@@ -8,7 +8,7 @@ describe('review preview', () => {
     render(<App />)
 
     expect(screen.getByRole('heading', { name: 'Дано:' })).toBeInTheDocument()
-    expect(screen.getByText('№ 123', { selector: '.exercise-number' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Решение' })).toBeInTheDocument()
     expect(screen.getByLabelText(/Лист тетради: задача 123/i)).toBeInTheDocument()
   })
 
@@ -17,7 +17,7 @@ describe('review preview', () => {
 
     fireEvent.change(screen.getByLabelText('Тестовая задача'), { target: { value: '2' } })
 
-    expect(screen.getByText('№ 125', { selector: '.exercise-number' })).toBeInTheDocument()
-    expect(screen.getByText('∠C = 55°.', { selector: '.solution-block p' })).toBeInTheDocument()
+    expect(screen.getByLabelText(/Лист тетради: задача 125/i)).toBeInTheDocument()
+    expect(screen.getByText('∠C = 55°.', { selector: '.solution-lines p' })).toBeInTheDocument()
   })
 })

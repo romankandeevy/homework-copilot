@@ -8,61 +8,67 @@ function TriangleDiagram({ fixture }: { fixture: NotebookFixture }) {
   return (
     <svg
       className="diagram"
-      viewBox="0 0 320 230"
+      viewBox="0 0 420 250"
       role="img"
       aria-label={fixture.diagram.description}
     >
-      <path className="diagram-line" d="M 44 190 L 274 190 L 164 35 Z" />
+      <path className="diagram-line" d="M 60 180 L 340 180 L 200 55 Z" />
       {fixture.diagram.variant === 'isosceles' && (
         <>
-          <path className="diagram-mark" d="M 94 111 L 107 120" />
-          <path className="diagram-mark" d="M 222 120 L 235 111" />
+          <path className="diagram-mark" d="M 119 109 L 136 121" />
+          <path className="diagram-mark" d="M 270 121 L 287 109" />
+          <path className="angle-mark" d="M 182 73 Q 200 91 218 73" />
+          <text className="angle-value" x="200" y="111">40*</text>
         </>
       )}
       {fixture.diagram.variant === 'median' && (
         <>
-          <path className="diagram-line diagram-auxiliary" d="M 164 35 L 159 190" />
-          <path className="diagram-mark" d="M 144 181 L 144 199" />
-          <path className="diagram-mark" d="M 174 181 L 174 199" />
+          <path className="diagram-auxiliary" d="M 200 55 L 200 180" />
+          <path className="diagram-mark" d="M 183 171 L 183 189" />
+          <path className="diagram-mark" d="M 217 171 L 217 189" />
+          <text className="diagram-small-label" x="191" y="203">M</text>
         </>
       )}
       {fixture.diagram.variant === 'right' && (
-        <path className="diagram-mark" d="M 61 190 L 61 174 L 77 174" />
+        <path className="diagram-mark" d="M 76 180 L 76 164 L 92 164" />
       )}
-      <text x="27" y="209">{labels[0]}</text>
-      <text x="279" y="209">{labels[1]}</text>
-      <text x="161" y="27">{labels[2]}</text>
-      {fixture.diagram.variant === 'median' && <text x="150" y="209">M</text>}
+      <text className="diagram-label label-a" x="-14" y="225">{labels[0]}</text>
+      <text className="diagram-label label-c" x="378" y="225">{labels[1]}</text>
+      <text className="diagram-label label-b" x="190" y="62">{labels[2]}</text>
     </svg>
   )
 }
 
-function NotebookPage({ fixture }: { fixture: NotebookFixture }) {
+function SolutionSheet({ fixture }: { fixture: NotebookFixture }) {
+  const goalItems = fixture.goalItems ?? [fixture.goal]
+
   return (
-    <article className="notebook-page" aria-label={`Лист тетради: задача ${fixture.number}`}>
-      <div className="margin-line" aria-hidden="true" />
-      <div className="notebook-content">
-        <p className="exercise-number">№ {fixture.number}</p>
-        <section className="notebook-block">
-          <h2>Дано:</h2>
-          <p>{fixture.given}</p>
-        </section>
-        <section className="notebook-block goal-block">
-          <h2>{fixture.goalTitle}:</h2>
-          <p>{fixture.goal}</p>
-        </section>
-        <TriangleDiagram fixture={fixture} />
-        <section className="notebook-block solution-block">
-          <h2>Решение.</h2>
+    <article className="solution-page" aria-label={`Лист тетради: задача ${fixture.number}`}>
+      <section className="given-panel">
+        <h2>Дано:</h2>
+        <p>{fixture.given.split(', ')[0]}</p>
+        <p>{fixture.given.split(', ')[1]}</p>
+        <p>{fixture.given.split(', ')[2]}</p>
+      </section>
+      <div className="given-divider" aria-hidden="true" />
+      <div className="goal-divider" aria-hidden="true" />
+      <section className="goal-panel">
+        <h2>Найти:</h2>
+        <div className="goal-items">
+          {goalItems.map((goalItem) => <p key={goalItem}>{goalItem}</p>)}
+        </div>
+      </section>
+
+      <TriangleDiagram fixture={fixture} />
+
+      <section className="solution-copy">
+        <h2>Решение</h2>
+        <div className="solution-lines">
           {fixture.solution.map((line) => <p key={line}>{line}</p>)}
-        </section>
-        {fixture.answer && (
-          <section className="notebook-block answer-block">
-            <h2>Ответ:</h2>
-            <p>{fixture.answer}</p>
-          </section>
-        )}
-      </div>
+        </div>
+      </section>
+
+      {fixture.answer && <p className="answer-line">Ответ:&nbsp;{fixture.answer}</p>}
     </article>
   )
 }
@@ -77,34 +83,22 @@ function App() {
 
   return (
     <main className="review-shell">
-      <header className="review-toolbar">
-        <div>
-          <p className="eyebrow">Geometry Notebook Engine</p>
-          <h1>Тестовый лист</h1>
-        </div>
-        <div className="fixture-controls" aria-label="Выбор тестовой задачи">
-          <button type="button" onClick={() => selectFixture(fixtureIndex - 1)}>←</button>
-          <label>
-            <span className="visually-hidden">Тестовая задача</span>
-            <select value={fixtureIndex} onChange={(event) => setFixtureIndex(Number(event.target.value))}>
-              {fixtures.map((item, index) => (
-                <option key={item.id} value={index}>№ {item.number}</option>
-              ))}
-            </select>
-          </label>
-          <button type="button" onClick={() => selectFixture(fixtureIndex + 1)}>→</button>
-        </div>
-      </header>
-
-      <section className="problem-context" aria-label="Условие задачи">
-        <p className="problem-label">Условие</p>
-        <p>{fixture.condition}</p>
-        <p className="fixture-status">Фикстура · AI не подключён</p>
-      </section>
-
       <section className="sheet-stage" aria-label="Готовый лист для переписывания">
-        <NotebookPage fixture={fixture} />
+        <SolutionSheet fixture={fixture} />
       </section>
+
+      <footer className="review-controls" aria-label="Выбор тестовой задачи">
+        <button type="button" onClick={() => selectFixture(fixtureIndex - 1)}>←</button>
+        <label>
+          <span className="visually-hidden">Тестовая задача</span>
+          <select value={fixtureIndex} onChange={(event) => setFixtureIndex(Number(event.target.value))}>
+            {fixtures.map((item, index) => (
+              <option key={item.id} value={index}>Задача № {item.number}</option>
+            ))}
+          </select>
+        </label>
+        <button type="button" onClick={() => selectFixture(fixtureIndex + 1)}>→</button>
+      </footer>
     </main>
   )
 }

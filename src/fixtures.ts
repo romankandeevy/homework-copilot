@@ -5,6 +5,7 @@ export type NotebookFixture = {
   given: string
   goalTitle: 'Найти' | 'Доказать'
   goal: string
+  goalItems?: string[]
   solution: string[]
   answer?: string
   diagram: {
@@ -22,14 +23,15 @@ export const fixtures: NotebookFixture[] = [
     given: '△ABC, AB = BC, ∠B = 40°.',
     goalTitle: 'Найти',
     goal: '∠A и ∠C.',
+    goalItems: ['∠C', '∠A'],
     solution: [
-      'Так как AB = BC, то △ABC равнобедренный.',
-      'Следовательно, ∠A = ∠C.',
+      'Т.к AB = BC то △ABC равнобедренный => ∠A = ∠C.',
       '∠A + ∠B + ∠C = 180°.',
       '2∠A + 40° = 180°.',
+      '∠A = (180 - 40):2',
       '∠A = ∠C = 70°.',
     ],
-    answer: '70°, 70°.',
+    answer: '∠A = 70°, ∠C = 70°.',
     diagram: {
       description: 'Равнобедренный треугольник ABC с равными боковыми сторонами AB и BC.',
       labels: ['A', 'C', 'B'],
