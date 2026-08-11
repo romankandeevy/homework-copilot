@@ -1,6 +1,29 @@
-import { useState } from 'react'
-import { fixtures, type NotebookFixture } from './fixtures'
+import { fixtures, task105Fixture, type NotebookFixture } from './fixtures'
 import './App.css'
+
+function PerpendicularDiagram({ fixture }: { fixture: NotebookFixture }) {
+  return (
+    <svg
+      className="diagram construction-diagram"
+      viewBox="0 0 420 250"
+      role="img"
+      aria-label={fixture.diagram.description}
+    >
+      <path className="diagram-line" d="M 24 130 H 396" />
+      <path className="diagram-line" d="M 128 45 V 130" />
+      <path className="diagram-line" d="M 294 130 V 215" />
+      <path className="diagram-mark" d="M 128 113 H 145 V 130" />
+      <path className="diagram-mark" d="M 277 130 H 294 V 147" />
+      <circle className="diagram-point" cx="128" cy="45" r="3.8" />
+      <circle className="diagram-point" cx="294" cy="215" r="3.8" />
+      <text className="diagram-label" x="99" y="38">A</text>
+      <text className="diagram-label" x="310" y="226">B</text>
+      <text className="diagram-small-label" x="122" y="151">C</text>
+      <text className="diagram-small-label" x="303" y="119">D</text>
+      <text className="line-label" x="370" y="119">a</text>
+    </svg>
+  )
+}
 
 function TriangleDiagram({ fixture }: { fixture: NotebookFixture }) {
   const labels = fixture.diagram.labels
@@ -41,28 +64,33 @@ function TriangleDiagram({ fixture }: { fixture: NotebookFixture }) {
 
 function SolutionSheet({ fixture }: { fixture: NotebookFixture }) {
   const goalItems = fixture.goalItems ?? [fixture.goal]
+  const givenLines = fixture.givenLines ?? fixture.given.split(', ')
 
   return (
-    <article className="solution-page" aria-label={`Лист тетради: задача ${fixture.number}`}>
+    <article
+      className={`solution-page${fixture.diagram.kind === 'perpendiculars' ? ' construction-page' : ''}`}
+      aria-label={`Лист тетради: задача ${fixture.number}`}
+    >
+      {fixture.id === task105Fixture.id && <p className="exercise-number">№ 105</p>}
       <section className="given-panel">
         <h2>Дано:</h2>
-        <p>{fixture.given.split(', ')[0]}</p>
-        <p>{fixture.given.split(', ')[1]}</p>
-        <p>{fixture.given.split(', ')[2]}</p>
+        {givenLines.map((line) => <p key={line}>{line}</p>)}
       </section>
       <div className="given-divider" aria-hidden="true" />
       <div className="goal-divider" aria-hidden="true" />
       <section className="goal-panel">
-        <h2>Найти:</h2>
+        <h2>{fixture.goalTitle}:</h2>
         <div className="goal-items">
           {goalItems.map((goalItem) => <p key={goalItem}>{goalItem}</p>)}
         </div>
       </section>
 
-      <TriangleDiagram fixture={fixture} />
+      {fixture.diagram.kind === 'perpendiculars'
+        ? <PerpendicularDiagram fixture={fixture} />
+        : <TriangleDiagram fixture={fixture} />}
 
       <section className="solution-copy">
-        <h2>Решение</h2>
+        <h2>{fixture.solutionTitle ?? 'Решение'}</h2>
         <div className="solution-lines">
           {fixture.solution.map((line) => <p key={line}>{line}</p>)}
         </div>
@@ -74,31 +102,12 @@ function SolutionSheet({ fixture }: { fixture: NotebookFixture }) {
 }
 
 function App() {
-  const [fixtureIndex, setFixtureIndex] = useState(0)
-  const fixture = fixtures[fixtureIndex]
-
-  const selectFixture = (nextIndex: number) => {
-    setFixtureIndex((nextIndex + fixtures.length) % fixtures.length)
-  }
-
   return (
     <main className="review-shell">
-      <section className="sheet-stage" aria-label="Готовый лист для переписывания">
-        <SolutionSheet fixture={fixture} />
+      <section className="sheet-stage" aria-label="Готовые листы для переписывания">
+        <SolutionSheet fixture={fixtures[0]} />
+        <SolutionSheet fixture={task105Fixture} />
       </section>
-
-      <footer className="review-controls" aria-label="Выбор тестовой задачи">
-        <button type="button" onClick={() => selectFixture(fixtureIndex - 1)}>←</button>
-        <label>
-          <span className="visually-hidden">Тестовая задача</span>
-          <select value={fixtureIndex} onChange={(event) => setFixtureIndex(Number(event.target.value))}>
-            {fixtures.map((item, index) => (
-              <option key={item.id} value={index}>Задача № {item.number}</option>
-            ))}
-          </select>
-        </label>
-        <button type="button" onClick={() => selectFixture(fixtureIndex + 1)}>→</button>
-      </footer>
     </main>
   )
 }

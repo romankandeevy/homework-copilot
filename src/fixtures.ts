@@ -3,14 +3,17 @@ export type NotebookFixture = {
   number: string
   condition: string
   given: string
-  goalTitle: 'Найти' | 'Доказать'
+  givenLines?: string[]
+  goalTitle: 'Найти' | 'Доказать' | 'Построить'
   goal: string
   goalItems?: string[]
+  solutionTitle?: 'Решение' | 'Построение'
   solution: string[]
   answer?: string
   diagram: {
     description: string
     labels: [string, string, string]
+    kind?: 'triangle' | 'perpendiculars'
     variant: 'isosceles' | 'median' | 'right'
   }
 }
@@ -33,6 +36,7 @@ export const fixtures: NotebookFixture[] = [
     ],
     answer: '∠A = 70°, ∠C = 70°.',
     diagram: {
+      kind: 'triangle',
       description: 'Равнобедренный треугольник ABC с равными боковыми сторонами AB и BC.',
       labels: ['A', 'C', 'B'],
       variant: 'isosceles',
@@ -51,6 +55,7 @@ export const fixtures: NotebookFixture[] = [
       'Значит, AM = MC.',
     ],
     diagram: {
+      kind: 'triangle',
       description: 'Треугольник ABC с медианой BM к стороне AC.',
       labels: ['A', 'C', 'B'],
       variant: 'median',
@@ -70,9 +75,34 @@ export const fixtures: NotebookFixture[] = [
     ],
     answer: '55°.',
     diagram: {
+      kind: 'triangle',
       description: 'Прямоугольный треугольник ABC с прямым углом при точке A.',
       labels: ['A', 'C', 'B'],
       variant: 'right',
     },
   },
 ]
+
+export const task105Fixture: NotebookFixture = {
+  id: 'task-105-perpendiculars',
+  number: '105',
+  condition: 'Начертите прямую a и отметьте точки A и B, лежащие по разные стороны от прямой a. С помощью чертёжного угольника проведите из этих точек перпендикуляры к прямой a.',
+  given: 'a — прямая, A и B по разные стороны от a.',
+  givenLines: ['a — прямая;', 'A и B — по разные', 'стороны от a.'],
+  goalTitle: 'Построить',
+  goal: 'AC ⟂ a, BD ⟂ a.',
+  goalItems: ['AC ⟂ a', 'BD ⟂ a'],
+  solutionTitle: 'Построение',
+  solution: [
+    '1. Один катет угольника приложим к прямой a.',
+    '2. Через точку A проведём второй катет: AC ⟂ a.',
+    '3. Так же через точку B проведём BD ⟂ a.',
+  ],
+  answer: 'AC ⟂ a, BD ⟂ a.',
+  diagram: {
+    kind: 'perpendiculars',
+    description: 'Прямая a, точки A и B по разные её стороны и перпендикуляры AC и BD к прямой a.',
+    labels: ['A', 'B', 'a'],
+    variant: 'right',
+  },
+}
