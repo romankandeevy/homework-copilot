@@ -88,11 +88,10 @@
 .goal-items {
   margin-top: -3.25cqw;
   color: #202020;
-  font-family: 'Comic Sans MS', 'Segoe Print', cursive;
-  font-size: 5.2cqw;
-  font-weight: 700;
-  line-height: 0.95;
-  transform: rotate(-2deg);
+  font-family: Arial, 'Segoe UI', sans-serif;
+  font-size: 3.8cqw;
+  font-weight: 400;
+  line-height: 1.08;
 }
 
 .diagram {
@@ -114,40 +113,27 @@
 }
 
 .diagram-line {
-  stroke-width: 1.2;
+  stroke-width: 1.5;
 }
 
 .diagram-mark {
-  stroke-width: 1.1;
+  stroke-width: 1.4;
 }
 
 .diagram-auxiliary {
-  stroke-width: 1.1;
+  stroke-width: 1.4;
   stroke-dasharray: 6 4;
 }
 
 .angle-mark {
-  stroke-width: 4;
+  stroke-width: 2;
 }
 
 .diagram-label {
   fill: currentColor;
-  font-family: 'Comic Sans MS', 'Segoe Print', cursive;
-  font-size: 42px;
-  font-weight: 700;
-}
-
-.label-a {
-  transform: rotate(-6deg);
-}
-
-.label-b {
-  font-size: 46px;
-  transform: rotate(-7deg);
-}
-
-.label-c {
-  transform: rotate(5deg);
+  font-family: Arial, 'Segoe UI', sans-serif;
+  font-size: 32px;
+  font-weight: 400;
 }
 
 .diagram-small-label,
@@ -163,8 +149,8 @@
 }
 
 .line-label {
-  font-family: 'Comic Sans MS', 'Segoe Print', cursive;
-  font-size: 26px;
+  font-family: Arial, 'Segoe UI', sans-serif;
+  font-size: 24px;
 }
 
 .diagram-point {
@@ -172,7 +158,7 @@
 }
 
 .construction-diagram .diagram-label {
-  font-size: 38px;
+  font-size: 30px;
 }
 
 .angle-value {
@@ -216,8 +202,8 @@
 
 .construction-page .goal-items {
   margin-top: -2.25cqw;
-  font-size: 3.65cqw;
-  line-height: 0.95;
+  font-size: 2.9cqw;
+  line-height: 1.1;
 }
 
 .construction-page .solution-copy h2 {
