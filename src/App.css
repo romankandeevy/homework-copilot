@@ -2,7 +2,6 @@
   width: min(100%, 760px);
   margin: 0 auto;
   padding: 16px 12px 28px;
-  box-sizing: border-box;
 }
 
 .review-toolbar {
@@ -21,7 +20,7 @@
   font-family: ui-monospace, Consolas, monospace;
   font-size: 11px;
   line-height: 1.2;
-  letter-spacing: 0.04em;
+  letter-spacing: .04em;
   text-transform: uppercase;
 }
 
@@ -80,123 +79,41 @@
   color: #4a7663;
 }
 
-.sheet-stage {
-  display: flex;
-  justify-content: center;
-  overflow: auto;
+.sheet-stage,
+.canvas-mode {
+  display: grid;
+  place-items: center;
 }
 
-.notebook-page {
-  --cell: clamp(10px, 2.75vw, 18px);
-  position: relative;
-  flex: none;
-  width: calc(var(--cell) * 31);
-  min-height: calc(var(--cell) * 44);
+.geometry-notebook-document {
+  display: grid;
+  justify-items: center;
+  gap: 18px;
+  width: 100%;
+}
+
+.geometry-notebook-page {
+  width: min(100%, 810px);
+  aspect-ratio: 3 / 4;
   overflow: hidden;
-  color: #185b9c;
-  background-color: #fffef9;
-  background-image:
-    linear-gradient(to right, rgba(83, 151, 203, 0.36) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(83, 151, 203, 0.36) 1px, transparent 1px);
-  background-size: var(--cell) var(--cell);
-  box-shadow: 0 2px 12px rgba(38, 42, 46, 0.14);
+  box-shadow: 0 2px 12px rgb(38 42 46 / 14%);
 }
 
-.margin-line {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: calc(var(--cell) * 4);
-  width: 1px;
-  background: rgba(215, 59, 74, 0.72);
-}
-
-.notebook-content {
-  position: relative;
-  z-index: 1;
-  padding: calc(var(--cell) * 1.25) calc(var(--cell) * 1.1) calc(var(--cell) * 2) calc(var(--cell) * 5.3);
-  font-family: 'Comic Sans MS', 'Segoe Print', cursive;
-  font-size: calc(var(--cell) * 1.08);
-  font-weight: 600;
-  line-height: 1.84;
-  letter-spacing: 0.01em;
-}
-
-.exercise-number {
-  margin: 0 0 calc(var(--cell) * 0.45);
-  text-align: right;
-}
-
-.notebook-block {
-  margin: 0;
-}
-
-.notebook-block h2,
-.notebook-block p {
-  display: inline;
-  margin: 0;
-  font: inherit;
-}
-
-.notebook-block h2 {
-  font-weight: 700;
-}
-
-.goal-block {
-  margin-bottom: calc(var(--cell) * 0.2);
-}
-
-.diagram {
+.geometry-notebook-page svg {
   display: block;
-  width: min(100%, calc(var(--cell) * 18));
-  margin: calc(var(--cell) * 0.2) auto calc(var(--cell) * 0.35);
-  overflow: visible;
-  fill: #185b9c;
-  color: #185b9c;
+  width: 100%;
+  height: 100%;
 }
 
-.diagram-line,
-.diagram-mark {
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+.canvas-mode {
+  min-height: 100svh;
+  overflow: hidden;
+  background: #fffefd;
 }
 
-.diagram-line {
-  stroke-width: 3;
-}
-
-.diagram-auxiliary {
-  stroke-width: 2.3;
-  stroke-dasharray: 7 5;
-}
-
-.diagram-mark {
-  stroke-width: 2.4;
-}
-
-.diagram text {
-  font-family: 'Comic Sans MS', 'Segoe Print', cursive;
-  font-size: 20px;
-  font-weight: 700;
-}
-
-.solution-block {
-  margin-top: calc(var(--cell) * 0.3);
-}
-
-.solution-block h2 {
-  display: block;
-}
-
-.solution-block p {
-  display: block;
-  padding-left: calc(var(--cell) * 0.55);
-}
-
-.answer-block {
-  margin-top: calc(var(--cell) * 0.45);
+.canvas-mode .geometry-notebook-page {
+  width: min(100vw, 75svh);
+  box-shadow: none;
 }
 
 .visually-hidden {
@@ -222,9 +139,5 @@
 
   .review-toolbar h1 {
     font-size: 16px;
-  }
-
-  .notebook-page {
-    --cell: calc((100vw - 16px) / 31);
   }
 }
