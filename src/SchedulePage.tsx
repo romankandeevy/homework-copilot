@@ -136,6 +136,15 @@ function SchedulePage() {
 
   useEffect(() => {
     if (ocrPhase === 'idle') return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [ocrPhase])
+
+  useEffect(() => {
+    if (ocrPhase === 'idle') return
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') closeOcr()
     }
@@ -406,46 +415,48 @@ function SchedulePage() {
 
             {ocrPhase === 'review' && (
               <div className="schedule-ocr-review">
-                <p className="schedule-ocr-review-intro">Нашли {ocrRows.length} {lessonWord(ocrRows.length)}. Исправь ошибки перед добавлением.</p>
-                <div className="schedule-ocr-rows">
-                  {ocrRows.map((entry, index) => (
-                    <div className="schedule-ocr-row" key={entry.id}>
-                      <span>{String(index + 1).padStart(2, '0')}</span>
-                      <label>
-                        <span className="sr-only">День, строка {index + 1}</span>
-                        <select value={entry.day} aria-label={`День, строка ${index + 1}`} onChange={(event) => updateOcrRow(entry.id, 'day', event.target.value)}>
-                          {weekdays.map((day) => <option value={day.id} key={day.id}>{day.short}</option>)}
-                        </select>
-                      </label>
-                      <label>
-                        <span className="sr-only">Время, строка {index + 1}</span>
-                        <input type="time" value={entry.time} aria-label={`Время, строка ${index + 1}`} onChange={(event) => updateOcrRow(entry.id, 'time', event.target.value)} />
-                      </label>
-                      <label>
-                        <span className="sr-only">Предмет, строка {index + 1}</span>
-                        <input value={entry.subject} placeholder="Предмет" aria-label={`Предмет, строка ${index + 1}`} onChange={(event) => updateOcrRow(entry.id, 'subject', event.target.value)} />
-                      </label>
-                      <label>
-                        <span className="sr-only">Кабинет, строка {index + 1}</span>
-                        <input value={entry.room} placeholder="Каб." aria-label={`Кабинет, строка ${index + 1}`} onChange={(event) => updateOcrRow(entry.id, 'room', event.target.value)} />
-                      </label>
-                      <button type="button" aria-label={`Удалить распознанную строку ${index + 1}`} onClick={() => setOcrRows((current) => current.filter((row) => row.id !== entry.id))}>
-                        <Trash size={17} weight="duotone" aria-hidden="true" />
-                      </button>
-                    </div>
-                  ))}
+                <div className="schedule-ocr-review-scroll">
+                  <p className="schedule-ocr-review-intro">Нашли {ocrRows.length} {lessonWord(ocrRows.length)}. Исправь ошибки перед добавлением.</p>
+                  <div className="schedule-ocr-rows">
+                    {ocrRows.map((entry, index) => (
+                      <div className="schedule-ocr-row" key={entry.id}>
+                        <span>{String(index + 1).padStart(2, '0')}</span>
+                        <label>
+                          <span className="sr-only">День, строка {index + 1}</span>
+                          <select value={entry.day} aria-label={`День, строка ${index + 1}`} onChange={(event) => updateOcrRow(entry.id, 'day', event.target.value)}>
+                            {weekdays.map((day) => <option value={day.id} key={day.id}>{day.short}</option>)}
+                          </select>
+                        </label>
+                        <label>
+                          <span className="sr-only">Время, строка {index + 1}</span>
+                          <input type="time" value={entry.time} aria-label={`Время, строка ${index + 1}`} onChange={(event) => updateOcrRow(entry.id, 'time', event.target.value)} />
+                        </label>
+                        <label>
+                          <span className="sr-only">Предмет, строка {index + 1}</span>
+                          <input value={entry.subject} placeholder="Предмет" aria-label={`Предмет, строка ${index + 1}`} onChange={(event) => updateOcrRow(entry.id, 'subject', event.target.value)} />
+                        </label>
+                        <label>
+                          <span className="sr-only">Кабинет, строка {index + 1}</span>
+                          <input value={entry.room} placeholder="Каб." aria-label={`Кабинет, строка ${index + 1}`} onChange={(event) => updateOcrRow(entry.id, 'room', event.target.value)} />
+                        </label>
+                        <button type="button" aria-label={`Удалить распознанную строку ${index + 1}`} onClick={() => setOcrRows((current) => current.filter((row) => row.id !== entry.id))}>
+                          <Trash size={17} weight="duotone" aria-hidden="true" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <button className="schedule-ocr-add-row" type="button" onClick={() => setOcrRows((current) => [...current, { id: makeScheduleEntryId(), day: current.at(-1)?.day ?? 'monday', time: defaultLessonTimes[current.length] ?? '', subject: '', room: '' }])}>
+                    <Plus size={17} weight="bold" aria-hidden="true" /> Добавить строку
+                  </button>
+
+                  {ocrRawText && (
+                    <details>
+                      <summary>Текст, который увидел OCR</summary>
+                      <pre>{ocrRawText}</pre>
+                    </details>
+                  )}
                 </div>
-
-                <button className="schedule-ocr-add-row" type="button" onClick={() => setOcrRows((current) => [...current, { id: makeScheduleEntryId(), day: current.at(-1)?.day ?? 'monday', time: defaultLessonTimes[current.length] ?? '', subject: '', room: '' }])}>
-                  <Plus size={17} weight="bold" aria-hidden="true" /> Добавить строку
-                </button>
-
-                {ocrRawText && (
-                  <details>
-                    <summary>Текст, который увидел OCR</summary>
-                    <pre>{ocrRawText}</pre>
-                  </details>
-                )}
 
                 <footer>
                   <button type="button" onClick={closeOcr}>Отмена</button>
