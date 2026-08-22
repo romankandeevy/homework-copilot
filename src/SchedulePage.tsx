@@ -11,7 +11,7 @@ import {
   WarningCircle,
   X,
 } from '@phosphor-icons/react'
-import { defaultLessonTimes, makeScheduleEntryId, parseScheduleText } from './scheduleOcr'
+import { defaultLessonTimes, makeScheduleEntryId, parseScheduleTableTsv, parseScheduleText } from './scheduleOcr'
 import type { ScheduleEntry, WeekdayId } from './scheduleOcr'
 import './SchedulePage.css'
 
@@ -80,6 +80,30 @@ function lessonWord(count: number) {
   if (last === 1 && lastTwo !== 11) return 'урок'
   if (last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14)) return 'урока'
   return 'уроков'
+}
+
+async function prepareOcrImage(file: File) {
+  if (typeof createImageBitmap !== 'function') return file
+
+  const bitmap = await createImageBitmap(file)
+  const preferredScale = bitmap.width < 1800 ? 2.2 : 1
+  const scale = Math.min(preferredScale, 3200 / Math.max(bitmap.width, bitmap.height))
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale))
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale))
+  const context = canvas.getContext('2d')
+
+  if (!context) {
+    bitmap.close()
+    return file
+  }
+
+  context.fillStyle = '#ffffff'
+  context.fillRect(0, 0, canvas.width, canvas.height)
+  context.filter = 'grayscale(1) contrast(1.3)'
+  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+  bitmap.close()
+  return canvas
 }
 
 function SchedulePage() {
@@ -159,23 +183,48 @@ function SchedulePage() {
 
     try {
       const { createWorker, PSM } = await import('tesseract.js')
+      const image = await prepareOcrImage(file)
+      let pass: 'loading' | 'table' | 'details' = 'loading'
       const worker = await createWorker(['rus', 'eng'], undefined, {
         logger: ({ progress, status }) => {
           if (ocrRunRef.current !== runId) return
-          setOcrProgress(Math.max(0.03, progress || 0))
-          setOcrMessage(ocrStatusLabel(status))
+          if (status === 'recognizing text' && pass === 'table') {
+            setOcrProgress(0.15 + (progress || 0) * 0.5)
+            setOcrMessage('Разбираем строки и колонки')
+          } else if (status === 'recognizing text' && pass === 'details') {
+            setOcrProgress(0.68 + (progress || 0) * 0.28)
+            setOcrMessage('Проверяем предметы и кабинеты')
+          } else {
+            setOcrProgress(Math.max(0.03, (progress || 0) * 0.12))
+            setOcrMessage(ocrStatusLabel(status))
+          }
         },
       })
 
       try {
         await worker.setParameters({
-          tessedit_pageseg_mode: PSM.SPARSE_TEXT,
+          tessedit_pageseg_mode: PSM.AUTO,
           preserve_interword_spaces: '1',
           user_defined_dpi: '300',
         })
-        const { data } = await worker.recognize(file)
+        pass = 'table'
+        const { data } = await worker.recognize(image, {}, { text: true, tsv: true })
         if (ocrRunRef.current !== runId) return
-        const parsed = parseScheduleText(data.text)
+        const primaryTsv = data.tsv ?? ''
+        let parsed = parseScheduleTableTsv(primaryTsv)
+
+        if (parsed.length > 0) {
+          pass = 'details'
+          setOcrProgress(0.68)
+          setOcrMessage('Проверяем предметы и кабинеты')
+          await worker.setParameters({ tessedit_pageseg_mode: PSM.SPARSE_TEXT })
+          const { data: detailData } = await worker.recognize(image, {}, { text: true, tsv: true })
+          if (ocrRunRef.current !== runId) return
+          parsed = parseScheduleTableTsv(primaryTsv, detailData.tsv ?? '')
+        } else {
+          parsed = parseScheduleText(data.text)
+        }
+
         setOcrRawText(data.text.trim())
 
         if (parsed.length === 0) {
