@@ -1,12 +1,25 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>homework-copilot</title>
+    <meta name="description" content="Homework Copilot превращает номер задачи в полностью готовое решение для тетради." />
+    <meta name="theme-color" content="#ecece5" />
+    <link rel="icon" href="data:," />
+    <title>Homework Copilot</title>
+    <script>
+      document.documentElement.dataset.theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+    </script>
   </head>
   <body>
+    <!--
+      THESIS: One saved textbook and one task number lead either to an instant shared answer or one new notebook-ready solution; this is not a productivity dashboard.
+      OWN-WORLD: Chalk surfaces, graphite structure, citrus signals, routed nodes, Unbounded display, Onest body.
+      STORY: See the balance, confirm the textbook, enter a number, open a shared answer instantly or wait for one new solution.
+      FIRST VIEWPORT: The active navigation route frames one large citrus copying surface; the saved textbook sits directly above the task number and adaptive action.
+      FORM: Direct task entry inside the established visual world, seed d1000b40.
+      FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
+    -->
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

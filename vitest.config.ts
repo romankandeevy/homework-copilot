@@ -6,6 +6,6 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
-    exclude: ['tests/**', '**/node_modules/**'],
+    exclude: ['tests/**', 'sites-homework-copilot/**', '**/node_modules/**'],
   },
 })

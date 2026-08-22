@@ -1,0 +1,193 @@
+@font-face {
+  font-family: 'Unbounded Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 900;
+  src: url('./assets/fonts/unbounded-lat.woff2') format('woff2-variations');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+
+@font-face {
+  font-family: 'Unbounded Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 900;
+  src: url('./assets/fonts/unbounded-cyr.woff2') format('woff2-variations');
+  unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;
+}
+
+@font-face {
+  font-family: 'Onest';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('./assets/fonts/onest-lat.woff2') format('woff2-variations');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+2000-206F,U+2074,U+20A0-20BF,U+2122,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+
+@font-face {
+  font-family: 'Onest';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('./assets/fonts/onest-cyr.woff2') format('woff2-variations');
+  unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 800;
+  src: url('./assets/fonts/jetbrains-mono-lat.woff2') format('woff2-variations');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 800;
+  src: url('./assets/fonts/jetbrains-mono-cyr.woff2') format('woff2-variations');
+  unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;
+}
+
+:root {
+  --font-display: 'Unbounded Variable', 'Arial Black', sans-serif;
+  --font-body: 'Onest', 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono Variable', Consolas, monospace;
+
+  --text-display: clamp(2.7rem, 4.8vw, 5.5rem);
+  --text-display-mobile: clamp(2.35rem, 12vw, 3.75rem);
+  --text-title: clamp(2rem, 4vw, 3.75rem);
+  --text-specimen: clamp(2.2rem, 5vw, 4.6rem);
+  --text-statement: clamp(1.5rem, 3vw, 2.8rem);
+  --text-display-small: clamp(1.5rem, 3vw, 2.4rem);
+  --text-brand-large: clamp(1.6rem, 4vw, 2.25rem);
+  --text-subtitle: clamp(1.25rem, 2vw, 1.75rem);
+  --text-lead: clamp(1rem, 1.5vw, 1.125rem);
+  --text-heading: 1.5rem;
+  --text-body: 1rem;
+  --text-ui: 0.875rem;
+  --text-small: 0.8125rem;
+  --text-caption: 0.75rem;
+  --text-micro: 0.6875rem;
+
+  --weight-regular: 400;
+  --weight-display: 400;
+  --weight-medium: 540;
+  --weight-semibold: 620;
+  --weight-bold: 680;
+  --weight-heavy: 720;
+
+  --leading-control: 1;
+  --leading-display: 0.99;
+  --leading-title: 1.05;
+  --leading-compact: 1.12;
+  --leading-ui: 1.45;
+  --leading-copy: 1.6;
+  --tracking-tight: -0.04em;
+  --tracking-snug: -0.025em;
+  --tracking-wide: 0.04em;
+
+  --color-canvas: oklch(97% 0.003 250);
+  --color-surface: oklch(99.2% 0.001 250);
+  --color-surface-raised: oklch(100% 0 0);
+  --color-surface-sunken: oklch(94% 0.004 250);
+  --color-border: oklch(84.5% 0.007 250);
+  --color-border-strong: oklch(70% 0.009 250);
+  --color-text-subtle: oklch(48% 0.009 250);
+  --color-text-muted: oklch(39% 0.011 250);
+  --color-text: oklch(24% 0.012 250);
+  --color-strong: oklch(15.5% 0.01 250);
+  --color-on-strong: oklch(97% 0.003 250);
+
+  --color-accent-soft: oklch(94% 0.09 111);
+  --color-accent: oklch(84% 0.19 111);
+  --color-accent-hover: oklch(79% 0.2 111);
+  --color-disabled-on-accent: oklch(92% 0.06 111);
+  --color-disabled-on-accent-border: oklch(57% 0.105 111);
+  --color-on-accent: oklch(17% 0.025 111);
+  --color-brand-accent: oklch(61% 0.15 111);
+
+  --color-info: oklch(59% 0.15 245);
+  --color-info-soft: oklch(94% 0.025 245);
+  --color-success: oklch(58% 0.13 154);
+  --color-success-strong: oklch(43% 0.12 154);
+  --color-success-soft: oklch(94% 0.025 154);
+  --color-warning: oklch(70% 0.15 78);
+  --color-warning-soft: oklch(95% 0.035 78);
+  --color-danger: oklch(59% 0.19 29);
+  --color-danger-soft: oklch(94% 0.035 29);
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --space-20: 5rem;
+  --space-24: 6rem;
+
+  --radius-xs: 0.25rem;
+  --radius-control: 0.5rem;
+  --radius-surface: 0.75rem;
+  --radius-panel: 1rem;
+  --radius-pill: 999px;
+
+  --border-thin: 1px;
+  --border-strong: 2px;
+
+  --shadow-raised: 0 1px 2px oklch(17% 0.02 91 / 0.08), 0 8px 24px oklch(17% 0.02 91 / 0.07);
+  --shadow-overlay: 0 2px 5px oklch(17% 0.02 91 / 0.12), 0 24px 72px oklch(17% 0.02 91 / 0.17);
+
+  --motion-instant: 70ms;
+  --motion-fast: 120ms;
+  --motion-ui: 180ms;
+  --motion-panel: 280ms;
+  --motion-navigation: 420ms;
+  --motion-route: 640ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+
+  --size-control: 2.5rem;
+  --size-control-large: 3rem;
+  --rail-width: 15rem;
+  --content-width: 88rem;
+  --focus-ring: 0 0 0 3px var(--color-canvas), 0 0 0 5px var(--color-text);
+
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  --color-canvas: oklch(16.5% 0.011 250);
+  --color-surface: oklch(20.5% 0.012 250);
+  --color-surface-raised: oklch(24.5% 0.014 250);
+  --color-surface-sunken: oklch(13.5% 0.01 250);
+  --color-border: oklch(33% 0.015 250);
+  --color-border-strong: oklch(46% 0.018 250);
+  --color-text-subtle: oklch(65% 0.012 250);
+  --color-text-muted: oklch(74% 0.012 250);
+  --color-text: oklch(91% 0.008 250);
+  --color-strong: oklch(94% 0.007 250);
+  --color-on-strong: oklch(18% 0.012 250);
+  --color-accent-soft: oklch(29% 0.07 111);
+  --color-accent: oklch(84% 0.19 111);
+  --color-accent-hover: oklch(88% 0.18 111);
+  --color-on-accent: oklch(17% 0.025 111);
+  --color-brand-accent: oklch(84% 0.19 111);
+  --color-info-soft: oklch(25% 0.04 245);
+  --color-success-strong: oklch(76% 0.1 154);
+  --color-success-soft: oklch(25% 0.035 154);
+  --color-warning-soft: oklch(27% 0.04 78);
+  --color-danger-soft: oklch(25% 0.05 29);
+  --shadow-raised: 0 1px 2px oklch(4% 0 0 / 0.3), 0 8px 24px oklch(4% 0 0 / 0.22);
+  --shadow-overlay: 0 2px 5px oklch(4% 0 0 / 0.4), 0 24px 72px oklch(4% 0 0 / 0.42);
+  --focus-ring: 0 0 0 3px var(--color-canvas), 0 0 0 5px var(--color-accent);
+  color-scheme: dark;
+}

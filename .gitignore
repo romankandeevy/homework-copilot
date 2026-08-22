@@ -11,6 +11,18 @@ node_modules
 dist
 dist-ssr
 *.local
+.vercel
+
+# Local design and browser QA artifacts
+.impeccable/
+.playwright-mcp/
+*-qa.png
+design-qa-*.png
+design-qa.md
+rail-rounded-elbows-final.png
+
+# Separate hosted prototype repository
+sites-homework-copilot/
 
 # Editor directories and files
 .vscode/*
