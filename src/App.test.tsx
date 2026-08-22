@@ -6,6 +6,7 @@ import App from './App'
 describe('Homework Copilot home', () => {
   beforeEach(() => {
     document.documentElement.dataset.theme = 'light'
+    window.localStorage.clear()
     window.history.replaceState({}, '', '/')
   })
 
@@ -119,6 +120,23 @@ describe('Homework Copilot home', () => {
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Главная' })[0])
     expect(screen.getByRole('heading', { name: 'Списать задачу' })).toBeInTheDocument()
+  })
+
+  it('opens an editable schedule and saves manual changes', () => {
+    render(<App />)
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Расписание' })[0])
+    expect(screen.getByRole('heading', { name: 'Расписание' })).toBeInTheDocument()
+    expect(screen.getByRole('table', { name: 'Расписание на понедельник' })).toBeInTheDocument()
+
+    const subjectInputs = screen.getAllByRole('textbox', { name: /Предмет, урок/ })
+    fireEvent.change(subjectInputs[0], { target: { value: 'Математика' } })
+    expect(subjectInputs[0]).toHaveValue('Математика')
+    expect(window.localStorage.getItem('homework-copilot:schedule-v1')).toContain('Математика')
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Добавить урок' })[0])
+    expect(screen.getAllByRole('textbox', { name: /Предмет, урок/ })).toHaveLength(subjectInputs.length + 1)
+    expect(screen.getByLabelText('Загрузить фото расписания')).toHaveAttribute('accept', 'image/*')
   })
 
   it('routes the sidebar line through the active icon center', () => {

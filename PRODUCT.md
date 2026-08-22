@@ -32,6 +32,7 @@ On the primary path the student uses a saved textbook and enters only the task n
 - Textbook selection is saved to the account and the most recently used textbook becomes the default Home context.
 - `База решений` is the shared catalogue of every already-solved task. A matching entry is available immediately.
 - `Мои решения` is the student's personal history of solutions they opened or requested.
+- `Расписание` is a free editable weekly timetable. Students can enter lessons manually or run Russian/English OCR on a photo, review the extracted rows, and keep the confirmed result on their device.
 - Product navigation, monetization, and textbook-catalogue coverage are not settled product policy.
 - The current Home page is a visual-only prototype. Product logic comes later.
 

@@ -29,6 +29,7 @@ import {
 } from '@phosphor-icons/react'
 import { GeometryNotebookLayoutV1 } from './notebook/GeometryNotebookLayoutV1'
 import { fixtures } from './fixtures'
+import SchedulePage from './SchedulePage'
 import './App.css'
 
 const DesignSystemPlayground = lazy(() => import('./DesignSystemPlayground'))
@@ -740,7 +741,7 @@ function HomePage() {
               </div>
             </div>
           </div>
-        ) : <ComingSoon section={activeNavigation} />}
+        ) : activeNavigation === 'Расписание' ? <SchedulePage /> : <ComingSoon section={activeNavigation} />}
       </div>
       <MobileNavigation activeLabel={activeNavigation} onNavigate={setActiveNavigation} />
     </main>

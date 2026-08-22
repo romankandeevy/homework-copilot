@@ -207,6 +207,10 @@ The five destinations remain, in order: **Главная**, **Мои решен�
 
 **База решений** means every ready solution available to all users and promises instant opening. **Мои решения** means only solutions this student opened or requested. They never share a heading, count, or ambiguous list treatment.
 
+### Schedule
+
+The schedule uses one day at a time to keep time, subject, and room fields comfortably editable at every viewport. Six compact day tabs expose the whole week. Photo import opens a centered OCR review dialog; recognized rows remain editable both before and after confirmation.
+
 ### Status and Result
 
 Processing is passive system work, not a user-controlled stepper. A ready shared match uses a concise success state and direct open action. A new task uses restrained progress motion and an approximate five-minute expectation without fabricated precision.
