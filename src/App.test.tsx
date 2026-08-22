@@ -127,15 +127,16 @@ describe('Homework Copilot home', () => {
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Расписание' })[0])
     expect(screen.getByRole('heading', { name: 'Расписание' })).toBeInTheDocument()
-    expect(screen.getByRole('table', { name: 'Расписание на понедельник' })).toBeInTheDocument()
+    expect(screen.getByRole('table', { name: 'Учебное расписание на неделю' })).toBeInTheDocument()
 
-    const subjectInputs = screen.getAllByRole('textbox', { name: /Предмет, урок/ })
+    const subjectInputs = screen.getAllByRole('textbox', { name: /Предмет, .*, урок/ })
     fireEvent.change(subjectInputs[0], { target: { value: 'Математика' } })
     expect(subjectInputs[0]).toHaveValue('Математика')
     expect(window.localStorage.getItem('homework-copilot:schedule-v1')).toContain('Математика')
 
+    const rows = screen.getAllByRole('row').length
     fireEvent.click(screen.getAllByRole('button', { name: 'Добавить урок' })[0])
-    expect(screen.getAllByRole('textbox', { name: /Предмет, урок/ })).toHaveLength(subjectInputs.length + 1)
+    expect(screen.getAllByRole('row')).toHaveLength(rows + 1)
     expect(screen.getByLabelText('Загрузить фото расписания')).toHaveAttribute('accept', 'image/*')
   })
 
