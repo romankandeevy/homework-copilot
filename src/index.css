@@ -7,14 +7,12 @@
 }
 
 html {
-  min-width: 320px;
   scroll-behavior: smooth;
   background: var(--color-canvas);
   scrollbar-color: var(--color-border-strong) var(--color-canvas);
 }
 
 body {
-  min-width: 320px;
   min-height: 100dvh;
   margin: 0;
   background: var(--color-canvas);

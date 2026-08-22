@@ -204,7 +204,7 @@ function BalanceControl() {
   )
 }
 
-function PageHeader() {
+function PageHeader({ theme, onToggleTheme }: { theme: Theme; onToggleTheme: () => void }) {
   return (
     <header className="page-header">
       <div className="mobile-brand"><BrandLockup /></div>
@@ -213,6 +213,7 @@ function PageHeader() {
         <span>Пятница, 21 августа</span>
       </div>
       <div className="header-actions">
+        <span className="mobile-theme-toggle"><ThemeToggle theme={theme} onToggle={onToggleTheme} /></span>
         <BalanceControl />
         <button className="profile-button" type="button" aria-label="Открыть профиль">
           <span>РК</span>
@@ -718,7 +719,7 @@ function HomePage() {
       <ProductSidebar theme={theme} activeLabel={activeNavigation} onNavigate={setActiveNavigation} onToggleTheme={toggleTheme} />
       <div className="product-seam" aria-hidden="true"><span /></div>
       <div className="product-content">
-        <PageHeader />
+        <PageHeader theme={theme} onToggleTheme={toggleTheme} />
         {activeNavigation === 'Главная' ? (
           <div className="home-content">
             <CopyTask

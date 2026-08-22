@@ -511,7 +511,10 @@ function SchedulePage() {
             <h2 id="schedule-title">Расписание</h2>
             <span>8 класс</span>
           </div>
-          <p>Вся неделя перед глазами. Нажми на ячейку, чтобы изменить урок.</p>
+          <p>
+            <span className="schedule-desktop-hint">Вся неделя перед глазами. Нажми на ячейку, чтобы изменить урок.</span>
+            <span className="schedule-mobile-hint">Свайпни таблицу, чтобы увидеть остальные дни. Ячейки можно редактировать.</span>
+          </p>
         </div>
         <div className="schedule-actions">
           <motion.label className="schedule-scan-button" whileTap={reduceMotion ? undefined : { scale: 0.98 }}>

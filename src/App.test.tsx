@@ -102,12 +102,14 @@ describe('Homework Copilot home', () => {
     expect(screen.getByText(/Решение найдено в общей базе/)).toBeInTheDocument()
   })
 
-  it('switches the whole shell theme from the single desktop control', () => {
+  it('switches the whole shell theme from desktop and mobile controls', () => {
     render(<App />)
 
-    expect(screen.getAllByRole('button', { name: /Включить .* тему/ })).toHaveLength(1)
-    fireEvent.click(screen.getByRole('button', { name: 'Включить тёмную тему' }))
+    const themeControls = screen.getAllByRole('button', { name: 'Включить тёмную тему' })
+    expect(themeControls).toHaveLength(2)
+    fireEvent.click(themeControls[0])
     expect(document.documentElement).toHaveAttribute('data-theme', 'dark')
+    expect(screen.getAllByRole('button', { name: 'Включить светлую тему' })).toHaveLength(2)
   })
 
   it('shows a coming-soon placeholder for unfinished sidebar sections', () => {

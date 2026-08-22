@@ -52,6 +52,8 @@
   line-height: var(--leading-ui);
 }
 
+.schedule-mobile-hint { display: none; }
+
 .schedule-workspace {
   border: var(--border-thin) solid var(--color-border);
   border-radius: var(--radius-panel);
@@ -339,8 +341,8 @@
 
 .schedule-cell-editor > div > button {
   display: inline-flex;
-  width: var(--size-control);
-  height: var(--size-control);
+  width: 2.75rem;
+  height: 2.75rem;
   align-items: center;
   justify-content: center;
   border: 0;
@@ -724,6 +726,8 @@
   .schedule-title-line h2 { font-size: var(--text-heading); }
   .schedule-title-line > span { font-size: var(--text-ui); }
   .schedule-heading p { font-size: var(--text-small); }
+  .schedule-desktop-hint { display: none; }
+  .schedule-mobile-hint { display: inline; }
 
   .schedule-toolbar { padding: var(--space-3) var(--space-4); }
   .schedule-toolbar-meta { display: none; }
@@ -736,18 +740,25 @@
   .schedule-scan-button,
   .schedule-add-button { width: 100%; }
 
-  .schedule-week-table { min-width: 72rem; }
+  .schedule-week-table { min-width: 72.5rem; }
+  .schedule-week-table .schedule-time-column { width: 9.5rem; }
+  .schedule-week-table col:not(.schedule-time-column) { width: 10.5rem; }
 
   .schedule-board-footer {
     align-items: flex-start;
     padding: var(--space-4);
   }
 
-  .schedule-ocr-backdrop { padding: var(--space-2); }
+  .schedule-ocr-backdrop {
+    padding-top: max(var(--space-2), env(safe-area-inset-top));
+    padding-right: max(var(--space-2), env(safe-area-inset-right));
+    padding-bottom: max(var(--space-2), env(safe-area-inset-bottom));
+    padding-left: max(var(--space-2), env(safe-area-inset-left));
+  }
 
   .schedule-ocr-dialog {
-    height: calc(100dvh - var(--space-4));
-    border-radius: var(--radius-panel) var(--radius-panel) 0 0;
+    height: calc(100dvh - max(var(--space-4), env(safe-area-inset-top)) - max(var(--space-4), env(safe-area-inset-bottom)));
+    border-radius: var(--radius-panel);
   }
 
   .schedule-ocr-dialog > header { padding: var(--space-4); }
@@ -766,12 +777,39 @@
 
   .schedule-ocr-grid { min-width: 56rem; }
 
+  .schedule-time-range input,
+  .schedule-cell-editor input,
+  .schedule-ocr-grid td input { font-size: 1rem; }
+
   .schedule-ocr-review footer {
     flex-direction: column-reverse;
     padding: var(--space-3) var(--space-4) var(--space-4);
   }
 
   .schedule-ocr-review footer button { width: 100%; }
+}
+
+@media (min-width: 560px) and (max-width: 980px) and (max-height: 500px) {
+  .schedule-page { gap: var(--space-4); margin-top: var(--space-3); }
+
+  .schedule-heading {
+    grid-template-columns: minmax(0, 1fr) minmax(19rem, 0.9fr);
+    align-items: end;
+    gap: var(--space-4);
+  }
+
+  .schedule-actions {
+    width: auto;
+    flex-direction: row;
+  }
+
+  .schedule-scan-button,
+  .schedule-add-button {
+    width: auto;
+    min-width: 0;
+    flex: 1 1 0;
+    padding-inline: var(--space-3);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
