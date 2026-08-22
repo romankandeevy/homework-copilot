@@ -13,6 +13,8 @@ test.describe('недельное расписание', () => {
 
     await expect(page.getByRole('columnheader', { name: 'Понедельник' })).toBeVisible()
     await expect(page.getByRole('columnheader', { name: 'Суббота' })).toBeVisible()
+    await expect(page.getByLabel('Начало урока 1')).toHaveValue('08:30')
+    await expect(page.getByLabel('Конец урока 1')).toHaveValue('09:15')
 
     const subject = page.getByLabel('Предмет, понедельник, урок 1')
     await subject.fill('Математика')

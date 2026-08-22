@@ -8,7 +8,21 @@ export type ScheduleEntry = {
   room: string
 }
 
-export const defaultLessonTimes = ['08:30', '09:25', '10:20', '11:20', '12:15', '13:10', '14:05', '15:00']
+export type ScheduleTableCell = {
+  day: WeekdayId
+  time: string
+  rectangle: { left: number; top: number; width: number; height: number }
+}
+
+export const defaultLessonTimes = [
+  '08:30-09:15',
+  '09:25-10:10',
+  '10:30-11:15',
+  '11:35-12:20',
+  '12:30-13:15',
+  '13:25-14:10',
+  '14:20-15:05',
+]
 
 const dayPatterns: ReadonlyArray<{ id: WeekdayId; pattern: RegExp }> = [
   { id: 'monday', pattern: /понедельник|\bпн\b/i },
@@ -21,7 +35,7 @@ const dayPatterns: ReadonlyArray<{ id: WeekdayId; pattern: RegExp }> = [
 
 const subjects: ReadonlyArray<{ label: string; aliases: readonly string[] }> = [
   { label: 'Русский язык', aliases: ['русский язык', 'русский'] },
-  { label: 'Английский язык', aliases: ['английский язык', 'английский'] },
+  { label: 'Английский язык', aliases: ['английский язык', 'английский', 'англ.яз', 'англ яз'] },
   { label: 'Обществознание', aliases: ['обществознание', 'общество'] },
   { label: 'Информатика', aliases: ['информатика', 'программирование'] },
   { label: 'Физкультура', aliases: ['физкультура', 'физическая культура'] },
@@ -29,7 +43,7 @@ const subjects: ReadonlyArray<{ label: string; aliases: readonly string[] }> = [
   { label: 'География', aliases: ['география'] },
   { label: 'Геометрия', aliases: ['геометрия'] },
   { label: 'Биология', aliases: ['биология'] },
-  { label: 'Алгебра', aliases: ['алгебра'] },
+  { label: 'Алгебра', aliases: ['алгебра', 'алгеб'] },
   { label: 'История', aliases: ['история'] },
   { label: 'Физика', aliases: ['физика'] },
   { label: 'Химия', aliases: ['химия'] },
@@ -37,6 +51,7 @@ const subjects: ReadonlyArray<{ label: string; aliases: readonly string[] }> = [
   { label: 'Музыка', aliases: ['музыка'] },
   { label: 'ИЗО', aliases: ['изо', 'рисование'] },
   { label: 'ОБЖ', aliases: ['обж'] },
+  { label: 'Вероятность и статистика', aliases: ['вероятность и статистика', 'вероятность', 'статистика'] },
 ]
 
 type OcrWord = {
@@ -171,7 +186,42 @@ function wordCenterY(word: OcrWord) {
 
 function parseTime(value: string) {
   const match = value.match(/([0-2]?\d)[:.]([0-5]\d)/)
-  return match ? `${match[1].padStart(2, '0')}:${match[2]}` : ''
+  if (!match || Number(match[1]) > 23) return ''
+  return `${match[1].padStart(2, '0')}:${match[2]}`
+}
+
+function timeToMinutes(value: string) {
+  const [hours, minutes] = value.split(':').map(Number)
+  return hours * 60 + minutes
+}
+
+function addMinutes(value: string, amount: number) {
+  const total = Math.min(timeToMinutes(value) + amount, 23 * 60 + 59)
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+}
+
+function lessonRangeFromTimes(times: string[], rowIndex: number) {
+  const start = times[0]
+  const end = times.find((time, index) => index > 0 && timeToMinutes(time) > timeToMinutes(start))
+  if (start && end) return `${start}-${end}`
+  const knownRange = start && defaultLessonTimes.find((range) => range.startsWith(`${start}-`))
+  if (knownRange) return knownRange
+  if (start) return `${start}-${addMinutes(start, 45)}`
+  return defaultLessonTimes[rowIndex] ?? ''
+}
+
+export function normalizeLessonTimeRange(value: string, fallbackIndex = 0) {
+  const times = Array.from(value.matchAll(/([0-2]?\d)[:.]([0-5]\d)/g), (match) => {
+    const hours = Number(match[1])
+    return hours <= 23 ? `${String(hours).padStart(2, '0')}:${match[2]}` : ''
+  }).filter(Boolean)
+  return lessonRangeFromTimes(times, fallbackIndex)
+}
+
+export function splitLessonTimeRange(value: string) {
+  const normalized = normalizeLessonTimeRange(value)
+  const [start, end] = normalized.split('-')
+  return { start, end }
 }
 
 function extractRooms(value: string) {
@@ -192,13 +242,18 @@ function estimateColumnCenters(foundCenters: Map<number, number>, count: number)
   return Array.from({ length: count }, (_, index) => foundCenters.get(index) ?? origin + step * index)
 }
 
-export function parseScheduleTableTsv(primaryTsv: string, fallbackTsv = ''): ScheduleEntry[] {
-  const primaryWords = parseTsvWords(primaryTsv)
-  const fallbackWords = fallbackTsv ? parseTsvWords(fallbackTsv) : []
+function median(values: number[]) {
+  if (values.length === 0) return 0
+  const sorted = [...values].sort((left, right) => left - right)
+  return sorted[Math.floor(sorted.length / 2)]
+}
+
+function getScheduleTableGeometry(tsv: string) {
+  const words = parseTsvWords(tsv)
   const foundCenters = new Map<number, number>()
   const headerWords: OcrWord[] = []
 
-  for (const word of primaryWords) {
+  for (const word of words) {
     const normalized = normalizeOcrValue(word.text)
     const weekdayIndex = tableWeekdays.findIndex((day) => weekdayAliases[day].some((alias) => normalized.includes(normalizeOcrValue(alias))))
     if (weekdayIndex >= 0 && !foundCenters.has(weekdayIndex)) {
@@ -207,73 +262,127 @@ export function parseScheduleTableTsv(primaryTsv: string, fallbackTsv = ''): Sch
     }
   }
 
-  if (foundCenters.size < 3 || headerWords.length < 3) return []
+  if (foundCenters.size < 3 || headerWords.length < 3) return null
 
   const lastFoundIndex = Math.max(...foundCenters.keys())
-  const dayCount = Math.max(5, lastFoundIndex + 1)
+  const dayCount = Math.min(tableWeekdays.length, Math.max(5, lastFoundIndex + 1))
   const columnCenters = estimateColumnCenters(foundCenters, dayCount)
-  const averageStep = columnCenters.slice(1).reduce((sum, center, index) => sum + center - columnCenters[index], 0) / Math.max(1, columnCenters.length - 1)
+  const columnSteps = columnCenters.slice(1).map((center, index) => center - columnCenters[index])
+  const averageStep = median(columnSteps) || 160
   const columnBounds = columnCenters.map((center, index) => ({
     left: index === 0 ? center - averageStep / 2 : (columnCenters[index - 1] + center) / 2,
     right: index === columnCenters.length - 1 ? center + averageStep / 2 : (center + columnCenters[index + 1]) / 2,
   }))
   const headerCenterY = headerWords.reduce((sum, word) => sum + wordCenterY(word), 0) / headerWords.length
-
-  const timeCandidates = primaryWords
+  const groupThreshold = Math.max(8, median(words.map(({ height }) => height).filter((height) => height > 0)) * 0.9)
+  const timeCandidates = words
     .map((word) => ({ word, time: parseTime(word.text) }))
-    .filter(({ word, time }) => time && wordCenterX(word) < columnBounds[0].left && wordCenterY(word) > headerCenterY + 8)
+    .filter(({ word, time }) => time && wordCenterX(word) < columnBounds[0].left && wordCenterY(word) > headerCenterY + groupThreshold)
     .sort((left, right) => wordCenterY(left.word) - wordCenterY(right.word) || left.word.x - right.word.x)
-
   const timeGroups: Array<Array<{ word: OcrWord; time: string }>> = []
+
   for (const candidate of timeCandidates) {
     const lastGroup = timeGroups.at(-1)
     const lastCenter = lastGroup
       ? lastGroup.reduce((sum, item) => sum + wordCenterY(item.word), 0) / lastGroup.length
       : undefined
-    if (!lastGroup || lastCenter === undefined || Math.abs(wordCenterY(candidate.word) - lastCenter) > 8) timeGroups.push([candidate])
+    if (!lastGroup || lastCenter === undefined || Math.abs(wordCenterY(candidate.word) - lastCenter) > groupThreshold) timeGroups.push([candidate])
     else lastGroup.push(candidate)
   }
 
   const rows = timeGroups
-    .map((group) => {
-      const sorted = [...group].sort((left, right) => left.word.x - right.word.x)
+    .map((group, rowIndex) => {
+      const times = [...group].sort((left, right) => left.word.x - right.word.x).map(({ time }) => time)
       return {
         centerY: group.reduce((sum, item) => sum + wordCenterY(item.word), 0) / group.length,
-        time: sorted[0]?.time ?? '',
+        time: lessonRangeFromTimes(times, rowIndex),
       }
     })
     .filter((row) => row.time)
     .slice(0, 12)
 
-  if (rows.length < 2) return []
+  if (rows.length < 2) return null
 
-  const averageRowStep = rows.slice(1).reduce((sum, row, index) => sum + row.centerY - rows[index].centerY, 0) / Math.max(1, rows.length - 1)
+  const averageRowStep = median(rows.slice(1).map((row, index) => row.centerY - rows[index].centerY)) || 48
+  const rowBounds = rows.map((row, rowIndex) => ({
+    ...row,
+    top: rowIndex === 0 ? row.centerY - averageRowStep / 2 : (rows[rowIndex - 1].centerY + row.centerY) / 2,
+    bottom: rowIndex === rows.length - 1 ? row.centerY + averageRowStep / 2 : (row.centerY + rows[rowIndex + 1].centerY) / 2,
+  }))
+
+  return { words, columnBounds, rowBounds }
+}
+
+export function getScheduleTableCells(tsv: string): ScheduleTableCell[] {
+  const geometry = getScheduleTableGeometry(tsv)
+  if (!geometry) return []
+
+  return geometry.rowBounds.flatMap((row) => geometry.columnBounds.map((column, dayIndex) => {
+    const inset = Math.max(2, Math.round(Math.min(column.right - column.left, row.bottom - row.top) * 0.07))
+    return {
+      day: tableWeekdays[dayIndex],
+      time: row.time,
+      rectangle: {
+        left: Math.max(0, Math.round(column.left + inset)),
+        top: Math.max(0, Math.round(row.top + inset)),
+        width: Math.max(1, Math.round(column.right - column.left - inset * 2)),
+        height: Math.max(1, Math.round(row.bottom - row.top - inset * 2)),
+      },
+    }
+  }))
+}
+
+export function parseScheduleCellText(value: string) {
+  const recognizedSubjects = findCanonicalSubjects(value)
+  return {
+    subject: recognizedSubjects.join(' / '),
+    room: extractRooms(value),
+  }
+}
+
+export function parseScheduleRoomDigits(value: string) {
+  const rooms = (value.match(/\d+/g) ?? [])
+    .map((digits) => digits.slice(-3))
+    .filter((room) => room.length === 3 && Number(room) >= 100)
+  return Array.from(new Set(rooms)).slice(-2).join(' / ')
+}
+
+export function getScheduleTeacherKey(value: string) {
+  const match = value.match(/([А-ЯЁA-Z][А-ЯЁа-яёA-Za-z]{3,})\s+([А-ЯЁA-Z])[.\s]*([А-ЯЁA-Z])?\.?/u)
+  if (!match) return ''
+  const surname = normalizeOcrValue(match[1])
+  const initial = normalizeOcrValue(match[2])
+  return `${surname.slice(0, 4)}${initial}`
+}
+
+export function parseScheduleTableTsv(primaryTsv: string, fallbackTsv = ''): ScheduleEntry[] {
+  const geometry = getScheduleTableGeometry(primaryTsv)
+  if (!geometry) return []
+
+  const primaryWords = geometry.words
+  const fallbackWords = fallbackTsv ? parseTsvWords(fallbackTsv) : []
   const allWords = [...primaryWords, ...fallbackWords]
   const entries: ScheduleEntry[] = []
 
-  rows.forEach((row, rowIndex) => {
-    const top = rowIndex === 0 ? row.centerY - averageRowStep / 2 : (rows[rowIndex - 1].centerY + row.centerY) / 2
-    const bottom = rowIndex === rows.length - 1 ? row.centerY + averageRowStep / 2 : (row.centerY + rows[rowIndex + 1].centerY) / 2
-
-    columnBounds.forEach((column, dayIndex) => {
+  geometry.rowBounds.forEach((row) => {
+    geometry.columnBounds.forEach((column, dayIndex) => {
       const cellWords = allWords
         .filter((word) => {
           const centerX = wordCenterX(word)
           const centerY = wordCenterY(word)
-          return centerX > column.left && centerX < column.right && centerY > top && centerY < bottom
+          return centerX > column.left && centerX < column.right && centerY > row.top && centerY < row.bottom
         })
         .sort((left, right) => left.y - right.y || left.x - right.x)
       const cellText = cellWords.map((word) => word.text).join(' ')
-      const recognizedSubjects = findCanonicalSubjects(cellText)
-
-      if (recognizedSubjects.length === 0) return
+      const parsed = parseScheduleCellText(cellText)
+      if (!parsed.subject) return
 
       entries.push({
         id: makeScheduleEntryId(),
         day: tableWeekdays[dayIndex],
         time: row.time,
-        subject: recognizedSubjects.join(' / '),
-        room: extractRooms(cellText),
+        subject: parsed.subject,
+        room: parsed.room,
       })
     })
   })
@@ -330,7 +439,7 @@ export function parseScheduleText(rawText: string): ScheduleEntry[] {
     if (!hasUsefulStructure || subject.length < 2 || looksLikeHeading) continue
 
     const lessonIndex = lessonCounts[activeDay]
-    const time = timeMatch ? `${timeMatch[1].padStart(2, '0')}:${timeMatch[2]}` : defaultLessonTimes[lessonIndex] ?? ''
+    const time = timeMatch ? normalizeLessonTimeRange(timeMatch[0], lessonIndex) : defaultLessonTimes[lessonIndex] ?? ''
     entries.push({ id: makeScheduleEntryId(), day: activeDay, time, subject, room })
     lessonCounts[activeDay] += 1
   }

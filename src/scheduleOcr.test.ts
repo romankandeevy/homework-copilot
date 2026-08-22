@@ -20,16 +20,16 @@ describe('schedule OCR parser', () => {
     `)
 
     expect(rows).toHaveLength(3)
-    expect(rows[0]).toMatchObject({ day: 'monday', time: '08:30', subject: 'Алгебра', room: '312' })
-    expect(rows[1]).toMatchObject({ day: 'monday', time: '09:25', subject: 'Русский язык', room: '218' })
-    expect(rows[2]).toMatchObject({ day: 'tuesday', time: '08:30', subject: 'Геометрия', room: '406' })
+    expect(rows[0]).toMatchObject({ day: 'monday', time: '08:30-09:15', subject: 'Алгебра', room: '312' })
+    expect(rows[1]).toMatchObject({ day: 'monday', time: '09:25-10:10', subject: 'Русский язык', room: '218' })
+    expect(rows[2]).toMatchObject({ day: 'tuesday', time: '08:30-09:15', subject: 'Геометрия', room: '406' })
   })
 
   it('keeps useful subjects even when OCR misses time and room columns', () => {
     const rows = parseScheduleText('Алгебра\nФизика\nИстория')
 
     expect(rows.map(({ subject }) => subject)).toEqual(['Алгебра', 'Физика', 'История'])
-    expect(rows.map(({ time }) => time)).toEqual(['08:30', '09:25', '10:20'])
+    expect(rows.map(({ time }) => time)).toEqual(['08:30-09:15', '09:25-10:10', '10:30-11:15'])
   })
 
   it('maps photographed table cells by weekday columns and lesson rows', () => {
@@ -56,12 +56,12 @@ describe('schedule OCR parser', () => {
     const rows = parseScheduleTableTsv(tsv)
 
     expect(rows.map(({ day, time, subject }) => ({ day, time, subject }))).toEqual([
-      { day: 'tuesday', time: '08:30', subject: 'Русский язык' },
-      { day: 'thursday', time: '08:30', subject: 'Биология' },
-      { day: 'monday', time: '09:25', subject: 'Физкультура' },
-      { day: 'tuesday', time: '09:25', subject: 'История' },
-      { day: 'wednesday', time: '09:25', subject: 'Алгебра' },
-      { day: 'friday', time: '09:25', subject: 'Геометрия' },
+      { day: 'tuesday', time: '08:30-09:15', subject: 'Русский язык' },
+      { day: 'thursday', time: '08:30-09:15', subject: 'Биология' },
+      { day: 'monday', time: '09:25-10:10', subject: 'Физкультура' },
+      { day: 'tuesday', time: '09:25-10:10', subject: 'История' },
+      { day: 'wednesday', time: '09:25-10:10', subject: 'Алгебра' },
+      { day: 'friday', time: '09:25-10:10', subject: 'Геометрия' },
     ])
     expect(rows[0]?.room).toBe('404')
   })
