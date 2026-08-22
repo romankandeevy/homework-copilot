@@ -11,6 +11,7 @@ node_modules
 dist
 dist-ssr
 *.local
+.env*
 .vercel
 
 # Local design and browser QA artifacts
