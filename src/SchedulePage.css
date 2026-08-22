@@ -158,13 +158,13 @@
 
 .schedule-week-table {
   width: 100%;
-  min-width: 72rem;
+  min-width: 58.5rem;
   border-spacing: 0;
   table-layout: fixed;
 }
 
-.schedule-week-table col { width: calc((100% - 11rem) / 6); }
-.schedule-week-table .schedule-time-column { width: 11rem; }
+.schedule-week-table col { width: calc((100% - 10.5rem) / 6); }
+.schedule-week-table .schedule-time-column { width: 10.5rem; }
 
 .schedule-week-table th,
 .schedule-week-table td {
