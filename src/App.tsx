@@ -22,6 +22,7 @@ import {
   Notebook,
   Plus,
   SpinnerGap,
+  SidebarSimple,
   Stack,
   Sun,
   TextT,
@@ -35,6 +36,7 @@ import SchedulePage from './SchedulePage'
 import LegalPage from './LegalPage'
 import type { AccountData } from './lib/supabase'
 import { getInitials, loadAccountData, supabase } from './lib/supabase'
+import { formatRubles } from './lib/currency'
 import './App.css'
 
 const DesignSystemPlayground = lazy(() => import('./DesignSystemPlayground'))
@@ -184,6 +186,8 @@ function ProductSidebar({
   user,
   account,
   onOpenAccount,
+  collapsed,
+  onToggleCollapsed,
 }: {
   theme: Theme
   activeLabel: NavigationLabel
@@ -192,12 +196,17 @@ function ProductSidebar({
   user: User | null
   account: AccountData | null
   onOpenAccount: () => void
+  collapsed: boolean
+  onToggleCollapsed: () => void
 }) {
   const activeIndex = navigation.findIndex(({ label }) => label === activeLabel)
 
   return (
     <aside className="product-sidebar" aria-label="Основная навигация">
       <div className="sidebar-brand"><BrandLockup /></div>
+      <button className="sidebar-collapse-button" type="button" onClick={onToggleCollapsed} aria-label={collapsed ? 'Развернуть боковое меню' : 'Свернуть боковое меню'} title={collapsed ? 'Развернуть меню' : 'Свернуть меню'}>
+        <SidebarSimple size={20} weight="duotone" aria-hidden="true" />
+      </button>
 
       <nav className="product-navigation">
         <svg className="navigation-route" viewBox="0 0 112 384" preserveAspectRatio="none" aria-hidden="true">
@@ -208,7 +217,7 @@ function ProductSidebar({
           return (
             <button className={`navigation-item${active ? ' is-active' : ''}`} type="button" key={label} aria-current={active ? 'page' : undefined} onClick={() => onNavigate(label)}>
               <span className="navigation-icon"><Icon size={32} weight="duotone" aria-hidden="true" /></span>
-              <span>{label}</span>
+              <span className="navigation-label">{label}</span>
             </button>
           )
         })}
@@ -223,9 +232,9 @@ function ProductSidebar({
 }
 
 function BalanceControl({ user, balance, onOpenAccount }: { user: User | null; balance: number | null; onOpenAccount: () => void }) {
-  const balanceLabel = user ? `${balance ?? 0} решений` : 'Войти'
+  const balanceLabel = user ? formatRubles(balance ?? 0) : 'Войти'
   return (
-    <div className="balance-control" aria-label={user ? `Баланс: ${balance ?? 0} решений` : 'Войти, чтобы увидеть баланс'}>
+    <div className="balance-control" aria-label={user ? `Баланс: ${formatRubles(balance ?? 0)}` : 'Войти, чтобы увидеть баланс'}>
       <Coins size={22} weight="duotone" aria-hidden="true" />
       <span><small>Баланс</small><strong>{balanceLabel}</strong></span>
       <button type="button" aria-label={user ? 'Открыть профиль и баланс' : 'Войти, чтобы открыть баланс'} onClick={onOpenAccount}><Plus size={17} weight="bold" aria-hidden="true" /></button>
@@ -581,7 +590,7 @@ function CopyTask({
           </div>
 
           <button className="copy-task-submit" type="submit" disabled={!canSubmit || isSubmitting}>
-            {isSubmitting ? 'Подожди…' : photo ? 'Списать по фото' : readyInBase && normalizedTask ? 'Открыть готовое' : 'Списать'}
+            {isSubmitting ? 'Подожди…' : photo ? 'Списать по фото за 1 ₽' : readyInBase && normalizedTask ? 'Открыть готовое за 1 ₽' : 'Списать за 1 ₽'}
             {!isSubmitting && <ArrowRight size={20} weight="bold" aria-hidden="true" />}
           </button>
         </div>
@@ -734,6 +743,7 @@ function ComingSoon({ section }: { section: NavigationLabel }) {
 
 function HomePage() {
   const [theme, setTheme] = useState<Theme>(() => document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light')
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => window.localStorage.getItem('homework-copilot:sidebar-collapsed') === '1')
   const [activeNavigation, setActiveNavigation] = useState<NavigationLabel>('Главная')
   const [taskNumber, setTaskNumber] = useState('')
   const [selectedTextbookId, setSelectedTextbookId] = useState<TextbookId>('geometry')
@@ -848,6 +858,11 @@ function HomePage() {
   }, [refreshAccount])
 
   const toggleTheme = () => setTheme((current) => current === 'light' ? 'dark' : 'light')
+  const toggleSidebar = () => setSidebarCollapsed((current) => {
+    const next = !current
+    window.localStorage.setItem('homework-copilot:sidebar-collapsed', next ? '1' : '0')
+    return next
+  })
   const openAccount = () => {
     setAccountNotice('')
     setAccountOpen(true)
@@ -865,7 +880,7 @@ function HomePage() {
         p_idempotency_key: idempotencyKey,
       })
       if (spendError) {
-        setAccountNotice(spendError.message.includes('insufficient balance') ? 'На балансе не осталось решений' : 'Не получилось списать решение с баланса')
+        setAccountNotice(spendError.message.includes('insufficient balance') ? 'На балансе меньше 1 ₽' : 'Не получилось списать 1 ₽ с баланса')
         setAccountOpen(true)
         return false
       }
@@ -881,8 +896,8 @@ function HomePage() {
   }
 
   return (
-    <main className="product-shell" style={shellStyle}>
-      <ProductSidebar theme={theme} activeLabel={activeNavigation} onNavigate={setActiveNavigation} onToggleTheme={toggleTheme} user={user} account={account} onOpenAccount={openAccount} />
+    <main className={`product-shell${sidebarCollapsed ? ' is-sidebar-collapsed' : ''}`} style={shellStyle}>
+      <ProductSidebar theme={theme} activeLabel={activeNavigation} onNavigate={setActiveNavigation} onToggleTheme={toggleTheme} user={user} account={account} onOpenAccount={openAccount} collapsed={sidebarCollapsed} onToggleCollapsed={toggleSidebar} />
       <div className="product-seam" aria-hidden="true"><span /></div>
       <div className="product-content">
         <PageHeader theme={theme} onToggleTheme={toggleTheme} user={user} account={account} onOpenAccount={openAccount} />

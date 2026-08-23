@@ -5,7 +5,10 @@
   grid-template-columns: var(--rail-width) 1px minmax(0, 1fr);
   background: var(--color-canvas);
   color: var(--color-text);
+  transition: grid-template-columns var(--motion-navigation) var(--ease-out);
 }
+
+.product-shell.is-sidebar-collapsed { --rail-width: 7rem; }
 
 .product-sidebar {
   display: flex;
@@ -16,6 +19,7 @@
   flex-direction: column;
   padding: var(--space-6) var(--space-4) var(--space-5);
   background: var(--color-canvas);
+  z-index: 3;
 }
 
 .sidebar-brand {
@@ -24,6 +28,27 @@
   align-items: center;
   padding-inline: var(--space-2);
 }
+
+.sidebar-collapse-button {
+  display: grid;
+  position: absolute;
+  z-index: 4;
+  top: 2rem;
+  right: -1.25rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  place-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  box-shadow: var(--shadow-raised);
+  cursor: pointer;
+  transition: color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), transform var(--motion-navigation) var(--ease-out);
+}
+
+.sidebar-collapse-button:hover { border-color: var(--color-border-strong); color: var(--color-text); }
+.product-shell.is-sidebar-collapsed .sidebar-collapse-button { transform: rotate(180deg); }
 
 .brand-lockup {
   display: inline-flex;
@@ -137,6 +162,35 @@
 .navigation-item:focus-visible .navigation-icon {
   border-color: var(--color-accent);
   box-shadow: none;
+}
+
+.product-shell.is-sidebar-collapsed .product-sidebar { padding-inline: var(--space-3); }
+.product-shell.is-sidebar-collapsed .sidebar-brand { justify-content: center; padding-inline: 0; }
+.product-shell.is-sidebar-collapsed .brand-name,
+.product-shell.is-sidebar-collapsed .navigation-label,
+.product-shell.is-sidebar-collapsed .profile-button > span:nth-child(2),
+.product-shell.is-sidebar-collapsed .profile-button > svg {
+  width: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.product-shell.is-sidebar-collapsed .brand-lockup { gap: 0; }
+.product-shell.is-sidebar-collapsed .navigation-item {
+  width: 3rem;
+  grid-template-columns: 3rem;
+  gap: 0;
+  margin-inline: auto;
+}
+.product-shell.is-sidebar-collapsed .navigation-item.is-active { transform: none; }
+.product-shell.is-sidebar-collapsed .navigation-route { left: -1.25rem; }
+.product-shell.is-sidebar-collapsed .sidebar-footer { justify-content: center; padding-inline: 0; }
+.product-shell.is-sidebar-collapsed .profile-button {
+  width: var(--size-control);
+  flex: 0 0 auto;
+  grid-template-columns: 2rem;
+  padding: 0.1875rem;
+  overflow: hidden;
 }
 
 .sidebar-footer {
@@ -916,6 +970,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .product-shell,
+  .sidebar-collapse-button,
   .navigation-item,
   .navigation-route path,
   .product-seam span,

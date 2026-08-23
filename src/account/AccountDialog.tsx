@@ -16,6 +16,7 @@ import {
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import type { AccountData } from '../lib/supabase'
 import { getInitials, supabase } from '../lib/supabase'
+import { formatRubles } from '../lib/currency'
 import './AccountDialog.css'
 
 type AuthScreen = 'sign-in' | 'sign-up' | 'forgot' | 'reset' | 'verify-code'
@@ -415,9 +416,9 @@ function ProfileView({ user, account, notice, onReloadAccount }: { user: User; a
           <span>Профиль</span>
           <h2 id="account-dialog-title">Твой аккаунт</h2>
         </div>
-        <div className="account-balance-pill" aria-label={`Баланс: ${account?.balance ?? 0} решений`}>
+        <div className="account-balance-pill" aria-label={`Баланс: ${formatRubles(account?.balance ?? 0)}`}>
           <Coins size={21} weight="duotone" aria-hidden="true" />
-          <span><small>Баланс</small><strong>{account?.balance ?? '…'} решений</strong></span>
+          <span><small>Баланс</small><strong>{account ? formatRubles(account.balance) : '…'}</strong></span>
         </div>
       </header>
 
@@ -461,7 +462,7 @@ function ProfileView({ user, account, notice, onReloadAccount }: { user: User; a
             <div><h3 id="wallet-history-title">Последние операции</h3><span>Журнал нельзя изменить</span></div>
             {account?.entries.map((entry) => (
               <div className="account-wallet-entry" key={entry.id}>
-                <span className={entry.amount > 0 ? 'is-credit' : 'is-debit'}>{entry.amount > 0 ? '+' : ''}{entry.amount}</span>
+                <span className={entry.amount > 0 ? 'is-credit' : 'is-debit'}>{entry.amount > 0 ? '+' : ''}{formatRubles(entry.amount)}</span>
                 <strong>{entry.description}</strong>
                 <time dateTime={entry.created_at}>{new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short' }).format(new Date(entry.created_at))}</time>
               </div>

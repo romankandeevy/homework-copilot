@@ -154,6 +154,17 @@ describe('Homework Copilot home', () => {
     expect(screen.getAllByRole('button', { name: 'Включить светлую тему' })).toHaveLength(2)
   })
 
+  it('collapses and restores the desktop sidebar', () => {
+    render(<App />)
+
+    const shell = document.querySelector('.product-shell')
+    fireEvent.click(screen.getByRole('button', { name: 'Свернуть боковое меню' }))
+    expect(shell).toHaveClass('is-sidebar-collapsed')
+    expect(window.localStorage.getItem('homework-copilot:sidebar-collapsed')).toBe('1')
+    fireEvent.click(screen.getByRole('button', { name: 'Развернуть боковое меню' }))
+    expect(shell).not.toHaveClass('is-sidebar-collapsed')
+  })
+
   it('shows a coming-soon placeholder for unfinished sidebar sections', () => {
     render(<App />)
 
@@ -208,7 +219,7 @@ describe('Homework Copilot home', () => {
     render(<App />)
 
     expect(screen.getByRole('heading', { name: 'Условия использования' })).toBeInTheDocument()
-    expect(screen.getByText(/3 бесплатных решения/)).toBeInTheDocument()
+    expect(screen.getByText(/20 ₽ промобаланса/)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Политика конфиденциальности/ })).toHaveAttribute('href', '/privacy')
   })
 })
