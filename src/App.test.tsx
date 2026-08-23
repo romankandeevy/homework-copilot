@@ -164,6 +164,16 @@ describe('Homework Copilot home', () => {
     expect(shell).not.toHaveClass('is-sidebar-collapsed')
   })
 
+  it('toggles the desktop sidebar with the Codex shortcut', () => {
+    render(<App />)
+
+    const shell = document.querySelector('.product-shell')
+    fireEvent.keyDown(window, { key: '\\', ctrlKey: true })
+    expect(shell).toHaveClass('is-sidebar-collapsed')
+    fireEvent.keyDown(window, { key: '\\', ctrlKey: true })
+    expect(shell).not.toHaveClass('is-sidebar-collapsed')
+  })
+
   it('shows a coming-soon placeholder for unfinished sidebar sections', () => {
     render(<App />)
 
@@ -194,14 +204,14 @@ describe('Homework Copilot home', () => {
     expect(screen.getByLabelText('Загрузить фото расписания')).toHaveAttribute('accept', 'image/*')
   })
 
-  it('routes the sidebar line through the active icon center', () => {
+  it('routes the sidebar line through the active icon track', () => {
     render(<App />)
 
     const path = document.querySelector('.navigation-route path')
-    expect(path).toHaveAttribute('d', 'M-1 18 H24 C46 18 64 18 64 39 V39 C64 39 64 39 64 39 V87 C64 99 40 99 40 111 V340 C40 350 32 360 16 360 H-1')
+    expect(path).toHaveAttribute('d', 'M20 -12 V6 C20 16 28 16 28 24 C28 32 20 32 20 42 V268')
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Мои решения' })[0])
-    expect(path).toHaveAttribute('d', 'M-1 18 H24 C34 18 40 24 40 34 V77 C40 89 64 89 64 101 V149 C64 161 40 161 40 173 V340 C40 350 32 360 16 360 H-1')
+    expect(path).toHaveAttribute('d', 'M20 -12 V58 C20 68 28 68 28 76 C28 84 20 84 20 94 V268')
   })
 
   it('publishes the privacy policy at its direct route', () => {

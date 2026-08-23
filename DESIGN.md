@@ -165,7 +165,7 @@ The palette combines clean paper and graphite with one sharp citrus signal; sema
 
 ## Layout
 
-Desktop uses a sticky 15rem sidebar and a centered content canvas capped at 88rem. Home starts with one dominant copying surface, then splits into a wider work/history column and a narrower saved-books/base column. The spacing system follows a 4px rhythm and reserves larger jumps for section boundaries.
+Desktop uses a sticky 14rem sidebar and a centered content canvas capped at 88rem. Home starts with one dominant copying surface, then splits into a wider work/history column and a narrower saved-books/base column. The spacing system follows a 4px rhythm and reserves larger jumps for section boundaries.
 
 At 1180px the secondary column compacts; below 980px the sidebar becomes a fixed five-item bottom navigation and Home becomes one column. Below 640px, fields and actions stack, secondary metadata compresses, and the primary action keeps full width. The document must remain usable from 320px without horizontal overflow.
 
@@ -183,7 +183,7 @@ The system is flat by default and uses a hybrid of tonal layers, borders, and tw
 
 Corners are gently geometric: compact marks use the smallest radius, controls use a half-rem radius, fields and rows use a three-quarter-rem radius, and only major panels reach one rem. Pills are reserved for continuous tracks and true capsule controls. Borders remain one pixel unless focus or a deliberate selected state requires stronger emphasis.
 
-Sidebar route lines use rounded elbows and a moving seam marker. The active destination shifts farther toward content while the connected route stretches smoothly behind it; the line never overlaps the item itself.
+The sidebar route stays on one measured icon grid. Only the active icon shifts toward content while the label remains fixed; the route bends by the same distance and the seam marker stays level with the icon center. The line never overlaps a label.
 
 ## Components
 
