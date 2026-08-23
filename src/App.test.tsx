@@ -35,6 +35,16 @@ describe('Homework Copilot home', () => {
     expect(screen.getByRole('textbox', { name: 'Имя' })).toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: 'Почта' })).toBeInTheDocument()
     expect(screen.getByLabelText('Класс')).toHaveValue('8')
+    expect(screen.getByRole('button', { name: 'Создать аккаунт' })).toBeDisabled()
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Имя' }), { target: { value: 'Рома' } })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Почта' }), { target: { value: 'roma@example.com' } })
+    fireEvent.change(screen.getByLabelText('Пароль'), { target: { value: '12' } })
+    expect(screen.getByRole('button', { name: 'Создать аккаунт' })).toBeDisabled()
+
+    fireEvent.change(screen.getByLabelText('Пароль'), { target: { value: '12345678' } })
+    expect(screen.getByRole('button', { name: 'Создать аккаунт' })).toBeEnabled()
+    expect(screen.queryByText(/Аккаунт сохраняет решения/)).not.toBeInTheDocument()
   })
 
   it('changes the saved textbook and checks the matching shared base', () => {

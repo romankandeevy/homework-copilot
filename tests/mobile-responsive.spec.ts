@@ -99,8 +99,16 @@ test.describe('адаптация под телефон', () => {
     await expect(page.getByRole('heading', { name: 'Создай аккаунт' })).toBeVisible()
     await expect(page.getByRole('textbox', { name: 'Имя' })).toBeVisible()
     await expect(page.getByRole('textbox', { name: 'Почта' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Создать аккаунт' })).toBeVisible()
+    const createAccount = page.getByRole('button', { name: 'Создать аккаунт' })
+    await expect(createAccount).toBeDisabled()
+    await page.getByRole('textbox', { name: 'Имя' }).fill('Рома')
+    await page.getByRole('textbox', { name: 'Почта' }).fill('roma@example.com')
+    await page.getByLabel('Пароль').fill('12')
+    await expect(createAccount).toBeDisabled()
+    await page.getByLabel('Пароль').fill('12345678')
+    await expect(createAccount).toBeEnabled()
     await expect(page.getByRole('textbox', { name: 'Имя' })).toHaveCSS('box-shadow', 'none')
+    await expect(page.getByText(/Аккаунт сохраняет решения/)).toHaveCount(0)
     await expectNoPageOverflow(page)
 
     const metrics = await page.locator('.account-dialog').evaluate((element) => {

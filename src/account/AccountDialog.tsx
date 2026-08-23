@@ -38,6 +38,10 @@ function authErrorMessage(message: string) {
   return 'Не получилось выполнить запрос. Проверь данные и попробуй ещё раз'
 }
 
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
+}
+
 function AuthView({ passwordRecovery, notice }: { passwordRecovery: boolean; notice?: string }) {
   const [screen, setScreen] = useState<AuthScreen>(passwordRecovery ? 'reset' : 'sign-in')
   const [fullName, setFullName] = useState('')
@@ -47,6 +51,14 @@ function AuthView({ passwordRecovery, notice }: { passwordRecovery: boolean; not
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+
+  const formIsValid = screen === 'sign-up'
+    ? fullName.trim().length >= 2 && isValidEmail(email) && password.length >= 8
+    : screen === 'sign-in'
+      ? isValidEmail(email) && password.length >= 8
+      : screen === 'forgot'
+        ? isValidEmail(email)
+        : password.length >= 8
 
   useEffect(() => {
     if (passwordRecovery) setScreen('reset')
@@ -182,7 +194,7 @@ function AuthView({ passwordRecovery, notice }: { passwordRecovery: boolean; not
         {error && <p className="account-form-message is-error" role="alert">{error}</p>}
         {status && <p className="account-form-message is-success" role="status"><CheckCircle size={18} weight="fill" aria-hidden="true" />{status}</p>}
 
-        <button className="account-primary-button" type="submit" disabled={loading}>
+        <button className="account-primary-button" type="submit" disabled={loading || !formIsValid}>
           {loading ? 'Подожди…' : screen === 'sign-up' ? 'Создать аккаунт' : screen === 'forgot' ? 'Отправить ссылку' : screen === 'reset' ? 'Сохранить пароль' : 'Войти'}
           {!loading && <ArrowRight size={18} weight="bold" aria-hidden="true" />}
         </button>
@@ -193,7 +205,6 @@ function AuthView({ passwordRecovery, notice }: { passwordRecovery: boolean; not
         {(screen === 'forgot' || screen === 'reset') && <button type="button" onClick={() => switchScreen('sign-in')}>Вернуться ко входу</button>}
       </div>
 
-      <p className="account-auth-footnote">Аккаунт сохраняет решения, учебники, расписание и баланс на всех устройствах.</p>
     </div>
   )
 }
