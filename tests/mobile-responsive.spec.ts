@@ -22,7 +22,7 @@ test.describe('адаптация под телефон', () => {
 
     const footer = page.locator('.sidebar-footer')
     const theme = footer.getByRole('button', { name: 'Включить тёмную тему' })
-    const profile = footer.getByRole('button', { name: 'Открыть профиль' })
+    const profile = footer.getByRole('button', { name: 'Войти или зарегистрироваться' })
     const [footerBox, themeBox, profileBox] = await Promise.all([
       footer.boundingBox(),
       theme.boundingBox(),
@@ -35,7 +35,7 @@ test.describe('адаптация под телефон', () => {
     expect(themeBox!.x + themeBox!.width).toBeLessThan(profileBox!.x)
     expect(Math.abs(themeBox!.y - profileBox!.y)).toBeLessThan(1)
     expect(footerBox!.y).toBeGreaterThan(780)
-    await expect(page.locator('.page-header').getByRole('button', { name: 'Открыть профиль' })).toHaveCount(0)
+    await expect(page.locator('.mobile-profile-button')).toBeHidden()
   })
 
   for (const viewport of phoneViewports) {
@@ -86,6 +86,38 @@ test.describe('адаптация под телефон', () => {
     const initialTheme = await page.locator('html').getAttribute('data-theme')
     await page.getByRole('button', { name: /Включить (светлую|тёмную) тему/ }).click()
     await expect(page.locator('html')).toHaveAttribute('data-theme', initialTheme === 'dark' ? 'light' : 'dark')
+  })
+
+  test('регистрация помещается на экран и прокручивается внутри диалога', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 812 })
+    await page.goto('/')
+
+    await page.getByRole('button', { name: 'Войти или зарегистрироваться' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Войди в аккаунт' })
+    await expect(dialog).toBeVisible()
+    await page.getByRole('tab', { name: 'Регистрация' }).click()
+    await expect(page.getByRole('heading', { name: 'Создай аккаунт' })).toBeVisible()
+    await expect(page.getByRole('textbox', { name: 'Имя' })).toBeVisible()
+    await expect(page.getByRole('textbox', { name: 'Почта' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Создать аккаунт' })).toBeVisible()
+    await expect(page.getByRole('textbox', { name: 'Имя' })).toHaveCSS('box-shadow', 'none')
+    await expectNoPageOverflow(page)
+
+    const metrics = await page.locator('.account-dialog').evaluate((element) => {
+      const rect = element.getBoundingClientRect()
+      return {
+        left: rect.left,
+        right: rect.right,
+        top: rect.top,
+        bottom: rect.bottom,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+      }
+    })
+    expect(metrics.left).toBeGreaterThanOrEqual(0)
+    expect(metrics.right).toBeLessThanOrEqual(metrics.viewportWidth)
+    expect(metrics.top).toBeGreaterThanOrEqual(0)
+    expect(metrics.bottom).toBeLessThanOrEqual(metrics.viewportHeight)
   })
 
   test('расписание листается только внутри таблицы на телефоне и в альбомной ориентации', async ({ page }) => {

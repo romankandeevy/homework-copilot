@@ -14,7 +14,7 @@ describe('Homework Copilot home', () => {
     render(<App />)
 
     expect(screen.getByRole('heading', { name: 'Списать задачу' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Баланс: 4 решения')).toBeInTheDocument()
+    expect(screen.getByLabelText('Войти, чтобы увидеть баланс')).toBeInTheDocument()
     expect(screen.getAllByText('Геометрия, 8 класс').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Геометрия. 7-9 классы').length).toBeGreaterThan(0)
     expect(screen.getByRole('heading', { name: 'Мои решения' })).toBeInTheDocument()
@@ -22,6 +22,19 @@ describe('Homework Copilot home', () => {
     expect(screen.getByRole('heading', { name: 'База решений' })).toBeInTheDocument()
     expect(screen.getByText('Общие готовые решения по всем добавленным учебникам. Их можно открыть сразу.')).toBeInTheDocument()
     expect(screen.queryByText(/МЭШ/i)).not.toBeInTheDocument()
+  })
+
+  it('opens the real account flow from the sidebar profile', async () => {
+    render(<App />)
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Войти или зарегистрироваться' })[0])
+    expect(await screen.findByRole('dialog', { name: 'Войди в аккаунт' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Регистрация' }))
+    expect(screen.getByRole('heading', { name: 'Создай аккаунт' })).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Имя' })).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Почта' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Класс')).toHaveValue('8')
   })
 
   it('changes the saved textbook and checks the matching shared base', () => {

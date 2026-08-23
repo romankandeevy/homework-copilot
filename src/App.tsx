@@ -1,5 +1,6 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, FormEvent } from 'react'
+import type { User } from '@supabase/supabase-js'
 import {
   ArrowRight,
   BookOpenText,
@@ -25,14 +26,18 @@ import {
   Sun,
   TextT,
   UploadSimple,
+  UserCircle,
   X,
 } from '@phosphor-icons/react'
 import { GeometryNotebookLayoutV1 } from './notebook/GeometryNotebookLayoutV1'
 import { fixtures } from './fixtures'
 import SchedulePage from './SchedulePage'
+import type { AccountData } from './lib/supabase'
+import { getInitials, loadAccountData, supabase } from './lib/supabase'
 import './App.css'
 
 const DesignSystemPlayground = lazy(() => import('./DesignSystemPlayground'))
+const AccountDialog = lazy(() => import('./account/AccountDialog'))
 
 type Theme = 'light' | 'dark'
 type TextbookId = string
@@ -155,12 +160,17 @@ function ThemeToggle({ theme, onToggle }: { theme: Theme; onToggle: () => void }
   )
 }
 
-function ProfileButton() {
+function ProfileButton({ user, account, onClick, compact = false }: { user: User | null; account: AccountData | null; onClick: () => void; compact?: boolean }) {
+  const name = account?.profile.full_name || (user ? user.email?.split('@')[0] : 'Войти') || 'Ученик'
+  const subtitle = user ? `${account?.profile.grade ?? 8} класс` : 'Аккаунт'
+
   return (
-    <button className="profile-button" type="button" aria-label="Открыть профиль">
-      <span>РК</span>
-      <span><strong>Рома</strong><small>8 класс</small></span>
-      <CaretRight size={14} weight="bold" aria-hidden="true" />
+    <button className={`profile-button${compact ? ' is-compact' : ''}`} type="button" aria-label={user ? 'Открыть профиль' : 'Войти или зарегистрироваться'} onClick={onClick}>
+      <span className="profile-avatar-small">
+        {account?.avatarUrl ? <img src={account.avatarUrl} alt="" /> : user ? getInitials(name, user.email) : <UserCircle size={21} weight="duotone" aria-hidden="true" />}
+      </span>
+      {!compact && <span><strong>{name}</strong><small>{subtitle}</small></span>}
+      {!compact && <CaretRight size={14} weight="bold" aria-hidden="true" />}
     </button>
   )
 }
@@ -170,11 +180,17 @@ function ProductSidebar({
   activeLabel,
   onNavigate,
   onToggleTheme,
+  user,
+  account,
+  onOpenAccount,
 }: {
   theme: Theme
   activeLabel: NavigationLabel
   onNavigate: (label: NavigationLabel) => void
   onToggleTheme: () => void
+  user: User | null
+  account: AccountData | null
+  onOpenAccount: () => void
 }) {
   const activeIndex = navigation.findIndex(({ label }) => label === activeLabel)
 
@@ -199,33 +215,39 @@ function ProductSidebar({
 
       <div className="sidebar-footer">
         <ThemeToggle theme={theme} onToggle={onToggleTheme} />
-        <ProfileButton />
+        <ProfileButton user={user} account={account} onClick={onOpenAccount} />
       </div>
     </aside>
   )
 }
 
-function BalanceControl() {
+function BalanceControl({ user, balance, onOpenAccount }: { user: User | null; balance: number | null; onOpenAccount: () => void }) {
+  const balanceLabel = user ? `${balance ?? 0} решений` : 'Войти'
   return (
-    <div className="balance-control" aria-label="Баланс: 4 решения">
+    <div className="balance-control" aria-label={user ? `Баланс: ${balance ?? 0} решений` : 'Войти, чтобы увидеть баланс'}>
       <Coins size={22} weight="duotone" aria-hidden="true" />
-      <span><small>Баланс</small><strong>4 решения</strong></span>
-      <button type="button" aria-label="Пополнить баланс"><Plus size={17} weight="bold" aria-hidden="true" /></button>
+      <span><small>Баланс</small><strong>{balanceLabel}</strong></span>
+      <button type="button" aria-label={user ? 'Открыть профиль и баланс' : 'Войти, чтобы открыть баланс'} onClick={onOpenAccount}><Plus size={17} weight="bold" aria-hidden="true" /></button>
     </div>
   )
 }
 
-function PageHeader({ theme, onToggleTheme }: { theme: Theme; onToggleTheme: () => void }) {
+function PageHeader({ theme, onToggleTheme, user, account, onOpenAccount }: { theme: Theme; onToggleTheme: () => void; user: User | null; account: AccountData | null; onOpenAccount: () => void }) {
+  const firstName = account?.profile.full_name.trim().split(/\s+/)[0]
+  const formattedDate = new Intl.DateTimeFormat('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date())
+  const dateLabel = formattedDate.charAt(0).toLocaleUpperCase('ru') + formattedDate.slice(1)
+
   return (
     <header className="page-header">
       <div className="mobile-brand"><BrandLockup /></div>
       <div className="page-heading">
-        <h1>Добрый день, Рома</h1>
-        <span>Пятница, 21 августа</span>
+        <h1>{firstName ? `Добрый день, ${firstName}` : 'Добрый день'}</h1>
+        <span>{dateLabel}</span>
       </div>
       <div className="header-actions">
         <span className="mobile-theme-toggle"><ThemeToggle theme={theme} onToggle={onToggleTheme} /></span>
-        <BalanceControl />
+        <BalanceControl user={user} balance={account?.balance ?? null} onOpenAccount={onOpenAccount} />
+        <span className="mobile-profile-button"><ProfileButton user={user} account={account} onClick={onOpenAccount} compact /></span>
       </div>
     </header>
   )
@@ -432,20 +454,31 @@ function CopyTask({
   onTaskNumberChange: (value: string) => void
   onTextbookChange: (id: TextbookId) => void
   onCreateTextbook: (textbook: Textbook) => void
-  onSubmit: (task: string, ready: boolean, source: 'number' | 'photo') => void
+  onSubmit: (task: string, ready: boolean, source: 'number' | 'photo', idempotencyKey: string) => Promise<boolean>
 }) {
   const [error, setError] = useState('')
   const [photo, setPhoto] = useState<File | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const photoInputRef = useRef<HTMLInputElement>(null)
+  const submissionRef = useRef(false)
   const normalizedTask = taskNumber.trim()
   const readyInBase = textbook.solvedTasks.includes(normalizedTask)
   const canSubmit = Boolean(normalizedTask || photo)
 
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    if (submissionRef.current) return
+    const submissionKey = typeof crypto.randomUUID === 'function'
+      ? `solution-${crypto.randomUUID()}`
+      : `solution-${Date.now()}-${Math.random().toString(16).slice(2)}`
+
     if (photo) {
       setError('')
-      onSubmit(photo.name, false, 'photo')
+      submissionRef.current = true
+      setIsSubmitting(true)
+      await onSubmit(photo.name, false, 'photo', submissionKey)
+      submissionRef.current = false
+      setIsSubmitting(false)
       return
     }
     if (!/^\d{1,4}$/.test(normalizedTask)) {
@@ -453,7 +486,11 @@ function CopyTask({
       return
     }
     setError('')
-    onSubmit(normalizedTask, readyInBase, 'number')
+    submissionRef.current = true
+    setIsSubmitting(true)
+    await onSubmit(normalizedTask, readyInBase, 'number', submissionKey)
+    submissionRef.current = false
+    setIsSubmitting(false)
   }
 
   const changeTaskNumber = (value: string) => {
@@ -542,9 +579,9 @@ function CopyTask({
             </div>
           </div>
 
-          <button className="copy-task-submit" type="submit" disabled={!canSubmit}>
-            {photo ? 'Списать по фото' : readyInBase && normalizedTask ? 'Открыть готовое' : 'Списать'}
-            <ArrowRight size={20} weight="bold" aria-hidden="true" />
+          <button className="copy-task-submit" type="submit" disabled={!canSubmit || isSubmitting}>
+            {isSubmitting ? 'Подожди…' : photo ? 'Списать по фото' : readyInBase && normalizedTask ? 'Открыть готовое' : 'Списать'}
+            {!isSubmitting && <ArrowRight size={20} weight="bold" aria-hidden="true" />}
           </button>
         </div>
 
@@ -701,6 +738,11 @@ function HomePage() {
   const [selectedTextbookId, setSelectedTextbookId] = useState<TextbookId>('geometry')
   const [customTextbooks, setCustomTextbooks] = useState<Textbook[]>([])
   const [solutionState, setSolutionState] = useState<SolutionState>({ mode: 'processing', textbookId: 'geometry', task: '118', source: 'number' })
+  const [user, setUser] = useState<User | null>(null)
+  const [account, setAccount] = useState<AccountData | null>(null)
+  const [accountOpen, setAccountOpen] = useState(() => new URLSearchParams(window.location.search).get('auth') === 'reset')
+  const [passwordRecovery, setPasswordRecovery] = useState(() => new URLSearchParams(window.location.search).get('auth') === 'reset')
+  const [accountNotice, setAccountNotice] = useState('')
   const availableTextbooks = useMemo(() => [...textbooks, ...customTextbooks], [customTextbooks])
   const selectedTextbook = getTextbook(selectedTextbookId, availableTextbooks)
   const activeNavigationIndex = navigation.findIndex(({ label }) => label === activeNavigation)
@@ -711,9 +753,77 @@ function HomePage() {
     document.documentElement.style.colorScheme = theme
   }, [theme])
 
+  useEffect(() => {
+    if (!supabase) return
+    let active = true
+
+    void supabase.auth.getUser().then(({ data }) => {
+      if (active) setUser(data.user ?? null)
+    })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      const nextUser = session?.user ?? null
+      setUser(nextUser)
+      if (!nextUser) setAccount(null)
+      if (event === 'PASSWORD_RECOVERY') {
+        setPasswordRecovery(true)
+        setAccountOpen(true)
+      }
+      if (event === 'SIGNED_OUT') {
+        setAccountOpen(false)
+        setPasswordRecovery(false)
+      }
+    })
+
+    return () => {
+      active = false
+      subscription.unsubscribe()
+    }
+  }, [])
+
+  const refreshAccount = useCallback(async () => {
+    if (!user) {
+      setAccount(null)
+      return
+    }
+    try {
+      setAccount(await loadAccountData(user))
+    } catch {
+      setAccountNotice('Не получилось загрузить профиль. Попробуй открыть его ещё раз')
+    }
+  }, [user])
+
+  useEffect(() => {
+    void refreshAccount()
+  }, [refreshAccount])
+
   const toggleTheme = () => setTheme((current) => current === 'light' ? 'dark' : 'light')
-  const submitTask = (task: string, ready: boolean, source: 'number' | 'photo') => {
+  const openAccount = () => {
+    setAccountNotice('')
+    setAccountOpen(true)
+  }
+  const submitTask = async (task: string, ready: boolean, source: 'number' | 'photo', idempotencyKey: string) => {
+    if (supabase && !user) {
+      setAccountNotice('Войди или зарегистрируйся, чтобы сохранить решение и списать его с баланса')
+      setAccountOpen(true)
+      return false
+    }
+
+    if (supabase && user) {
+      const { error: spendError } = await supabase.rpc('spend_solution_credit', {
+        p_description: source === 'photo' ? 'Решение задачи по фото' : `Решение задачи № ${task}`,
+        p_idempotency_key: idempotencyKey,
+      })
+      if (spendError) {
+        setAccountNotice(spendError.message.includes('insufficient balance') ? 'На балансе не осталось решений' : 'Не получилось списать решение с баланса')
+        setAccountOpen(true)
+        return false
+      }
+      await refreshAccount()
+    }
+
     setSolutionState({ mode: ready ? 'ready' : 'processing', textbookId: selectedTextbookId, task, source })
+    return true
   }
   const createTextbook = (textbook: Textbook) => {
     setCustomTextbooks((current) => [...current, textbook])
@@ -722,10 +832,10 @@ function HomePage() {
 
   return (
     <main className="product-shell" style={shellStyle}>
-      <ProductSidebar theme={theme} activeLabel={activeNavigation} onNavigate={setActiveNavigation} onToggleTheme={toggleTheme} />
+      <ProductSidebar theme={theme} activeLabel={activeNavigation} onNavigate={setActiveNavigation} onToggleTheme={toggleTheme} user={user} account={account} onOpenAccount={openAccount} />
       <div className="product-seam" aria-hidden="true"><span /></div>
       <div className="product-content">
-        <PageHeader theme={theme} onToggleTheme={toggleTheme} />
+        <PageHeader theme={theme} onToggleTheme={toggleTheme} user={user} account={account} onOpenAccount={openAccount} />
         {activeNavigation === 'Главная' ? (
           <div className="home-content">
             <CopyTask
@@ -751,6 +861,18 @@ function HomePage() {
         ) : activeNavigation === 'Расписание' ? <SchedulePage /> : <ComingSoon section={activeNavigation} />}
       </div>
       <MobileNavigation activeLabel={activeNavigation} onNavigate={setActiveNavigation} />
+      {accountOpen && (
+        <Suspense fallback={null}>
+          <AccountDialog
+            user={user}
+            account={account}
+            passwordRecovery={passwordRecovery}
+            notice={accountNotice}
+            onClose={() => { setAccountOpen(false); setAccountNotice('') }}
+            onReloadAccount={refreshAccount}
+          />
+        </Suspense>
+      )}
     </main>
   )
 }

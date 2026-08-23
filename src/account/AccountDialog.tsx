@@ -1,0 +1,389 @@
+import { useEffect, useState } from 'react'
+import type { FormEvent } from 'react'
+import type { User } from '@supabase/supabase-js'
+import {
+  ArrowRight,
+  Camera,
+  CheckCircle,
+  Coins,
+  EnvelopeSimple,
+  LockKey,
+  SignOut,
+  UserCircle,
+  X,
+} from '@phosphor-icons/react'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
+import type { AccountData } from '../lib/supabase'
+import { getInitials, supabase } from '../lib/supabase'
+import './AccountDialog.css'
+
+type AuthScreen = 'sign-in' | 'sign-up' | 'forgot' | 'reset'
+
+type AccountDialogProps = {
+  user: User | null
+  account: AccountData | null
+  passwordRecovery: boolean
+  notice?: string
+  onClose: () => void
+  onReloadAccount: () => Promise<void>
+}
+
+function authErrorMessage(message: string) {
+  const normalized = message.toLocaleLowerCase('en')
+  if (normalized.includes('invalid login credentials')) return 'Неверная почта или пароль'
+  if (normalized.includes('user already registered')) return 'Аккаунт с этой почтой уже существует'
+  if (normalized.includes('password') && normalized.includes('characters')) return 'Пароль должен содержать минимум 8 символов'
+  if (normalized.includes('email rate limit')) return 'Слишком много писем. Попробуй немного позже'
+  if (normalized.includes('email not confirmed')) return 'Сначала подтверди почту по ссылке из письма'
+  return 'Не получилось выполнить запрос. Проверь данные и попробуй ещё раз'
+}
+
+function AuthView({ passwordRecovery, notice }: { passwordRecovery: boolean; notice?: string }) {
+  const [screen, setScreen] = useState<AuthScreen>(passwordRecovery ? 'reset' : 'sign-in')
+  const [fullName, setFullName] = useState('')
+  const [grade, setGrade] = useState('8')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [status, setStatus] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (passwordRecovery) setScreen('reset')
+  }, [passwordRecovery])
+
+  const switchScreen = (next: AuthScreen) => {
+    setScreen(next)
+    setStatus('')
+    setError('')
+  }
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!supabase || loading) return
+    setLoading(true)
+    setStatus('')
+    setError('')
+
+    try {
+      if (screen === 'sign-in') {
+        const { error: signInError } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
+        if (signInError) throw signInError
+        return
+      }
+
+      if (screen === 'sign-up') {
+        if (fullName.trim().length < 2) throw new Error('name')
+        if (password.length < 8) throw new Error('password characters')
+        const { data, error: signUpError } = await supabase.auth.signUp({
+          email: email.trim(),
+          password,
+          options: {
+            data: { full_name: fullName.trim(), grade },
+            emailRedirectTo: window.location.origin,
+          },
+        })
+        if (signUpError) throw signUpError
+        if (!data.session) setStatus('Проверь почту и подтверди регистрацию по ссылке')
+        return
+      }
+
+      if (screen === 'forgot') {
+        const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+          redirectTo: `${window.location.origin}/?auth=reset`,
+        })
+        if (resetError) throw resetError
+        setStatus('Если аккаунт существует, ссылка для смены пароля уже отправлена')
+        return
+      }
+
+      if (password.length < 8) throw new Error('password characters')
+      const { error: updateError } = await supabase.auth.updateUser({ password })
+      if (updateError) throw updateError
+      setStatus('Пароль обновлён')
+      window.history.replaceState({}, '', window.location.pathname)
+      setScreen('sign-in')
+      setPassword('')
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : ''
+      if (message === 'name') setError('Введи имя')
+      else setError(authErrorMessage(message))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const title = screen === 'sign-up'
+    ? 'Создай аккаунт'
+    : screen === 'forgot'
+      ? 'Восстанови доступ'
+      : screen === 'reset'
+        ? 'Новый пароль'
+        : 'Войди в аккаунт'
+
+  return (
+    <div className="account-auth-view">
+      <div className="account-auth-brand">
+        <span className="account-auth-mark"><UserCircle size={30} weight="duotone" aria-hidden="true" /></span>
+        <div>
+          <span>Homework Copilot</span>
+          <h2 id="account-dialog-title">{title}</h2>
+        </div>
+      </div>
+
+      {(screen === 'sign-in' || screen === 'sign-up') && (
+        <div className="account-auth-tabs" role="tablist" aria-label="Вход или регистрация">
+          <button type="button" role="tab" aria-selected={screen === 'sign-in'} className={screen === 'sign-in' ? 'is-active' : ''} onClick={() => switchScreen('sign-in')}>Вход</button>
+          <button type="button" role="tab" aria-selected={screen === 'sign-up'} className={screen === 'sign-up' ? 'is-active' : ''} onClick={() => switchScreen('sign-up')}>Регистрация</button>
+        </div>
+      )}
+
+      {notice && <p className="account-notice">{notice}</p>}
+
+      <form className="account-auth-form" onSubmit={submit}>
+        {screen === 'sign-up' && (
+          <div className="account-field-row">
+            <label>
+              <span>Имя</span>
+              <div className="account-input-shell">
+                <UserCircle size={19} weight="duotone" aria-hidden="true" />
+                <input value={fullName} onChange={(event) => setFullName(event.target.value)} autoComplete="name" maxLength={80} placeholder="Как к тебе обращаться" required autoFocus />
+              </div>
+            </label>
+            <label className="account-grade-field">
+              <span>Класс</span>
+              <select value={grade} onChange={(event) => setGrade(event.target.value)} aria-label="Класс">
+                {Array.from({ length: 11 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}</option>)}
+              </select>
+            </label>
+          </div>
+        )}
+
+        {screen !== 'reset' && (
+          <label>
+            <span>Почта</span>
+            <div className="account-input-shell">
+              <EnvelopeSimple size={19} weight="duotone" aria-hidden="true" />
+              <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" placeholder="name@example.com" required autoFocus={screen !== 'sign-up'} />
+            </div>
+          </label>
+        )}
+
+        {screen !== 'forgot' && (
+          <label>
+            <span>{screen === 'reset' ? 'Новый пароль' : 'Пароль'}</span>
+            <div className="account-input-shell">
+              <LockKey size={19} weight="duotone" aria-hidden="true" />
+              <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete={screen === 'sign-in' ? 'current-password' : 'new-password'} minLength={8} placeholder="Минимум 8 символов" required autoFocus={screen === 'reset'} />
+            </div>
+          </label>
+        )}
+
+        {error && <p className="account-form-message is-error" role="alert">{error}</p>}
+        {status && <p className="account-form-message is-success" role="status"><CheckCircle size={18} weight="fill" aria-hidden="true" />{status}</p>}
+
+        <button className="account-primary-button" type="submit" disabled={loading}>
+          {loading ? 'Подожди…' : screen === 'sign-up' ? 'Создать аккаунт' : screen === 'forgot' ? 'Отправить ссылку' : screen === 'reset' ? 'Сохранить пароль' : 'Войти'}
+          {!loading && <ArrowRight size={18} weight="bold" aria-hidden="true" />}
+        </button>
+      </form>
+
+      <div className="account-auth-secondary">
+        {screen === 'sign-in' && <button type="button" onClick={() => switchScreen('forgot')}>Не помню пароль</button>}
+        {(screen === 'forgot' || screen === 'reset') && <button type="button" onClick={() => switchScreen('sign-in')}>Вернуться ко входу</button>}
+      </div>
+
+      <p className="account-auth-footnote">Аккаунт сохраняет решения, учебники, расписание и баланс на всех устройствах.</p>
+    </div>
+  )
+}
+
+function ProfileView({ user, account, notice, onReloadAccount }: { user: User; account: AccountData | null; notice?: string; onReloadAccount: () => Promise<void> }) {
+  const [fullName, setFullName] = useState(account?.profile.full_name ?? '')
+  const [grade, setGrade] = useState(String(account?.profile.grade ?? 8))
+  const [loading, setLoading] = useState(false)
+  const [status, setStatus] = useState('')
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    setFullName(account?.profile.full_name ?? '')
+    setGrade(String(account?.profile.grade ?? 8))
+  }, [account])
+
+  const saveProfile = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!supabase || loading) return
+    setLoading(true)
+    setStatus('')
+    setError('')
+    const { error: updateError } = await supabase
+      .from('profiles')
+      .update({ full_name: fullName.trim(), grade: Number(grade) })
+      .eq('id', user.id)
+
+    if (updateError) setError('Не получилось сохранить профиль')
+    else {
+      await onReloadAccount()
+      setStatus('Профиль сохранён')
+    }
+    setLoading(false)
+  }
+
+  const uploadAvatar = async (file: File | null) => {
+    if (!supabase || !file || loading) return
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) {
+      setError('Выбери JPG, PNG или WEBP до 5 МБ')
+      return
+    }
+
+    setLoading(true)
+    setStatus('')
+    setError('')
+    const avatarPath = `${user.id}/avatar`
+    const { error: uploadError } = await supabase.storage.from('profile-avatars').upload(avatarPath, file, {
+      cacheControl: '3600',
+      contentType: file.type,
+      upsert: true,
+    })
+
+    if (uploadError) setError('Не получилось загрузить фото')
+    else {
+      const { error: updateError } = await supabase.from('profiles').update({ avatar_path: avatarPath }).eq('id', user.id)
+      if (updateError) setError('Фото загружено, но профиль не обновился')
+      else {
+        await onReloadAccount()
+        setStatus('Фото обновлено')
+      }
+    }
+    setLoading(false)
+  }
+
+  const signOut = async () => {
+    if (!supabase || loading) return
+    setLoading(true)
+    const { error: signOutError } = await supabase.auth.signOut({ scope: 'local' })
+    if (signOutError) {
+      setError('Не получилось выйти из аккаунта')
+      setLoading(false)
+    }
+  }
+
+  const displayName = account?.profile.full_name || user.email || 'Ученик'
+
+  return (
+    <div className="account-profile-view">
+      <header className="account-profile-header">
+        <div>
+          <span>Профиль</span>
+          <h2 id="account-dialog-title">Твой аккаунт</h2>
+        </div>
+        <div className="account-balance-pill" aria-label={`Баланс: ${account?.balance ?? 0} решений`}>
+          <Coins size={21} weight="duotone" aria-hidden="true" />
+          <span><small>Баланс</small><strong>{account?.balance ?? '…'} решений</strong></span>
+        </div>
+      </header>
+
+      {notice && <p className="account-notice account-profile-notice">{notice}</p>}
+
+      <div className="account-profile-grid">
+        <aside className="account-profile-summary">
+          <div className="account-avatar-large">
+            {account?.avatarUrl ? <img src={account.avatarUrl} alt="Фото профиля" /> : <span>{getInitials(displayName, user.email)}</span>}
+          </div>
+          <strong>{displayName}</strong>
+          <small>{user.email}</small>
+          <input id="profile-avatar" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { void uploadAvatar(event.target.files?.[0] ?? null); event.currentTarget.value = '' }} />
+          <label className="account-avatar-button" htmlFor="profile-avatar"><Camera size={18} weight="duotone" aria-hidden="true" /> Сменить фото</label>
+        </aside>
+
+        <div className="account-profile-main">
+          <form className="account-profile-form" onSubmit={saveProfile}>
+            <label>
+              <span>Имя</span>
+              <input value={fullName} onChange={(event) => setFullName(event.target.value)} maxLength={80} autoComplete="name" required />
+            </label>
+            <label>
+              <span>Класс</span>
+              <select value={grade} onChange={(event) => setGrade(event.target.value)}>
+                {Array.from({ length: 11 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value} класс</option>)}
+              </select>
+            </label>
+            <label className="account-email-field">
+              <span>Почта</span>
+              <input value={user.email ?? ''} disabled readOnly />
+            </label>
+
+            {error && <p className="account-form-message is-error" role="alert">{error}</p>}
+            {status && <p className="account-form-message is-success" role="status"><CheckCircle size={18} weight="fill" aria-hidden="true" />{status}</p>}
+
+            <button className="account-primary-button" type="submit" disabled={loading || fullName.trim().length < 1}>Сохранить</button>
+          </form>
+
+          <section className="account-wallet-history" aria-labelledby="wallet-history-title">
+            <div><h3 id="wallet-history-title">Последние операции</h3><span>Журнал нельзя изменить</span></div>
+            {account?.entries.map((entry) => (
+              <div className="account-wallet-entry" key={entry.id}>
+                <span className={entry.amount > 0 ? 'is-credit' : 'is-debit'}>{entry.amount > 0 ? '+' : ''}{entry.amount}</span>
+                <strong>{entry.description}</strong>
+                <time dateTime={entry.created_at}>{new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short' }).format(new Date(entry.created_at))}</time>
+              </div>
+            ))}
+            {!account?.entries.length && <p>Операций пока нет.</p>}
+          </section>
+        </div>
+      </div>
+
+      <footer className="account-profile-footer">
+        <span>Данные профиля защищены правилами доступа Supabase.</span>
+        <button type="button" onClick={() => { void signOut() }} disabled={loading}><SignOut size={18} weight="duotone" aria-hidden="true" /> Выйти</button>
+      </footer>
+    </div>
+  )
+}
+
+export default function AccountDialog({ user, account, passwordRecovery, notice, onClose, onReloadAccount }: AccountDialogProps) {
+  const reduceMotion = useReducedMotion()
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [onClose])
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        className="account-dialog-backdrop"
+        role="presentation"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: reduceMotion ? 0 : 0.18 }}
+        onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}
+      >
+        <motion.section
+          className={`account-dialog${user ? ' is-profile' : ' is-auth'}`}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="account-dialog-title"
+          initial={reduceMotion ? false : { opacity: 0, scale: 0.985, y: 8 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={reduceMotion ? undefined : { opacity: 0, scale: 0.985, y: 8 }}
+          transition={{ duration: reduceMotion ? 0 : 0.24, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <button className="account-dialog-close" type="button" aria-label="Закрыть профиль" onClick={onClose}><X size={20} weight="bold" aria-hidden="true" /></button>
+          {user
+            ? <ProfileView user={user} account={account} notice={notice} onReloadAccount={onReloadAccount} />
+            : <AuthView passwordRecovery={passwordRecovery} notice={notice} />}
+        </motion.section>
+      </motion.div>
+    </AnimatePresence>
+  )
+}

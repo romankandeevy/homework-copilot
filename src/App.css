@@ -201,6 +201,7 @@
 
 .mobile-brand { display: none; }
 .mobile-theme-toggle { display: none; }
+.mobile-profile-button { display: none; }
 
 .page-heading {
   display: grid;
@@ -322,6 +323,9 @@
 .profile-button small { color: var(--color-text-subtle); font-size: var(--text-micro); }
 .profile-button strong,
 .profile-button small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.profile-avatar-small { overflow: hidden; }
+.profile-avatar-small img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.profile-button.is-compact { width: 2.75rem; height: 2.75rem; flex: 0 0 auto; grid-template-columns: 2rem; padding: 0.3125rem; }
 
 .home-content {
   width: min(100%, var(--content-width));
@@ -804,6 +808,7 @@
   .page-heading span { display: none; }
   .page-heading h1 { font-size: var(--text-subtitle); }
   .mobile-theme-toggle { display: inline-flex; }
+  .mobile-profile-button { display: inline-flex; }
   .copy-task { grid-template-columns: 1fr; }
   .copy-task h2 { max-width: none; }
   .copy-task-footer { grid-column: auto; }

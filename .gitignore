@@ -12,11 +12,13 @@ dist
 dist-ssr
 *.local
 .env*
+!.env.example
 .vercel
 
 # Local design and browser QA artifacts
 .impeccable/
 .playwright-mcp/
+test-results/
 *-qa.png
 design-qa-*.png
 design-qa.md
