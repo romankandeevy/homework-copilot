@@ -152,28 +152,6 @@ describe('Homework Copilot home', () => {
     expect(screen.getAllByRole('button', { name: 'Включить светлую тему' })).toHaveLength(2)
   })
 
-  it('collapses and restores the desktop sidebar', () => {
-    render(<App />)
-
-    const shell = document.querySelector('.product-shell')
-    fireEvent.click(screen.getByRole('button', { name: 'Свернуть боковое меню' }))
-    expect(shell).toHaveClass('is-sidebar-collapsed')
-    expect(window.localStorage.getItem('homework-copilot:sidebar-collapsed')).toBe('1')
-    expect(screen.queryByRole('button', { name: 'Свернуть боковое меню' })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Развернуть боковое меню' }))
-    expect(shell).not.toHaveClass('is-sidebar-collapsed')
-  })
-
-  it('toggles the desktop sidebar with the Codex shortcut', () => {
-    render(<App />)
-
-    const shell = document.querySelector('.product-shell')
-    fireEvent.keyDown(window, { key: '\\', ctrlKey: true })
-    expect(shell).toHaveClass('is-sidebar-collapsed')
-    fireEvent.keyDown(window, { key: '\\', ctrlKey: true })
-    expect(shell).not.toHaveClass('is-sidebar-collapsed')
-  })
-
   it('shows a coming-soon placeholder for unfinished sidebar sections', () => {
     render(<App />)
 

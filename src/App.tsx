@@ -22,7 +22,6 @@ import {
   Notebook,
   Plus,
   SpinnerGap,
-  SidebarSimple,
   Stack,
   Sun,
   TextT,
@@ -174,8 +173,6 @@ function ProductSidebar({
   user,
   account,
   onOpenAccount,
-  collapsed,
-  onToggleCollapsed,
 }: {
   theme: Theme
   activeLabel: NavigationLabel
@@ -184,18 +181,13 @@ function ProductSidebar({
   user: User | null
   account: AccountData | null
   onOpenAccount: () => void
-  collapsed: boolean
-  onToggleCollapsed: () => void
 }) {
   const activeIndex = navigation.findIndex(({ label }) => label === activeLabel)
 
   return (
-    <aside className="product-sidebar" aria-label="Основная навигация" aria-hidden={collapsed || undefined} inert={collapsed || undefined}>
+    <aside className="product-sidebar" aria-label="Основная навигация">
       <div className="sidebar-brand">
         <BrandLockup />
-        <button className="sidebar-collapse-button" type="button" onClick={onToggleCollapsed} aria-label="Свернуть боковое меню" aria-keyshortcuts="Control+\\" title="Свернуть меню (Ctrl+\\)">
-          <SidebarSimple size={18} weight="duotone" aria-hidden="true" />
-        </button>
       </div>
 
       <nav className="product-navigation">
@@ -232,18 +224,13 @@ function BalanceControl({ user, balance, onOpenAccount }: { user: User | null; b
   )
 }
 
-function PageHeader({ theme, onToggleTheme, user, account, onOpenAccount, sidebarCollapsed, onToggleSidebar }: { theme: Theme; onToggleTheme: () => void; user: User | null; account: AccountData | null; onOpenAccount: () => void; sidebarCollapsed: boolean; onToggleSidebar: () => void }) {
+function PageHeader({ theme, onToggleTheme, user, account, onOpenAccount }: { theme: Theme; onToggleTheme: () => void; user: User | null; account: AccountData | null; onOpenAccount: () => void }) {
   const firstName = account?.profile.full_name.trim().split(/\s+/)[0]
   const formattedDate = new Intl.DateTimeFormat('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date())
   const dateLabel = formattedDate.charAt(0).toLocaleUpperCase('ru') + formattedDate.slice(1)
 
   return (
-    <header className={`page-header${sidebarCollapsed ? ' is-sidebar-collapsed' : ''}`}>
-      {sidebarCollapsed && (
-        <button className="sidebar-open-button" type="button" onClick={onToggleSidebar} aria-label="Развернуть боковое меню" aria-keyshortcuts="Control+\\" title="Развернуть меню (Ctrl+\\)">
-          <SidebarSimple size={18} weight="duotone" aria-hidden="true" />
-        </button>
-      )}
+    <header className="page-header">
       <div className="mobile-brand"><BrandLockup /></div>
       <div className="page-heading">
         <h1>{firstName ? `Добрый день, ${firstName}` : 'Добрый день'}</h1>
@@ -738,7 +725,6 @@ function ComingSoon({ section }: { section: NavigationLabel }) {
 
 function HomePage() {
   const [theme, setTheme] = useState<Theme>(() => document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light')
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => window.localStorage.getItem('homework-copilot:sidebar-collapsed') === '1')
   const [activeNavigation, setActiveNavigation] = useState<NavigationLabel>('Главная')
   const [taskNumber, setTaskNumber] = useState('')
   const [selectedTextbookId, setSelectedTextbookId] = useState<TextbookId>('geometry')
@@ -760,21 +746,6 @@ function HomePage() {
     document.documentElement.dataset.theme = theme
     document.documentElement.style.colorScheme = theme
   }, [theme])
-
-  useEffect(() => {
-    const handleSidebarShortcut = (event: KeyboardEvent) => {
-      if (event.ctrlKey && event.key === '\\') {
-        event.preventDefault()
-        setSidebarCollapsed((current) => {
-          const next = !current
-          window.localStorage.setItem('homework-copilot:sidebar-collapsed', next ? '1' : '0')
-          return next
-        })
-      }
-    }
-    window.addEventListener('keydown', handleSidebarShortcut)
-    return () => window.removeEventListener('keydown', handleSidebarShortcut)
-  }, [])
 
   useEffect(() => {
     if (!supabase) return
@@ -879,11 +850,6 @@ function HomePage() {
   }, [refreshAccount])
 
   const toggleTheme = () => setTheme((current) => current === 'light' ? 'dark' : 'light')
-  const toggleSidebar = () => setSidebarCollapsed((current) => {
-    const next = !current
-    window.localStorage.setItem('homework-copilot:sidebar-collapsed', next ? '1' : '0')
-    return next
-  })
   const openAccount = () => {
     setAccountNotice('')
     setAccountOpen(true)
@@ -929,11 +895,11 @@ function HomePage() {
   }
 
   return (
-    <main className={`product-shell${sidebarCollapsed ? ' is-sidebar-collapsed' : ''}`} style={shellStyle}>
-      <ProductSidebar theme={theme} activeLabel={activeNavigation} onNavigate={setActiveNavigation} onToggleTheme={toggleTheme} user={user} account={account} onOpenAccount={openAccount} collapsed={sidebarCollapsed} onToggleCollapsed={toggleSidebar} />
+    <main className="product-shell" style={shellStyle}>
+      <ProductSidebar theme={theme} activeLabel={activeNavigation} onNavigate={setActiveNavigation} onToggleTheme={toggleTheme} user={user} account={account} onOpenAccount={openAccount} />
       <div className="product-seam" aria-hidden="true"><span /></div>
       <div className="product-content">
-        <PageHeader theme={theme} onToggleTheme={toggleTheme} user={user} account={account} onOpenAccount={openAccount} sidebarCollapsed={sidebarCollapsed} onToggleSidebar={toggleSidebar} />
+        <PageHeader theme={theme} onToggleTheme={toggleTheme} user={user} account={account} onOpenAccount={openAccount} />
         {activeNavigation === 'Главная' ? (
           <div className="home-content">
             <CopyTask

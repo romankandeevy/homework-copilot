@@ -7,11 +7,6 @@
   grid-template-columns: var(--rail-width) 1px minmax(0, 1fr);
   background: var(--color-canvas);
   color: var(--color-text);
-  transition: grid-template-columns var(--motion-navigation) var(--ease-out);
-}
-
-.product-shell.is-sidebar-collapsed {
-  grid-template-columns: 0 0 minmax(0, 1fr);
 }
 
 .product-sidebar {
@@ -25,59 +20,14 @@
   padding: var(--space-5) var(--space-3) var(--space-4);
   background: color-mix(in oklch, var(--color-canvas) 86%, var(--color-surface-sunken));
   z-index: 3;
-  clip-path: inset(0);
-  transform: translateX(0);
-  opacity: 1;
-  visibility: visible;
-  transition: clip-path var(--motion-navigation) var(--ease-out), transform var(--motion-navigation) var(--ease-out), opacity var(--motion-ui) var(--ease-out), visibility 0s linear 0s;
 }
 
 .sidebar-brand {
   display: flex;
   min-height: 3rem;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-2);
   padding: 0 var(--space-1);
-}
-
-.sidebar-collapse-button {
-  display: grid;
-  width: 2rem;
-  height: 2rem;
-  flex: 0 0 auto;
-  place-items: center;
-  border: 1px solid transparent;
-  border-radius: var(--radius-control);
-  background: transparent;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  transition: color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), background var(--motion-fast) var(--ease-out), transform var(--motion-fast) var(--ease-out);
-}
-
-.sidebar-collapse-button:hover { border-color: var(--color-border); background: var(--color-surface-raised); color: var(--color-text); }
-.sidebar-collapse-button:active { transform: scale(0.94); }
-
-.sidebar-open-button {
-  display: grid;
-  flex: 0 0 auto;
-  width: 2.25rem;
-  height: 2.25rem;
-  place-items: center;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-control);
-  background: transparent;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  animation: sidebar-open-control-in var(--motion-navigation) var(--ease-out) both;
-}
-
-.sidebar-open-button:hover { border-color: var(--color-border-strong); color: var(--color-text); }
-.sidebar-open-button:active { transform: scale(0.94); }
-
-@keyframes sidebar-open-control-in {
-  from { opacity: 0; transform: translateX(-0.5rem); }
-  to { opacity: 1; transform: translateX(0); }
 }
 
 .brand-lockup {
@@ -216,14 +166,6 @@
   box-shadow: none;
 }
 
-.product-shell.is-sidebar-collapsed .product-sidebar {
-  visibility: hidden;
-  clip-path: inset(0 100% 0 0);
-  transform: translateX(-1rem);
-  opacity: 0;
-  transition: clip-path var(--motion-navigation) var(--ease-out), transform var(--motion-navigation) var(--ease-out), opacity var(--motion-ui) var(--ease-out), visibility 0s linear var(--motion-navigation);
-}
-
 .sidebar-footer {
   display: flex;
   align-items: center;
@@ -254,11 +196,7 @@
   position: relative;
   z-index: 4;
   background: var(--color-border);
-  opacity: 1;
-  transition: opacity var(--motion-ui) var(--ease-out);
 }
-
-.product-shell.is-sidebar-collapsed .product-seam { opacity: 0; }
 
 .product-seam span {
   position: absolute;
@@ -288,9 +226,6 @@
   margin-inline: auto;
   border-bottom: 1px solid var(--color-border);
 }
-
-.page-header.is-sidebar-collapsed { justify-content: flex-start; }
-.page-header.is-sidebar-collapsed .page-heading { margin-right: auto; }
 
 .mobile-brand { display: none; }
 .mobile-theme-toggle { display: none; }
@@ -889,8 +824,7 @@
 @media (max-width: 980px) {
   .product-shell { display: block; padding-bottom: calc(5rem + env(safe-area-inset-bottom)); }
   .product-sidebar,
-  .product-seam,
-  .sidebar-open-button { display: none; }
+  .product-seam { display: none; }
   .product-content {
     padding-right: max(var(--space-6), env(safe-area-inset-right));
     padding-left: max(var(--space-6), env(safe-area-inset-left));
@@ -1009,16 +943,11 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .product-shell,
-  .sidebar-collapse-button,
-  .sidebar-open-button,
-  .product-sidebar,
   .navigation-item,
   .navigation-route path,
   .product-seam span,
   .task-number-control,
   .task-number-control button { transition: none; }
-  .sidebar-open-button { animation: none; }
   .solution-progress-icon svg,
   .system-stages .is-current svg,
   .solution-progress-track span { transform: none; animation: none; }
