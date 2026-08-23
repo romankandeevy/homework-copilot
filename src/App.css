@@ -221,6 +221,7 @@
 
 .product-seam {
   position: relative;
+  z-index: 4;
   background: var(--color-border);
 }
 
