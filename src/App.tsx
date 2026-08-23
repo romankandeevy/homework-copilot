@@ -73,8 +73,20 @@ const navigation = [
 type NavigationLabel = (typeof navigation)[number]['label']
 
 function navigationRoutePath(activeIndex: number) {
-  const centerY = 24 + activeIndex * 52
-  return `M20 -12 V${centerY - 18} C20 ${centerY - 8} 28 ${centerY - 8} 28 ${centerY} C28 ${centerY + 8} 20 ${centerY + 8} 20 ${centerY + 18} V268`
+  const centerY = 63 + activeIndex * 62
+  const topY = centerY - 24
+  const bottomY = centerY + 24
+  const returnY = bottomY + 24
+  const tailY = Math.max(returnY, 340)
+  const entryCurve = activeIndex === 0
+    ? `C46 18 64 18 64 ${topY}`
+    : 'C34 18 40 24 40 34'
+  const approachY = activeIndex === 0 ? topY : topY - 24
+  const entryBend = activeIndex === 0
+    ? `C64 ${topY} 64 ${topY} 64 ${topY}`
+    : `C40 ${topY - 12} 64 ${topY - 12} 64 ${topY}`
+
+  return `M-1 18 H24 ${entryCurve} V${approachY} ${entryBend} V${bottomY} C64 ${bottomY + 12} 40 ${bottomY + 12} 40 ${returnY} V${tailY} C40 ${tailY + 10} 32 ${tailY + 20} 16 ${tailY + 20} H-1`
 }
 
 const textbooks: readonly Textbook[] = [
@@ -191,7 +203,7 @@ function ProductSidebar({
       </div>
 
       <nav className="product-navigation">
-        <svg className="navigation-route" viewBox="0 0 56 256" preserveAspectRatio="none" aria-hidden="true">
+        <svg className="navigation-route" viewBox="0 0 112 384" preserveAspectRatio="none" aria-hidden="true">
           <path d={navigationRoutePath(activeIndex)} />
         </svg>
         {navigation.map(({ label, icon: Icon }) => {
