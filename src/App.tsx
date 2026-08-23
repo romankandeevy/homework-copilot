@@ -32,6 +32,7 @@ import {
 import { GeometryNotebookLayoutV1 } from './notebook/GeometryNotebookLayoutV1'
 import { fixtures } from './fixtures'
 import SchedulePage from './SchedulePage'
+import LegalPage from './LegalPage'
 import type { AccountData } from './lib/supabase'
 import { getInitials, loadAccountData, supabase } from './lib/supabase'
 import './App.css'
@@ -930,6 +931,10 @@ function HomePage() {
 
 function App() {
   const params = new URLSearchParams(window.location.search)
+  const pathname = window.location.pathname.replace(/\/+$/, '') || '/'
+
+  if (pathname === '/privacy') return <LegalPage kind="privacy" />
+  if (pathname === '/terms') return <LegalPage kind="terms" />
 
   if (params.get('canvas') === '1') {
     return <main className="canvas-mode"><GeometryNotebookLayoutV1 spec={fixtures[0]} /></main>

@@ -328,6 +328,10 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice, onVerifi
         )}
       </div>
 
+      {screen === 'sign-up' && (
+        <p className="account-auth-legal">Создавая аккаунт, ты принимаешь <a href="/terms" target="_blank" rel="noreferrer">условия использования</a> и <a href="/privacy" target="_blank" rel="noreferrer">политику конфиденциальности</a>.</p>
+      )}
+
     </div>
   )
 }

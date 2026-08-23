@@ -169,6 +169,8 @@
 .account-auth-secondary button { min-height: 2.75rem; border: 0; background: transparent; color: var(--color-text-muted); font-weight: var(--weight-medium); cursor: pointer; }
 .account-auth-secondary button:hover { color: var(--color-text); }
 .account-auth-secondary button:disabled { color: var(--color-text-subtle); cursor: not-allowed; }
+.account-auth-legal { margin: calc(-1 * var(--space-2)) 0 0; color: var(--color-text-subtle); font-size: var(--text-micro); line-height: var(--leading-ui); text-align: center; }
+.account-auth-legal a { color: var(--color-text-muted); }
 .account-form-message { display: flex; align-items: center; gap: var(--space-2); margin: 0; font-size: var(--text-small); line-height: var(--leading-ui); }
 .account-form-message.is-error { color: var(--color-danger); }
 .account-form-message.is-success { color: var(--color-success-strong); }

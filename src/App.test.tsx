@@ -193,4 +193,22 @@ describe('Homework Copilot home', () => {
     fireEvent.click(screen.getAllByRole('button', { name: 'Мои решения' })[0])
     expect(path).toHaveAttribute('d', 'M-1 18 H24 C34 18 40 24 40 34 V77 C40 89 64 89 64 101 V149 C64 161 40 161 40 173 V340 C40 350 32 360 16 360 H-1')
   })
+
+  it('publishes the privacy policy at its direct route', () => {
+    window.history.replaceState({}, '', '/privacy')
+    render(<App />)
+
+    expect(screen.getByRole('heading', { name: 'Политика конфиденциальности' })).toBeInTheDocument()
+    expect(screen.getByText(/Supabase для авторизации/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Условия использования/ })).toHaveAttribute('href', '/terms')
+  })
+
+  it('publishes the terms at its direct route', () => {
+    window.history.replaceState({}, '', '/terms')
+    render(<App />)
+
+    expect(screen.getByRole('heading', { name: 'Условия использования' })).toBeInTheDocument()
+    expect(screen.getByText(/3 бесплатных решения/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Политика конфиденциальности/ })).toHaveAttribute('href', '/privacy')
+  })
 })
