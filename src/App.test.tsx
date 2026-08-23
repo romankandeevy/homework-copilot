@@ -46,24 +46,22 @@ describe('Homework Copilot home', () => {
     fireEvent.change(screen.getByLabelText('Пароль'), { target: { value: '12345678' } })
     expect(screen.getByRole('button', { name: 'Создать аккаунт' })).toBeEnabled()
     expect(screen.queryByText(/Аккаунт сохраняет решения/)).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Закрыть окно аккаунта' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('requires the complete email code after Google', async () => {
+  it('shows the email-link confirmation flow after Google', async () => {
     window.sessionStorage.setItem('homework-copilot:google-verification-email', 'roma@example.com')
+    window.sessionStorage.setItem('homework-copilot:verification-sent-at', String(Date.now()))
     render(<App />)
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Войти или зарегистрироваться' })[0])
-    expect(await screen.findByRole('heading', { name: 'Проверь почту' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Открой почту' })).toBeInTheDocument()
     expect(screen.getByText(/roma@example.com/)).toBeInTheDocument()
-
-    const code = screen.getByRole('textbox', { name: 'Код подтверждения' })
-    const submit = screen.getByRole('button', { name: 'Подтвердить код' })
-    expect(code).toHaveAttribute('maxlength', '8')
-    expect(submit).toBeDisabled()
-    fireEvent.change(code, { target: { value: '1234567' } })
-    expect(submit).toBeDisabled()
-    fireEvent.change(code, { target: { value: '12345678' } })
-    expect(submit).toBeEnabled()
+    expect(screen.getByText('Нажми кнопку в письме')).toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: 'Код подтверждения' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Отправить снова через/ })).toBeDisabled()
   })
 
   it('changes the saved textbook and checks the matching shared base', () => {
@@ -161,6 +159,7 @@ describe('Homework Copilot home', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Свернуть боковое меню' }))
     expect(shell).toHaveClass('is-sidebar-collapsed')
     expect(window.localStorage.getItem('homework-copilot:sidebar-collapsed')).toBe('1')
+    expect(screen.queryByRole('button', { name: 'Свернуть боковое меню' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Развернуть боковое меню' }))
     expect(shell).not.toHaveClass('is-sidebar-collapsed')
   })

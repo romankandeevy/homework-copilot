@@ -202,9 +202,9 @@ function ProductSidebar({
   const activeIndex = navigation.findIndex(({ label }) => label === activeLabel)
 
   return (
-    <aside className="product-sidebar" aria-label="Основная навигация">
+    <aside className="product-sidebar" aria-label="Основная навигация" aria-hidden={collapsed || undefined} inert={collapsed || undefined}>
       <div className="sidebar-brand"><BrandLockup /></div>
-      <button className="sidebar-collapse-button" type="button" onClick={onToggleCollapsed} aria-label={collapsed ? 'Развернуть боковое меню' : 'Свернуть боковое меню'} title={collapsed ? 'Развернуть меню' : 'Свернуть меню'}>
+      <button className="sidebar-collapse-button" type="button" onClick={onToggleCollapsed} aria-label="Свернуть боковое меню" title="Свернуть меню">
         <SidebarSimple size={20} weight="duotone" aria-hidden="true" />
       </button>
 
@@ -242,13 +242,18 @@ function BalanceControl({ user, balance, onOpenAccount }: { user: User | null; b
   )
 }
 
-function PageHeader({ theme, onToggleTheme, user, account, onOpenAccount }: { theme: Theme; onToggleTheme: () => void; user: User | null; account: AccountData | null; onOpenAccount: () => void }) {
+function PageHeader({ theme, onToggleTheme, user, account, onOpenAccount, sidebarCollapsed, onToggleSidebar }: { theme: Theme; onToggleTheme: () => void; user: User | null; account: AccountData | null; onOpenAccount: () => void; sidebarCollapsed: boolean; onToggleSidebar: () => void }) {
   const firstName = account?.profile.full_name.trim().split(/\s+/)[0]
   const formattedDate = new Intl.DateTimeFormat('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date())
   const dateLabel = formattedDate.charAt(0).toLocaleUpperCase('ru') + formattedDate.slice(1)
 
   return (
-    <header className="page-header">
+    <header className={`page-header${sidebarCollapsed ? ' is-sidebar-collapsed' : ''}`}>
+      {sidebarCollapsed && (
+        <button className="sidebar-open-button" type="button" onClick={onToggleSidebar} aria-label="Развернуть боковое меню" title="Развернуть меню">
+          <SidebarSimple size={20} weight="duotone" aria-hidden="true" />
+        </button>
+      )}
       <div className="mobile-brand"><BrandLockup /></div>
       <div className="page-heading">
         <h1>{firstName ? `Добрый день, ${firstName}` : 'Добрый день'}</h1>
@@ -751,7 +756,7 @@ function HomePage() {
   const [solutionState, setSolutionState] = useState<SolutionState>({ mode: 'processing', textbookId: 'geometry', task: '118', source: 'number' })
   const [user, setUser] = useState<User | null>(null)
   const [account, setAccount] = useState<AccountData | null>(null)
-  const [accountOpen, setAccountOpen] = useState(() => new URLSearchParams(window.location.search).get('auth') === 'reset')
+  const [accountOpen, setAccountOpen] = useState(() => ['reset', 'verified'].includes(new URLSearchParams(window.location.search).get('auth') ?? ''))
   const [passwordRecovery, setPasswordRecovery] = useState(() => new URLSearchParams(window.location.search).get('auth') === 'reset')
   const [pendingVerificationEmail, setPendingVerificationEmail] = useState(() => sessionStorage.getItem('homework-copilot:google-verification-email') ?? '')
   const [accountNotice, setAccountNotice] = useState('')
@@ -781,6 +786,13 @@ function HomePage() {
       if (event === 'PASSWORD_RECOVERY') {
         setPasswordRecovery(true)
         setAccountOpen(true)
+      }
+      if (event === 'SIGNED_IN' && nextUser) {
+        sessionStorage.removeItem('homework-copilot:google-auth-pending')
+        sessionStorage.removeItem('homework-copilot:google-verification-email')
+        sessionStorage.removeItem('homework-copilot:verification-sent-at')
+        setPendingVerificationEmail('')
+        if (new URLSearchParams(window.location.search).get('auth') === 'verified') setAccountOpen(true)
       }
       if (event === 'SIGNED_OUT') {
         if (sessionStorage.getItem('homework-copilot:google-verification-email')) setAccountOpen(true)
@@ -821,8 +833,12 @@ function HomePage() {
       sessionStorage.setItem('homework-copilot:google-verification-email', googleEmail)
       const { error: codeError } = await authClient.auth.signInWithOtp({
         email: googleEmail,
-        options: { shouldCreateUser: false },
+        options: {
+          shouldCreateUser: false,
+          emailRedirectTo: `${window.location.origin}/?auth=verified`,
+        },
       })
+      if (!codeError) sessionStorage.setItem('homework-copilot:verification-sent-at', String(Date.now()))
       await authClient.auth.signOut({ scope: 'local' })
 
       const cleanUrl = new URL(window.location.href)
@@ -833,7 +849,7 @@ function HomePage() {
       setUser(null)
       setAccount(null)
       setPendingVerificationEmail(googleEmail)
-      setAccountNotice(codeError ? 'Не получилось отправить код. Попробуй ещё раз' : '')
+      setAccountNotice(codeError ? 'Не получилось отправить письмо. Попробуй ещё раз' : '')
       setAccountOpen(true)
     }
 
@@ -867,6 +883,18 @@ function HomePage() {
     setAccountNotice('')
     setAccountOpen(true)
   }
+  const closeAccount = useCallback(() => {
+    setAccountOpen(false)
+    setAccountNotice('')
+    setPasswordRecovery(false)
+    setPendingVerificationEmail('')
+    sessionStorage.removeItem('homework-copilot:google-auth-pending')
+    sessionStorage.removeItem('homework-copilot:google-verification-email')
+    sessionStorage.removeItem('homework-copilot:verification-sent-at')
+    const cleanUrl = new URL(window.location.href)
+    cleanUrl.searchParams.delete('auth')
+    window.history.replaceState({}, '', `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`)
+  }, [])
   const submitTask = async (task: string, ready: boolean, source: 'number' | 'photo', idempotencyKey: string) => {
     if (supabase && !user) {
       setAccountNotice('Войди или зарегистрируйся, чтобы сохранить решение и списать его с баланса')
@@ -900,7 +928,7 @@ function HomePage() {
       <ProductSidebar theme={theme} activeLabel={activeNavigation} onNavigate={setActiveNavigation} onToggleTheme={toggleTheme} user={user} account={account} onOpenAccount={openAccount} collapsed={sidebarCollapsed} onToggleCollapsed={toggleSidebar} />
       <div className="product-seam" aria-hidden="true"><span /></div>
       <div className="product-content">
-        <PageHeader theme={theme} onToggleTheme={toggleTheme} user={user} account={account} onOpenAccount={openAccount} />
+        <PageHeader theme={theme} onToggleTheme={toggleTheme} user={user} account={account} onOpenAccount={openAccount} sidebarCollapsed={sidebarCollapsed} onToggleSidebar={toggleSidebar} />
         {activeNavigation === 'Главная' ? (
           <div className="home-content">
             <CopyTask
@@ -934,8 +962,7 @@ function HomePage() {
             passwordRecovery={passwordRecovery}
             pendingVerificationEmail={pendingVerificationEmail}
             notice={accountNotice}
-            onClose={() => { setAccountOpen(false); setAccountNotice('') }}
-            onVerificationComplete={() => setPendingVerificationEmail('')}
+            onClose={closeAccount}
             onReloadAccount={refreshAccount}
           />
         </Suspense>
