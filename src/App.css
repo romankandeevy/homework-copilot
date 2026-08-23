@@ -141,7 +141,8 @@
 
 .sidebar-footer {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
+  gap: var(--space-2);
   margin-top: auto;
   padding: var(--space-4) var(--space-2) 0;
   border-top: 1px solid var(--color-border);
@@ -284,24 +285,29 @@
 
 .profile-button {
   display: grid;
-  grid-template-columns: 2.5rem minmax(0, 1fr) auto;
+  min-width: 0;
+  height: var(--size-control);
+  flex: 1 1 auto;
+  grid-template-columns: 2rem minmax(0, 1fr) auto;
   align-items: center;
-  gap: var(--space-3);
-  min-width: 10.5rem;
-  height: 3rem;
-  padding: 0 var(--space-3) 0 var(--space-1);
+  gap: var(--space-2);
+  padding: 0 0.375rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-surface);
   background: var(--color-surface);
   color: var(--color-text);
   text-align: left;
   cursor: pointer;
+  transition: background var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), transform var(--motion-instant) var(--ease-out);
 }
+
+.profile-button:hover { border-color: var(--color-border-strong); background: var(--color-surface-raised); }
+.profile-button:active { transform: translateY(1px) scale(0.98); }
 
 .profile-button > span:first-child {
   display: grid;
-  width: 2.5rem;
-  height: 2.5rem;
+  width: 2rem;
+  height: 2rem;
   place-items: center;
   border-radius: var(--radius-control);
   background: var(--color-strong);
@@ -311,9 +317,11 @@
   font-weight: var(--weight-semibold);
 }
 
-.profile-button > span:nth-child(2) { display: grid; gap: 0.05rem; }
+.profile-button > span:nth-child(2) { display: grid; min-width: 0; gap: 0.05rem; }
 .profile-button strong { font-size: var(--text-small); font-weight: var(--weight-semibold); }
 .profile-button small { color: var(--color-text-subtle); font-size: var(--text-micro); }
+.profile-button strong,
+.profile-button small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .home-content {
   width: min(100%, var(--content-width));
@@ -780,9 +788,6 @@
   :root { --rail-width: 13.5rem; }
   .copy-task { grid-template-columns: minmax(14rem, 0.7fr) minmax(22rem, 1.3fr); }
   .home-grid { grid-template-columns: minmax(0, 1.15fr) minmax(18rem, 0.85fr); }
-  .profile-button { min-width: 3rem; grid-template-columns: 2.5rem; padding-right: var(--space-1); }
-  .profile-button > span:nth-child(2),
-  .profile-button > svg { display: none; }
 }
 
 @media (max-width: 980px) {
@@ -798,7 +803,6 @@
   .page-heading { margin-right: auto; }
   .page-heading span { display: none; }
   .page-heading h1 { font-size: var(--text-subtitle); }
-  .profile-button { display: none; }
   .mobile-theme-toggle { display: inline-flex; }
   .copy-task { grid-template-columns: 1fr; }
   .copy-task h2 { max-width: none; }

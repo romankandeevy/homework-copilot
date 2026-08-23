@@ -16,6 +16,28 @@ async function expectNoPageOverflow(page: import('@playwright/test').Page) {
 }
 
 test.describe('адаптация под телефон', () => {
+  test('тема стоит слева от профиля внизу сайдбара', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/')
+
+    const footer = page.locator('.sidebar-footer')
+    const theme = footer.getByRole('button', { name: 'Включить тёмную тему' })
+    const profile = footer.getByRole('button', { name: 'Открыть профиль' })
+    const [footerBox, themeBox, profileBox] = await Promise.all([
+      footer.boundingBox(),
+      theme.boundingBox(),
+      profile.boundingBox(),
+    ])
+
+    expect(footerBox).not.toBeNull()
+    expect(themeBox).not.toBeNull()
+    expect(profileBox).not.toBeNull()
+    expect(themeBox!.x + themeBox!.width).toBeLessThan(profileBox!.x)
+    expect(Math.abs(themeBox!.y - profileBox!.y)).toBeLessThan(1)
+    expect(footerBox!.y).toBeGreaterThan(780)
+    await expect(page.locator('.page-header').getByRole('button', { name: 'Открыть профиль' })).toHaveCount(0)
+  })
+
   for (const viewport of phoneViewports) {
     test(`главная не переполняется на ${viewport.width}px`, async ({ page }) => {
       await page.setViewportSize(viewport)

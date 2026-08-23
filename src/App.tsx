@@ -155,6 +155,16 @@ function ThemeToggle({ theme, onToggle }: { theme: Theme; onToggle: () => void }
   )
 }
 
+function ProfileButton() {
+  return (
+    <button className="profile-button" type="button" aria-label="Открыть профиль">
+      <span>РК</span>
+      <span><strong>Рома</strong><small>8 класс</small></span>
+      <CaretRight size={14} weight="bold" aria-hidden="true" />
+    </button>
+  )
+}
+
 function ProductSidebar({
   theme,
   activeLabel,
@@ -189,6 +199,7 @@ function ProductSidebar({
 
       <div className="sidebar-footer">
         <ThemeToggle theme={theme} onToggle={onToggleTheme} />
+        <ProfileButton />
       </div>
     </aside>
   )
@@ -215,11 +226,6 @@ function PageHeader({ theme, onToggleTheme }: { theme: Theme; onToggleTheme: () 
       <div className="header-actions">
         <span className="mobile-theme-toggle"><ThemeToggle theme={theme} onToggle={onToggleTheme} /></span>
         <BalanceControl />
-        <button className="profile-button" type="button" aria-label="Открыть профиль">
-          <span>РК</span>
-          <span><strong>Рома</strong><small>8 класс</small></span>
-          <CaretRight size={16} weight="bold" aria-hidden="true" />
-        </button>
       </div>
     </header>
   )
