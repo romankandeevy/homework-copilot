@@ -7,6 +7,7 @@ describe('Homework Copilot home', () => {
   beforeEach(() => {
     document.documentElement.dataset.theme = 'light'
     window.localStorage.clear()
+    window.sessionStorage.clear()
     window.history.replaceState({}, '', '/')
   })
 
@@ -45,6 +46,24 @@ describe('Homework Copilot home', () => {
     fireEvent.change(screen.getByLabelText('Пароль'), { target: { value: '12345678' } })
     expect(screen.getByRole('button', { name: 'Создать аккаунт' })).toBeEnabled()
     expect(screen.queryByText(/Аккаунт сохраняет решения/)).not.toBeInTheDocument()
+  })
+
+  it('requires the complete email code after Google', async () => {
+    window.sessionStorage.setItem('homework-copilot:google-verification-email', 'roma@example.com')
+    render(<App />)
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Войти или зарегистрироваться' })[0])
+    expect(await screen.findByRole('heading', { name: 'Проверь почту' })).toBeInTheDocument()
+    expect(screen.getByText(/roma@example.com/)).toBeInTheDocument()
+
+    const code = screen.getByRole('textbox', { name: 'Код подтверждения' })
+    const submit = screen.getByRole('button', { name: 'Подтвердить код' })
+    expect(code).toHaveAttribute('maxlength', '8')
+    expect(submit).toBeDisabled()
+    fireEvent.change(code, { target: { value: '1234567' } })
+    expect(submit).toBeDisabled()
+    fireEvent.change(code, { target: { value: '12345678' } })
+    expect(submit).toBeEnabled()
   })
 
   it('changes the saved textbook and checks the matching shared base', () => {

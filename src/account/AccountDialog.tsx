@@ -7,6 +7,7 @@ import {
   CheckCircle,
   Coins,
   EnvelopeSimple,
+  GoogleLogo,
   LockKey,
   SignOut,
   UserCircle,
@@ -17,14 +18,17 @@ import type { AccountData } from '../lib/supabase'
 import { getInitials, supabase } from '../lib/supabase'
 import './AccountDialog.css'
 
-type AuthScreen = 'sign-in' | 'sign-up' | 'forgot' | 'reset'
+type AuthScreen = 'sign-in' | 'sign-up' | 'forgot' | 'reset' | 'verify-code'
+type VerificationKind = 'signup' | 'google'
 
 type AccountDialogProps = {
   user: User | null
   account: AccountData | null
   passwordRecovery: boolean
+  pendingVerificationEmail?: string
   notice?: string
   onClose: () => void
+  onVerificationComplete: () => void
   onReloadAccount: () => Promise<void>
 }
 
@@ -35,6 +39,7 @@ function authErrorMessage(message: string) {
   if (normalized.includes('password') && normalized.includes('characters')) return 'Пароль должен содержать минимум 8 символов'
   if (normalized.includes('email rate limit')) return 'Слишком много писем. Попробуй немного позже'
   if (normalized.includes('email not confirmed')) return 'Сначала подтверди почту по ссылке из письма'
+  if (normalized.includes('token') || normalized.includes('otp')) return 'Код неверный или уже истёк'
   return 'Не получилось выполнить запрос. Проверь данные и попробуй ещё раз'
 }
 
@@ -42,12 +47,15 @@ function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
 }
 
-function AuthView({ passwordRecovery, notice }: { passwordRecovery: boolean; notice?: string }) {
-  const [screen, setScreen] = useState<AuthScreen>(passwordRecovery ? 'reset' : 'sign-in')
+function AuthView({ passwordRecovery, pendingVerificationEmail, notice, onVerificationComplete }: { passwordRecovery: boolean; pendingVerificationEmail?: string; notice?: string; onVerificationComplete: () => void }) {
+  const [screen, setScreen] = useState<AuthScreen>(passwordRecovery ? 'reset' : pendingVerificationEmail ? 'verify-code' : 'sign-in')
+  const [verificationKind, setVerificationKind] = useState<VerificationKind>(pendingVerificationEmail ? 'google' : 'signup')
   const [fullName, setFullName] = useState('')
   const [grade, setGrade] = useState('8')
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState(pendingVerificationEmail ?? '')
   const [password, setPassword] = useState('')
+  const [code, setCode] = useState('')
+  const [resendIn, setResendIn] = useState(0)
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -58,16 +66,68 @@ function AuthView({ passwordRecovery, notice }: { passwordRecovery: boolean; not
       ? isValidEmail(email) && password.length >= 8
       : screen === 'forgot'
         ? isValidEmail(email)
-        : password.length >= 8
+        : screen === 'verify-code'
+          ? code.length === 8
+          : password.length >= 8
 
   useEffect(() => {
     if (passwordRecovery) setScreen('reset')
   }, [passwordRecovery])
 
+  useEffect(() => {
+    if (!pendingVerificationEmail) return
+    setEmail(pendingVerificationEmail)
+    setVerificationKind('google')
+    setScreen('verify-code')
+  }, [pendingVerificationEmail])
+
+  useEffect(() => {
+    if (resendIn <= 0) return
+    const timer = window.setInterval(() => setResendIn((value) => Math.max(0, value - 1)), 1000)
+    return () => window.clearInterval(timer)
+  }, [resendIn])
+
   const switchScreen = (next: AuthScreen) => {
     setScreen(next)
     setStatus('')
     setError('')
+  }
+
+  const continueWithGoogle = async () => {
+    if (!supabase || loading) return
+    setLoading(true)
+    setStatus('')
+    setError('')
+    sessionStorage.setItem('homework-copilot:google-auth-pending', '1')
+    const { error: oauthError } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/?auth=google-code`,
+        queryParams: { prompt: 'select_account' },
+      },
+    })
+    if (oauthError) {
+      sessionStorage.removeItem('homework-copilot:google-auth-pending')
+      setError(authErrorMessage(oauthError.message))
+      setLoading(false)
+    }
+  }
+
+  const resendCode = async () => {
+    if (!supabase || loading || resendIn > 0) return
+    setLoading(true)
+    setStatus('')
+    setError('')
+    const normalizedEmail = email.trim()
+    const { error: resendError } = verificationKind === 'signup'
+      ? await supabase.auth.resend({ type: 'signup', email: normalizedEmail })
+      : await supabase.auth.signInWithOtp({ email: normalizedEmail, options: { shouldCreateUser: false } })
+    if (resendError) setError(authErrorMessage(resendError.message))
+    else {
+      setStatus('Новый код отправлен')
+      setResendIn(60)
+    }
+    setLoading(false)
   }
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -96,7 +156,25 @@ function AuthView({ passwordRecovery, notice }: { passwordRecovery: boolean; not
           },
         })
         if (signUpError) throw signUpError
-        if (!data.session) setStatus('Проверь почту и подтверди регистрацию по ссылке')
+        if (!data.session) {
+          setVerificationKind('signup')
+          setCode('')
+          setResendIn(60)
+          setScreen('verify-code')
+        }
+        return
+      }
+
+      if (screen === 'verify-code') {
+        const { error: verifyError } = await supabase.auth.verifyOtp({
+          email: email.trim(),
+          token: code,
+          type: verificationKind === 'signup' ? 'signup' : 'email',
+        })
+        if (verifyError) throw verifyError
+        sessionStorage.removeItem('homework-copilot:google-auth-pending')
+        sessionStorage.removeItem('homework-copilot:google-verification-email')
+        onVerificationComplete()
         return
       }
 
@@ -131,6 +209,8 @@ function AuthView({ passwordRecovery, notice }: { passwordRecovery: boolean; not
       ? 'Восстанови доступ'
       : screen === 'reset'
         ? 'Новый пароль'
+        : screen === 'verify-code'
+          ? 'Проверь почту'
         : 'Войди в аккаунт'
 
   return (
@@ -152,6 +232,23 @@ function AuthView({ passwordRecovery, notice }: { passwordRecovery: boolean; not
 
       {notice && <p className="account-notice">{notice}</p>}
 
+      {(screen === 'sign-in' || screen === 'sign-up') && (
+        <>
+          <button className="account-google-button" type="button" onClick={() => { void continueWithGoogle() }} disabled={loading}>
+            <GoogleLogo size={20} weight="bold" aria-hidden="true" />
+            Продолжить с Google
+          </button>
+          <div className="account-auth-divider"><span>или</span></div>
+        </>
+      )}
+
+      {screen === 'verify-code' && (
+        <div className="account-code-intro">
+          <span className="account-code-icon"><EnvelopeSimple size={24} weight="duotone" aria-hidden="true" /></span>
+          <p>Введи 8-значный код, который мы отправили на <strong>{email}</strong>.</p>
+        </div>
+      )}
+
       <form className="account-auth-form" onSubmit={submit}>
         {screen === 'sign-up' && (
           <div className="account-field-row">
@@ -171,7 +268,7 @@ function AuthView({ passwordRecovery, notice }: { passwordRecovery: boolean; not
           </div>
         )}
 
-        {screen !== 'reset' && (
+        {screen !== 'reset' && screen !== 'verify-code' && (
           <label>
             <span>Почта</span>
             <div className="account-input-shell">
@@ -181,7 +278,7 @@ function AuthView({ passwordRecovery, notice }: { passwordRecovery: boolean; not
           </label>
         )}
 
-        {screen !== 'forgot' && (
+        {screen !== 'forgot' && screen !== 'verify-code' && (
           <label>
             <span>{screen === 'reset' ? 'Новый пароль' : 'Пароль'}</span>
             <div className="account-input-shell">
@@ -191,11 +288,31 @@ function AuthView({ passwordRecovery, notice }: { passwordRecovery: boolean; not
           </label>
         )}
 
+        {screen === 'verify-code' && (
+          <label>
+            <span>Код подтверждения</span>
+            <div className="account-input-shell account-code-shell">
+              <input
+                value={code}
+                onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 8))}
+                autoComplete="one-time-code"
+                inputMode="numeric"
+                pattern="[0-9]{8}"
+                maxLength={8}
+                placeholder="00000000"
+                aria-label="Код подтверждения"
+                required
+                autoFocus
+              />
+            </div>
+          </label>
+        )}
+
         {error && <p className="account-form-message is-error" role="alert">{error}</p>}
         {status && <p className="account-form-message is-success" role="status"><CheckCircle size={18} weight="fill" aria-hidden="true" />{status}</p>}
 
         <button className="account-primary-button" type="submit" disabled={loading || !formIsValid}>
-          {loading ? 'Подожди…' : screen === 'sign-up' ? 'Создать аккаунт' : screen === 'forgot' ? 'Отправить ссылку' : screen === 'reset' ? 'Сохранить пароль' : 'Войти'}
+          {loading ? 'Подожди…' : screen === 'sign-up' ? 'Создать аккаунт' : screen === 'forgot' ? 'Отправить ссылку' : screen === 'reset' ? 'Сохранить пароль' : screen === 'verify-code' ? 'Подтвердить код' : 'Войти'}
           {!loading && <ArrowRight size={18} weight="bold" aria-hidden="true" />}
         </button>
       </form>
@@ -203,6 +320,12 @@ function AuthView({ passwordRecovery, notice }: { passwordRecovery: boolean; not
       <div className="account-auth-secondary">
         {screen === 'sign-in' && <button type="button" onClick={() => switchScreen('forgot')}>Не помню пароль</button>}
         {(screen === 'forgot' || screen === 'reset') && <button type="button" onClick={() => switchScreen('sign-in')}>Вернуться ко входу</button>}
+        {screen === 'verify-code' && (
+          <>
+            <button type="button" onClick={() => { void resendCode() }} disabled={loading || resendIn > 0}>{resendIn > 0 ? `Отправить снова через ${resendIn} сек.` : 'Отправить код снова'}</button>
+            {verificationKind === 'signup' && <button type="button" onClick={() => switchScreen('sign-up')}>Изменить почту</button>}
+          </>
+        )}
       </div>
 
     </div>
@@ -352,7 +475,7 @@ function ProfileView({ user, account, notice, onReloadAccount }: { user: User; a
   )
 }
 
-export default function AccountDialog({ user, account, passwordRecovery, notice, onClose, onReloadAccount }: AccountDialogProps) {
+export default function AccountDialog({ user, account, passwordRecovery, pendingVerificationEmail, notice, onClose, onVerificationComplete, onReloadAccount }: AccountDialogProps) {
   const reduceMotion = useReducedMotion()
 
   useEffect(() => {
@@ -392,7 +515,7 @@ export default function AccountDialog({ user, account, passwordRecovery, notice,
           <button className="account-dialog-close" type="button" aria-label="Закрыть профиль" onClick={onClose}><X size={20} weight="bold" aria-hidden="true" /></button>
           {user
             ? <ProfileView user={user} account={account} notice={notice} onReloadAccount={onReloadAccount} />
-            : <AuthView passwordRecovery={passwordRecovery} notice={notice} />}
+            : <AuthView passwordRecovery={passwordRecovery} pendingVerificationEmail={pendingVerificationEmail} notice={notice} onVerificationComplete={onVerificationComplete} />}
         </motion.section>
       </motion.div>
     </AnimatePresence>

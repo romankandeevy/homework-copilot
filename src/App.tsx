@@ -742,7 +742,9 @@ function HomePage() {
   const [account, setAccount] = useState<AccountData | null>(null)
   const [accountOpen, setAccountOpen] = useState(() => new URLSearchParams(window.location.search).get('auth') === 'reset')
   const [passwordRecovery, setPasswordRecovery] = useState(() => new URLSearchParams(window.location.search).get('auth') === 'reset')
+  const [pendingVerificationEmail, setPendingVerificationEmail] = useState(() => sessionStorage.getItem('homework-copilot:google-verification-email') ?? '')
   const [accountNotice, setAccountNotice] = useState('')
+  const googleVerificationStarted = useRef(false)
   const availableTextbooks = useMemo(() => [...textbooks, ...customTextbooks], [customTextbooks])
   const selectedTextbook = getTextbook(selectedTextbookId, availableTextbooks)
   const activeNavigationIndex = navigation.findIndex(({ label }) => label === activeNavigation)
@@ -770,7 +772,8 @@ function HomePage() {
         setAccountOpen(true)
       }
       if (event === 'SIGNED_OUT') {
-        setAccountOpen(false)
+        if (sessionStorage.getItem('homework-copilot:google-verification-email')) setAccountOpen(true)
+        else setAccountOpen(false)
         setPasswordRecovery(false)
       }
     })
@@ -779,6 +782,52 @@ function HomePage() {
       active = false
       subscription.unsubscribe()
     }
+  }, [])
+
+  useEffect(() => {
+    if (!supabase || new URLSearchParams(window.location.search).get('auth') !== 'google-code' || googleVerificationStarted.current) return
+    const authClient = supabase
+    googleVerificationStarted.current = true
+    let active = true
+
+    const requestGoogleCode = async () => {
+      let session = null
+      for (let attempt = 0; attempt < 20 && active; attempt += 1) {
+        const { data } = await authClient.auth.getSession()
+        session = data.session
+        if (session?.user.email) break
+        await new Promise((resolve) => window.setTimeout(resolve, 100))
+      }
+      const googleEmail = session?.user.email?.trim()
+      if (!googleEmail) {
+        if (active) {
+          setAccountNotice('Google не вернул почту. Попробуй войти ещё раз')
+          setAccountOpen(true)
+        }
+        return
+      }
+
+      sessionStorage.setItem('homework-copilot:google-verification-email', googleEmail)
+      const { error: codeError } = await authClient.auth.signInWithOtp({
+        email: googleEmail,
+        options: { shouldCreateUser: false },
+      })
+      await authClient.auth.signOut({ scope: 'local' })
+
+      const cleanUrl = new URL(window.location.href)
+      cleanUrl.searchParams.delete('auth')
+      window.history.replaceState({}, '', `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`)
+
+      if (!active) return
+      setUser(null)
+      setAccount(null)
+      setPendingVerificationEmail(googleEmail)
+      setAccountNotice(codeError ? 'Не получилось отправить код. Попробуй ещё раз' : '')
+      setAccountOpen(true)
+    }
+
+    window.setTimeout(() => { void requestGoogleCode() }, 0)
+    return () => { active = false }
   }, [])
 
   const refreshAccount = useCallback(async () => {
@@ -867,8 +916,10 @@ function HomePage() {
             user={user}
             account={account}
             passwordRecovery={passwordRecovery}
+            pendingVerificationEmail={pendingVerificationEmail}
             notice={accountNotice}
             onClose={() => { setAccountOpen(false); setAccountNotice('') }}
+            onVerificationComplete={() => setPendingVerificationEmail('')}
             onReloadAccount={refreshAccount}
           />
         </Suspense>

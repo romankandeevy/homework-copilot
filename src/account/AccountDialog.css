@@ -87,6 +87,29 @@
 
 .account-auth-tabs button.is-active { background: var(--color-surface-raised); color: var(--color-text); box-shadow: var(--shadow-raised); }
 .account-notice { margin: 0; padding: var(--space-3); border-left: 3px solid var(--color-accent); background: var(--color-accent-soft); font-size: var(--text-small); line-height: var(--leading-ui); }
+.account-google-button {
+  display: inline-flex;
+  min-height: 3rem;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+}
+.account-google-button:hover { background: var(--color-surface-raised); box-shadow: var(--shadow-raised); }
+.account-google-button:disabled { color: var(--color-text-subtle); cursor: not-allowed; }
+.account-auth-divider { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: var(--space-3); color: var(--color-text-subtle); font-size: var(--text-caption); }
+.account-auth-divider::before,
+.account-auth-divider::after { height: 1px; background: var(--color-border); content: ''; }
+.account-code-intro { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: var(--space-3); padding: var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-surface); background: var(--color-surface-sunken); }
+.account-code-intro p { margin: 0; color: var(--color-text-muted); font-size: var(--text-small); line-height: var(--leading-ui); overflow-wrap: anywhere; }
+.account-code-intro strong { color: var(--color-text); }
+.account-code-icon { display: grid; width: 2.75rem; height: 2.75rem; place-items: center; border-radius: var(--radius-control); background: var(--color-accent-soft); color: var(--color-accent-hover); }
 .account-auth-form,
 .account-profile-form { display: grid; gap: var(--space-4); }
 .account-auth-form > label,
@@ -99,6 +122,8 @@
 .account-input-shell input { width: 100%; min-width: 0; height: 2.8rem; border: 0; outline: 0; background: transparent; color: var(--color-text); font: inherit; }
 .account-input-shell input:focus-visible { box-shadow: none; }
 .account-input-shell input::placeholder { color: var(--color-text-subtle); }
+.account-code-shell { grid-template-columns: minmax(0, 1fr); }
+.account-code-shell input { text-align: center; font-family: var(--font-mono); font-size: 1.25rem; font-weight: var(--weight-semibold); letter-spacing: 0.34em; }
 
 .account-grade-field select,
 .account-profile-form input,
@@ -140,9 +165,10 @@
   color: var(--color-text-subtle);
   cursor: not-allowed;
 }
-.account-auth-secondary { display: flex; justify-content: center; }
+.account-auth-secondary { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: var(--space-1) var(--space-3); }
 .account-auth-secondary button { min-height: 2.75rem; border: 0; background: transparent; color: var(--color-text-muted); font-weight: var(--weight-medium); cursor: pointer; }
 .account-auth-secondary button:hover { color: var(--color-text); }
+.account-auth-secondary button:disabled { color: var(--color-text-subtle); cursor: not-allowed; }
 .account-form-message { display: flex; align-items: center; gap: var(--space-2); margin: 0; font-size: var(--text-small); line-height: var(--leading-ui); }
 .account-form-message.is-error { color: var(--color-danger); }
 .account-form-message.is-success { color: var(--color-success-strong); }
