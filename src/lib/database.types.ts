@@ -33,6 +33,27 @@ export type Database = {
         }
         Relationships: []
       }
+      user_schedules: {
+        Row: {
+          entries: Json
+          time_slots: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          entries?: Json
+          time_slots?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          entries?: Json
+          time_slots?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       wallet_accounts: {
         Row: {
           balance: number

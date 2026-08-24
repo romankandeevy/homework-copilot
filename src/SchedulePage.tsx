@@ -25,6 +25,8 @@ import {
   splitLessonTimeRange,
 } from './scheduleOcr'
 import type { ScheduleEntry, WeekdayId } from './scheduleOcr'
+import type { Json } from './lib/database.types'
+import { supabase } from './lib/supabase'
 import { useModalIsolation } from './lib/useModalIsolation'
 import './SchedulePage.css'
 
@@ -85,14 +87,28 @@ function loadSchedule() {
   try {
     const stored = window.localStorage.getItem(STORAGE_KEY)
     if (!stored) return starterSchedule
-    const parsed = JSON.parse(stored) as ScheduleEntry[]
-    const valid = parsed
-      .filter((entry) => weekdays.some(({ id }) => id === entry.day) && typeof entry.subject === 'string')
-      .map((entry, index) => ({ ...entry, time: migrateLessonTime(entry.time, index) }))
-    return valid.length > 0 ? valid : starterSchedule
+    return parseScheduleEntries(JSON.parse(stored), starterSchedule)
   } catch {
     return starterSchedule
   }
+}
+
+function parseScheduleEntries(value: unknown, fallback: ScheduleEntry[]) {
+  if (!Array.isArray(value)) return fallback
+  return value
+    .filter((entry): entry is ScheduleEntry => Boolean(
+      entry
+      && typeof entry === 'object'
+      && 'day' in entry
+      && weekdays.some(({ id }) => id === entry.day)
+      && 'subject' in entry
+      && typeof entry.subject === 'string'
+      && 'room' in entry
+      && typeof entry.room === 'string'
+      && 'time' in entry
+      && typeof entry.time === 'string',
+    ))
+    .map((entry, index) => ({ ...entry, time: migrateLessonTime(entry.time, index) }))
 }
 
 function sortTimes(times: string[]) {
@@ -183,7 +199,7 @@ function scaleRectangle(rectangle: { left: number; top: number; width: number; h
   }
 }
 
-function SchedulePage() {
+function SchedulePage({ userId = null, grade = 8 }: { userId?: string | null; grade?: number }) {
   const reduceMotion = useReducedMotion()
   const [entries, setEntries] = useState<ScheduleEntry[]>(loadSchedule)
   const [timeSlots, setTimeSlots] = useState<string[]>(() => loadTimeSlots(loadSchedule()))
@@ -196,6 +212,8 @@ function SchedulePage() {
   const [previewUrl, setPreviewUrl] = useState('')
   const [importRevision, setImportRevision] = useState(0)
   const [activeDay, setActiveDay] = useState<WeekdayId>('monday')
+  const [persistenceReady, setPersistenceReady] = useState(!userId)
+  const [saveState, setSaveState] = useState<'local' | 'loading' | 'saving' | 'saved' | 'error'>(userId ? 'loading' : 'local')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const ocrRunRef = useRef(0)
 
@@ -214,12 +232,79 @@ function SchedulePage() {
   const ocrDialogRef = useModalIsolation<HTMLElement>(ocrPhase !== 'idle', closeOcr)
 
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(entries))
-  }, [entries])
+    let cancelled = false
+    const client = supabase
+
+    if (!userId || !client) {
+      setPersistenceReady(true)
+      setSaveState('local')
+      return
+    }
+
+    setPersistenceReady(false)
+    setSaveState('loading')
+    const loadAccountSchedule = async () => {
+      const { data, error } = await client
+        .from('user_schedules')
+        .select('entries, time_slots')
+        .eq('user_id', userId)
+        .maybeSingle()
+
+      if (cancelled) return
+      if (error) {
+        setPersistenceReady(true)
+        setSaveState('error')
+        return
+      }
+
+      if (data) {
+        const nextEntries = parseScheduleEntries(data.entries, [])
+        const nextTimes = Array.isArray(data.time_slots)
+          ? sortTimes(data.time_slots.filter((value): value is string => typeof value === 'string')).slice(0, MAX_TIME_SLOTS)
+          : []
+        setEntries(nextEntries)
+        setTimeSlots(nextTimes.length > 0 ? nextTimes : loadTimeSlots(nextEntries))
+      } else {
+        const { error: createError } = await client.from('user_schedules').insert({
+          user_id: userId,
+          entries: entries as unknown as Json,
+          time_slots: timeSlots as unknown as Json,
+        })
+        if (cancelled) return
+        if (createError) {
+          setPersistenceReady(true)
+          setSaveState('error')
+          return
+        }
+      }
+
+      setPersistenceReady(true)
+      setSaveState('saved')
+    }
+
+    void loadAccountSchedule()
+    return () => { cancelled = true }
+    // The account change is the only event that should rehydrate the editor.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId])
 
   useEffect(() => {
+    const client = supabase
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(entries))
     window.localStorage.setItem(TIME_STORAGE_KEY, JSON.stringify(timeSlots))
-  }, [timeSlots])
+
+    if (!userId || !client || !persistenceReady) return
+    setSaveState('saving')
+    const timer = window.setTimeout(() => {
+      void client.from('user_schedules').upsert({
+        user_id: userId,
+        entries: entries as unknown as Json,
+        time_slots: timeSlots as unknown as Json,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'user_id' }).then(({ error }) => setSaveState(error ? 'error' : 'saved'))
+    }, 500)
+    return () => window.clearTimeout(timer)
+  }, [entries, timeSlots, userId, persistenceReady])
 
   useEffect(() => {
     return () => {
@@ -250,12 +335,6 @@ function SchedulePage() {
     if (!value || normalizedParts.start >= normalizedParts.end || (normalized !== previous && timeSlots.includes(normalized))) return
     setTimeSlots((current) => current.map((time, timeIndex) => timeIndex === index ? normalized : time).sort((left, right) => left.localeCompare(right)))
     setEntries((current) => current.map((entry) => entry.time === previous ? { ...entry, time: normalized } : entry))
-  }
-
-  const addTimeSlot = () => {
-    if (timeSlots.length >= MAX_TIME_SLOTS) return
-    const nextTime = nextLessonTime(timeSlots)
-    if (!timeSlots.includes(nextTime)) setTimeSlots((current) => [...current, nextTime])
   }
 
   const removeEntry = (id: string) => setEntries((current) => current.filter((entry) => entry.id !== id))
@@ -495,7 +574,7 @@ function SchedulePage() {
         <div className="schedule-heading-copy">
           <div className="schedule-title-line">
             <h2 id="schedule-title">Расписание</h2>
-            <span>8 класс</span>
+            <span>{grade} класс</span>
           </div>
           <p>
             <span className="schedule-desktop-hint">Вся неделя перед глазами. Нажми на ячейку, чтобы изменить урок.</span>
@@ -508,18 +587,20 @@ function SchedulePage() {
             <ImageSquare size={19} weight="duotone" aria-hidden="true" />
             Распознать фото
           </motion.label>
-          <motion.button className="schedule-add-button" type="button" disabled={timeSlots.length >= MAX_TIME_SLOTS} onClick={addTimeSlot} whileTap={reduceMotion ? undefined : { scale: 0.98 }}>
-            <Plus size={19} weight="bold" aria-hidden="true" />
-            Добавить урок
-          </motion.button>
         </div>
       </motion.header>
 
       <section className="schedule-workspace" aria-labelledby="schedule-editor-title">
         <header className="schedule-toolbar">
-          <div className="schedule-save-state">
-            <Check size={16} weight="bold" aria-hidden="true" />
-            <span id="schedule-editor-title">Всё сохраняется на этом устройстве</span>
+          <div className={`schedule-save-state${saveState === 'error' ? ' is-error' : ''}`}>
+            {saveState === 'loading' || saveState === 'saving'
+              ? <SpinnerGap className="schedule-save-spinner" size={16} weight="bold" aria-hidden="true" />
+              : saveState === 'error'
+                ? <WarningCircle size={16} weight="fill" aria-hidden="true" />
+                : <Check size={16} weight="bold" aria-hidden="true" />}
+            <span id="schedule-editor-title">
+              {saveState === 'loading' ? 'Загружаем расписание из аккаунта' : saveState === 'saving' ? 'Сохраняем в аккаунте' : saveState === 'saved' ? 'Сохранено в аккаунте' : saveState === 'error' ? 'Не получилось сохранить в аккаунте' : 'Сохраняется в этом браузере'}
+            </span>
           </div>
           <span className="schedule-toolbar-meta">{timeSlots.length} уроков · {weekdays.length} дней</span>
         </header>

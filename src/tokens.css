@@ -90,10 +90,10 @@
   --tracking-snug: -0.025em;
   --tracking-wide: 0.04em;
 
-  --color-canvas: oklch(97.5% 0.006 255);
-  --color-surface: oklch(99% 0.0035 255);
-  --color-surface-raised: oklch(99.7% 0.002 255);
-  --color-surface-sunken: oklch(94.5% 0.008 255);
+  --color-canvas: oklch(98.8% 0.004 255);
+  --color-surface: oklch(100% 0 0);
+  --color-surface-raised: oklch(99.5% 0.003 255);
+  --color-surface-sunken: oklch(96.5% 0.007 255);
   --color-border: oklch(84% 0.012 255);
   --color-border-strong: oklch(70% 0.018 255);
   --color-text-subtle: oklch(49% 0.018 255);
@@ -109,6 +109,11 @@
   --color-disabled-on-accent-border: oklch(48% 0.07 258);
   --color-on-accent: oklch(98% 0.004 255);
   --color-brand-accent: oklch(49% 0.205 260);
+  --color-avatar-spark: oklch(55% 0.18 275);
+  --color-avatar-wave: oklch(48% 0.14 235);
+  --color-avatar-grid: oklch(46% 0.11 250);
+  --color-avatar-signal: oklch(52% 0.16 265);
+  --color-avatar-focus: oklch(43% 0.08 255);
 
   --color-info: oklch(59% 0.15 245);
   --color-info-soft: oklch(94% 0.025 245);
@@ -165,11 +170,11 @@
 }
 
 :root[data-theme='dark'] {
-  --color-canvas: oklch(14.5% 0.018 258);
-  --color-surface: oklch(18% 0.021 258);
-  --color-surface-raised: oklch(22% 0.024 258);
-  --color-surface-sunken: oklch(11.8% 0.015 258);
-  --color-border: oklch(30% 0.024 258);
+  --color-canvas: oklch(10.5% 0.018 258);
+  --color-surface: oklch(13.5% 0.021 258);
+  --color-surface-raised: oklch(17% 0.024 258);
+  --color-surface-sunken: oklch(8.5% 0.015 258);
+  --color-border: oklch(25% 0.024 258);
   --color-border-strong: oklch(43% 0.028 258);
   --color-text-subtle: oklch(64% 0.022 255);
   --color-text-muted: oklch(76% 0.018 255);
@@ -183,6 +188,11 @@
   --color-disabled-on-accent-border: oklch(47% 0.07 258);
   --color-on-accent: oklch(98% 0.004 255);
   --color-brand-accent: oklch(72% 0.15 255);
+  --color-avatar-spark: oklch(60% 0.17 275);
+  --color-avatar-wave: oklch(57% 0.14 235);
+  --color-avatar-grid: oklch(55% 0.11 250);
+  --color-avatar-signal: oklch(59% 0.16 265);
+  --color-avatar-focus: oklch(52% 0.08 255);
   --color-info-soft: oklch(25% 0.04 245);
   --color-success-strong: oklch(76% 0.1 154);
   --color-success-soft: oklch(25% 0.035 154);

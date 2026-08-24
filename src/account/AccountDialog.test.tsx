@@ -1,0 +1,50 @@
+import '@testing-library/jest-dom/vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
+import type { User } from '@supabase/supabase-js'
+import AccountDialog from './AccountDialog'
+import type { AccountData } from '../lib/supabase'
+
+const user = { id: 'user-1', email: 'roman@example.com' } as User
+const account: AccountData = {
+  profile: {
+    id: user.id,
+    full_name: 'Роман',
+    grade: 8,
+    avatar_path: 'preset:orbit',
+    created_at: '2026-08-24T00:00:00.000Z',
+    updated_at: '2026-08-24T00:00:00.000Z',
+  },
+  balance: 20,
+  entries: [{
+    id: 'entry-1',
+    user_id: user.id,
+    amount: 20,
+    kind: 'credit',
+    description: 'Стартовый баланс',
+    idempotency_key: 'welcome-credit',
+    created_at: '2026-08-24T00:00:00.000Z',
+  }],
+  avatarUrl: null,
+}
+
+describe('AccountDialog profile', () => {
+  it('opens balance separately and exposes the complete profile controls', () => {
+    const toggleTheme = vi.fn()
+    render(<AccountDialog user={user} account={account} passwordRecovery={false} initialView="wallet" theme="dark" onToggleTheme={toggleTheme} onClose={() => undefined} onReloadAccount={async () => undefined} />)
+
+    expect(screen.getByRole('navigation', { name: 'Раздел аккаунта' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: '20 ₽' })).toBeInTheDocument()
+    expect(screen.getByText('одно готовое решение')).toBeInTheDocument()
+    expect(screen.queryByText('Журнал нельзя изменить')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Профиль' }))
+    expect(screen.getByRole('heading', { name: 'Аватар' })).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /Выбрать аватар/ })).toHaveLength(6)
+    expect(screen.getByRole('button', { name: 'Тёмная' })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(screen.getByRole('button', { name: 'Светлая' }))
+    expect(toggleTheme).toHaveBeenCalledOnce()
+    expect(screen.getByRole('link', { name: 'Конфиденциальность' })).toHaveAttribute('href', '/privacy')
+    expect(screen.getByRole('link', { name: 'Правила сервиса' })).toHaveAttribute('href', '/terms')
+  })
+})

@@ -50,8 +50,12 @@ describe('Homework Copilot home', () => {
     expect(screen.getByText('Слишком предсказуемый')).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('Пароль'), { target: { value: 'Homework2026!' } })
-    expect(screen.getByRole('button', { name: 'Создать аккаунт' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Создать аккаунт' })).toBeDisabled()
     expect(screen.getByRole('meter', { name: 'Надёжность пароля' })).toHaveAttribute('aria-valuetext', 'Надёжный')
+    fireEvent.click(screen.getByRole('checkbox'))
+    expect(screen.getByRole('button', { name: 'Создать аккаунт' })).toBeEnabled()
+    expect(screen.getByRole('link', { name: 'условия использования' })).toHaveAttribute('href', '/terms')
+    expect(screen.getByRole('link', { name: 'политику конфиденциальности' })).toHaveAttribute('href', '/privacy')
     expect(screen.queryByText(/Аккаунт сохраняет решения/)).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Закрыть окно аккаунта' }))
@@ -188,9 +192,8 @@ describe('Homework Copilot home', () => {
     expect(subjectInputs[0]).toHaveValue('Математика')
     expect(window.localStorage.getItem('homework-copilot:schedule-v1')).toContain('Математика')
 
-    const rows = screen.getAllByRole('row').length
-    fireEvent.click(screen.getAllByRole('button', { name: 'Добавить урок' })[0])
-    expect(screen.getAllByRole('row')).toHaveLength(rows + 1)
+    expect(screen.queryByRole('button', { name: 'Добавить урок' })).not.toBeInTheDocument()
+    expect(screen.getByText('Сохраняется в этом браузере')).toBeInTheDocument()
     expect(screen.getByLabelText('Загрузить фото расписания')).toHaveAttribute('accept', 'image/*')
   })
 

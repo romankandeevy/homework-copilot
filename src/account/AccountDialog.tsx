@@ -5,15 +5,17 @@ import type { User } from '@supabase/supabase-js'
 import {
   ArrowRight,
   Camera,
+  Check,
   CheckCircle,
   ClockCountdown,
   EnvelopeSimple,
   GoogleLogo,
   LockKey,
+  Moon,
   ShieldCheck,
   SignOut,
+  Sun,
   UserCircle,
-  Wallet,
   X,
 } from '@phosphor-icons/react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
@@ -22,12 +24,17 @@ import { supabase } from '../lib/supabase'
 import { getInitials } from '../lib/account'
 import { formatRubles } from '../lib/currency'
 import { useModalIsolation } from '../lib/useModalIsolation'
+import { AccountAvatar } from './AccountAvatar'
+import { avatarPresets, getAvatarPresetId } from './avatarPresets'
+import type { AvatarPresetId } from './avatarPresets'
 import PasswordStrength from './PasswordStrength'
 import { isStrongPassword } from './passwordStrengthRules'
 import './AccountDialog.css'
 
 type AuthScreen = 'sign-in' | 'sign-up' | 'forgot' | 'reset' | 'verify-email'
 type VerificationKind = 'signup' | 'google'
+type AccountView = 'profile' | 'wallet'
+type Theme = 'light' | 'dark'
 
 const emailResendDelay = 60
 const emailCodeLifetime = 5 * 60
@@ -76,6 +83,9 @@ type AccountDialogProps = {
   passwordRecovery: boolean
   pendingVerificationEmail?: string
   notice?: string
+  initialView: AccountView
+  theme: Theme
+  onToggleTheme: () => void
   onClose: () => void
   onReloadAccount: () => Promise<void>
 }
@@ -111,6 +121,7 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [legalAccepted, setLegalAccepted] = useState(false)
   const passwordStrengthId = useId()
   const requiresStrongPassword = screen === 'sign-up' || screen === 'reset'
   const passwordIsValid = requiresStrongPassword ? isStrongPassword(password) : password.length >= 8
@@ -118,7 +129,7 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
   const expiresIn = verificationSecondsLeft(sentAt, emailCodeLifetime, now)
 
   const formIsValid = screen === 'sign-up'
-    ? fullName.trim().length >= 2 && isValidEmail(email) && passwordIsValid
+    ? fullName.trim().length >= 2 && isValidEmail(email) && passwordIsValid && legalAccepted
     : screen === 'sign-in'
       ? isValidEmail(email) && password.length >= 8
       : screen === 'forgot'
@@ -435,6 +446,14 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
           </div>
         )}
 
+        {screen === 'sign-up' && (
+          <label className="account-consent">
+            <input type="checkbox" checked={legalAccepted} onChange={(event) => setLegalAccepted(event.target.checked)} />
+            <span aria-hidden="true"><Check size={14} weight="bold" /></span>
+            <em>Я принимаю <a href="/terms" target="_blank" rel="noreferrer">условия использования</a> и <a href="/privacy" target="_blank" rel="noreferrer">политику конфиденциальности</a></em>
+          </label>
+        )}
+
         {error && <p className="account-form-message is-error" role="alert">{error}</p>}
         {status && <p className="account-form-message is-success" role="status"><CheckCircle size={18} weight="fill" aria-hidden="true" />{status}</p>}
 
@@ -462,17 +481,15 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
         )}
       </div>
 
-      {screen === 'sign-up' && (
-        <p className="account-auth-legal">Создавая аккаунт, ты принимаешь <a href="/terms" target="_blank" rel="noreferrer">условия использования</a> и <a href="/privacy" target="_blank" rel="noreferrer">политику конфиденциальности</a>.</p>
-      )}
       </section>
     </div>
   )
 }
 
-function ProfileView({ user, account, notice, onReloadAccount }: { user: User; account: AccountData | null; notice?: string; onReloadAccount: () => Promise<void> }) {
+function ProfileView({ user, account, notice, initialView, theme, onToggleTheme, onReloadAccount }: { user: User; account: AccountData | null; notice?: string; initialView: AccountView; theme: Theme; onToggleTheme: () => void; onReloadAccount: () => Promise<void> }) {
   const [fullName, setFullName] = useState(account?.profile.full_name ?? '')
   const [grade, setGrade] = useState(String(account?.profile.grade ?? 8))
+  const [activeView, setActiveView] = useState<AccountView>(initialView)
   const [loading, setLoading] = useState(false)
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
@@ -481,6 +498,8 @@ function ProfileView({ user, account, notice, onReloadAccount }: { user: User; a
     setFullName(account?.profile.full_name ?? '')
     setGrade(String(account?.profile.grade ?? 8))
   }, [account])
+
+  useEffect(() => setActiveView(initialView), [initialView])
 
   const saveProfile = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -530,6 +549,20 @@ function ProfileView({ user, account, notice, onReloadAccount }: { user: User; a
     setLoading(false)
   }
 
+  const selectAvatar = async (preset: AvatarPresetId) => {
+    if (!supabase || loading) return
+    setLoading(true)
+    setStatus('')
+    setError('')
+    const { error: updateError } = await supabase.from('profiles').update({ avatar_path: `preset:${preset}` }).eq('id', user.id)
+    if (updateError) setError('Не получилось выбрать аватар')
+    else {
+      await onReloadAccount()
+      setStatus('Аватар обновлён')
+    }
+    setLoading(false)
+  }
+
   const signOut = async () => {
     if (!supabase || loading) return
     setLoading(true)
@@ -541,34 +574,50 @@ function ProfileView({ user, account, notice, onReloadAccount }: { user: User; a
   }
 
   const displayName = account?.profile.full_name || user.email || 'Ученик'
+  const selectedPreset = getAvatarPresetId(account?.profile.avatar_path)
 
   return (
     <div className="account-profile-view">
       <header className="account-profile-header">
-        <div>
-          <span>Профиль</span>
-          <h2 id="account-dialog-title">Твой аккаунт</h2>
-        </div>
-        <div className="account-balance-pill" aria-label={`Баланс: ${formatRubles(account?.balance ?? 0)}`}>
-          <span className="account-balance-icon" aria-hidden="true"><Wallet size={18} weight="duotone" /></span>
-          <span><small>Баланс</small><strong>{account ? formatRubles(account.balance) : '…'}</strong></span>
+        <div className="account-profile-identity">
+          <div className="account-avatar-large">
+            {account?.avatarUrl
+              ? <img src={account.avatarUrl} alt="Фото профиля" />
+              : <AccountAvatar preset={selectedPreset} initials={getInitials(displayName, user.email)} />}
+          </div>
+          <div>
+            <span>Аккаунт</span>
+            <h2 id="account-dialog-title">{displayName}</h2>
+            <p>{user.email}</p>
+          </div>
         </div>
       </header>
 
       {notice && <p className="account-notice account-profile-notice">{notice}</p>}
 
-      <div className="account-profile-grid">
-        <aside className="account-profile-summary">
-          <div className="account-avatar-large">
-            {account?.avatarUrl ? <img src={account.avatarUrl} alt="Фото профиля" /> : <span>{getInitials(displayName, user.email)}</span>}
-          </div>
-          <strong>{displayName}</strong>
-          <small>{user.email}</small>
-          <input id="profile-avatar" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { void uploadAvatar(event.target.files?.[0] ?? null); event.currentTarget.value = '' }} />
-          <label className="account-avatar-button" htmlFor="profile-avatar"><Camera size={18} weight="duotone" aria-hidden="true" /> Сменить фото</label>
-        </aside>
+      <nav className="account-profile-tabs" aria-label="Раздел аккаунта">
+        <button type="button" className={activeView === 'profile' ? 'is-active' : ''} aria-current={activeView === 'profile' ? 'page' : undefined} onClick={() => setActiveView('profile')}>Профиль</button>
+        <button type="button" className={activeView === 'wallet' ? 'is-active' : ''} aria-current={activeView === 'wallet' ? 'page' : undefined} onClick={() => setActiveView('wallet')}>Баланс <strong>{account ? formatRubles(account.balance) : '…'}</strong></button>
+      </nav>
 
+      {activeView === 'profile' ? (
         <div className="account-profile-main">
+          <section className="account-profile-section account-avatar-section" aria-labelledby="avatar-section-title">
+            <header><div><h3 id="avatar-section-title">Аватар</h3><p>Выбери готовый или загрузи своё фото.</p></div>
+              <><input id="profile-avatar" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { void uploadAvatar(event.target.files?.[0] ?? null); event.currentTarget.value = '' }} /><label className="account-avatar-button" htmlFor="profile-avatar"><Camera size={18} weight="duotone" aria-hidden="true" /> Загрузить фото</label></>
+            </header>
+            <div className="account-avatar-presets">
+              {avatarPresets.map((preset) => (
+                <button key={preset.id} type="button" className={selectedPreset === preset.id ? 'is-selected' : ''} aria-label={`Выбрать аватар «${preset.label}»`} aria-pressed={selectedPreset === preset.id} onClick={() => { void selectAvatar(preset.id) }} disabled={loading}>
+                  <AccountAvatar preset={preset.id} initials="" />
+                  <span>{preset.label}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section className="account-profile-section" aria-labelledby="profile-data-title">
+            <header><div><h3 id="profile-data-title">Личные данные</h3><p>Имя и класс используются в интерфейсе.</p></div></header>
           <form className="account-profile-form" onSubmit={saveProfile}>
             <label>
               <span>Имя</span>
@@ -582,7 +631,7 @@ function ProfileView({ user, account, notice, onReloadAccount }: { user: User; a
             </label>
             <label className="account-email-field">
               <span>Почта</span>
-              <input value={user.email ?? ''} disabled readOnly />
+              <input value={user.email ?? ''} readOnly />
             </label>
 
             {error && <p className="account-form-message is-error" role="alert">{error}</p>}
@@ -590,9 +639,25 @@ function ProfileView({ user, account, notice, onReloadAccount }: { user: User; a
 
             <button className="account-primary-button" type="submit" disabled={loading || fullName.trim().length < 1}>Сохранить</button>
           </form>
+          </section>
+
+          <section className="account-profile-section account-theme-section" aria-labelledby="profile-theme-title">
+            <header><div><h3 id="profile-theme-title">Тема</h3><p>Настрой вид приложения на этом устройстве.</p></div></header>
+            <div className="account-theme-options">
+              <button type="button" className={theme === 'light' ? 'is-selected' : ''} aria-pressed={theme === 'light'} onClick={() => { if (theme !== 'light') onToggleTheme() }}><Sun size={20} weight="duotone" /> Светлая</button>
+              <button type="button" className={theme === 'dark' ? 'is-selected' : ''} aria-pressed={theme === 'dark'} onClick={() => { if (theme !== 'dark') onToggleTheme() }}><Moon size={20} weight="duotone" /> Тёмная</button>
+            </div>
+          </section>
+        </div>
+      ) : (
+        <div className="account-wallet-view">
+          <section className="account-wallet-hero" aria-labelledby="account-wallet-title">
+            <div><span>Доступно сейчас</span><strong id="account-wallet-title">{account ? formatRubles(account.balance) : '…'}</strong></div>
+            <div className="account-wallet-rate"><strong>1 ₽</strong><span>одно готовое решение</span></div>
+          </section>
 
           <section className="account-wallet-history" aria-labelledby="wallet-history-title">
-            <div><h3 id="wallet-history-title">Последние операции</h3><span>Журнал нельзя изменить</span></div>
+            <div><h3 id="wallet-history-title">Последние операции</h3></div>
             {account?.entries.map((entry) => (
               <div className="account-wallet-entry" key={entry.id}>
                 <span className={entry.amount > 0 ? 'is-credit' : 'is-debit'}>{entry.amount > 0 ? '+' : ''}{formatRubles(entry.amount)}</span>
@@ -603,17 +668,17 @@ function ProfileView({ user, account, notice, onReloadAccount }: { user: User; a
             {!account?.entries.length && <p>Операций пока нет.</p>}
           </section>
         </div>
-      </div>
+      )}
 
       <footer className="account-profile-footer">
-        <span>Данные профиля доступны только тебе.</span>
+        <nav aria-label="Документы"><a href="/privacy" target="_blank" rel="noreferrer">Конфиденциальность</a><a href="/terms" target="_blank" rel="noreferrer">Правила сервиса</a></nav>
         <button type="button" onClick={() => { void signOut() }} disabled={loading}><SignOut size={18} weight="duotone" aria-hidden="true" /> Выйти</button>
       </footer>
     </div>
   )
 }
 
-export default function AccountDialog({ user, account, passwordRecovery, pendingVerificationEmail, notice, onClose, onReloadAccount }: AccountDialogProps) {
+export default function AccountDialog({ user, account, passwordRecovery, pendingVerificationEmail, notice, initialView, theme, onToggleTheme, onClose, onReloadAccount }: AccountDialogProps) {
   const reduceMotion = useReducedMotion()
   const dialogRef = useModalIsolation<HTMLElement>(true, onClose)
 
@@ -641,7 +706,7 @@ export default function AccountDialog({ user, account, passwordRecovery, pending
         >
           <button className="account-dialog-close" type="button" aria-label="Закрыть окно аккаунта" onClick={onClose}><X size={20} weight="bold" aria-hidden="true" /></button>
           {user
-            ? <ProfileView user={user} account={account} notice={notice} onReloadAccount={onReloadAccount} />
+            ? <ProfileView user={user} account={account} notice={notice} initialView={initialView} theme={theme} onToggleTheme={onToggleTheme} onReloadAccount={onReloadAccount} />
             : <AuthView passwordRecovery={passwordRecovery} pendingVerificationEmail={pendingVerificationEmail} notice={notice} />}
         </motion.section>
       </motion.div>

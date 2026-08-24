@@ -87,14 +87,18 @@
   font-weight: var(--weight-semibold);
 }
 
+.schedule-save-state.is-error { color: var(--color-danger); }
+.schedule-save-spinner { animation: schedule-save-spin 0.8s linear infinite; }
+
+@keyframes schedule-save-spin { to { transform: rotate(360deg); } }
+
 .schedule-actions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
 }
 
-.schedule-scan-button,
-.schedule-add-button {
+.schedule-scan-button {
   display: inline-flex;
   min-height: var(--size-control-large);
   align-items: center;
@@ -124,25 +128,10 @@
   clip: rect(0 0 0 0);
 }
 
-.schedule-add-button {
-  background: var(--color-surface);
-  color: var(--color-text);
-}
-
 .schedule-scan-button:hover { background: var(--color-accent-hover); }
-.schedule-add-button:hover { border-color: var(--color-text); background: var(--color-surface-raised); }
-.schedule-scan-button:active,
-.schedule-add-button:active { transform: translateY(1px); }
+.schedule-scan-button:active { transform: translateY(1px); }
 
-.schedule-scan-button:focus-within,
-.schedule-add-button:focus-visible { box-shadow: var(--focus-ring); }
-
-.schedule-add-button:disabled {
-  border-color: var(--color-border);
-  background: var(--color-surface-sunken);
-  color: var(--color-text-subtle);
-  cursor: not-allowed;
-}
+.schedule-scan-button:focus-within { box-shadow: var(--focus-ring); }
 
 .schedule-table-scroll {
   position: relative;
@@ -803,8 +792,7 @@
     flex-direction: column;
   }
 
-  .schedule-scan-button,
-  .schedule-add-button { width: 100%; }
+  .schedule-scan-button { width: 100%; }
 
   .schedule-day-tabs strong { display: none; }
   .schedule-mobile-lesson { grid-template-columns: 1fr; }
@@ -876,8 +864,7 @@
     flex-direction: row;
   }
 
-  .schedule-scan-button,
-  .schedule-add-button {
+  .schedule-scan-button {
     width: auto;
     min-width: 0;
     flex: 1 1 0;

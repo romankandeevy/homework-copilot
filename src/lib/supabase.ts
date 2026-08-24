@@ -39,7 +39,7 @@ export async function loadAccountData(user: User): Promise<AccountData> {
   if (entriesError) throw entriesError
 
   let avatarUrl: string | null = null
-  if (profile.avatar_path) {
+  if (profile.avatar_path && !profile.avatar_path.startsWith('preset:')) {
     const { data } = await supabase.storage.from('profile-avatars').createSignedUrl(profile.avatar_path, 60 * 60)
     avatarUrl = data?.signedUrl ?? null
   }

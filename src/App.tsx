@@ -27,7 +27,6 @@ import {
   TextT,
   UploadSimple,
   UserCircle,
-  Wallet,
   X,
 } from '@phosphor-icons/react'
 import LegalPage from './LegalPage'
@@ -37,6 +36,8 @@ import type { AccountData } from './lib/supabase'
 import { getInitials } from './lib/account'
 import { formatRubles } from './lib/currency'
 import { useModalIsolation } from './lib/useModalIsolation'
+import { AccountAvatar } from './account/AccountAvatar'
+import { getAvatarPresetId } from './account/avatarPresets'
 import './App.css'
 
 const DesignSystemPlayground = lazy(() => import('./DesignSystemPlayground'))
@@ -44,7 +45,11 @@ const AccountDialog = lazy(() => import('./account/AccountDialog'))
 const SchedulePage = lazy(() => import('./SchedulePage'))
 
 type Theme = 'light' | 'dark'
+type AccountView = 'profile' | 'wallet'
 type TextbookId = string
+
+const authIsConfigured = import.meta.env.MODE !== 'test'
+  && Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY)
 
 type Textbook = {
   id: TextbookId
@@ -172,7 +177,11 @@ function ProfileButton({ user, account, onClick, compact = false }: { user: User
   return (
     <button className={`profile-button${compact ? ' is-compact' : ''}`} type="button" aria-label={user ? 'Открыть профиль' : 'Войти или зарегистрироваться'} onClick={onClick}>
       <span className="profile-avatar-small">
-        {account?.avatarUrl ? <img src={account.avatarUrl} alt="" /> : user ? getInitials(name, user.email) : <UserCircle size={21} weight="duotone" aria-hidden="true" />}
+        {account?.avatarUrl
+          ? <img src={account.avatarUrl} alt="" />
+          : user
+            ? <AccountAvatar preset={getAvatarPresetId(account?.profile.avatar_path)} initials={getInitials(name, user.email)} />
+            : <UserCircle size={21} weight="duotone" aria-hidden="true" />}
       </span>
       {!compact && <span><strong>{name}</strong><small>{subtitle}</small></span>}
       {!compact && <CaretRight size={14} weight="bold" aria-hidden="true" />}
@@ -228,10 +237,10 @@ function ProductSidebar({
   )
 }
 
-function BalanceControl({ user, balance, onOpenAccount }: { user: User | null; balance: number | null; onOpenAccount: () => void }) {
+function BalanceControl({ user, balance, onOpenWallet }: { user: User | null; balance: number | null; onOpenWallet: () => void }) {
   if (!user) {
     return (
-      <button className="header-sign-in" type="button" onClick={onOpenAccount}>
+      <button className="header-sign-in" type="button" onClick={onOpenWallet}>
         <UserCircle size={20} weight="duotone" aria-hidden="true" />
         Войти
       </button>
@@ -239,15 +248,14 @@ function BalanceControl({ user, balance, onOpenAccount }: { user: User | null; b
   }
 
   return (
-    <div className="balance-control" aria-label={`Баланс: ${formatRubles(balance ?? 0)}`}>
-      <span className="balance-icon" aria-hidden="true"><Wallet size={21} weight="duotone" /></span>
+    <button className="balance-control" type="button" aria-label={`Открыть баланс: ${formatRubles(balance ?? 0)}`} onClick={onOpenWallet}>
       <span><small>Баланс</small><strong>{formatRubles(balance ?? 0)}</strong></span>
-      <button type="button" aria-label="Открыть баланс и пополнить" onClick={onOpenAccount}><Plus size={17} weight="bold" aria-hidden="true" /><span>Пополнить</span></button>
-    </div>
+      <span className="balance-open">Пополнить <ArrowRight size={15} weight="bold" aria-hidden="true" /></span>
+    </button>
   )
 }
 
-function PageHeader({ theme, onToggleTheme, user, account, onOpenAccount }: { theme: Theme; onToggleTheme: () => void; user: User | null; account: AccountData | null; onOpenAccount: () => void }) {
+function PageHeader({ theme, onToggleTheme, user, account, onOpenWallet }: { theme: Theme; onToggleTheme: () => void; user: User | null; account: AccountData | null; onOpenWallet: () => void }) {
   const firstName = account?.profile.full_name.trim().split(/\s+/)[0]
   const formattedDate = new Intl.DateTimeFormat('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date())
   const dateLabel = formattedDate.charAt(0).toLocaleUpperCase('ru') + formattedDate.slice(1)
@@ -261,7 +269,19 @@ function PageHeader({ theme, onToggleTheme, user, account, onOpenAccount }: { th
       </div>
       <div className="header-actions">
         <span className="mobile-theme-toggle"><ThemeToggle theme={theme} onToggle={onToggleTheme} /></span>
-        <BalanceControl user={user} balance={account?.balance ?? null} onOpenAccount={onOpenAccount} />
+        <BalanceControl user={user} balance={account?.balance ?? null} onOpenWallet={onOpenWallet} />
+      </div>
+    </header>
+  )
+}
+
+function InternalUtilityHeader({ theme, onToggleTheme, user, account, onOpenWallet }: { theme: Theme; onToggleTheme: () => void; user: User | null; account: AccountData | null; onOpenWallet: () => void }) {
+  return (
+    <header className="internal-utility-header">
+      <div className="mobile-brand"><BrandLockup /></div>
+      <div className="header-actions">
+        <ThemeToggle theme={theme} onToggle={onToggleTheme} />
+        <BalanceControl user={user} balance={account?.balance ?? null} onOpenWallet={onOpenWallet} />
       </div>
     </header>
   )
@@ -756,7 +776,10 @@ function HomePage() {
   const [supabaseClient, setSupabaseClient] = useState<SupabaseClient<Database> | null>(null)
   const [user, setUser] = useState<User | null>(null)
   const [account, setAccount] = useState<AccountData | null>(null)
+  const [authReady, setAuthReady] = useState(!authIsConfigured)
+  const [accountReady, setAccountReady] = useState(!authIsConfigured)
   const [accountOpen, setAccountOpen] = useState(() => ['reset', 'verified', 'confirm'].includes(new URLSearchParams(window.location.search).get('auth') ?? ''))
+  const [accountView, setAccountView] = useState<AccountView>('profile')
   const [passwordRecovery, setPasswordRecovery] = useState(() => new URLSearchParams(window.location.search).get('auth') === 'reset')
   const [pendingVerificationEmail, setPendingVerificationEmail] = useState(() => sessionStorage.getItem('homework-copilot:google-verification-email') ?? '')
   const [accountNotice, setAccountNotice] = useState('')
@@ -778,7 +801,12 @@ function HomePage() {
   useEffect(() => {
     let active = true
     void import('./lib/supabase').then(({ supabase }) => {
-      if (active) setSupabaseClient(supabase)
+      if (!active) return
+      setSupabaseClient(supabase)
+      if (!supabase) {
+        setAuthReady(true)
+        setAccountReady(true)
+      }
     })
     return () => { active = false }
   }, [])
@@ -787,14 +815,25 @@ function HomePage() {
     if (!supabaseClient) return
     let active = true
 
-    void supabaseClient.auth.getUser().then(({ data }) => {
-      if (active) setUser(data.user ?? null)
+    void supabaseClient.auth.getSession().then(({ data }) => {
+      if (!active) return
+      const nextUser = data.session?.user ?? null
+      setUser(nextUser)
+      setAuthReady(true)
+      if (!nextUser) setAccountReady(true)
     })
 
     const { data: { subscription } } = supabaseClient.auth.onAuthStateChange((event, session) => {
       const nextUser = session?.user ?? null
-      setUser(nextUser)
-      if (!nextUser) setAccount(null)
+      setUser((current) => {
+        if (current?.id !== nextUser?.id) setAccountReady(!nextUser)
+        return nextUser
+      })
+      setAuthReady(true)
+      if (!nextUser) {
+        setAccount(null)
+        setAccountReady(true)
+      }
       if (event === 'PASSWORD_RECOVERY') {
         setPasswordRecovery(true)
         setAccountOpen(true)
@@ -903,6 +942,7 @@ function HomePage() {
   const refreshAccount = useCallback(async () => {
     if (!user) {
       setAccount(null)
+      setAccountReady(true)
       return
     }
     try {
@@ -910,6 +950,8 @@ function HomePage() {
       setAccount(await loadAccountData(user))
     } catch {
       setAccountNotice('Не получилось загрузить профиль. Попробуй открыть его ещё раз')
+    } finally {
+      setAccountReady(true)
     }
   }, [user])
 
@@ -920,6 +962,12 @@ function HomePage() {
   const toggleTheme = () => setTheme((current) => current === 'light' ? 'dark' : 'light')
   const openAccount = () => {
     setAccountNotice('')
+    setAccountView('profile')
+    setAccountOpen(true)
+  }
+  const openWallet = () => {
+    setAccountNotice('')
+    setAccountView('wallet')
     setAccountOpen(true)
   }
   const closeAccount = useCallback(() => {
@@ -960,12 +1008,23 @@ function HomePage() {
     setSelectedTextbookId(textbook.id)
   }
 
+  if (!authReady || (user && !accountReady)) {
+    return (
+      <main className="session-loading-screen" aria-label="Загружаем аккаунт" aria-busy="true">
+        <BrandLockup />
+        <SpinnerGap size={24} weight="bold" aria-hidden="true" />
+      </main>
+    )
+  }
+
   return (
     <main className="product-shell" style={shellStyle}>
       <ProductSidebar theme={theme} activeLabel={activeNavigation} onNavigate={setActiveNavigation} onToggleTheme={toggleTheme} user={user} account={account} onOpenAccount={openAccount} />
       <div className="product-seam" aria-hidden="true"><span /></div>
       <div className="product-content">
-        <PageHeader theme={theme} onToggleTheme={toggleTheme} user={user} account={account} onOpenAccount={openAccount} />
+        {activeNavigation === 'Главная'
+          ? <PageHeader theme={theme} onToggleTheme={toggleTheme} user={user} account={account} onOpenWallet={openWallet} />
+          : <InternalUtilityHeader theme={theme} onToggleTheme={toggleTheme} user={user} account={account} onOpenWallet={openWallet} />}
         {activeNavigation === 'Главная' ? (
           <div className="home-content">
             <CopyTask
@@ -989,7 +1048,7 @@ function HomePage() {
             </div>
           </div>
         ) : activeNavigation === 'Расписание' ? (
-          <Suspense fallback={<div className="route-loading" role="status">Загружаем расписание…</div>}><SchedulePage /></Suspense>
+          <Suspense fallback={<div className="route-loading" role="status">Загружаем расписание…</div>}><SchedulePage userId={user?.id ?? null} grade={account?.profile.grade ?? 8} /></Suspense>
         ) : <ComingSoon section={activeNavigation} />}
       </div>
       <MobileNavigation activeLabel={activeNavigation} onNavigate={setActiveNavigation} />
@@ -1001,6 +1060,9 @@ function HomePage() {
             passwordRecovery={passwordRecovery}
             pendingVerificationEmail={pendingVerificationEmail}
             notice={accountNotice}
+            initialView={accountView}
+            theme={theme}
+            onToggleTheme={toggleTheme}
             onClose={closeAccount}
             onReloadAccount={refreshAccount}
           />

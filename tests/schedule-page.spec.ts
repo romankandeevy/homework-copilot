@@ -20,9 +20,7 @@ test.describe('недельное расписание', () => {
     await subject.fill('Математика')
     await expect(subject).toHaveValue('Математика')
 
-    const before = await page.getByRole('row').count()
-    await page.getByRole('button', { name: 'Добавить урок' }).click()
-    await expect(page.getByRole('row')).toHaveCount(before + 1)
+    await expect(page.getByRole('button', { name: 'Добавить урок' })).toHaveCount(0)
 
     await page.getByRole('button', { name: 'Включить тёмную тему' }).click()
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
@@ -39,6 +37,6 @@ test.describe('недельное расписание', () => {
     await expect(page.getByLabel('Предмет, пятница, урок 1', { exact: true })).toHaveValue('Химия')
     const widths = await page.evaluate(() => ({ documentWidth: document.documentElement.scrollWidth, viewportWidth: window.innerWidth }))
     expect(widths.documentWidth).toBeLessThanOrEqual(widths.viewportWidth)
-    await expect(page.getByText('Всё сохраняется на этом устройстве')).toBeVisible()
+    await expect(page.getByText('Сохраняется в этом браузере')).toBeVisible()
   })
 })
