@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import type { User } from '@supabase/supabase-js'
 import {
@@ -17,6 +17,8 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import type { AccountData } from '../lib/supabase'
 import { getInitials, supabase } from '../lib/supabase'
 import { formatRubles } from '../lib/currency'
+import PasswordStrength from './PasswordStrength'
+import { isStrongPassword } from './passwordStrengthRules'
 import './AccountDialog.css'
 
 type AuthScreen = 'sign-in' | 'sign-up' | 'forgot' | 'reset' | 'check-email'
@@ -73,14 +75,17 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const passwordStrengthId = useId()
+  const requiresStrongPassword = screen === 'sign-up' || screen === 'reset'
+  const passwordIsValid = requiresStrongPassword ? isStrongPassword(password) : password.length >= 8
 
   const formIsValid = screen === 'sign-up'
-    ? fullName.trim().length >= 2 && isValidEmail(email) && password.length >= 8
+    ? fullName.trim().length >= 2 && isValidEmail(email) && passwordIsValid
     : screen === 'sign-in'
       ? isValidEmail(email) && password.length >= 8
       : screen === 'forgot'
         ? isValidEmail(email)
-        : password.length >= 8
+        : passwordIsValid
 
   useEffect(() => {
     if (passwordRecovery) setScreen('reset')
@@ -163,7 +168,7 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
 
       if (screen === 'sign-up') {
         if (fullName.trim().length < 2) throw new Error('name')
-        if (password.length < 8) throw new Error('password characters')
+        if (!isStrongPassword(password)) throw new Error('weak password')
         const { data, error: signUpError } = await supabase.auth.signUp({
           email: email.trim(),
           password,
@@ -191,7 +196,7 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
         return
       }
 
-      if (password.length < 8) throw new Error('password characters')
+      if (!isStrongPassword(password)) throw new Error('weak password')
       const { error: updateError } = await supabase.auth.updateUser({ password })
       if (updateError) throw updateError
       setStatus('Пароль обновлён')
@@ -201,6 +206,7 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : ''
       if (message === 'name') setError('Введи имя')
+      else if (message === 'weak password') setError('Выполни все требования к паролю')
       else setError(authErrorMessage(message))
     } finally {
       setLoading(false)
@@ -224,7 +230,7 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
       : screen === 'forgot'
         ? 'Пришлём безопасную ссылку для нового пароля.'
         : screen === 'reset'
-          ? 'Придумай пароль длиной не меньше 8 символов.'
+          ? 'Придумай новый надёжный пароль.'
           : 'Продолжи с Google или войди по почте.'
 
   return (
@@ -302,13 +308,26 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
         )}
 
         {screen !== 'forgot' && (
-          <label>
-            <span>{screen === 'reset' ? 'Новый пароль' : 'Пароль'}</span>
-            <div className="account-input-shell">
-              <LockKey size={19} weight="duotone" aria-hidden="true" />
-              <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete={screen === 'sign-in' ? 'current-password' : 'new-password'} minLength={8} placeholder="Минимум 8 символов" required autoFocus={screen === 'reset'} />
-            </div>
-          </label>
+          <div className="account-password-field">
+            <label>
+              <span>{screen === 'reset' ? 'Новый пароль' : 'Пароль'}</span>
+              <div className="account-input-shell">
+                <LockKey size={19} weight="duotone" aria-hidden="true" />
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  autoComplete={screen === 'sign-in' ? 'current-password' : 'new-password'}
+                  minLength={requiresStrongPassword ? 12 : 8}
+                  placeholder={requiresStrongPassword ? 'Не меньше 12 символов' : 'Твой пароль'}
+                  aria-describedby={requiresStrongPassword ? passwordStrengthId : undefined}
+                  required
+                  autoFocus={screen === 'reset'}
+                />
+              </div>
+            </label>
+            {requiresStrongPassword && <PasswordStrength id={passwordStrengthId} value={password} />}
+          </div>
         )}
 
         {error && <p className="account-form-message is-error" role="alert">{error}</p>}

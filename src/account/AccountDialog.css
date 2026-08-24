@@ -125,15 +125,35 @@
 .account-auth-form,
 .account-profile-form { display: grid; gap: var(--space-4); }
 .account-auth-form > label,
+.account-password-field > label,
 .account-profile-form > label,
 .account-field-row > label { display: grid; gap: var(--space-2); color: var(--color-text-muted); font-size: var(--text-small); font-weight: var(--weight-semibold); }
 
+.account-password-field { display: grid; gap: var(--space-3); }
 .account-field-row { display: grid; grid-template-columns: minmax(0, 1fr) 5.5rem; gap: var(--space-3); }
 .account-input-shell { display: grid; min-height: 3rem; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: var(--space-2); padding: 0 var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-surface); color: var(--color-text-subtle); }
 .account-input-shell:focus-within { border-color: var(--color-accent-hover); box-shadow: 0 0 0 3px var(--color-accent-soft); }
 .account-input-shell input { width: 100%; min-width: 0; height: 2.8rem; border: 0; outline: 0; background: transparent; color: var(--color-text); font: inherit; }
 .account-input-shell input:focus-visible { box-shadow: none; }
 .account-input-shell input::placeholder { color: var(--color-text-subtle); }
+
+.password-strength { display: grid; gap: var(--space-2); }
+.password-strength-meter { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); }
+.password-strength-cell { position: relative; height: 0.3rem; overflow: hidden; border-radius: var(--radius-xs); background: var(--color-border); }
+.password-strength-cell > span { position: absolute; inset: 0; border-radius: inherit; background: var(--password-strength-tone, var(--color-border)); transform-origin: left; }
+.password-strength.is-danger { --password-strength-tone: var(--color-danger); }
+.password-strength.is-warning { --password-strength-tone: var(--color-warning); }
+.password-strength.is-success { --password-strength-tone: var(--color-success); }
+.password-strength-summary { display: flex; min-height: 1.25rem; align-items: center; justify-content: space-between; gap: var(--space-3); color: var(--color-text-subtle); font-size: var(--text-caption); font-weight: var(--weight-semibold); }
+.password-strength.is-danger .password-strength-summary > span:first-child { color: var(--color-danger); }
+.password-strength.is-warning .password-strength-summary > span:first-child { color: color-mix(in oklch, var(--color-warning) 72%, var(--color-text)); }
+.password-strength.is-success .password-strength-summary > span:first-child { color: var(--color-success-strong); }
+.password-strength-warning { color: color-mix(in oklch, var(--color-warning) 72%, var(--color-text)); font-weight: var(--weight-medium); }
+.password-strength-rules { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-1) var(--space-3); margin: 0; padding: 0; list-style: none; }
+.password-strength-rules li { display: flex; min-width: 0; align-items: center; gap: var(--space-2); color: var(--color-text-subtle); font-size: var(--text-caption); font-weight: var(--weight-medium); line-height: var(--leading-ui); }
+.password-strength-rules li.is-met { color: var(--color-text-muted); }
+.password-rule-state { display: grid; width: 0.9rem; height: 0.9rem; flex: 0 0 auto; place-items: center; border: 1px solid var(--color-border-strong); border-radius: var(--radius-xs); color: var(--color-on-accent); }
+.password-strength-rules li.is-met .password-rule-state { border-color: var(--color-success); background: var(--color-success); }
 .account-grade-field select,
 .account-profile-form input,
 .account-profile-form select {
@@ -245,6 +265,7 @@
   .account-email-check-lead { padding: var(--space-3); }
   .account-email-steps li { padding-block: var(--space-3); }
   .account-field-row { grid-template-columns: minmax(0, 1fr) 5rem; }
+  .password-strength-rules { grid-template-columns: 1fr; }
   .account-profile-header { align-items: flex-start; flex-direction: column; padding: var(--space-5) 4.5rem var(--space-5) var(--space-4); }
   .account-profile-grid { display: block; }
   .account-profile-summary { padding: var(--space-5) var(--space-4); border-right: 0; border-bottom: 1px solid var(--color-border); }
@@ -267,5 +288,6 @@
 @media (prefers-reduced-motion: reduce) {
   .account-dialog-close,
   .account-google-button,
-  .account-primary-button { transition: none; }
+  .account-primary-button,
+  .password-strength-cell > span { transition: none; }
 }

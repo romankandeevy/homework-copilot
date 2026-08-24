@@ -42,9 +42,15 @@ describe('Homework Copilot home', () => {
     fireEvent.change(screen.getByRole('textbox', { name: 'Почта' }), { target: { value: 'roma@example.com' } })
     fireEvent.change(screen.getByLabelText('Пароль'), { target: { value: '12' } })
     expect(screen.getByRole('button', { name: 'Создать аккаунт' })).toBeDisabled()
+    expect(screen.getByRole('meter', { name: 'Надёжность пароля' })).toHaveAttribute('aria-valuetext', 'Слабый')
 
     fireEvent.change(screen.getByLabelText('Пароль'), { target: { value: '12345678' } })
+    expect(screen.getByRole('button', { name: 'Создать аккаунт' })).toBeDisabled()
+    expect(screen.getByText('Слишком предсказуемый')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Пароль'), { target: { value: 'Homework2026!' } })
     expect(screen.getByRole('button', { name: 'Создать аккаунт' })).toBeEnabled()
+    expect(screen.getByRole('meter', { name: 'Надёжность пароля' })).toHaveAttribute('aria-valuetext', 'Надёжный')
     expect(screen.queryByText(/Аккаунт сохраняет решения/)).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Закрыть окно аккаунта' }))

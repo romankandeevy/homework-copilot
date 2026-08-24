@@ -584,7 +584,7 @@ function CopyTask({
           </div>
 
           <button className="copy-task-submit" type="submit" disabled={!canSubmit || isSubmitting}>
-            {isSubmitting ? 'Подожди…' : photo ? 'Списать по фото за 1 ₽' : readyInBase && normalizedTask ? 'Открыть готовое за 1 ₽' : 'Списать за 1 ₽'}
+            {isSubmitting ? 'Подожди…' : photo ? 'Списать по фото за 1 рубль' : readyInBase && normalizedTask ? 'Открыть готовое за 1 рубль' : 'Списать за 1 рубль'}
             {!isSubmitting && <ArrowRight size={20} weight="bold" aria-hidden="true" />}
           </button>
         </div>
