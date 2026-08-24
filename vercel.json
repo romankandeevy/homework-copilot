@@ -1,4 +1,11 @@
 {
+  "redirects": [
+    {
+      "source": "/:path*",
+      "destination": "https://www.homeworkcopilot.ru/:path*",
+      "permanent": false
+    }
+  ],
   "rewrites": [
     { "source": "/privacy", "destination": "/index.html" },
     { "source": "/terms", "destination": "/index.html" }
