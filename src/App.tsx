@@ -216,92 +216,9 @@ function ProductSidebar({
         })}
       </nav>
 
-      <div data-impeccable-variants="b8c7a4d0" data-impeccable-variant-count="3" style={{ display: "contents" }}>
-        {/* impeccable-variants-start b8c7a4d0 */}
-        <style data-impeccable-css="58d44f2d-0e1a-45f3-b274-dbd4293e9dd7">{`
-@scope ([data-impeccable-variant]) {
-  :scope {
-    display: none;
-  }
-}
-
-@scope ([data-impeccable-variant="1"]) {
-  :scope {
-    display: block;
-  }
-  :scope > .sidebar-footer-impeccable {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    padding: 16px 8px 0;
-  }
-  :scope > .sidebar-footer-impeccable .utility-button,
-  :scope > .sidebar-footer-impeccable .profile-button {
-    flex: 0 0 auto;
-  }
-}
-
-@scope ([data-impeccable-variant="2"]) {
-  :scope {
-    display: block;
-  }
-  :scope > .sidebar-footer-impeccable {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 8px;
-    padding: 12px 10px 0;
-  }
-  :scope > .sidebar-footer-impeccable .profile-button {
-    width: 100%;
-  }
-}
-
-@scope ([data-impeccable-variant="3"]) {
-  :scope {
-    display: block;
-  }
-  :scope > .sidebar-footer-impeccable {
-    display: grid;
-    grid-template-columns: 44px 1fr;
-    align-items: center;
-    column-gap: 10px;
-    padding: 14px 8px 0;
-  }
-  :scope > .sidebar-footer-impeccable .utility-button {
-    justify-self: end;
-  }
-}
-`}</style>
-
-        {/* Original */}
-        <div data-impeccable-variant="original">
-          <div className="sidebar-footer sidebar-footer-impeccable sidebar-footer-impeccable-v1">
-            <ThemeToggle theme={theme} onToggle={onToggleTheme} />
-            <ProfileButton user={user} account={account} onClick={onOpenAccount} />
-          </div>
-        </div>
-
-        {/* Variants: insert below this line */}
-        <div data-impeccable-variant="1">
-          <div className="sidebar-footer sidebar-footer-impeccable sidebar-footer-impeccable-v1">
-            <ThemeToggle theme={theme} onToggle={onToggleTheme} />
-            <ProfileButton user={user} account={account} onClick={onOpenAccount} />
-          </div>
-        </div>
-        <div data-impeccable-variant="2">
-          <div className="sidebar-footer sidebar-footer-impeccable sidebar-footer-impeccable-v2">
-            <ThemeToggle theme={theme} onToggle={onToggleTheme} />
-            <ProfileButton user={user} account={account} onClick={onOpenAccount} compact />
-          </div>
-        </div>
-        <div data-impeccable-variant="3">
-          <div className="sidebar-footer sidebar-footer-impeccable sidebar-footer-impeccable-v3">
-            <ProfileButton user={user} account={account} onClick={onOpenAccount} />
-            <ThemeToggle theme={theme} onToggle={onToggleTheme} />
-          </div>
-        </div>
-        {/* impeccable-variants-end b8c7a4d0 */}
+      <div className="sidebar-footer">
+        <ThemeToggle theme={theme} onToggle={onToggleTheme} />
+        <ProfileButton user={user} account={account} onClick={onOpenAccount} />
       </div>
     </aside>
   )
