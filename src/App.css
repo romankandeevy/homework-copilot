@@ -104,11 +104,14 @@
   font-weight: var(--weight-medium);
   text-align: left;
   cursor: pointer;
-  transition: color var(--motion-fast) var(--ease-out);
+  transition: color var(--motion-fast) var(--ease-out), transform var(--motion-navigation) var(--ease-out);
 }
 
 .navigation-item:hover { color: var(--color-text); }
-.navigation-item.is-active { color: var(--color-text); }
+.navigation-item.is-active {
+  color: var(--color-text);
+  transform: translateX(1.5rem);
+}
 
 .navigation-icon,
 .catalog-pick-icon,

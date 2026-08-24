@@ -44,6 +44,17 @@ test.describe('адаптация под телефон', () => {
 
     const marker = page.locator('.product-seam span')
     const navigationItems = page.locator('.product-sidebar .navigation-item')
+    const activeItemBox = await navigationItems.first().boundingBox()
+    const inactiveItemBox = await navigationItems.nth(1).boundingBox()
+    const activeLabelBox = await navigationItems.first().locator('.navigation-label').boundingBox()
+    const inactiveLabelBox = await navigationItems.nth(1).locator('.navigation-label').boundingBox()
+
+    expect(activeItemBox).not.toBeNull()
+    expect(inactiveItemBox).not.toBeNull()
+    expect(activeLabelBox).not.toBeNull()
+    expect(inactiveLabelBox).not.toBeNull()
+    expect(activeItemBox!.x - inactiveItemBox!.x).toBeCloseTo(24, 0)
+    expect(activeLabelBox!.x - inactiveLabelBox!.x).toBeCloseTo(24, 0)
 
     for (let index = 0; index < await navigationItems.count(); index += 1) {
       const item = navigationItems.nth(index)
