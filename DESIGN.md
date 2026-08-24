@@ -6,8 +6,8 @@ colors:
   surface: "oklch(99% 0.0035 255)"
   surface-raised: "oklch(99.7% 0.002 255)"
   surface-sunken: "oklch(94.5% 0.008 255)"
-  border: "oklch(84% 0.012 255)"
-  border-strong: "oklch(70% 0.018 255)"
+  border: "oklch(79% 0.014 255)"
+  border-strong: "oklch(59% 0.022 255)"
   text-subtle: "oklch(49% 0.018 255)"
   text-muted: "oklch(39% 0.022 255)"
   text: "oklch(22% 0.025 258)"
@@ -15,6 +15,8 @@ colors:
   on-strong: "oklch(98% 0.004 255)"
   accent-soft: "oklch(92.5% 0.04 255)"
   accent: "oklch(54% 0.2 260)"
+  accent-surface: "oklch(54% 0.2 260)"
+  dark-accent-surface: "oklch(44% 0.15 260)"
   accent-hover: "oklch(49% 0.21 260)"
   disabled-on-accent: "oklch(43% 0.045 258)"
   disabled-on-accent-border: "oklch(48% 0.07 258)"
@@ -80,7 +82,7 @@ components:
     typography: "{typography.label}"
     rounded: "{rounded.control}"
     padding: "0 {spacing.4}"
-    height: "2.5rem"
+    height: "2.75rem"
   task-action:
     backgroundColor: "{colors.strong}"
     textColor: "{colors.on-strong}"
@@ -126,6 +128,7 @@ The palette combines cool paper and blue graphite with one saturated cobalt sign
 ### Primary
 
 - **Cobalt Ink:** points to the primary copying action, active navigation, selected book, and progress.
+- **Dark Cobalt Surface:** only the large Home panel shifts to `oklch(44% 0.15 260)` in dark mode; interactive cobalt stays bright for navigation and focus.
 - **Deep Graphite:** carries decisive controls and the strongest text hierarchy.
 
 ### Neutral

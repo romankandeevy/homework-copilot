@@ -29,7 +29,9 @@ describe('Homework Copilot home', () => {
   it('opens the real account flow from the sidebar profile', async () => {
     render(<App />)
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Войти или зарегистрироваться' })[0])
+    const accountTrigger = screen.getAllByRole('button', { name: 'Войти или зарегистрироваться' })[0]
+    accountTrigger.focus()
+    fireEvent.click(accountTrigger)
     expect(await screen.findByRole('dialog', { name: 'Войди в аккаунт' })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('tab', { name: 'Регистрация' }))
@@ -58,8 +60,9 @@ describe('Homework Copilot home', () => {
     expect(screen.getByRole('link', { name: 'политику конфиденциальности' })).toHaveAttribute('href', '/privacy')
     expect(screen.queryByText(/Аккаунт сохраняет решения/)).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Закрыть окно аккаунта' }))
+    fireEvent.keyDown(window, { key: 'Escape' })
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(accountTrigger).toHaveFocus()
   })
 
   it('keeps the email-code confirmation flow on the current device after Google', async () => {
@@ -80,7 +83,7 @@ describe('Homework Copilot home', () => {
     expect(screen.queryByText(/Supabase Auth/)).not.toBeInTheDocument()
   })
 
-  it('changes the saved textbook and checks the matching shared base', () => {
+  it('changes the textbook without inventing a shared-base match', () => {
     render(<App />)
 
     const input = screen.getByRole('textbox', { name: 'Номер задачи' })
@@ -96,6 +99,12 @@ describe('Homework Copilot home', () => {
     expect(screen.getAllByText('Русский язык, 8 класс').length).toBeGreaterThan(0)
 
     fireEvent.change(input, { target: { value: '39' } })
+    expect(screen.getByText(/В базе пока нет/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Открыть готовое/ })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Сменить'))
+    fireEvent.click(screen.getByRole('option', { name: /Геометрия, 8 класс/ }))
+    fireEvent.change(input, { target: { value: '123' } })
     expect(screen.getByRole('button', { name: /Открыть готовое/ })).toBeInTheDocument()
   })
 
@@ -165,16 +174,26 @@ describe('Homework Copilot home', () => {
     expect(themeControls).toHaveLength(2)
     fireEvent.click(themeControls[0])
     expect(document.documentElement).toHaveAttribute('data-theme', 'dark')
+    expect(window.localStorage.getItem('homework-copilot:theme')).toBe('dark')
     expect(screen.getAllByRole('button', { name: 'Включить светлую тему' })).toHaveLength(2)
   })
 
-  it('shows a coming-soon placeholder for unfinished sidebar sections', () => {
+  it('opens the implemented solutions, base and understanding routes', () => {
     render(<App />)
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Мои решения' })[0])
-    expect(screen.getByRole('heading', { name: 'Скоро' })).toBeInTheDocument()
-    expect(screen.getByText('Этот раздел появится позже.')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Мои решения' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Твои решения появятся после входа' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Списать задачу' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'База решений' })[0])
+    expect(screen.getByRole('heading', { name: 'База решений' })).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Найти в базе' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /№ 123/ })).toBeInTheDocument()
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Разобраться' })[0])
+    expect(screen.getByRole('heading', { name: 'Разобраться' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Перейти к задаче/ })).toBeInTheDocument()
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Главная' })[0])
     expect(screen.getByRole('heading', { name: 'Списать задачу' })).toBeInTheDocument()

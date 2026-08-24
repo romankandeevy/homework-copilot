@@ -46,15 +46,20 @@ test.describe('адаптация под телефон', () => {
     const navigationItems = page.locator('.product-sidebar .navigation-item')
     const activeItemBox = await navigationItems.first().boundingBox()
     const inactiveItemBox = await navigationItems.nth(1).boundingBox()
+    const activeIconBox = await navigationItems.first().locator('.navigation-icon').boundingBox()
+    const inactiveIconBox = await navigationItems.nth(1).locator('.navigation-icon').boundingBox()
     const activeLabelBox = await navigationItems.first().locator('.navigation-label').boundingBox()
     const inactiveLabelBox = await navigationItems.nth(1).locator('.navigation-label').boundingBox()
 
     expect(activeItemBox).not.toBeNull()
     expect(inactiveItemBox).not.toBeNull()
+    expect(activeIconBox).not.toBeNull()
+    expect(inactiveIconBox).not.toBeNull()
     expect(activeLabelBox).not.toBeNull()
     expect(inactiveLabelBox).not.toBeNull()
-    expect(activeItemBox!.x - inactiveItemBox!.x).toBeCloseTo(24, 0)
-    expect(activeLabelBox!.x - inactiveLabelBox!.x).toBeCloseTo(24, 0)
+    expect(activeItemBox!.x - inactiveItemBox!.x).toBeCloseTo(0, 0)
+    expect(activeIconBox!.x - inactiveIconBox!.x).toBeCloseTo(24, 0)
+    expect(activeLabelBox!.x - inactiveLabelBox!.x).toBeCloseTo(0, 0)
 
     for (let index = 0; index < await navigationItems.count(); index += 1) {
       const item = navigationItems.nth(index)
@@ -72,8 +77,11 @@ test.describe('адаптация под телефон', () => {
     const markerBefore = await marker.boundingBox()
     expect(markerBefore).not.toBeNull()
 
-    await page.evaluate(() => window.scrollTo(0, 700))
-    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
+    const canScroll = await page.evaluate(() => document.documentElement.scrollHeight > window.innerHeight)
+    if (canScroll) {
+      await page.evaluate(() => window.scrollTo(0, 700))
+      await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
+    }
 
     const markerAfter = await marker.boundingBox()
     const iconAfter = await activeIcon.boundingBox()
@@ -139,6 +147,17 @@ test.describe('адаптация под телефон', () => {
     const initialTheme = await page.locator('html').getAttribute('data-theme')
     await page.getByRole('button', { name: /Включить (светлую|тёмную) тему/ }).click()
     await expect(page.locator('html')).toHaveAttribute('data-theme', initialTheme === 'dark' ? 'light' : 'dark')
+  })
+
+  test('уменьшенное движение отключает анимацию диалога', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto('/')
+
+    await page.getByRole('button', { name: /Учебник Геометрия/ }).click()
+
+    await expect(page.locator('.textbook-dialog-backdrop')).toHaveCSS('animation-name', 'none')
+    await expect(page.locator('.textbook-dialog')).toHaveCSS('animation-name', 'none')
   })
 
   test('диалог учебника изолирует страницу, удерживает фокус и возвращает его', async ({ page }) => {

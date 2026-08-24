@@ -1,5 +1,5 @@
 import { useEffect, useId, useState } from 'react'
-import type { FormEvent } from 'react'
+import type { FormEvent, RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import type { User } from '@supabase/supabase-js'
 import {
@@ -88,6 +88,7 @@ type AccountDialogProps = {
   onToggleTheme: () => void
   onClose: () => void
   onReloadAccount: () => Promise<void>
+  returnFocusRef?: RefObject<HTMLElement | null>
 }
 
 function authErrorMessage(message: string) {
@@ -678,9 +679,9 @@ function ProfileView({ user, account, notice, initialView, theme, onToggleTheme,
   )
 }
 
-export default function AccountDialog({ user, account, passwordRecovery, pendingVerificationEmail, notice, initialView, theme, onToggleTheme, onClose, onReloadAccount }: AccountDialogProps) {
+export default function AccountDialog({ user, account, passwordRecovery, pendingVerificationEmail, notice, initialView, theme, onToggleTheme, onClose, onReloadAccount, returnFocusRef }: AccountDialogProps) {
   const reduceMotion = useReducedMotion()
-  const dialogRef = useModalIsolation<HTMLElement>(true, onClose)
+  const dialogRef = useModalIsolation<HTMLElement>(true, onClose, returnFocusRef)
 
   return createPortal((
     <AnimatePresence>

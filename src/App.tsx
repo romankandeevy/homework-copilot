@@ -31,6 +31,8 @@ import {
 } from '@phosphor-icons/react'
 import LegalPage from './LegalPage'
 import NotebookCanvas from './NotebookCanvas'
+import { GeometryNotebookLayoutV1 } from './notebook/GeometryNotebookLayoutV1'
+import { geometryFixtures } from './notebook/fixtures'
 import type { Database } from './lib/database.types'
 import type { AccountData } from './lib/supabase'
 import { getInitials } from './lib/account'
@@ -69,6 +71,12 @@ type SolutionState = {
   source: 'number' | 'photo'
 }
 
+type PersonalSolution = SolutionState & {
+  time: string
+}
+
+const themeStorageKey = 'homework-copilot:theme'
+
 const navigation = [
   { label: 'Главная', icon: House },
   { label: 'Мои решения', icon: Notebook },
@@ -105,7 +113,7 @@ const textbooks: readonly Textbook[] = [
     title: 'Геометрия. 7-9 классы',
     authors: 'Л. С. Атанасян, В. Ф. Бутузов',
     edition: 'Просвещение, 2023',
-    solvedTasks: ['118', '123'],
+    solvedTasks: ['123'],
     icon: BookOpenText,
   },
   {
@@ -115,7 +123,7 @@ const textbooks: readonly Textbook[] = [
     title: 'Алгебра. 8 класс',
     authors: 'Ю. Н. Макарычев, Н. Г. Миндюк',
     edition: 'Просвещение, 2023',
-    solvedTasks: ['17.2', '18.5'],
+    solvedTasks: [],
     icon: MathOperations,
   },
   {
@@ -125,16 +133,10 @@ const textbooks: readonly Textbook[] = [
     title: 'Русский язык. 8 класс',
     authors: 'Т. А. Ладыженская, М. Т. Баранов',
     edition: 'Просвещение, 2023',
-    solvedTasks: ['39', '42'],
+    solvedTasks: [],
     icon: TextT,
   },
 ] as const
-
-const personalSolutions = [
-  { textbookId: 'geometry', task: '118', time: 'Вчера, 19:42' },
-  { textbookId: 'algebra', task: '17.2 и 17.4', time: 'Вчера, 17:10' },
-  { textbookId: 'russian', task: '39', time: '19 августа' },
-] satisfies ReadonlyArray<{ textbookId: TextbookId; task: string; time: string }>
 
 function getTextbook(id: TextbookId, items: readonly Textbook[] = textbooks) {
   return items.find((textbook) => textbook.id === id) ?? items[0] ?? textbooks[0]
@@ -264,7 +266,7 @@ function PageHeader({ theme, onToggleTheme, user, account, onOpenWallet }: { the
     <header className="page-header">
       <div className="mobile-brand"><BrandLockup /></div>
       <div className="page-heading">
-        <h1>{firstName ? `Добрый день, ${firstName}` : 'Добрый день'}</h1>
+        <p className="page-greeting">{firstName ? `Добрый день, ${firstName}` : 'Добрый день'}</p>
         <span>{dateLabel}</span>
       </div>
       <div className="header-actions">
@@ -292,30 +294,39 @@ function TextbookPicker({
   items,
   onSelect,
   onCreate,
+  open,
+  onOpenChange,
 }: {
   selected: Textbook
   items: readonly Textbook[]
   onSelect: (id: TextbookId) => void
   onCreate: (textbook: Textbook) => void
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }) {
   const SelectedIcon = selected.icon
   const triggerRef = useRef<HTMLButtonElement>(null)
   const [query, setQuery] = useState('')
-  const [isOpen, setIsOpen] = useState(false)
+  const [internalOpen, setInternalOpen] = useState(false)
   const [importMode, setImportMode] = useState<'link' | 'file'>('link')
   const [link, setLink] = useState('')
   const [importError, setImportError] = useState('')
+  const isOpen = open ?? internalOpen
   const filtered = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase('ru')
     if (!normalized) return items
     return items.filter((textbook) => `${textbook.subject} ${textbook.title} ${textbook.authors} ${textbook.grade}`.toLocaleLowerCase('ru').includes(normalized))
   }, [items, query])
 
+  const setDialogOpen = useCallback((nextOpen: boolean) => {
+    if (onOpenChange) onOpenChange(nextOpen)
+    else setInternalOpen(nextOpen)
+  }, [onOpenChange])
   const closeDialog = useCallback(() => {
-    setIsOpen(false)
+    setDialogOpen(false)
     setQuery('')
     setImportError('')
-  }, [])
+  }, [setDialogOpen])
   const dialogRef = useModalIsolation<HTMLElement>(isOpen, closeDialog, triggerRef)
 
   const selectTextbook = (id: TextbookId) => {
@@ -373,7 +384,7 @@ function TextbookPicker({
 
   return (
     <div className="textbook-picker">
-      <button ref={triggerRef} className="textbook-picker-trigger" type="button" aria-haspopup="dialog" aria-expanded={isOpen} onClick={() => setIsOpen(true)}>
+      <button ref={triggerRef} className="textbook-picker-trigger" type="button" aria-haspopup="dialog" aria-expanded={isOpen} onClick={() => setDialogOpen(true)}>
         <SelectedIcon size={32} weight="duotone" aria-hidden="true" />
         <span>
           <small>Учебник</small>
@@ -440,10 +451,11 @@ function TextbookPicker({
                   <p>Импортируем название и выберем его для задачи.</p>
                 </div>
                 <div className="textbook-import-tabs" role="tablist" aria-label="Способ добавления">
-                  <button type="button" role="tab" aria-selected={importMode === 'link'} className={importMode === 'link' ? 'is-active' : ''} onClick={() => { setImportMode('link'); setImportError('') }}><LinkSimple size={18} weight="duotone" aria-hidden="true" /> Ссылка</button>
-                  <button type="button" role="tab" aria-selected={importMode === 'file'} className={importMode === 'file' ? 'is-active' : ''} onClick={() => { setImportMode('file'); setImportError('') }}><UploadSimple size={18} weight="duotone" aria-hidden="true" /> Файл</button>
+                  <button id="textbook-import-link-tab" type="button" role="tab" aria-controls="textbook-import-panel" aria-selected={importMode === 'link'} className={importMode === 'link' ? 'is-active' : ''} onClick={() => { setImportMode('link'); setImportError('') }}><LinkSimple size={18} weight="duotone" aria-hidden="true" /> Ссылка</button>
+                  <button id="textbook-import-file-tab" type="button" role="tab" aria-controls="textbook-import-panel" aria-selected={importMode === 'file'} className={importMode === 'file' ? 'is-active' : ''} onClick={() => { setImportMode('file'); setImportError('') }}><UploadSimple size={18} weight="duotone" aria-hidden="true" /> Файл</button>
                 </div>
 
+                <div id="textbook-import-panel" role="tabpanel" aria-labelledby={importMode === 'link' ? 'textbook-import-link-tab' : 'textbook-import-file-tab'} tabIndex={0}>
                 {importMode === 'link' ? (
                   <div className="textbook-link-import">
                     <label htmlFor="textbook-link">Ссылка на учебник</label>
@@ -456,6 +468,7 @@ function TextbookPicker({
                     <label htmlFor="textbook-file"><UploadSimple size={28} weight="duotone" aria-hidden="true" /><span><strong>Выбрать файл</strong><small>PDF, EPUB, JPG, PNG или WEBP</small></span></label>
                   </div>
                 )}
+                </div>
                 {importError && <p className="textbook-import-error" role="alert">{importError}</p>}
               </aside>
             </div>
@@ -474,6 +487,8 @@ function CopyTask({
   onTextbookChange,
   onCreateTextbook,
   onSubmit,
+  textbookPickerOpen,
+  onTextbookPickerOpenChange,
 }: {
   taskNumber: string
   textbook: Textbook
@@ -482,6 +497,8 @@ function CopyTask({
   onTextbookChange: (id: TextbookId) => void
   onCreateTextbook: (textbook: Textbook) => void
   onSubmit: (task: string, ready: boolean, source: 'number' | 'photo', idempotencyKey: string) => Promise<boolean>
+  textbookPickerOpen: boolean
+  onTextbookPickerOpenChange: (open: boolean) => void
 }) {
   const [error, setError] = useState('')
   const [photo, setPhoto] = useState<File | null>(null)
@@ -553,12 +570,12 @@ function CopyTask({
   return (
     <section className="copy-task" aria-labelledby="copy-task-title">
       <div className="copy-task-copy">
-        <h2 id="copy-task-title">Списать задачу</h2>
+        <h1 id="copy-task-title">Списать задачу</h1>
         <p>Выбери учебник, введи номер или добавь фото задачи.</p>
       </div>
 
       <form className="copy-task-form" aria-label="Списать задачу" onSubmit={submit}>
-        <TextbookPicker selected={textbook} items={textbooks} onSelect={onTextbookChange} onCreate={onCreateTextbook} />
+        <TextbookPicker selected={textbook} items={textbooks} onSelect={onTextbookChange} onCreate={onCreateTextbook} open={textbookPickerOpen} onOpenChange={onTextbookPickerOpenChange} />
 
         <div className="task-entry-row">
           <div className="task-number-field">
@@ -576,6 +593,7 @@ function CopyTask({
                 autoComplete="off"
                 aria-invalid={Boolean(error && !photo)}
                 aria-errormessage={error ? 'task-entry-error' : undefined}
+                aria-describedby={!error && !canSubmit ? 'task-entry-helper' : undefined}
               />
             </div>
           </div>
@@ -613,6 +631,7 @@ function CopyTask({
         </div>
 
         {error && <p className="task-number-error" id="task-entry-error" role="alert">{error}</p>}
+        {!error && !canSubmit && <p className="task-entry-helper" id="task-entry-helper">Введи номер задачи или добавь фото.</p>}
         {!error && (normalizedTask || photo) && (
             <p className={`base-match${readyInBase ? ' is-ready' : ''}`} aria-live="polite">
               {photo
@@ -627,7 +646,7 @@ function CopyTask({
   )
 }
 
-function SolutionStatus({ state, textbooks: items }: { state: SolutionState; textbooks: readonly Textbook[] }) {
+function SolutionStatus({ state, textbooks: items, onOpenSolution }: { state: SolutionState; textbooks: readonly Textbook[]; onOpenSolution: (state: SolutionState) => void }) {
   const textbook = getTextbook(state.textbookId, items)
 
   if (state.mode === 'ready') {
@@ -638,7 +657,7 @@ function SolutionStatus({ state, textbooks: items }: { state: SolutionState; tex
           <h2 id="ready-solution-title">№ {state.task} уже готова</h2>
           <p>{textbook.subject}. {textbook.title}. Решение найдено в общей базе, ждать не нужно.</p>
         </div>
-        <button type="button">Открыть решение <ArrowRight size={18} weight="bold" aria-hidden="true" /></button>
+        <button type="button" onClick={() => onOpenSolution(state)}>Открыть решение <ArrowRight size={18} weight="bold" aria-hidden="true" /></button>
       </section>
     )
   }
@@ -659,7 +678,7 @@ function SolutionStatus({ state, textbooks: items }: { state: SolutionState; tex
       </div>
 
       <div className="solution-progress-track" role="progressbar" aria-label="Подготовка решения"><span /></div>
-      <p className="solution-status-note">Статус обновится автоматически — эту страницу можно оставить открытой.</p>
+      <p className="solution-status-note">Статус обновится автоматически. Эту страницу можно оставить открытой.</p>
     </section>
   )
 }
@@ -669,7 +688,6 @@ function GuestWorkspace({ onOpenAccount }: { onOpenAccount: () => void }) {
     <section className="guest-workspace" aria-labelledby="guest-workspace-title">
       <span className="guest-workspace-icon" aria-hidden="true"><Notebook size={34} weight="duotone" /></span>
       <div>
-        <span>Личное пространство</span>
         <h2 id="guest-workspace-title">Твои решения появятся после входа</h2>
         <p>Здесь будут только твои учебники, открытые ответы и задачи, которые ты заказывал.</p>
       </div>
@@ -678,12 +696,12 @@ function GuestWorkspace({ onOpenAccount }: { onOpenAccount: () => void }) {
   )
 }
 
-function MyTextbooks({ items, selectedId, onSelect }: { items: readonly Textbook[]; selectedId: TextbookId; onSelect: (id: TextbookId) => void }) {
+function MyTextbooks({ items, selectedId, onSelect, onAdd }: { items: readonly Textbook[]; selectedId: TextbookId; onSelect: (id: TextbookId) => void; onAdd: () => void }) {
   return (
     <section className="textbooks-section" aria-labelledby="textbooks-title">
       <header className="section-heading">
         <div><h2 id="textbooks-title">Мои учебники</h2><p>Выбор сохраняется. На главной останется последний учебник.</p></div>
-        <button className="section-action" type="button"><Plus size={17} weight="bold" aria-hidden="true" /> Добавить</button>
+        <button className="section-action" type="button" onClick={onAdd}><Plus size={17} weight="bold" aria-hidden="true" /> Добавить</button>
       </header>
       <div className="textbook-list">
         {items.map((textbook) => {
@@ -702,32 +720,32 @@ function MyTextbooks({ items, selectedId, onSelect }: { items: readonly Textbook
   )
 }
 
-function MySolutions() {
+function MySolutions({ items, onOpenAll, onOpenSolution }: { items: readonly PersonalSolution[]; onOpenAll: () => void; onOpenSolution: (state: SolutionState) => void }) {
   return (
     <section className="my-solutions" aria-labelledby="my-solutions-title">
       <header className="section-heading">
-        <div><h2 id="my-solutions-title">Мои решения</h2><p>Только задачи, которые ты уже открывал или заказывал.</p></div>
-        <button className="section-link" type="button">Все мои решения <ArrowRight size={17} weight="bold" aria-hidden="true" /></button>
+        <div><h2 id="my-solutions-title">Мои решения</h2><p>Только задачи, которые ты уже открыл или запросил в этом сеансе.</p></div>
+        <button className="section-link" type="button" onClick={onOpenAll}>Все мои решения <ArrowRight size={17} weight="bold" aria-hidden="true" /></button>
       </header>
-      <div className="solution-list">
-        {personalSolutions.map(({ textbookId, task, time }) => {
+      {items.length > 0 ? <div className="solution-list">
+        {items.map(({ textbookId, task, time, mode, source }) => {
           const textbook = getTextbook(textbookId)
           const Icon = textbook.icon
           return (
-            <button type="button" key={`${textbookId}-${task}`}>
+            <button type="button" key={`${textbookId}-${task}-${time}`} onClick={() => onOpenSolution({ textbookId, task, mode, source })}>
               <Icon size={32} weight="duotone" aria-hidden="true" />
-              <span><small>{textbook.subject} · {textbook.title}</small><strong>№ {task}</strong></span>
+              <span><small>{textbook.subject}, {textbook.title}</small><strong>№ {task}</strong></span>
               <time>{time}</time>
               <ArrowRight size={18} weight="bold" aria-hidden="true" />
             </button>
           )
         })}
-      </div>
+      </div> : <p className="collection-empty">Пока здесь пусто. Первое решение появится после запроса.</p>}
     </section>
   )
 }
 
-function BaseShortcut() {
+function BaseShortcut({ onOpenBase }: { onOpenBase: () => void }) {
   return (
     <section className="base-shortcut" aria-labelledby="base-shortcut-title">
       <Stack size={36} weight="duotone" aria-hidden="true" />
@@ -735,7 +753,7 @@ function BaseShortcut() {
         <h2 id="base-shortcut-title">База решений</h2>
         <p>Общие готовые решения по всем добавленным учебникам. Их можно открыть сразу.</p>
       </div>
-      <button type="button">Открыть базу <ArrowRight size={18} weight="bold" aria-hidden="true" /></button>
+      <button type="button" onClick={onOpenBase}>Открыть базу <ArrowRight size={18} weight="bold" aria-hidden="true" /></button>
     </section>
   )
 }
@@ -756,23 +774,114 @@ function MobileNavigation({ activeLabel, onNavigate }: { activeLabel: Navigation
   )
 }
 
-function ComingSoon({ section }: { section: NavigationLabel }) {
+function MySolutionsPage({ user, items, onOpenAccount, onOpenSolution }: { user: User | null; items: readonly PersonalSolution[]; onOpenAccount: () => void; onOpenSolution: (state: SolutionState) => void }) {
   return (
-    <section className="coming-soon" aria-labelledby="coming-soon-title">
-      <span>{section}</span>
-      <h2 id="coming-soon-title">Скоро</h2>
-      <p>Этот раздел появится позже.</p>
+    <section className="route-page" aria-labelledby="my-solutions-page-title">
+      <header className="route-page-header">
+        <h1 id="my-solutions-page-title">Мои решения</h1>
+        <p>Здесь видны только задачи, которые ты открыл или запросил в этом сеансе.</p>
+      </header>
+      {!user ? <GuestWorkspace onOpenAccount={onOpenAccount} /> : items.length > 0 ? (
+        <div className="solution-list route-solution-list">
+          {items.map(({ textbookId, task, time, mode, source }) => {
+            const textbook = getTextbook(textbookId)
+            const Icon = textbook.icon
+            return (
+              <button type="button" key={`${textbookId}-${task}-${time}`} onClick={() => onOpenSolution({ textbookId, task, mode, source })}>
+                <Icon size={32} weight="duotone" aria-hidden="true" />
+                <span><small>{textbook.subject}, {textbook.title}</small><strong>№ {task}</strong></span>
+                <time>{time}</time>
+                <ArrowRight size={18} weight="bold" aria-hidden="true" />
+              </button>
+            )
+          })}
+        </div>
+      ) : <section className="route-empty" aria-labelledby="solutions-empty-title"><Notebook size={34} weight="duotone" aria-hidden="true" /><div><h2 id="solutions-empty-title">Решений пока нет</h2><p>Открой готовый ответ или отправь новую задачу, и она появится здесь.</p></div></section>}
+    </section>
+  )
+}
+
+function SolutionBasePage({ items, onOpenSolution }: { items: readonly Textbook[]; onOpenSolution: (state: SolutionState) => void }) {
+  const [query, setQuery] = useState('')
+  const entries = useMemo(() => items.flatMap((textbook) => textbook.solvedTasks.map((task) => ({ textbook, task }))), [items])
+  const normalizedQuery = query.trim().toLocaleLowerCase('ru')
+  const results = entries.filter(({ textbook, task }) => `${textbook.subject} ${textbook.title} ${task}`.toLocaleLowerCase('ru').includes(normalizedQuery))
+
+  return (
+    <section className="route-page" aria-labelledby="solution-base-page-title">
+      <header className="route-page-header">
+        <h1 id="solution-base-page-title">База решений</h1>
+        <p>Готовые ответы из общей базы. Если совпадение есть, его можно открыть сразу.</p>
+      </header>
+      <label className="route-search" htmlFor="solution-base-search"><MagnifyingGlass size={20} weight="duotone" aria-hidden="true" /><span>Найти в базе</span><input id="solution-base-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Предмет или номер задачи" autoComplete="off" /></label>
+      {results.length > 0 ? <div className="solution-list route-solution-list">
+        {results.map(({ textbook, task }) => {
+          const Icon = textbook.icon
+          return (
+            <button type="button" key={`${textbook.id}-${task}`} onClick={() => onOpenSolution({ mode: 'ready', textbookId: textbook.id, task, source: 'number' })}>
+              <Icon size={32} weight="duotone" aria-hidden="true" />
+              <span><small>{textbook.subject}, {textbook.grade}</small><strong>№ {task}</strong></span>
+              <span className="solution-availability"><CheckCircle size={17} weight="duotone" aria-hidden="true" /> Готово</span>
+              <ArrowRight size={18} weight="bold" aria-hidden="true" />
+            </button>
+          )
+        })}
+      </div> : <section className="route-empty" aria-labelledby="base-empty-title"><MagnifyingGlass size={34} weight="duotone" aria-hidden="true" /><div><h2 id="base-empty-title">Совпадений нет</h2><p>Попробуй другой номер или отправь задачу с главной страницы.</p></div></section>}
+    </section>
+  )
+}
+
+function UnderstandingPage({ solution, onGoHome }: { solution: SolutionState | null; onGoHome: () => void }) {
+  const notebookFixture = solution?.textbookId === 'geometry'
+    ? geometryFixtures.find((fixture) => fixture.number === solution.task)
+    : undefined
+
+  if (notebookFixture) {
+    return (
+      <section className="route-page solution-view" aria-labelledby="understanding-page-title">
+        <header className="route-page-header">
+          <h1 id="understanding-page-title">Решение № {notebookFixture.number}</h1>
+          <p>Готовый лист для тетради. Проверь условие перед тем, как переписывать ответ.</p>
+        </header>
+        <div className="solution-notebook-preview"><GeometryNotebookLayoutV1 spec={notebookFixture} /></div>
+      </section>
+    )
+  }
+
+  return (
+    <section className="route-page" aria-labelledby="understanding-page-title">
+      <header className="route-page-header">
+        <h1 id="understanding-page-title">Разобраться</h1>
+        <p>Открой готовое решение, чтобы увидеть условие, ход решения и ответ в одном месте.</p>
+      </header>
+      <div className="understanding-flow">
+        <section><BookOpenText size={30} weight="duotone" aria-hidden="true" /><h2>Выбери учебник</h2><p>Номер задачи проверяется только внутри конкретного учебника.</p></section>
+        <section><Hash size={30} weight="duotone" aria-hidden="true" /><h2>Укажи задачу</h2><p>Если ответ уже есть в базе, его можно открыть без ожидания.</p></section>
+        <section><Notebook size={30} weight="duotone" aria-hidden="true" /><h2>Проверь ответ</h2><p>Готовое решение оформлено так, чтобы его было удобно переписать в тетрадь.</p></section>
+      </div>
+      <button className="route-primary-action" type="button" onClick={onGoHome}>Перейти к задаче <ArrowRight size={18} weight="bold" aria-hidden="true" /></button>
     </section>
   )
 }
 
 function HomePage() {
-  const [theme, setTheme] = useState<Theme>(() => document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light')
+  const [theme, setTheme] = useState<Theme>(() => {
+    try {
+      const storedTheme = window.localStorage.getItem(themeStorageKey)
+      if (storedTheme === 'light' || storedTheme === 'dark') return storedTheme
+    } catch {
+      // The document theme remains the safe fallback when storage is unavailable.
+    }
+    return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'
+  })
   const [activeNavigation, setActiveNavigation] = useState<NavigationLabel>('Главная')
   const [taskNumber, setTaskNumber] = useState('')
   const [selectedTextbookId, setSelectedTextbookId] = useState<TextbookId>('geometry')
   const [customTextbooks, setCustomTextbooks] = useState<Textbook[]>([])
   const [solutionState, setSolutionState] = useState<SolutionState | null>(null)
+  const [selectedSolution, setSelectedSolution] = useState<SolutionState | null>(null)
+  const [personalSolutions, setPersonalSolutions] = useState<PersonalSolution[]>([])
+  const [textbookPickerOpen, setTextbookPickerOpen] = useState(false)
   const [supabaseClient, setSupabaseClient] = useState<SupabaseClient<Database> | null>(null)
   const [user, setUser] = useState<User | null>(null)
   const [account, setAccount] = useState<AccountData | null>(null)
@@ -785,6 +894,7 @@ function HomePage() {
   const [accountNotice, setAccountNotice] = useState('')
   const googleVerificationStarted = useRef(false)
   const emailConfirmationStarted = useRef(false)
+  const accountTriggerRef = useRef<HTMLElement | null>(null)
   const availableTextbooks = useMemo(() => [...textbooks, ...customTextbooks], [customTextbooks])
   const selectedTextbook = getTextbook(selectedTextbookId, availableTextbooks)
   const activeNavigationIndex = navigation.findIndex(({ label }) => label === activeNavigation)
@@ -796,6 +906,11 @@ function HomePage() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme
     document.documentElement.style.colorScheme = theme
+    try {
+      window.localStorage.setItem(themeStorageKey, theme)
+    } catch {
+      // Keeping the active document theme is enough when storage is blocked.
+    }
   }, [theme])
 
   useEffect(() => {
@@ -960,12 +1075,17 @@ function HomePage() {
   }, [refreshAccount])
 
   const toggleTheme = () => setTheme((current) => current === 'light' ? 'dark' : 'light')
+  const rememberAccountTrigger = () => {
+    accountTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  }
   const openAccount = () => {
+    rememberAccountTrigger()
     setAccountNotice('')
     setAccountView('profile')
     setAccountOpen(true)
   }
   const openWallet = () => {
+    rememberAccountTrigger()
     setAccountNotice('')
     setAccountView('wallet')
     setAccountOpen(true)
@@ -982,6 +1102,7 @@ function HomePage() {
   }, [])
   const submitTask = async (task: string, ready: boolean, source: 'number' | 'photo', idempotencyKey: string) => {
     if (supabaseClient && !user) {
+      rememberAccountTrigger()
       setAccountNotice('Войди или зарегистрируйся, чтобы сохранить решение и списать его с баланса')
       setAccountOpen(true)
       return false
@@ -993,6 +1114,7 @@ function HomePage() {
         p_idempotency_key: idempotencyKey,
       })
       if (spendError) {
+        rememberAccountTrigger()
         setAccountNotice(spendError.message.includes('insufficient balance') ? 'На балансе меньше 1 ₽' : 'Не получилось списать 1 ₽ с баланса')
         setAccountOpen(true)
         return false
@@ -1000,12 +1122,27 @@ function HomePage() {
       await refreshAccount()
     }
 
-    setSolutionState({ mode: ready ? 'ready' : 'processing', textbookId: selectedTextbookId, task, source })
+    const nextState: SolutionState = { mode: ready ? 'ready' : 'processing', textbookId: selectedTextbookId, task, source }
+    setSolutionState(nextState)
+    if (user) {
+      setPersonalSolutions((current) => [
+        { ...nextState, time: 'Только что' },
+        ...current.filter((entry) => entry.textbookId !== nextState.textbookId || entry.task !== nextState.task),
+      ])
+    }
     return true
   }
   const createTextbook = (textbook: Textbook) => {
     setCustomTextbooks((current) => [...current, textbook])
     setSelectedTextbookId(textbook.id)
+  }
+  const openTextbookPicker = () => {
+    setActiveNavigation('Главная')
+    setTextbookPickerOpen(true)
+  }
+  const openSolution = (state: SolutionState) => {
+    setSelectedSolution(state)
+    setActiveNavigation('Разобраться')
   }
 
   if (!authReady || (user && !accountReady)) {
@@ -1035,21 +1172,27 @@ function HomePage() {
               onTextbookChange={setSelectedTextbookId}
               onCreateTextbook={createTextbook}
               onSubmit={submitTask}
+              textbookPickerOpen={textbookPickerOpen}
+              onTextbookPickerOpenChange={setTextbookPickerOpen}
             />
             <div className="home-grid">
               <div className="home-column home-column-primary">
-                {solutionState && <SolutionStatus state={solutionState} textbooks={availableTextbooks} />}
-                {user ? <MySolutions /> : <GuestWorkspace onOpenAccount={openAccount} />}
+                {solutionState && <SolutionStatus state={solutionState} textbooks={availableTextbooks} onOpenSolution={openSolution} />}
+                {user ? <MySolutions items={personalSolutions} onOpenAll={() => setActiveNavigation('Мои решения')} onOpenSolution={openSolution} /> : <GuestWorkspace onOpenAccount={openAccount} />}
               </div>
               <div className="home-column home-column-secondary">
-                {user && <MyTextbooks items={availableTextbooks} selectedId={selectedTextbookId} onSelect={setSelectedTextbookId} />}
-                <BaseShortcut />
+                {user && <MyTextbooks items={availableTextbooks} selectedId={selectedTextbookId} onSelect={setSelectedTextbookId} onAdd={openTextbookPicker} />}
+                <BaseShortcut onOpenBase={() => setActiveNavigation('База решений')} />
               </div>
             </div>
           </div>
         ) : activeNavigation === 'Расписание' ? (
           <Suspense fallback={<div className="route-loading" role="status">Загружаем расписание…</div>}><SchedulePage userId={user?.id ?? null} grade={account?.profile.grade ?? 8} /></Suspense>
-        ) : <ComingSoon section={activeNavigation} />}
+        ) : activeNavigation === 'Мои решения' ? (
+          <MySolutionsPage user={user} items={personalSolutions} onOpenAccount={openAccount} onOpenSolution={openSolution} />
+        ) : activeNavigation === 'База решений' ? (
+          <SolutionBasePage items={availableTextbooks} onOpenSolution={openSolution} />
+        ) : <UnderstandingPage solution={selectedSolution} onGoHome={() => setActiveNavigation('Главная')} />}
       </div>
       <MobileNavigation activeLabel={activeNavigation} onNavigate={setActiveNavigation} />
       {accountOpen && (
@@ -1065,6 +1208,7 @@ function HomePage() {
             onToggleTheme={toggleTheme}
             onClose={closeAccount}
             onReloadAccount={refreshAccount}
+            returnFocusRef={accountTriggerRef}
           />
         </Suspense>
       )}

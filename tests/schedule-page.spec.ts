@@ -26,6 +26,19 @@ test.describe('недельное расписание', () => {
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
   })
 
+  test('сохраняет расписание после обновления страницы', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 })
+    await openSchedule(page)
+
+    const subject = page.getByLabel('Предмет, понедельник, урок 1 в недельной таблице')
+    await subject.fill('История')
+    await expect(subject).toHaveValue('История')
+
+    await page.reload()
+    await page.getByRole('button', { name: 'Расписание' }).click()
+    await expect(page.getByLabel('Предмет, понедельник, урок 1 в недельной таблице')).toHaveValue('История')
+  })
+
   test('на телефоне переключает дни без горизонтальной таблицы', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await openSchedule(page)
