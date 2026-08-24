@@ -254,14 +254,7 @@
   width: 2.25rem;
   height: 2.25rem;
   place-items: center;
-  border-radius: var(--radius-control);
-  background: var(--color-accent-soft);
-  color: var(--color-text);
-  font-size: 1.05rem;
-  font-family: var(--font-mono);
-  font-weight: var(--weight-semibold);
-  line-height: 1;
-  letter-spacing: 0;
+  color: var(--color-brand-accent);
 }
 
 
@@ -376,7 +369,7 @@
 .copy-task-copy p {
   max-width: 38rem;
   margin: 0;
-  color: color-mix(in oklch, var(--color-on-accent) 76%, var(--color-accent));
+  color: color-mix(in oklch, var(--color-on-accent) 94%, var(--color-accent));
   font-size: var(--text-lead);
   line-height: var(--leading-copy);
 }
@@ -419,7 +412,7 @@
 
 .task-number-error {
   margin: 0;
-  color: color-mix(in oklch, var(--color-on-accent) 78%, var(--color-danger));
+  color: color-mix(in oklch, var(--color-on-accent) 92%, var(--color-danger));
   font-size: var(--text-caption);
   font-weight: var(--weight-semibold);
 }
@@ -445,7 +438,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-.task-number-control input::placeholder { color: var(--color-border-strong); }
+.task-number-control input::placeholder { color: var(--color-text-subtle); }
 
 .task-number-control button {
   display: inline-flex;
@@ -1539,7 +1532,7 @@
   align-items: center;
   gap: var(--space-2);
   margin: 0;
-  color: color-mix(in oklch, var(--color-on-accent) 78%, var(--color-accent));
+  color: color-mix(in oklch, var(--color-on-accent) 94%, var(--color-accent));
   font-size: var(--text-small);
   font-weight: var(--weight-medium);
 }

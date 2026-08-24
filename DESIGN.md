@@ -2,24 +2,24 @@
 name: Homework Copilot
 description: Textbook-first copying flow with instant shared answers and notebook-ready solutions.
 colors:
-  canvas: "oklch(97% 0.003 250)"
-  surface: "oklch(99.2% 0.001 250)"
-  surface-raised: "oklch(100% 0 0)"
-  surface-sunken: "oklch(94% 0.004 250)"
-  border: "oklch(84.5% 0.007 250)"
-  border-strong: "oklch(70% 0.009 250)"
-  text-subtle: "oklch(48% 0.009 250)"
-  text-muted: "oklch(39% 0.011 250)"
-  text: "oklch(24% 0.012 250)"
-  strong: "oklch(15.5% 0.01 250)"
-  on-strong: "oklch(97% 0.003 250)"
-  accent-soft: "oklch(94% 0.09 111)"
-  accent: "oklch(84% 0.19 111)"
-  accent-hover: "oklch(79% 0.2 111)"
-  disabled-on-accent: "oklch(92% 0.06 111)"
-  disabled-on-accent-border: "oklch(57% 0.105 111)"
-  on-accent: "oklch(17% 0.025 111)"
-  brand-accent: "oklch(61% 0.15 111)"
+  canvas: "oklch(97.5% 0.006 255)"
+  surface: "oklch(99% 0.0035 255)"
+  surface-raised: "oklch(99.7% 0.002 255)"
+  surface-sunken: "oklch(94.5% 0.008 255)"
+  border: "oklch(84% 0.012 255)"
+  border-strong: "oklch(70% 0.018 255)"
+  text-subtle: "oklch(49% 0.018 255)"
+  text-muted: "oklch(39% 0.022 255)"
+  text: "oklch(22% 0.025 258)"
+  strong: "oklch(16% 0.024 258)"
+  on-strong: "oklch(98% 0.004 255)"
+  accent-soft: "oklch(92.5% 0.04 255)"
+  accent: "oklch(54% 0.2 260)"
+  accent-hover: "oklch(49% 0.21 260)"
+  disabled-on-accent: "oklch(43% 0.045 258)"
+  disabled-on-accent-border: "oklch(48% 0.07 258)"
+  on-accent: "oklch(98% 0.004 255)"
+  brand-accent: "oklch(49% 0.205 260)"
   info: "oklch(59% 0.15 245)"
   success: "oklch(58% 0.13 154)"
   success-strong: "oklch(43% 0.12 154)"
@@ -107,25 +107,25 @@ components:
 
 **Creative North Star: "The Guided Margin"**
 
-Homework Copilot feels like a precise route drawn through a clean school notebook: neutral paper, graphite structure, citrus direction, and no ornamental dashboard noise. The system is dense enough to make the next action obvious, but never busy enough to compete with the task the student came to copy.
+Homework Copilot feels like a precise route drawn through a clean school notebook: cool paper, ink-blue structure, cobalt direction, and no ornamental dashboard noise. The system is dense enough to make the next action obvious, but never busy enough to compete with the task the student came to copy.
 
 The primary journey is textbook-first. An exact book and a task number form one search key: if the shared solution base already contains that pair, the answer opens immediately; otherwise the same surface starts a new notebook-ready solution. Shared catalogue and personal history stay visibly separate because they answer different questions.
 
 **Key Characteristics:**
 
 - Cool-neutral canvas with crisp, bordered working surfaces.
-- One citrus signal for the primary route, active location, and decisive state.
+- One cobalt signal for the primary route, active location, and decisive state.
 - Editorial display type at weight 400, compact interface copy, and monospace metadata.
 - Route lines, nodes, and measured motion that explain location rather than decorate it.
 - Direct duotone subject icons without gray tiles or ornamental backplates.
 
 ## Colors
 
-The palette combines clean paper and graphite with one sharp citrus signal; semantic colors appear only when they communicate a real state.
+The palette combines cool paper and blue graphite with one saturated cobalt signal; semantic colors appear only when they communicate a real state.
 
 ### Primary
 
-- **Citrus Signal:** points to the primary copying action, active navigation, selected book, and progress.
+- **Cobalt Ink:** points to the primary copying action, active navigation, selected book, and progress.
 - **Deep Graphite:** carries decisive controls and the strongest text hierarchy.
 
 ### Neutral
@@ -138,7 +138,7 @@ The palette combines clean paper and graphite with one sharp citrus signal; sema
 
 ### Named Rules
 
-**The One Signal Rule.** Citrus marks the route or the decision; it is never an ambient background effect.
+**The One Signal Rule.** Cobalt marks the route or the decision; it is never an ambient background effect.
 
 **The No Gray Icon Tile Rule.** Subject and content icons sit directly in the composition. A filled icon container is reserved for navigation state or a control with a real hit target.
 
@@ -189,7 +189,7 @@ The sidebar route stays on one measured icon grid. Only the active icon shifts t
 
 ### Primary Copying Surface
 
-The citrus panel is the visual and functional start of Home. It contains the exact textbook selector, task-number field, base-match feedback, and one adaptive action: **«Открыть готовое»** for an existing shared solution or **«Списать»** for a new request. The action and result copy update together, never independently.
+The cobalt panel is the visual and functional start of Home. It contains the exact textbook selector, task-number field, base-match feedback, and one adaptive action: **«Открыть готовое»** for an existing shared solution or **«Списать»** for a new request. The action and result copy update together, never independently.
 
 ### Textbook Picker
 
@@ -201,7 +201,7 @@ The number uses the monospace face and accepts identifiers such as `123` or `18.
 
 ### Navigation
 
-The five destinations remain, in order: **Главная**, **Мои решения**, **База решений**, **Разобраться**, **Расписание**. Desktop uses the routed sidebar and a single theme control at bottom-left. Mobile uses the same order in bottom navigation. Active state combines citrus, movement, label contrast, and `aria-current`.
+The five destinations remain, in order: **Главная**, **Мои решения**, **База решений**, **Разобраться**, **Расписание**. Desktop uses the routed sidebar and a single theme control at bottom-left. Mobile uses the same order in bottom navigation. Active state combines cobalt, movement, label contrast, and `aria-current`.
 
 ### Shared Base and Personal History
 

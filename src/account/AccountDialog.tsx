@@ -10,6 +10,7 @@ import {
   LockKey,
   SignOut,
   UserCircle,
+  Wallet,
   X,
 } from '@phosphor-icons/react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
@@ -425,7 +426,7 @@ function ProfileView({ user, account, notice, onReloadAccount }: { user: User; a
           <h2 id="account-dialog-title">Твой аккаунт</h2>
         </div>
         <div className="account-balance-pill" aria-label={`Баланс: ${formatRubles(account?.balance ?? 0)}`}>
-          <span className="account-balance-icon" aria-hidden="true">₽</span>
+          <span className="account-balance-icon" aria-hidden="true"><Wallet size={18} weight="duotone" /></span>
           <span><small>Баланс</small><strong>{account ? formatRubles(account.balance) : '…'}</strong></span>
         </div>
       </header>

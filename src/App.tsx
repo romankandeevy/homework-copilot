@@ -26,6 +26,7 @@ import {
   TextT,
   UploadSimple,
   UserCircle,
+  Wallet,
   X,
 } from '@phosphor-icons/react'
 import { GeometryNotebookLayoutV1 } from './notebook/GeometryNotebookLayoutV1'
@@ -228,7 +229,7 @@ function BalanceControl({ user, balance, onOpenAccount }: { user: User | null; b
   const balanceLabel = user ? formatRubles(balance ?? 0) : 'Войти'
   return (
     <div className="balance-control" aria-label={user ? `Баланс: ${formatRubles(balance ?? 0)}` : 'Войти, чтобы увидеть баланс'}>
-      <span className="balance-icon" aria-hidden="true">₽</span>
+      <span className="balance-icon" aria-hidden="true"><Wallet size={21} weight="duotone" /></span>
       <span><small>Баланс</small><strong>{balanceLabel}</strong></span>
       <button type="button" aria-label={user ? 'Открыть профиль и баланс' : 'Войти, чтобы открыть баланс'} onClick={onOpenAccount}><Plus size={17} weight="bold" aria-hidden="true" /></button>
     </div>

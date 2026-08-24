@@ -1183,7 +1183,7 @@ input[type='range'] {
 .segmented-control button.is-active {
   background: var(--color-surface-raised);
   color: var(--color-text);
-  box-shadow: 0 1px 2px oklch(17% 0.02 91 / 0.1);
+  box-shadow: 0 1px 2px oklch(17% 0.025 260 / 0.1);
 }
 
 .icon-grid {
@@ -1428,7 +1428,7 @@ input[type='range'] {
   height: 1.375rem;
   border-radius: 50%;
   background: var(--color-surface-raised);
-  box-shadow: 0 1px 2px oklch(17% 0.02 91 / 0.18);
+  box-shadow: 0 1px 2px oklch(17% 0.025 260 / 0.18);
   transition: transform var(--motion-panel) var(--ease-out);
 }
 
@@ -2321,7 +2321,7 @@ kbd {
 }
 
 .ds-dialog::backdrop {
-  background: oklch(8% 0.012 91 / 0.58);
+  background: oklch(8% 0.018 258 / 0.58);
   backdrop-filter: blur(0.35rem);
   animation: backdrop-in var(--motion-panel) var(--ease-out) both;
 }
