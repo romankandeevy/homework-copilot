@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import {
   Check,
@@ -24,6 +25,7 @@ import {
   splitLessonTimeRange,
 } from './scheduleOcr'
 import type { ScheduleEntry, WeekdayId } from './scheduleOcr'
+import { useModalIsolation } from './lib/useModalIsolation'
 import './SchedulePage.css'
 
 type OcrPhase = 'idle' | 'reading' | 'review' | 'error'
@@ -193,10 +195,23 @@ function SchedulePage() {
   const [ocrRawText, setOcrRawText] = useState('')
   const [previewUrl, setPreviewUrl] = useState('')
   const [importRevision, setImportRevision] = useState(0)
+  const [activeDay, setActiveDay] = useState<WeekdayId>('monday')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const ocrRunRef = useRef(0)
 
   const entriesByCell = useMemo(() => new Map(entries.map((entry) => [`${entry.day}:${entry.time}`, entry])), [entries])
+
+  const closeOcr = useCallback(() => {
+    ocrRunRef.current += 1
+    setOcrPhase('idle')
+    setOcrRows([])
+    setOcrRawText('')
+    setOcrError('')
+    setOcrProgress(0)
+    setPreviewUrl('')
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }, [])
+  const ocrDialogRef = useModalIsolation<HTMLElement>(ocrPhase !== 'idle', closeOcr)
 
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(entries))
@@ -211,24 +226,6 @@ function SchedulePage() {
       if (previewUrl) URL.revokeObjectURL(previewUrl)
     }
   }, [previewUrl])
-
-  useEffect(() => {
-    if (ocrPhase === 'idle') return
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.body.style.overflow = previousOverflow
-    }
-  }, [ocrPhase])
-
-  useEffect(() => {
-    if (ocrPhase === 'idle') return
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') closeOcr()
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  })
 
   const updateCell = (day: WeekdayId, time: string, field: 'subject' | 'room', value: string) => {
     setEntries((current) => {
@@ -262,17 +259,6 @@ function SchedulePage() {
   }
 
   const removeEntry = (id: string) => setEntries((current) => current.filter((entry) => entry.id !== id))
-
-  const closeOcr = () => {
-    ocrRunRef.current += 1
-    setOcrPhase('idle')
-    setOcrRows([])
-    setOcrRawText('')
-    setOcrError('')
-    setOcrProgress(0)
-    setPreviewUrl('')
-    if (fileInputRef.current) fileInputRef.current.value = ''
-  }
 
   const recognizeSchedule = async (file: File) => {
     const runId = ocrRunRef.current + 1
@@ -513,7 +499,7 @@ function SchedulePage() {
           </div>
           <p>
             <span className="schedule-desktop-hint">Вся неделя перед глазами. Нажми на ячейку, чтобы изменить урок.</span>
-            <span className="schedule-mobile-hint">Свайпни таблицу, чтобы увидеть остальные дни. Ячейки можно редактировать.</span>
+            <span className="schedule-mobile-hint">Выбери день и редактируй уроки без горизонтальной прокрутки.</span>
           </p>
         </div>
         <div className="schedule-actions">
@@ -567,9 +553,9 @@ function SchedulePage() {
                   <th scope="row">
                     <span>{String(rowIndex + 1).padStart(2, '0')}</span>
                     <div className="schedule-time-range" aria-label={`Время урока ${rowIndex + 1}: ${displayLessonTime(time)}`}>
-                      <input type="time" value={splitLessonTimeRange(time).start} aria-label={`Начало урока ${rowIndex + 1}`} onChange={(event) => updateTimeSlot(rowIndex, 'start', event.target.value)} />
+                      <input type="time" value={splitLessonTimeRange(time).start} aria-label={`Начало урока ${rowIndex + 1} в недельной таблице`} onChange={(event) => updateTimeSlot(rowIndex, 'start', event.target.value)} />
                       <i aria-hidden="true" />
-                      <input type="time" value={splitLessonTimeRange(time).end} aria-label={`Конец урока ${rowIndex + 1}`} onChange={(event) => updateTimeSlot(rowIndex, 'end', event.target.value)} />
+                      <input type="time" value={splitLessonTimeRange(time).end} aria-label={`Конец урока ${rowIndex + 1} в недельной таблице`} onChange={(event) => updateTimeSlot(rowIndex, 'end', event.target.value)} />
                     </div>
                   </th>
                   {weekdays.map((day) => {
@@ -583,7 +569,7 @@ function SchedulePage() {
                             <input
                               value={entry?.subject ?? ''}
                               maxLength={50}
-                              aria-label={`Предмет, ${day.label.toLocaleLowerCase('ru-RU')}, урок ${rowIndex + 1}`}
+                              aria-label={`Предмет, ${day.label.toLocaleLowerCase('ru-RU')}, урок ${rowIndex + 1} в недельной таблице`}
                               onChange={(event) => updateCell(day.id, time, 'subject', event.target.value)}
                             />
                           </label>
@@ -594,7 +580,7 @@ function SchedulePage() {
                                 value={entry?.room ?? ''}
                                 maxLength={16}
                                 placeholder={hasContent ? 'Кабинет' : ''}
-                                aria-label={`Кабинет, ${day.label.toLocaleLowerCase('ru-RU')}, урок ${rowIndex + 1}`}
+                                aria-label={`Кабинет, ${day.label.toLocaleLowerCase('ru-RU')}, урок ${rowIndex + 1} в недельной таблице`}
                                 onChange={(event) => updateCell(day.id, time, 'room', event.target.value)}
                               />
                             </label>
@@ -614,13 +600,87 @@ function SchedulePage() {
           </table>
         </div>
 
+        <div className="schedule-mobile-board">
+          <div className="schedule-day-tabs" role="tablist" aria-label="День недели">
+            {weekdays.map((day) => (
+              <button
+                type="button"
+                role="tab"
+                id={`schedule-day-${day.id}`}
+                aria-controls="schedule-day-panel"
+                aria-selected={activeDay === day.id}
+                className={activeDay === day.id ? 'is-active' : ''}
+                key={day.id}
+                onClick={() => setActiveDay(day.id)}
+              >
+                <span>{day.short}</span>
+                <strong>{day.label}</strong>
+              </button>
+            ))}
+          </div>
+
+          <div
+            className="schedule-day-panel"
+            id="schedule-day-panel"
+            role="tabpanel"
+            aria-labelledby={`schedule-day-${activeDay}`}
+          >
+            {timeSlots.map((time, rowIndex) => {
+              const day = weekdays.find(({ id }) => id === activeDay) ?? weekdays[0]
+              const entry = entriesByCell.get(`${activeDay}:${time}`)
+              const hasContent = Boolean(entry?.subject.trim() || entry?.room.trim())
+              return (
+                <div className="schedule-mobile-lesson" key={time}>
+                  <div className="schedule-mobile-time">
+                    <span>{String(rowIndex + 1).padStart(2, '0')}</span>
+                    <div className="schedule-time-range" aria-label={`Время урока ${rowIndex + 1}: ${displayLessonTime(time)}`}>
+                      <input type="time" value={splitLessonTimeRange(time).start} aria-label={`Начало урока ${rowIndex + 1}`} onChange={(event) => updateTimeSlot(rowIndex, 'start', event.target.value)} />
+                      <i aria-hidden="true" />
+                      <input type="time" value={splitLessonTimeRange(time).end} aria-label={`Конец урока ${rowIndex + 1}`} onChange={(event) => updateTimeSlot(rowIndex, 'end', event.target.value)} />
+                    </div>
+                  </div>
+                  <div className={`schedule-cell-editor${hasContent ? ' has-content' : ''}`}>
+                    <label>
+                      <span className="sr-only">Предмет, {day.label.toLocaleLowerCase('ru-RU')}, урок {rowIndex + 1}</span>
+                      <input
+                        value={entry?.subject ?? ''}
+                        maxLength={50}
+                        placeholder="Предмет"
+                        aria-label={`Предмет, ${day.label.toLocaleLowerCase('ru-RU')}, урок ${rowIndex + 1}`}
+                        onChange={(event) => updateCell(activeDay, time, 'subject', event.target.value)}
+                      />
+                    </label>
+                    <div>
+                      <label>
+                        <span className="sr-only">Кабинет, {day.label.toLocaleLowerCase('ru-RU')}, урок {rowIndex + 1}</span>
+                        <input
+                          value={entry?.room ?? ''}
+                          maxLength={16}
+                          placeholder="Кабинет"
+                          aria-label={`Кабинет, ${day.label.toLocaleLowerCase('ru-RU')}, урок ${rowIndex + 1}`}
+                          onChange={(event) => updateCell(activeDay, time, 'room', event.target.value)}
+                        />
+                      </label>
+                      {entry && (
+                        <button type="button" aria-label={`Удалить ${entry.subject || 'урок'}: ${day.label.toLocaleLowerCase('ru-RU')}, ${time}`} onClick={() => removeEntry(entry.id)}>
+                          <Trash size={16} weight="duotone" aria-hidden="true" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
         <footer className="schedule-board-footer">
           <MagicWand size={21} weight="duotone" aria-hidden="true" />
           <p><strong>Есть фото?</strong> OCR соберёт таблицу, а ты проверишь её перед добавлением.</p>
         </footer>
       </section>
 
-      <AnimatePresence>
+      {createPortal(<AnimatePresence>
         {ocrPhase !== 'idle' && (
         <motion.div
           className="schedule-ocr-backdrop"
@@ -634,10 +694,12 @@ function SchedulePage() {
           }}
         >
           <motion.section
+            ref={ocrDialogRef}
             className="schedule-ocr-dialog"
             role="dialog"
             aria-modal="true"
             aria-labelledby="schedule-ocr-title"
+            tabIndex={-1}
             initial={reduceMotion ? false : { y: 18, opacity: 0.72, clipPath: 'inset(0 0 12% 0 round 16px)' }}
             animate={{ y: 0, opacity: 1, clipPath: 'inset(0 0 0% 0 round 16px)' }}
             exit={reduceMotion ? { opacity: 0 } : { y: 10, opacity: 0, clipPath: 'inset(0 0 8% 0 round 16px)' }}
@@ -743,7 +805,7 @@ function SchedulePage() {
           </motion.section>
         </motion.div>
         )}
-      </AnimatePresence>
+      </AnimatePresence>, document.body)}
     </div>
   )
 }

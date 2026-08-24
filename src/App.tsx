@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, FormEvent } from 'react'
-import type { User } from '@supabase/supabase-js'
+import { createPortal } from 'react-dom'
+import type { SupabaseClient, User } from '@supabase/supabase-js'
 import {
   ArrowRight,
   BookOpenText,
@@ -29,17 +30,18 @@ import {
   Wallet,
   X,
 } from '@phosphor-icons/react'
-import { GeometryNotebookLayoutV1 } from './notebook/GeometryNotebookLayoutV1'
-import { fixtures } from './fixtures'
-import SchedulePage from './SchedulePage'
 import LegalPage from './LegalPage'
+import NotebookCanvas from './NotebookCanvas'
+import type { Database } from './lib/database.types'
 import type { AccountData } from './lib/supabase'
-import { getInitials, loadAccountData, supabase } from './lib/supabase'
+import { getInitials } from './lib/account'
 import { formatRubles } from './lib/currency'
+import { useModalIsolation } from './lib/useModalIsolation'
 import './App.css'
 
 const DesignSystemPlayground = lazy(() => import('./DesignSystemPlayground'))
 const AccountDialog = lazy(() => import('./account/AccountDialog'))
+const SchedulePage = lazy(() => import('./SchedulePage'))
 
 type Theme = 'light' | 'dark'
 type TextbookId = string
@@ -227,12 +229,20 @@ function ProductSidebar({
 }
 
 function BalanceControl({ user, balance, onOpenAccount }: { user: User | null; balance: number | null; onOpenAccount: () => void }) {
-  const balanceLabel = user ? formatRubles(balance ?? 0) : 'Войти'
+  if (!user) {
+    return (
+      <button className="header-sign-in" type="button" onClick={onOpenAccount}>
+        <UserCircle size={20} weight="duotone" aria-hidden="true" />
+        Войти
+      </button>
+    )
+  }
+
   return (
-    <div className="balance-control" aria-label={user ? `Баланс: ${formatRubles(balance ?? 0)}` : 'Войти, чтобы увидеть баланс'}>
+    <div className="balance-control" aria-label={`Баланс: ${formatRubles(balance ?? 0)}`}>
       <span className="balance-icon" aria-hidden="true"><Wallet size={21} weight="duotone" /></span>
-      <span><small>Баланс</small><strong>{balanceLabel}</strong></span>
-      <button type="button" aria-label={user ? 'Открыть профиль и баланс' : 'Войти, чтобы открыть баланс'} onClick={onOpenAccount}><Plus size={17} weight="bold" aria-hidden="true" /></button>
+      <span><small>Баланс</small><strong>{formatRubles(balance ?? 0)}</strong></span>
+      <button type="button" aria-label="Открыть баланс и пополнить" onClick={onOpenAccount}><Plus size={17} weight="bold" aria-hidden="true" /><span>Пополнить</span></button>
     </div>
   )
 }
@@ -252,7 +262,6 @@ function PageHeader({ theme, onToggleTheme, user, account, onOpenAccount }: { th
       <div className="header-actions">
         <span className="mobile-theme-toggle"><ThemeToggle theme={theme} onToggle={onToggleTheme} /></span>
         <BalanceControl user={user} balance={account?.balance ?? null} onOpenAccount={onOpenAccount} />
-        <span className="mobile-profile-button"><ProfileButton user={user} account={account} onClick={onOpenAccount} compact /></span>
       </div>
     </header>
   )
@@ -270,6 +279,7 @@ function TextbookPicker({
   onCreate: (textbook: Textbook) => void
 }) {
   const SelectedIcon = selected.icon
+  const triggerRef = useRef<HTMLButtonElement>(null)
   const [query, setQuery] = useState('')
   const [isOpen, setIsOpen] = useState(false)
   const [importMode, setImportMode] = useState<'link' | 'file'>('link')
@@ -281,18 +291,12 @@ function TextbookPicker({
     return items.filter((textbook) => `${textbook.subject} ${textbook.title} ${textbook.authors} ${textbook.grade}`.toLocaleLowerCase('ru').includes(normalized))
   }, [items, query])
 
-  useEffect(() => {
-    if (!isOpen) return
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => { document.body.style.overflow = previousOverflow }
-  }, [isOpen])
-
-  const closeDialog = () => {
+  const closeDialog = useCallback(() => {
     setIsOpen(false)
     setQuery('')
     setImportError('')
-  }
+  }, [])
+  const dialogRef = useModalIsolation<HTMLElement>(isOpen, closeDialog, triggerRef)
 
   const selectTextbook = (id: TextbookId) => {
     onSelect(id)
@@ -349,7 +353,7 @@ function TextbookPicker({
 
   return (
     <div className="textbook-picker">
-      <button className="textbook-picker-trigger" type="button" aria-haspopup="dialog" aria-expanded={isOpen} onClick={() => setIsOpen(true)}>
+      <button ref={triggerRef} className="textbook-picker-trigger" type="button" aria-haspopup="dialog" aria-expanded={isOpen} onClick={() => setIsOpen(true)}>
         <SelectedIcon size={32} weight="duotone" aria-hidden="true" />
         <span>
           <small>Учебник</small>
@@ -359,13 +363,11 @@ function TextbookPicker({
         <span className="textbook-change">Сменить <CaretDown size={17} weight="bold" aria-hidden="true" /></span>
       </button>
 
-      {isOpen && (
+      {isOpen && createPortal((
         <div className="textbook-dialog-backdrop" role="presentation" onMouseDown={(event) => {
           if (event.target === event.currentTarget) closeDialog()
-        }} onKeyDown={(event) => {
-          if (event.key === 'Escape') closeDialog()
         }}>
-          <section className="textbook-dialog" role="dialog" aria-modal="true" aria-labelledby="textbook-dialog-title">
+          <section ref={dialogRef} className="textbook-dialog" role="dialog" aria-modal="true" aria-labelledby="textbook-dialog-title" tabIndex={-1}>
             <header className="textbook-dialog-header">
               <div>
                 <h2 id="textbook-dialog-title">Выбери учебник</h2>
@@ -439,7 +441,7 @@ function TextbookPicker({
             </div>
           </section>
         </div>
-      )}
+      ), document.body)}
     </div>
   )
 }
@@ -628,22 +630,30 @@ function SolutionStatus({ state, textbooks: items }: { state: SolutionState; tex
           <h2 id="active-solution-title">{state.source === 'photo' ? 'Готовим задачу с фото' : `Готовим № ${state.task}`}</h2>
           <p>{textbook.subject}. {textbook.title}. {state.source === 'photo' ? 'Распознаём условие и готовим решение.' : 'Готовое решение появится автоматически.'}</p>
         </div>
-        <time>03:42</time>
+        <span className="solution-eta">Обычно до 5 минут</span>
       </header>
 
-      <div className="solution-progress" aria-label="Решение готовится">
+      <div className="solution-progress" role="status" aria-live="polite" aria-busy="true">
         <SpinnerGap className="solution-loader-orbit" size={36} weight="bold" aria-label="Решаем задачу" />
         <span className="solution-progress-copy"><strong>Решаем задачу</strong><small>Затем оформим ответ как в тетради</small></span>
-        <span className="solution-progress-value">44%</span>
       </div>
 
-      <div className="solution-progress-track" aria-hidden="true"><span /></div>
+      <div className="solution-progress-track" role="progressbar" aria-label="Подготовка решения"><span /></div>
+      <p className="solution-status-note">Статус обновится автоматически — эту страницу можно оставить открытой.</p>
+    </section>
+  )
+}
 
-      <ol className="system-stages" aria-label="Этапы подготовки">
-        <li className="is-done"><span><Check size={14} weight="bold" /></span><strong>Условие найдено</strong></li>
-        <li className="is-current"><span><SpinnerGap size={14} weight="bold" /></span><strong>Решение</strong></li>
-        <li><span /><strong>Оформление</strong></li>
-      </ol>
+function GuestWorkspace({ onOpenAccount }: { onOpenAccount: () => void }) {
+  return (
+    <section className="guest-workspace" aria-labelledby="guest-workspace-title">
+      <span className="guest-workspace-icon" aria-hidden="true"><Notebook size={34} weight="duotone" /></span>
+      <div>
+        <span>Личное пространство</span>
+        <h2 id="guest-workspace-title">Твои решения появятся после входа</h2>
+        <p>Здесь будут только твои учебники, открытые ответы и задачи, которые ты заказывал.</p>
+      </div>
+      <button type="button" onClick={onOpenAccount}>Войти <ArrowRight size={18} weight="bold" aria-hidden="true" /></button>
     </section>
   )
 }
@@ -742,14 +752,16 @@ function HomePage() {
   const [taskNumber, setTaskNumber] = useState('')
   const [selectedTextbookId, setSelectedTextbookId] = useState<TextbookId>('geometry')
   const [customTextbooks, setCustomTextbooks] = useState<Textbook[]>([])
-  const [solutionState, setSolutionState] = useState<SolutionState>({ mode: 'processing', textbookId: 'geometry', task: '118', source: 'number' })
+  const [solutionState, setSolutionState] = useState<SolutionState | null>(null)
+  const [supabaseClient, setSupabaseClient] = useState<SupabaseClient<Database> | null>(null)
   const [user, setUser] = useState<User | null>(null)
   const [account, setAccount] = useState<AccountData | null>(null)
-  const [accountOpen, setAccountOpen] = useState(() => ['reset', 'verified'].includes(new URLSearchParams(window.location.search).get('auth') ?? ''))
+  const [accountOpen, setAccountOpen] = useState(() => ['reset', 'verified', 'confirm'].includes(new URLSearchParams(window.location.search).get('auth') ?? ''))
   const [passwordRecovery, setPasswordRecovery] = useState(() => new URLSearchParams(window.location.search).get('auth') === 'reset')
   const [pendingVerificationEmail, setPendingVerificationEmail] = useState(() => sessionStorage.getItem('homework-copilot:google-verification-email') ?? '')
   const [accountNotice, setAccountNotice] = useState('')
   const googleVerificationStarted = useRef(false)
+  const emailConfirmationStarted = useRef(false)
   const availableTextbooks = useMemo(() => [...textbooks, ...customTextbooks], [customTextbooks])
   const selectedTextbook = getTextbook(selectedTextbookId, availableTextbooks)
   const activeNavigationIndex = navigation.findIndex(({ label }) => label === activeNavigation)
@@ -764,14 +776,22 @@ function HomePage() {
   }, [theme])
 
   useEffect(() => {
-    if (!supabase) return
+    let active = true
+    void import('./lib/supabase').then(({ supabase }) => {
+      if (active) setSupabaseClient(supabase)
+    })
+    return () => { active = false }
+  }, [])
+
+  useEffect(() => {
+    if (!supabaseClient) return
     let active = true
 
-    void supabase.auth.getUser().then(({ data }) => {
+    void supabaseClient.auth.getUser().then(({ data }) => {
       if (active) setUser(data.user ?? null)
     })
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabaseClient.auth.onAuthStateChange((event, session) => {
       const nextUser = session?.user ?? null
       setUser(nextUser)
       if (!nextUser) setAccount(null)
@@ -782,12 +802,14 @@ function HomePage() {
       if (event === 'SIGNED_IN' && nextUser) {
         sessionStorage.removeItem('homework-copilot:google-auth-pending')
         sessionStorage.removeItem('homework-copilot:google-verification-email')
+        sessionStorage.removeItem('homework-copilot:verification-email')
+        sessionStorage.removeItem('homework-copilot:verification-kind')
         sessionStorage.removeItem('homework-copilot:verification-sent-at')
         setPendingVerificationEmail('')
-        if (new URLSearchParams(window.location.search).get('auth') === 'verified') setAccountOpen(true)
+        if (['verified', 'confirm'].includes(new URLSearchParams(window.location.search).get('auth') ?? '')) setAccountOpen(true)
       }
       if (event === 'SIGNED_OUT') {
-        if (sessionStorage.getItem('homework-copilot:google-verification-email')) setAccountOpen(true)
+        if (sessionStorage.getItem('homework-copilot:verification-email') || sessionStorage.getItem('homework-copilot:google-verification-email')) setAccountOpen(true)
         else setAccountOpen(false)
         setPasswordRecovery(false)
       }
@@ -797,11 +819,36 @@ function HomePage() {
       active = false
       subscription.unsubscribe()
     }
-  }, [])
+  }, [supabaseClient])
 
   useEffect(() => {
-    if (!supabase || new URLSearchParams(window.location.search).get('auth') !== 'google-code' || googleVerificationStarted.current) return
-    const authClient = supabase
+    const params = new URLSearchParams(window.location.search)
+    const tokenHash = params.get('token_hash')
+    if (!supabaseClient || params.get('auth') !== 'confirm' || !tokenHash || emailConfirmationStarted.current) return
+    const authClient = supabaseClient
+    emailConfirmationStarted.current = true
+    let active = true
+
+    const confirmEmail = async () => {
+      const { error: confirmationError } = await authClient.auth.verifyOtp({ token_hash: tokenHash, type: 'email' })
+      const cleanUrl = new URL(window.location.href)
+      cleanUrl.searchParams.delete('auth')
+      cleanUrl.searchParams.delete('token_hash')
+      cleanUrl.searchParams.delete('type')
+      window.history.replaceState({}, '', `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`)
+
+      if (!active) return
+      setAccountNotice(confirmationError ? 'Ссылка устарела. Введи код из письма или запроси новый' : 'Почта подтверждена')
+      setAccountOpen(true)
+    }
+
+    void confirmEmail()
+    return () => { active = false }
+  }, [supabaseClient])
+
+  useEffect(() => {
+    if (!supabaseClient || new URLSearchParams(window.location.search).get('auth') !== 'google-code' || googleVerificationStarted.current) return
+    const authClient = supabaseClient
     googleVerificationStarted.current = true
     let active = true
 
@@ -830,7 +877,11 @@ function HomePage() {
           emailRedirectTo: `${window.location.origin}/?auth=verified`,
         },
       })
-      if (!codeError) sessionStorage.setItem('homework-copilot:verification-sent-at', String(Date.now()))
+      if (!codeError) {
+        sessionStorage.setItem('homework-copilot:verification-email', googleEmail)
+        sessionStorage.setItem('homework-copilot:verification-kind', 'google')
+        sessionStorage.setItem('homework-copilot:verification-sent-at', String(Date.now()))
+      }
       await authClient.auth.signOut({ scope: 'local' })
 
       const cleanUrl = new URL(window.location.href)
@@ -847,7 +898,7 @@ function HomePage() {
 
     window.setTimeout(() => { void requestGoogleCode() }, 0)
     return () => { active = false }
-  }, [])
+  }, [supabaseClient])
 
   const refreshAccount = useCallback(async () => {
     if (!user) {
@@ -855,6 +906,7 @@ function HomePage() {
       return
     }
     try {
+      const { loadAccountData } = await import('./lib/supabase')
       setAccount(await loadAccountData(user))
     } catch {
       setAccountNotice('Не получилось загрузить профиль. Попробуй открыть его ещё раз')
@@ -876,21 +928,19 @@ function HomePage() {
     setPasswordRecovery(false)
     setPendingVerificationEmail('')
     sessionStorage.removeItem('homework-copilot:google-auth-pending')
-    sessionStorage.removeItem('homework-copilot:google-verification-email')
-    sessionStorage.removeItem('homework-copilot:verification-sent-at')
     const cleanUrl = new URL(window.location.href)
     cleanUrl.searchParams.delete('auth')
     window.history.replaceState({}, '', `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`)
   }, [])
   const submitTask = async (task: string, ready: boolean, source: 'number' | 'photo', idempotencyKey: string) => {
-    if (supabase && !user) {
+    if (supabaseClient && !user) {
       setAccountNotice('Войди или зарегистрируйся, чтобы сохранить решение и списать его с баланса')
       setAccountOpen(true)
       return false
     }
 
-    if (supabase && user) {
-      const { error: spendError } = await supabase.rpc('spend_solution_credit', {
+    if (supabaseClient && user) {
+      const { error: spendError } = await supabaseClient.rpc('spend_solution_credit', {
         p_description: source === 'photo' ? 'Решение задачи по фото' : `Решение задачи № ${task}`,
         p_idempotency_key: idempotencyKey,
       })
@@ -929,16 +979,18 @@ function HomePage() {
             />
             <div className="home-grid">
               <div className="home-column home-column-primary">
-                <SolutionStatus state={solutionState} textbooks={availableTextbooks} />
-                <MySolutions />
+                {solutionState && <SolutionStatus state={solutionState} textbooks={availableTextbooks} />}
+                {user ? <MySolutions /> : <GuestWorkspace onOpenAccount={openAccount} />}
               </div>
               <div className="home-column home-column-secondary">
-                <MyTextbooks items={availableTextbooks} selectedId={selectedTextbookId} onSelect={setSelectedTextbookId} />
+                {user && <MyTextbooks items={availableTextbooks} selectedId={selectedTextbookId} onSelect={setSelectedTextbookId} />}
                 <BaseShortcut />
               </div>
             </div>
           </div>
-        ) : activeNavigation === 'Расписание' ? <SchedulePage /> : <ComingSoon section={activeNavigation} />}
+        ) : activeNavigation === 'Расписание' ? (
+          <Suspense fallback={<div className="route-loading" role="status">Загружаем расписание…</div>}><SchedulePage /></Suspense>
+        ) : <ComingSoon section={activeNavigation} />}
       </div>
       <MobileNavigation activeLabel={activeNavigation} onNavigate={setActiveNavigation} />
       {accountOpen && (
@@ -966,7 +1018,7 @@ function App() {
   if (pathname === '/terms') return <LegalPage kind="terms" />
 
   if (params.get('canvas') === '1') {
-    return <main className="canvas-mode"><GeometryNotebookLayoutV1 spec={fixtures[0]} /></main>
+    return <NotebookCanvas />
   }
 
   if (params.get('design-system') === '1') {

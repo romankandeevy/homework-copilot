@@ -11,15 +11,16 @@ describe('Homework Copilot home', () => {
     window.history.replaceState({}, '', '/')
   })
 
-  it('shows the textbook context, personal history and the shared solution base', () => {
+  it('shows the textbook context, a truthful signed-out state and the shared solution base', () => {
     render(<App />)
 
     expect(screen.getByRole('heading', { name: 'Списать задачу' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Войти, чтобы увидеть баланс')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Войти' }).length).toBeGreaterThan(0)
     expect(screen.getAllByText('Геометрия, 8 класс').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('Геометрия. 7-9 классы').length).toBeGreaterThan(0)
-    expect(screen.getByRole('heading', { name: 'Мои решения' })).toBeInTheDocument()
-    expect(screen.getByText('Только задачи, которые ты уже открывал или заказывал.')).toBeInTheDocument()
+    expect(screen.getAllByText(/Геометрия\. 7-9 классы/).length).toBeGreaterThan(0)
+    expect(screen.getByRole('heading', { name: 'Твои решения появятся после входа' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Мои решения' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Вчера, 19:42')).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'База решений' })).toBeInTheDocument()
     expect(screen.getByText('Общие готовые решения по всем добавленным учебникам. Их можно открыть сразу.')).toBeInTheDocument()
     expect(screen.queryByText(/МЭШ/i)).not.toBeInTheDocument()
@@ -57,17 +58,22 @@ describe('Homework Copilot home', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('shows the email-link confirmation flow after Google', async () => {
+  it('keeps the email-code confirmation flow on the current device after Google', async () => {
     window.sessionStorage.setItem('homework-copilot:google-verification-email', 'roma@example.com')
+    window.sessionStorage.setItem('homework-copilot:verification-email', 'roma@example.com')
+    window.sessionStorage.setItem('homework-copilot:verification-kind', 'google')
     window.sessionStorage.setItem('homework-copilot:verification-sent-at', String(Date.now()))
     render(<App />)
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Войти или зарегистрироваться' })[0])
-    expect(await screen.findByRole('heading', { name: 'Открой почту' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Введи код' })).toBeInTheDocument()
     expect(screen.getByText(/roma@example.com/)).toBeInTheDocument()
-    expect(screen.getByText('Нажми кнопку в письме')).toBeInTheDocument()
-    expect(screen.queryByRole('textbox', { name: 'Код подтверждения' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Отправить снова через/ })).toBeDisabled()
+    const codeInput = screen.getByRole('textbox', { name: 'Код подтверждения' })
+    fireEvent.change(codeInput, { target: { value: '12a34567' } })
+    expect(codeInput).toHaveValue('123456')
+    expect(screen.getByRole('button', { name: 'Подтвердить и войти' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /Новый код через 01:00/ })).toBeDisabled()
+    expect(screen.queryByText(/Supabase Auth/)).not.toBeInTheDocument()
   })
 
   it('changes the saved textbook and checks the matching shared base', () => {
@@ -97,7 +103,7 @@ describe('Homework Copilot home', () => {
     fireEvent.click(screen.getByRole('button', { name: /Добавить по ссылке/ }))
 
     expect(screen.queryByRole('dialog', { name: 'Выбери учебник' })).not.toBeInTheDocument()
-    expect(screen.getAllByText('example.com').length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/example\.com/).length).toBeGreaterThan(0)
 
     fireEvent.click(screen.getByText('Сменить'))
     fireEvent.click(screen.getByRole('tab', { name: /Файл/ }))
@@ -105,7 +111,7 @@ describe('Homework Copilot home', () => {
     fireEvent.change(screen.getByLabelText(/Выбрать файл/), { target: { files: [textbookFile] } })
 
     expect(screen.queryByRole('dialog', { name: 'Выбери учебник' })).not.toBeInTheDocument()
-    expect(screen.getAllByText('algebra-notes').length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/algebra-notes/).length).toBeGreaterThan(0)
   })
 
   it('validates a number and starts a new system-owned solution', () => {
@@ -170,11 +176,11 @@ describe('Homework Copilot home', () => {
     expect(screen.getByRole('heading', { name: 'Списать задачу' })).toBeInTheDocument()
   })
 
-  it('opens an editable schedule and saves manual changes', () => {
+  it('opens an editable schedule and saves manual changes', async () => {
     render(<App />)
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Расписание' })[0])
-    expect(screen.getByRole('heading', { name: 'Расписание' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Расписание' })).toBeInTheDocument()
     expect(screen.getByRole('table', { name: 'Учебное расписание на неделю' })).toBeInTheDocument()
 
     const subjectInputs = screen.getAllByRole('textbox', { name: /Предмет, .*, урок/ })

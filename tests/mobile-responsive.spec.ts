@@ -78,7 +78,15 @@ test.describe('адаптация под телефон', () => {
       await page.goto('/')
 
       await expectNoPageOverflow(page)
-      await expect(page.getByRole('navigation', { name: 'Основная навигация' })).toBeVisible()
+      const mobileNavigation = page.locator('.mobile-navigation')
+      await expect(mobileNavigation).toBeVisible()
+      const [contentBox, navigationBox] = await Promise.all([
+        page.locator('.product-content').boundingBox(),
+        mobileNavigation.boundingBox(),
+      ])
+      expect(contentBox).not.toBeNull()
+      expect(navigationBox).not.toBeNull()
+      expect(Math.abs(contentBox!.y + contentBox!.height - navigationBox!.y)).toBeLessThan(1)
 
       const smallButtons = await page.locator('button').evaluateAll((buttons) => buttons
         .map((button) => {
@@ -122,11 +130,36 @@ test.describe('адаптация под телефон', () => {
     await expect(page.locator('html')).toHaveAttribute('data-theme', initialTheme === 'dark' ? 'light' : 'dark')
   })
 
+  test('диалог учебника изолирует страницу, удерживает фокус и возвращает его', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto('/')
+
+    const trigger = page.getByRole('button', { name: /Учебник Геометрия/ })
+    await trigger.click()
+    const dialog = page.getByRole('dialog', { name: 'Выбери учебник' })
+    const closeButton = page.getByRole('button', { name: 'Закрыть выбор учебника' })
+    const lastControl = page.getByRole('textbox', { name: 'Ссылка на учебник' })
+    await expect(dialog).toBeVisible()
+    await expect(page.locator('.product-shell')).toHaveAttribute('aria-hidden', 'true')
+
+    await closeButton.focus()
+    await page.keyboard.press('Shift+Tab')
+    await expect(lastControl).toBeFocused()
+    await lastControl.focus()
+    await page.keyboard.press('Tab')
+    await expect(closeButton).toBeFocused()
+
+    await page.keyboard.press('Escape')
+    await expect(dialog).toBeHidden()
+    await expect(trigger).toBeFocused()
+    await expect(page.locator('.product-shell')).not.toHaveAttribute('aria-hidden', 'true')
+  })
+
   test('регистрация помещается на экран и прокручивается внутри диалога', async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 812 })
     await page.goto('/')
 
-    await page.getByRole('button', { name: 'Войти или зарегистрироваться' }).click()
+    await page.locator('.page-header').getByRole('button', { name: 'Войти', exact: true }).click()
     const dialog = page.getByRole('dialog', { name: 'Войди в аккаунт' })
     await expect(dialog).toBeVisible()
     await page.getByRole('tab', { name: 'Регистрация' }).click()
@@ -166,19 +199,18 @@ test.describe('адаптация под телефон', () => {
     expect(metrics.bottom).toBeLessThanOrEqual(metrics.viewportHeight)
   })
 
-  test('расписание листается только внутри таблицы на телефоне и в альбомной ориентации', async ({ page }) => {
+  test('расписание показывает один выбранный день на телефоне и в альбомной ориентации', async ({ page }) => {
     for (const viewport of [{ width: 320, height: 812 }, { width: 667, height: 375 }]) {
       await page.setViewportSize(viewport)
       await page.goto('/')
       await page.getByRole('button', { name: 'Расписание', exact: true }).click()
-      await expect(page.getByText(/Свайпни таблицу/)).toBeVisible()
+      await expect(page.getByText(/Выбери день/)).toBeVisible()
       await expectNoPageOverflow(page)
-
-      const tableWidths = await page.locator('.schedule-table-scroll').evaluate((scroller) => ({
-        client: scroller.clientWidth,
-        scroll: scroller.scrollWidth,
-      }))
-      expect(tableWidths.scroll).toBeGreaterThan(tableWidths.client)
+      await expect(page.locator('.schedule-table-scroll')).toBeHidden()
+      await expect(page.getByRole('tab', { name: /Пн|Понедельник/ })).toHaveAttribute('aria-selected', 'true')
+      await page.getByRole('tab', { name: /Вт|Вторник/ }).click()
+      await expect(page.getByRole('tab', { name: /Вт|Вторник/ })).toHaveAttribute('aria-selected', 'true')
+      await expect(page.getByLabel('Предмет, вторник, урок 1', { exact: true })).toHaveValue('Геометрия')
     }
   })
 })

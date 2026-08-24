@@ -156,12 +156,14 @@ max_indexes = 5
 enabled = true
 # The base URL of your website. Used as an allow-list for redirects and for constructing URLs used
 # in emails.
-site_url = "https://homework-copilot-taupe.vercel.app"
+site_url = "https://www.homeworkcopilot.ru"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
 additional_redirect_urls = [
   "https://homework-copilot-taupe.vercel.app/**",
+  "https://www.homeworkcopilot.ru/**",
+  "https://homeworkcopilot.ru/**",
   "http://localhost:5173/**",
   "http://127.0.0.1:4173/**",
 ]
@@ -235,16 +237,16 @@ max_frequency = "1m0s"
 # Number of characters used in the email OTP.
 otp_length = 6
 # Number of seconds before the email OTP expires (defaults to 1 hour).
-otp_expiry = 600
+otp_expiry = 300
 
 # Enable only after Homework Copilot has its own verified mail domain.
 [auth.email.smtp]
-enabled = false
+enabled = true
 host = "smtp.resend.com"
 port = 587
 user = "resend"
 pass = "env(RESEND_API_KEY)"
-admin_email = "no-reply@example.com"
+admin_email = "no-reply@homeworkcopilot.ru"
 sender_name = "Homework Copilot"
 
 [auth.email.template.confirmation]

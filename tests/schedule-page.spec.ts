@@ -13,10 +13,10 @@ test.describe('недельное расписание', () => {
 
     await expect(page.getByRole('columnheader', { name: 'Понедельник' })).toBeVisible()
     await expect(page.getByRole('columnheader', { name: 'Суббота' })).toBeVisible()
-    await expect(page.getByLabel('Начало урока 1')).toHaveValue('08:30')
-    await expect(page.getByLabel('Конец урока 1')).toHaveValue('09:15')
+    await expect(page.getByLabel('Начало урока 1 в недельной таблице')).toHaveValue('08:30')
+    await expect(page.getByLabel('Конец урока 1 в недельной таблице')).toHaveValue('09:15')
 
-    const subject = page.getByLabel('Предмет, понедельник, урок 1')
+    const subject = page.getByLabel('Предмет, понедельник, урок 1 в недельной таблице')
     await subject.fill('Математика')
     await expect(subject).toHaveValue('Математика')
 
@@ -28,22 +28,17 @@ test.describe('недельное расписание', () => {
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
   })
 
-  test('на телефоне листается внутри таблицы', async ({ page }) => {
+  test('на телефоне переключает дни без горизонтальной таблицы', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await openSchedule(page)
 
-    const sizes = await page.evaluate(() => {
-      const scroller = document.querySelector('.schedule-table-scroll') as HTMLElement
-      return {
-        documentWidth: document.documentElement.scrollWidth,
-        viewportWidth: window.innerWidth,
-        tableScrollWidth: scroller.scrollWidth,
-        tableClientWidth: scroller.clientWidth,
-      }
-    })
-
-    expect(sizes.documentWidth).toBeLessThanOrEqual(sizes.viewportWidth)
-    expect(sizes.tableScrollWidth).toBeGreaterThan(sizes.tableClientWidth)
+    await expect(page.locator('.schedule-table-scroll')).toBeHidden()
+    await expect(page.getByRole('tab', { name: 'Пн' })).toHaveAttribute('aria-selected', 'true')
+    await page.getByRole('tab', { name: 'Пт' }).click()
+    await expect(page.getByRole('tab', { name: 'Пт' })).toHaveAttribute('aria-selected', 'true')
+    await expect(page.getByLabel('Предмет, пятница, урок 1', { exact: true })).toHaveValue('Химия')
+    const widths = await page.evaluate(() => ({ documentWidth: document.documentElement.scrollWidth, viewportWidth: window.innerWidth }))
+    expect(widths.documentWidth).toBeLessThanOrEqual(widths.viewportWidth)
     await expect(page.getByText('Всё сохраняется на этом устройстве')).toBeVisible()
   })
 })

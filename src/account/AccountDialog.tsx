@@ -1,13 +1,16 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import type { FormEvent } from 'react'
+import { createPortal } from 'react-dom'
 import type { User } from '@supabase/supabase-js'
 import {
   ArrowRight,
   Camera,
   CheckCircle,
+  ClockCountdown,
   EnvelopeSimple,
   GoogleLogo,
   LockKey,
+  ShieldCheck,
   SignOut,
   UserCircle,
   Wallet,
@@ -15,28 +18,56 @@ import {
 } from '@phosphor-icons/react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import type { AccountData } from '../lib/supabase'
-import { getInitials, supabase } from '../lib/supabase'
+import { supabase } from '../lib/supabase'
+import { getInitials } from '../lib/account'
 import { formatRubles } from '../lib/currency'
+import { useModalIsolation } from '../lib/useModalIsolation'
 import PasswordStrength from './PasswordStrength'
 import { isStrongPassword } from './passwordStrengthRules'
 import './AccountDialog.css'
 
-type AuthScreen = 'sign-in' | 'sign-up' | 'forgot' | 'reset' | 'check-email'
+type AuthScreen = 'sign-in' | 'sign-up' | 'forgot' | 'reset' | 'verify-email'
 type VerificationKind = 'signup' | 'google'
 
 const emailResendDelay = 60
+const emailCodeLifetime = 5 * 60
+const verificationEmailKey = 'homework-copilot:verification-email'
+const verificationKindKey = 'homework-copilot:verification-kind'
+const verificationSentAtKey = 'homework-copilot:verification-sent-at'
 
 function verificationRedirectUrl() {
   return `${window.location.origin}/?auth=verified`
 }
 
-function rememberEmailSent() {
-  sessionStorage.setItem('homework-copilot:verification-sent-at', String(Date.now()))
+function readPendingVerification(): { email: string; kind: VerificationKind } | null {
+  const email = sessionStorage.getItem(verificationEmailKey)?.trim() ?? ''
+  const kind = sessionStorage.getItem(verificationKindKey)
+  if (!email || (kind !== 'signup' && kind !== 'google')) return null
+  return { email, kind }
 }
 
-function emailResendSecondsLeft() {
-  const sentAt = Number(sessionStorage.getItem('homework-copilot:verification-sent-at') ?? 0)
-  return Math.max(0, emailResendDelay - Math.floor((Date.now() - sentAt) / 1000))
+function rememberVerification(email: string, kind: VerificationKind) {
+  const sentAt = Date.now()
+  sessionStorage.setItem(verificationEmailKey, email)
+  sessionStorage.setItem(verificationKindKey, kind)
+  sessionStorage.setItem(verificationSentAtKey, String(sentAt))
+  return sentAt
+}
+
+function clearPendingVerification() {
+  sessionStorage.removeItem(verificationEmailKey)
+  sessionStorage.removeItem(verificationKindKey)
+  sessionStorage.removeItem(verificationSentAtKey)
+}
+
+function verificationSecondsLeft(sentAt: number, lifetime: number, now: number) {
+  if (!sentAt) return 0
+  return Math.max(0, lifetime - Math.floor((now - sentAt) / 1000))
+}
+
+function formatCountdown(seconds: number) {
+  const minutes = Math.floor(seconds / 60)
+  return `${String(minutes).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
 }
 
 type AccountDialogProps = {
@@ -55,7 +86,7 @@ function authErrorMessage(message: string) {
   if (normalized.includes('user already registered')) return 'Аккаунт с этой почтой уже существует'
   if (normalized.includes('password') && normalized.includes('characters')) return 'Пароль должен содержать минимум 8 символов'
   if (normalized.includes('email rate limit')) return 'Слишком много писем. Попробуй немного позже'
-  if (normalized.includes('email not confirmed')) return 'Сначала подтверди почту по ссылке из письма'
+  if (normalized.includes('email not confirmed')) return 'Сначала подтверди почту кодом из письма'
   if (normalized.includes('token') || normalized.includes('otp')) return 'Код неверный или уже истёк'
   return 'Не получилось выполнить запрос. Проверь данные и попробуй ещё раз'
 }
@@ -65,19 +96,26 @@ function isValidEmail(value: string) {
 }
 
 function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { passwordRecovery: boolean; pendingVerificationEmail?: string; notice?: string }) {
-  const [screen, setScreen] = useState<AuthScreen>(passwordRecovery ? 'reset' : pendingVerificationEmail ? 'check-email' : 'sign-in')
-  const [verificationKind, setVerificationKind] = useState<VerificationKind>(pendingVerificationEmail ? 'google' : 'signup')
+  const [initialVerification] = useState(() => pendingVerificationEmail
+    ? { email: pendingVerificationEmail, kind: 'google' as const }
+    : readPendingVerification())
+  const [screen, setScreen] = useState<AuthScreen>(passwordRecovery ? 'reset' : initialVerification ? 'verify-email' : 'sign-in')
+  const [verificationKind, setVerificationKind] = useState<VerificationKind>(initialVerification?.kind ?? 'signup')
   const [fullName, setFullName] = useState('')
   const [grade, setGrade] = useState('8')
-  const [email, setEmail] = useState(pendingVerificationEmail ?? '')
+  const [email, setEmail] = useState(initialVerification?.email ?? '')
   const [password, setPassword] = useState('')
-  const [resendIn, setResendIn] = useState(() => pendingVerificationEmail ? emailResendSecondsLeft() : 0)
+  const [verificationCode, setVerificationCode] = useState('')
+  const [sentAt, setSentAt] = useState(() => initialVerification ? Number(sessionStorage.getItem(verificationSentAtKey) ?? 0) : 0)
+  const [now, setNow] = useState(() => Date.now())
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const passwordStrengthId = useId()
   const requiresStrongPassword = screen === 'sign-up' || screen === 'reset'
   const passwordIsValid = requiresStrongPassword ? isStrongPassword(password) : password.length >= 8
+  const resendIn = verificationSecondsLeft(sentAt, emailResendDelay, now)
+  const expiresIn = verificationSecondsLeft(sentAt, emailCodeLifetime, now)
 
   const formIsValid = screen === 'sign-up'
     ? fullName.trim().length >= 2 && isValidEmail(email) && passwordIsValid
@@ -95,20 +133,23 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
     if (!pendingVerificationEmail) return
     setEmail(pendingVerificationEmail)
     setVerificationKind('google')
-    setResendIn(emailResendSecondsLeft())
-    setScreen('check-email')
+    setSentAt(Number(sessionStorage.getItem(verificationSentAtKey) ?? 0))
+    setNow(Date.now())
+    setScreen('verify-email')
   }, [pendingVerificationEmail])
 
   useEffect(() => {
-    if (resendIn <= 0) return
-    const timer = window.setInterval(() => setResendIn((value) => Math.max(0, value - 1)), 1000)
+    if (screen !== 'verify-email') return
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
     return () => window.clearInterval(timer)
-  }, [resendIn])
+  }, [screen])
 
   const switchScreen = (next: AuthScreen) => {
+    if (screen === 'verify-email' && next !== 'verify-email') clearPendingVerification()
     setScreen(next)
     setStatus('')
     setError('')
+    setVerificationCode('')
   }
 
   const continueWithGoogle = async () => {
@@ -145,9 +186,39 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
         })
     if (resendError) setError(authErrorMessage(resendError.message))
     else {
-      rememberEmailSent()
-      setStatus('Новое письмо отправлено. Проверь также папку «Спам»')
-      setResendIn(emailResendDelay)
+      const nextSentAt = rememberVerification(normalizedEmail, verificationKind)
+      setSentAt(nextSentAt)
+      setNow(nextSentAt)
+      setVerificationCode('')
+      setStatus('Новый код отправлен. Предыдущий больше не действует')
+    }
+    setLoading(false)
+  }
+
+  const verifyCode = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!supabase || loading || verificationCode.length !== 6) return
+    if (expiresIn <= 0) {
+      setError('Код уже истёк. Запроси новый')
+      return
+    }
+
+    setLoading(true)
+    setStatus('')
+    setError('')
+    const { error: verificationError } = await supabase.auth.verifyOtp({
+      email: email.trim(),
+      token: verificationCode,
+      type: verificationKind === 'signup' ? 'signup' : 'email',
+    })
+
+    if (verificationError) setError(authErrorMessage(verificationError.message))
+    else {
+      clearPendingVerification()
+      setStatus('Почта подтверждена')
+      const cleanUrl = new URL(window.location.href)
+      cleanUrl.searchParams.delete('auth')
+      window.history.replaceState({}, '', `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`)
     }
     setLoading(false)
   }
@@ -180,9 +251,12 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
         if (signUpError) throw signUpError
         if (!data.session) {
           setVerificationKind('signup')
-          rememberEmailSent()
-          setResendIn(emailResendDelay)
-          setScreen('check-email')
+          const normalizedEmail = email.trim()
+          const nextSentAt = rememberVerification(normalizedEmail, 'signup')
+          setEmail(normalizedEmail)
+          setSentAt(nextSentAt)
+          setNow(nextSentAt)
+          setScreen('verify-email')
         }
         return
       }
@@ -219,14 +293,14 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
       ? 'Восстанови доступ'
       : screen === 'reset'
         ? 'Новый пароль'
-        : screen === 'check-email'
-          ? 'Открой почту'
+        : screen === 'verify-email'
+          ? 'Введи код'
         : 'Войди в аккаунт'
 
   const subtitle = screen === 'sign-up'
     ? 'Создай профиль и получи 20 ₽ на первые решения.'
-    : screen === 'check-email'
-      ? 'Остался один короткий шаг.'
+    : screen === 'verify-email'
+      ? 'Шесть цифр из письма — и аккаунт готов.'
       : screen === 'forgot'
         ? 'Пришлём безопасную ссылку для нового пароля.'
         : screen === 'reset'
@@ -235,13 +309,27 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
 
   return (
     <div className="account-auth-view">
-      <div className="account-auth-brand">
-        <span className="account-auth-mark"><UserCircle size={30} weight="duotone" aria-hidden="true" /></span>
-        <div>
-          <h2 id="account-dialog-title">{title}</h2>
-          <p>{subtitle}</p>
+      <aside className="account-auth-context" aria-hidden="true">
+        <div className="account-auth-wordmark"><span>HC</span><strong>Homework Copilot</strong></div>
+        <div className="account-auth-context-copy">
+          {screen === 'verify-email' ? <ShieldCheck size={42} weight="duotone" /> : <LockKey size={42} weight="duotone" />}
+          <strong>{screen === 'verify-email' ? 'Код остаётся на этом устройстве.' : 'Аккаунт без лишних переходов.'}</strong>
+          <p>{screen === 'verify-email' ? 'Открой письмо где угодно, а шесть цифр введи здесь.' : 'Учебники, баланс и готовые решения будут ждать тебя после входа.'}</p>
         </div>
-      </div>
+        <div className="account-auth-context-meta">
+          <ClockCountdown size={20} weight="duotone" />
+          <span>{screen === 'verify-email' ? 'Код действует 5 минут' : 'Подтверждение занимает меньше минуты'}</span>
+        </div>
+      </aside>
+
+      <section className="account-auth-panel">
+        <div className="account-auth-brand">
+          <span className="account-auth-mark">{screen === 'verify-email' ? <EnvelopeSimple size={28} weight="duotone" aria-hidden="true" /> : <UserCircle size={28} weight="duotone" aria-hidden="true" />}</span>
+          <div>
+            <h2 id="account-dialog-title">{title}</h2>
+            <p>{subtitle}</p>
+          </div>
+        </div>
 
       {(screen === 'sign-in' || screen === 'sign-up') && (
         <div className="account-auth-tabs" role="tablist" aria-label="Вход или регистрация">
@@ -262,23 +350,40 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
         </>
       )}
 
-      {screen === 'check-email' && (
+      {screen === 'verify-email' && (
         <div className="account-email-check">
           <div className="account-email-check-lead">
-            <span className="account-code-icon"><EnvelopeSimple size={25} weight="duotone" aria-hidden="true" /></span>
             <div>
-              <strong>Письмо отправлено</strong>
+              <strong>Код отправлен</strong>
               <p>{email}</p>
             </div>
+            <span className={expiresIn > 0 ? 'account-code-timer' : 'account-code-timer is-expired'}>{expiresIn > 0 ? formatCountdown(expiresIn) : 'Истёк'}</span>
           </div>
-          <ol className="account-email-steps">
-            <li><span>1</span><div><strong>Открой письмо</strong><small>Отправитель — Supabase Auth. Проверь «Спам», если его нет во входящих.</small></div></li>
-            <li><span>2</span><div><strong>Нажми кнопку в письме</strong><small>Мы вернём тебя сюда уже с подтверждённым входом.</small></div></li>
-          </ol>
+          <form className="account-verify-form" onSubmit={verifyCode}>
+            <label htmlFor="account-verification-code">Код подтверждения</label>
+            <input
+              id="account-verification-code"
+              className="account-otp-input"
+              value={verificationCode}
+              onChange={(event) => { setVerificationCode(event.target.value.replace(/\D/g, '').slice(0, 6)); setError('') }}
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              pattern="[0-9]{6}"
+              placeholder="000000"
+              aria-describedby="account-code-help"
+              autoFocus
+              required
+            />
+            <p id="account-code-help">Можно вставить все шесть цифр сразу.</p>
+            <button className="account-primary-button" type="submit" disabled={loading || expiresIn <= 0 || verificationCode.length !== 6}>
+              {loading ? 'Проверяем…' : 'Подтвердить и войти'}
+              {!loading && <ArrowRight size={18} weight="bold" aria-hidden="true" />}
+            </button>
+          </form>
         </div>
       )}
 
-      {screen !== 'check-email' && <form className="account-auth-form" onSubmit={submit}>
+      {screen !== 'verify-email' && <form className="account-auth-form" onSubmit={submit}>
         {screen === 'sign-up' && (
           <div className="account-field-row">
             <label>
@@ -339,7 +444,7 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
         </button>
       </form>}
 
-      {screen === 'check-email' && (
+      {screen === 'verify-email' && (
         <>
           {error && <p className="account-form-message is-error" role="alert">{error}</p>}
           {status && <p className="account-form-message is-success" role="status"><CheckCircle size={18} weight="fill" aria-hidden="true" />{status}</p>}
@@ -349,9 +454,9 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
       <div className="account-auth-secondary">
         {screen === 'sign-in' && <button type="button" onClick={() => switchScreen('forgot')}>Не помню пароль</button>}
         {(screen === 'forgot' || screen === 'reset') && <button type="button" onClick={() => switchScreen('sign-in')}>Вернуться ко входу</button>}
-        {screen === 'check-email' && (
+        {screen === 'verify-email' && (
           <>
-            <button type="button" onClick={() => { void resendEmail() }} disabled={loading || resendIn > 0}>{resendIn > 0 ? `Отправить снова через ${resendIn} сек.` : 'Отправить письмо снова'}</button>
+            <button type="button" onClick={() => { void resendEmail() }} disabled={loading || resendIn > 0}>{resendIn > 0 ? `Новый код через ${formatCountdown(resendIn)}` : 'Отправить новый код'}</button>
             <button type="button" onClick={() => switchScreen(verificationKind === 'signup' ? 'sign-up' : 'sign-in')}>{verificationKind === 'signup' ? 'Изменить почту' : 'Другой способ входа'}</button>
           </>
         )}
@@ -360,7 +465,7 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
       {screen === 'sign-up' && (
         <p className="account-auth-legal">Создавая аккаунт, ты принимаешь <a href="/terms" target="_blank" rel="noreferrer">условия использования</a> и <a href="/privacy" target="_blank" rel="noreferrer">политику конфиденциальности</a>.</p>
       )}
-
+      </section>
     </div>
   )
 }
@@ -501,7 +606,7 @@ function ProfileView({ user, account, notice, onReloadAccount }: { user: User; a
       </div>
 
       <footer className="account-profile-footer">
-        <span>Данные профиля защищены правилами доступа Supabase.</span>
+        <span>Данные профиля доступны только тебе.</span>
         <button type="button" onClick={() => { void signOut() }} disabled={loading}><SignOut size={18} weight="duotone" aria-hidden="true" /> Выйти</button>
       </footer>
     </div>
@@ -510,28 +615,12 @@ function ProfileView({ user, account, notice, onReloadAccount }: { user: User; a
 
 export default function AccountDialog({ user, account, passwordRecovery, pendingVerificationEmail, notice, onClose, onReloadAccount }: AccountDialogProps) {
   const reduceMotion = useReducedMotion()
-  const closeButtonRef = useRef<HTMLButtonElement>(null)
+  const dialogRef = useModalIsolation<HTMLElement>(true, onClose)
 
-  useEffect(() => {
-    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', closeOnEscape)
-    window.setTimeout(() => closeButtonRef.current?.focus(), 0)
-    return () => {
-      document.body.style.overflow = previousOverflow
-      window.removeEventListener('keydown', closeOnEscape)
-      previouslyFocused?.focus()
-    }
-  }, [onClose])
-
-  return (
+  return createPortal((
     <AnimatePresence>
       <motion.div
-        className="account-dialog-backdrop"
+        className={`account-dialog-backdrop${user ? '' : ' is-auth-backdrop'}`}
         role="presentation"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -540,6 +629,7 @@ export default function AccountDialog({ user, account, passwordRecovery, pending
         onPointerDown={(event) => { if (event.target === event.currentTarget) onClose() }}
       >
         <motion.section
+          ref={dialogRef}
           className={`account-dialog${user ? ' is-profile' : ' is-auth'}`}
           role="dialog"
           aria-modal="true"
@@ -549,12 +639,12 @@ export default function AccountDialog({ user, account, passwordRecovery, pending
           exit={reduceMotion ? undefined : { opacity: 0, scale: 0.985, y: 8 }}
           transition={{ duration: reduceMotion ? 0 : 0.24, ease: [0.16, 1, 0.3, 1] }}
         >
-          <button ref={closeButtonRef} className="account-dialog-close" type="button" aria-label="Закрыть окно аккаунта" onClick={onClose}><X size={20} weight="bold" aria-hidden="true" /></button>
+          <button className="account-dialog-close" type="button" aria-label="Закрыть окно аккаунта" onClick={onClose}><X size={20} weight="bold" aria-hidden="true" /></button>
           {user
             ? <ProfileView user={user} account={account} notice={notice} onReloadAccount={onReloadAccount} />
             : <AuthView passwordRecovery={passwordRecovery} pendingVerificationEmail={pendingVerificationEmail} notice={notice} />}
         </motion.section>
       </motion.div>
     </AnimatePresence>
-  )
+  ), document.body)
 }

@@ -9,6 +9,11 @@
   backdrop-filter: blur(0.7rem);
 }
 
+.account-dialog-backdrop.is-auth-backdrop {
+  background: oklch(10.5% 0.032 260 / 0.96);
+  backdrop-filter: none;
+}
+
 .account-dialog {
   position: relative;
   width: min(100%, 56rem);
@@ -21,7 +26,29 @@
   box-shadow: var(--shadow-overlay);
 }
 
-.account-dialog.is-auth { width: min(100%, 34rem); }
+.account-dialog.is-auth {
+  --auth-canvas: oklch(14.5% 0.034 260);
+  --auth-panel: oklch(18% 0.038 260);
+  --auth-field: oklch(22% 0.04 260);
+  --auth-field-hover: oklch(25% 0.045 260);
+  --auth-line: oklch(38% 0.055 260);
+  --auth-text: oklch(97.5% 0.008 255);
+  --auth-muted: oklch(76% 0.035 255);
+  --auth-subtle: oklch(65% 0.035 255);
+  --auth-accent: oklch(57% 0.2 260);
+  --auth-accent-hover: oklch(62% 0.19 258);
+  width: min(100%, 58rem);
+  border: 1px solid var(--auth-line);
+  background: var(--auth-canvas);
+  color: var(--auth-text);
+  box-shadow: 0 1.75rem 5rem oklch(4% 0.02 260 / 0.52);
+  scrollbar-color: var(--auth-line) var(--auth-canvas);
+  scrollbar-width: thin;
+}
+
+.account-dialog.is-auth::-webkit-scrollbar { width: 0.55rem; }
+.account-dialog.is-auth::-webkit-scrollbar-track { background: var(--auth-canvas); }
+.account-dialog.is-auth::-webkit-scrollbar-thumb { border: 2px solid var(--auth-canvas); border-radius: var(--radius-pill); background: var(--auth-line); }
 
 .account-dialog-close {
   display: grid;
@@ -43,7 +70,40 @@
 .account-dialog-close:hover { border-color: var(--color-border); background: var(--color-surface); color: var(--color-text); }
 .account-dialog-close:active { transform: scale(0.94); }
 
-.account-auth-view { display: grid; gap: var(--space-5); padding: var(--space-8); }
+.account-auth-view {
+  display: grid;
+  min-height: 38rem;
+  grid-template-columns: minmax(14rem, 0.72fr) minmax(0, 1.35fr);
+}
+
+.account-auth-context {
+  display: flex;
+  justify-content: space-between;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: var(--space-8);
+  background: var(--auth-accent);
+  color: white;
+}
+
+.account-auth-wordmark { display: flex; align-items: center; gap: var(--space-3); font-size: var(--text-small); }
+.account-auth-wordmark > span { font-family: var(--font-display); font-size: var(--text-body); font-weight: var(--weight-display); letter-spacing: var(--tracking-snug); }
+.account-auth-wordmark > strong { font-weight: var(--weight-semibold); }
+.account-auth-context-copy { display: grid; gap: var(--space-4); }
+.account-auth-context-copy > strong { max-width: 11ch; font-family: var(--font-display); font-size: var(--text-heading); font-weight: var(--weight-display); line-height: 1.12; letter-spacing: -0.025em; text-wrap: balance; }
+.account-auth-context-copy > p { max-width: 27ch; margin: 0; color: color-mix(in oklch, var(--auth-text) 78%, transparent); font-size: var(--text-small); line-height: var(--leading-body); }
+.account-auth-context-meta { display: flex; align-items: center; gap: var(--space-2); color: oklch(98% 0.01 255 / 0.82); font-size: var(--text-caption); font-weight: var(--weight-semibold); }
+
+.account-auth-panel {
+  display: grid;
+  align-content: center;
+  gap: var(--space-5);
+  padding: var(--space-12);
+  background: var(--auth-panel);
+}
+
+.account-dialog.is-auth .account-dialog-close { color: var(--auth-subtle); }
+.account-dialog.is-auth .account-dialog-close:hover { border-color: var(--auth-line); background: var(--auth-field); color: var(--auth-text); }
 
 .account-auth-brand {
   display: flex;
@@ -67,6 +127,10 @@
 .account-auth-brand h2,
 .account-profile-header h2 { margin: 0; font-family: var(--font-display); font-size: var(--text-heading); font-weight: var(--weight-display); letter-spacing: var(--tracking-snug); }
 .account-auth-brand p { max-width: 34ch; margin: 0; color: var(--color-text-subtle); font-size: var(--text-small); line-height: var(--leading-ui); }
+
+.account-dialog.is-auth .account-auth-brand h2 { color: var(--auth-text); }
+.account-dialog.is-auth .account-auth-brand p { color: var(--auth-muted); }
+.account-dialog.is-auth .account-auth-mark { background: var(--auth-field); color: var(--auth-accent-hover); }
 
 .account-auth-tabs {
   display: grid;
@@ -109,19 +173,36 @@
 .account-auth-divider { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: var(--space-3); color: var(--color-text-subtle); font-size: var(--text-caption); }
 .account-auth-divider::before,
 .account-auth-divider::after { height: 1px; background: var(--color-border); content: ''; }
-.account-code-icon { display: grid; width: 2.75rem; height: 2.75rem; place-items: center; border-radius: var(--radius-control); background: var(--color-accent-soft); color: var(--color-accent-hover); }
 .account-email-check { display: grid; gap: var(--space-5); }
-.account-email-check-lead { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: var(--space-3); padding: var(--space-4); border-radius: var(--radius-surface); background: var(--color-surface-sunken); }
+.account-email-check-lead { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); padding: var(--space-4); border-radius: var(--radius-surface); background: var(--color-surface-sunken); }
 .account-email-check-lead > div { display: grid; min-width: 0; gap: var(--space-1); }
 .account-email-check-lead strong { font-size: var(--text-body); }
 .account-email-check-lead p { margin: 0; overflow: hidden; color: var(--color-text-muted); font-size: var(--text-small); text-overflow: ellipsis; white-space: nowrap; }
-.account-email-steps { display: grid; margin: 0; padding: 0; list-style: none; }
-.account-email-steps li { display: grid; grid-template-columns: 1.75rem minmax(0, 1fr); gap: var(--space-3); padding: var(--space-4) 0; border-top: 1px solid var(--color-border); }
-.account-email-steps li:last-child { border-bottom: 1px solid var(--color-border); }
-.account-email-steps li > span { display: grid; width: 1.75rem; height: 1.75rem; place-items: center; border-radius: 50%; background: var(--color-accent); color: var(--color-on-accent); font-family: var(--font-mono); font-size: var(--text-micro); font-weight: var(--weight-semibold); }
-.account-email-steps li > div { display: grid; gap: var(--space-1); }
-.account-email-steps strong { font-size: var(--text-small); }
-.account-email-steps small { color: var(--color-text-subtle); font-size: var(--text-caption); line-height: var(--leading-ui); }
+.account-code-timer { min-width: 4.6rem; color: var(--auth-text); font-family: var(--font-mono); font-size: var(--text-small); font-variant-numeric: tabular-nums; text-align: right; }
+.account-code-timer.is-expired { color: var(--color-danger); font-family: var(--font-sans); }
+.account-verify-form { display: grid; gap: var(--space-3); }
+.account-verify-form > label { color: var(--auth-muted); font-size: var(--text-small); font-weight: var(--weight-semibold); }
+.account-verify-form > p { margin: calc(-1 * var(--space-1)) 0 var(--space-1); color: var(--auth-subtle); font-size: var(--text-caption); }
+.account-otp-input {
+  width: 100%;
+  min-height: 5.25rem;
+  padding: 0.25rem 1.15rem 0.25rem 1.55rem;
+  border: 1px solid var(--auth-line);
+  border-radius: var(--radius-surface);
+  outline: 0;
+  background: var(--auth-field);
+  color: var(--auth-text);
+  caret-color: var(--auth-accent-hover);
+  font-family: var(--font-mono);
+  font-size: var(--text-statement);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.36em;
+  text-align: center;
+  transition: border-color var(--motion-fast) var(--ease-out), background var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out);
+}
+.account-otp-input::placeholder { color: var(--auth-subtle); opacity: 1; }
+.account-otp-input:focus { border-color: var(--auth-accent-hover); background: var(--auth-field-hover); box-shadow: 0 0 0 3px color-mix(in oklch, var(--auth-accent) 22%, transparent); }
 .account-auth-form,
 .account-profile-form { display: grid; gap: var(--space-4); }
 .account-auth-form > label,
@@ -208,6 +289,44 @@
 .account-form-message.is-error { color: var(--color-danger); }
 .account-form-message.is-success { color: var(--color-success-strong); }
 
+.account-dialog.is-auth .account-auth-tabs { border-color: var(--auth-line); background: var(--auth-canvas); }
+.account-dialog.is-auth .account-auth-tabs button { color: var(--auth-subtle); }
+.account-dialog.is-auth .account-auth-tabs button.is-active { background: var(--auth-field); color: var(--auth-text); box-shadow: none; }
+.account-dialog.is-auth .account-notice { border-color: var(--auth-line); background: var(--auth-field); color: var(--auth-text); }
+.account-dialog.is-auth .account-google-button { border-color: var(--auth-line); background: var(--auth-field); color: var(--auth-text); }
+.account-dialog.is-auth .account-google-button:hover { border-color: var(--auth-accent-hover); background: var(--auth-field-hover); }
+.account-dialog.is-auth .account-google-button:disabled { color: var(--auth-subtle); }
+.account-dialog.is-auth .account-auth-divider { color: var(--auth-subtle); }
+.account-dialog.is-auth .account-auth-divider::before,
+.account-dialog.is-auth .account-auth-divider::after { background: var(--auth-line); }
+.account-dialog.is-auth .account-email-check-lead { border: 1px solid var(--auth-line); background: var(--auth-canvas); }
+.account-dialog.is-auth .account-email-check-lead p { color: var(--auth-muted); }
+.account-dialog.is-auth .account-auth-form > label,
+.account-dialog.is-auth .account-password-field > label,
+.account-dialog.is-auth .account-field-row > label { color: var(--auth-muted); }
+.account-dialog.is-auth .account-input-shell { border-color: var(--auth-line); background: var(--auth-field); color: var(--auth-subtle); }
+.account-dialog.is-auth .account-input-shell:focus-within { border-color: var(--auth-accent-hover); box-shadow: 0 0 0 3px color-mix(in oklch, var(--auth-accent) 22%, transparent); }
+.account-dialog.is-auth .account-input-shell input { color: var(--auth-text); caret-color: var(--auth-accent-hover); }
+.account-dialog.is-auth .account-input-shell input::placeholder { color: var(--auth-subtle); }
+.account-dialog.is-auth .account-grade-field select { border-color: var(--auth-line); background: var(--auth-field); color: var(--auth-text); }
+.account-dialog.is-auth .account-grade-field select:focus { border-color: var(--auth-accent-hover); box-shadow: 0 0 0 3px color-mix(in oklch, var(--auth-accent) 22%, transparent); }
+.account-dialog.is-auth .password-strength-cell { background: var(--auth-line); }
+.account-dialog.is-auth .password-strength-summary,
+.account-dialog.is-auth .password-strength-rules li { color: var(--auth-subtle); }
+.account-dialog.is-auth .password-strength-rules li.is-met { color: var(--auth-muted); }
+.account-dialog.is-auth .password-rule-state { border-color: var(--auth-line); }
+.account-dialog.is-auth .account-primary-button { border-color: var(--auth-accent); background: var(--auth-accent); color: white; }
+.account-dialog.is-auth .account-primary-button:not(:disabled):hover { border-color: var(--auth-accent-hover); background: var(--auth-accent-hover); }
+.account-dialog.is-auth .account-primary-button:disabled { border-color: var(--auth-line); background: var(--auth-field); color: var(--auth-subtle); }
+.account-dialog.is-auth .account-auth-secondary button { color: var(--auth-muted); }
+.account-dialog.is-auth .account-auth-secondary button:hover { color: var(--auth-text); }
+.account-dialog.is-auth .account-auth-secondary button:disabled { color: var(--auth-subtle); }
+.account-dialog.is-auth .account-auth-legal { color: var(--auth-subtle); }
+.account-dialog.is-auth .account-auth-legal a { color: var(--auth-muted); text-underline-offset: 0.22em; }
+.account-dialog.is-auth .account-form-message.is-error { color: color-mix(in oklch, var(--color-danger) 68%, white); }
+.account-dialog.is-auth .account-form-message.is-success { color: color-mix(in oklch, var(--color-success) 70%, white); }
+.account-dialog.is-auth ::selection { background: var(--auth-accent-hover); color: white; }
+
 .account-profile-view { display: grid; }
 .account-profile-notice { margin: var(--space-4) var(--space-6) 0; }
 .account-profile-header { display: flex; min-height: 7rem; align-items: center; justify-content: space-between; gap: var(--space-6); padding: var(--space-6) 5rem var(--space-6) var(--space-6); border-bottom: 1px solid var(--color-border); }
@@ -257,13 +376,17 @@
 
 @media (max-width: 640px) {
   .account-dialog-backdrop { padding: var(--space-2); }
+  .account-dialog-backdrop.is-auth-backdrop { padding: 0; }
   .account-dialog { max-height: calc(100dvh - var(--space-4)); border-radius: var(--radius-surface); }
+  .account-dialog.is-auth { width: 100%; height: 100dvh; max-height: 100dvh; border: 0; border-radius: 0; }
   .account-dialog-close { top: var(--space-3); right: var(--space-3); }
-  .account-auth-view { gap: var(--space-4); padding: var(--space-5) var(--space-4); }
+  .account-auth-view { display: block; min-height: 100%; }
+  .account-auth-context { display: none; }
+  .account-auth-panel { min-height: 100dvh; align-content: start; gap: var(--space-4); padding: 4.75rem var(--space-5) var(--space-8); }
   .account-auth-brand { padding-right: 3rem; }
-  .account-auth-brand h2 { font-size: 1.25rem; }
+  .account-auth-brand h2 { font-size: var(--text-subtitle); }
   .account-email-check-lead { padding: var(--space-3); }
-  .account-email-steps li { padding-block: var(--space-3); }
+  .account-otp-input { min-height: 4.75rem; padding-inline: 0.75rem 0.45rem; font-size: var(--text-heading); letter-spacing: 0.28em; }
   .account-field-row { grid-template-columns: minmax(0, 1fr) 5rem; }
   .password-strength-rules { grid-template-columns: 1fr; }
   .account-profile-header { align-items: flex-start; flex-direction: column; padding: var(--space-5) 4.5rem var(--space-5) var(--space-4); }
