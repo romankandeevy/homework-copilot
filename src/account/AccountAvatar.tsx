@@ -1,4 +1,5 @@
 import type { AvatarPresetId } from './avatarPresets'
+import './AccountAvatar.css'
 
 export function AccountAvatar({ preset, initials, className = '' }: { preset?: AvatarPresetId | null; initials: string; className?: string }) {
   if (!preset) return <span className={className}>{initials}</span>
