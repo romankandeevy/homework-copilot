@@ -38,6 +38,30 @@ test.describe('адаптация под телефон', () => {
     await expect(page.locator('.mobile-profile-button')).toBeHidden()
   })
 
+  test('маркер активного раздела остаётся напротив иконки при прокрутке', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/')
+
+    const marker = page.locator('.product-seam span')
+    const activeIcon = page.locator('.navigation-item[aria-current="page"] .navigation-icon')
+    const markerBefore = await marker.boundingBox()
+    const iconBefore = await activeIcon.boundingBox()
+
+    expect(markerBefore).not.toBeNull()
+    expect(iconBefore).not.toBeNull()
+    expect(Math.abs((markerBefore!.y + markerBefore!.height / 2) - (iconBefore!.y + iconBefore!.height / 2))).toBeLessThan(1)
+
+    await page.evaluate(() => window.scrollTo(0, 700))
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
+
+    const markerAfter = await marker.boundingBox()
+    const iconAfter = await activeIcon.boundingBox()
+    expect(markerAfter).not.toBeNull()
+    expect(iconAfter).not.toBeNull()
+    expect(Math.abs(markerAfter!.y - markerBefore!.y)).toBeLessThan(1)
+    expect(Math.abs((markerAfter!.y + markerAfter!.height / 2) - (iconAfter!.y + iconAfter!.height / 2))).toBeLessThan(1)
+  })
+
   for (const viewport of phoneViewports) {
     test(`главная не переполняется на ${viewport.width}px`, async ({ page }) => {
       await page.setViewportSize(viewport)
