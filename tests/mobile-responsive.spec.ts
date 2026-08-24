@@ -43,13 +43,23 @@ test.describe('адаптация под телефон', () => {
     await page.goto('/')
 
     const marker = page.locator('.product-seam span')
-    const activeIcon = page.locator('.navigation-item[aria-current="page"] .navigation-icon')
-    const markerBefore = await marker.boundingBox()
-    const iconBefore = await activeIcon.boundingBox()
+    const navigationItems = page.locator('.product-sidebar .navigation-item')
 
+    for (let index = 0; index < await navigationItems.count(); index += 1) {
+      const item = navigationItems.nth(index)
+      await item.click()
+      await expect(item).toHaveAttribute('aria-current', 'page')
+      await expect.poll(async () => {
+        const markerBox = await marker.boundingBox()
+        const iconBox = await item.locator('.navigation-icon').boundingBox()
+        if (!markerBox || !iconBox) return Number.POSITIVE_INFINITY
+        return Math.abs((markerBox.y + markerBox.height / 2) - (iconBox.y + iconBox.height / 2))
+      }).toBeLessThan(1)
+    }
+
+    const activeIcon = navigationItems.last().locator('.navigation-icon')
+    const markerBefore = await marker.boundingBox()
     expect(markerBefore).not.toBeNull()
-    expect(iconBefore).not.toBeNull()
-    expect(Math.abs((markerBefore!.y + markerBefore!.height / 2) - (iconBefore!.y + iconBefore!.height / 2))).toBeLessThan(1)
 
     await page.evaluate(() => window.scrollTo(0, 700))
     await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0)

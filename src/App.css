@@ -92,7 +92,7 @@
   position: relative;
   z-index: 1;
   width: calc(100% - 1.5rem);
-  min-height: 3.875rem;
+  min-height: var(--navigation-item-height);
   grid-template-columns: 3rem minmax(0, 1fr);
   align-items: center;
   gap: var(--space-3);

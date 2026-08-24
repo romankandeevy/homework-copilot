@@ -71,9 +71,10 @@ const navigation = [
 ] as const
 
 type NavigationLabel = (typeof navigation)[number]['label']
+const navigationItemStep = 62
 
 function navigationRoutePath(activeIndex: number) {
-  const centerY = 63 + activeIndex * 62
+  const centerY = 63 + activeIndex * navigationItemStep
   const topY = centerY - 24
   const bottomY = centerY + 24
   const returnY = bottomY + 24
@@ -752,7 +753,10 @@ function HomePage() {
   const availableTextbooks = useMemo(() => [...textbooks, ...customTextbooks], [customTextbooks])
   const selectedTextbook = getTextbook(selectedTextbookId, availableTextbooks)
   const activeNavigationIndex = navigation.findIndex(({ label }) => label === activeNavigation)
-  const shellStyle = { '--active-navigation-offset': `${activeNavigationIndex * 3.25}rem` } as CSSProperties
+  const shellStyle = {
+    '--navigation-item-height': `${navigationItemStep}px`,
+    '--active-navigation-offset': `${activeNavigationIndex * navigationItemStep}px`,
+  } as CSSProperties
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
