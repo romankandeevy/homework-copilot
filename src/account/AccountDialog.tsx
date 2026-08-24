@@ -5,7 +5,6 @@ import {
   ArrowRight,
   Camera,
   CheckCircle,
-  Coins,
   EnvelopeSimple,
   GoogleLogo,
   LockKey,
@@ -426,7 +425,7 @@ function ProfileView({ user, account, notice, onReloadAccount }: { user: User; a
           <h2 id="account-dialog-title">Твой аккаунт</h2>
         </div>
         <div className="account-balance-pill" aria-label={`Баланс: ${formatRubles(account?.balance ?? 0)}`}>
-          <Coins size={21} weight="duotone" aria-hidden="true" />
+          <span className="account-balance-icon" aria-hidden="true">₽</span>
           <span><small>Баланс</small><strong>{account ? formatRubles(account.balance) : '…'}</strong></span>
         </div>
       </header>

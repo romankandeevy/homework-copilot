@@ -256,8 +256,14 @@
   place-items: center;
   border-radius: var(--radius-control);
   background: var(--color-accent-soft);
-  color: var(--color-accent-hover);
+  color: var(--color-text);
+  font-size: 1.05rem;
+  font-family: var(--font-mono);
+  font-weight: var(--weight-semibold);
+  line-height: 1;
+  letter-spacing: 0;
 }
+
 
 .balance-control > span:nth-child(2) {
   display: grid;

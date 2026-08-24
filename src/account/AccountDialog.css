@@ -194,7 +194,19 @@
 .account-profile-header > div:first-child { display: grid; gap: var(--space-1); }
 .account-profile-header > div:first-child > span { color: var(--color-text-subtle); font-family: var(--font-mono); font-size: var(--text-micro); text-transform: uppercase; }
 .account-balance-pill { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-surface); background: var(--color-surface); }
-.account-balance-pill > svg { color: var(--color-accent-hover); }
+.account-balance-icon {
+  display: inline-grid;
+  width: 1.7rem;
+  height: 1.7rem;
+  place-items: center;
+  border-radius: var(--radius-control);
+  background: var(--color-accent-soft);
+  color: var(--color-text);
+  font-size: 0.9rem;
+  font-family: var(--font-mono);
+  font-weight: var(--weight-semibold);
+  line-height: 1;
+}
 .account-balance-pill > span { display: grid; gap: 0.05rem; }
 .account-balance-pill small { color: var(--color-text-subtle); font-size: var(--text-micro); }
 .account-balance-pill strong { font-size: var(--text-small); white-space: nowrap; }
