@@ -59,7 +59,7 @@ describe('Homework Copilot task flow', () => {
     fireEvent.change(screen.getByRole('textbox', { name: 'Номер задачи' }), { target: { value: '2' } })
     expect(screen.getByText('Условие задачи № 2')).toBeInTheDocument()
     expect(screen.getByText('Отметьте три точки А, В и С, не лежащие на одной прямой, и через каждую пару точек проведите прямую. Сколько прямых получилось?')).toBeInTheDocument()
-    expect(screen.getByText(/14-е издание, Просвещение, 2023, с. 8/)).toBeInTheDocument()
+    expect(screen.getByText(/PDF учебника.*14-е издание, Просвещение, 2023, стр. 9/)).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Проверить условие' }))
     expect(screen.getByRole('button', { name: 'Да, это моя задача' })).toBeInTheDocument()
@@ -72,7 +72,7 @@ describe('Homework Copilot task flow', () => {
       task: '2',
       condition: 'Отметьте три точки А, В и С, не лежащие на одной прямой, и через каждую пару точек проведите прямую. Сколько прямых получилось?',
       sourceUrl: '/textbooks/geometry-7-9-atanasyan.pdf',
-      sourcePage: 8,
+      sourcePage: 9,
     })
   })
 

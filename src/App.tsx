@@ -537,14 +537,13 @@ function TaskConditionPreview({ task }: { task: VerifiedTextbookTask }) {
       <div className="task-condition-copy">
         <span id="task-condition-title">Условие задачи № {task.task}</span>
         <p>{task.condition}</p>
-        <small>Источник: учебник «{task.textbookTitle}», {task.edition}{task.sourcePage ? `, с. ${task.sourcePage}` : ''}.</small>
+        <small>Источник: PDF учебника «{task.textbookTitle}», {task.edition}{task.sourcePage ? `, стр. ${task.sourcePage}` : ''}.</small>
       </div>
       <svg className="task-condition-diagram" viewBox="0 0 156 116" role="img" aria-label={task.diagram.description}>
         <path d={isRight ? 'M22 20L134 92L22 92Z' : 'M22 92L78 20L134 92Z'} />
         {isMedian && <path d="M78 20V92" />}
         {isRight && <path d="M22 77H37V92" />}
         {isParallel && <path d="M39 76L103 76" />}
-        {task.diagram.kind === 'three-point-lines' && <path d="M22 92L78 20L134 92Z" />}
         {!isMedian && !isRight && !isParallel && task.diagram.kind !== 'three-point-lines' && <>
           <path d="M42 67l8 6M108 73l8-6" />
           <path d="M68 34q10 10 20 0" />

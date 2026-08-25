@@ -48,7 +48,7 @@ export const verifiedTextbookTasks: readonly VerifiedTextbookTask[] = [
     task: '2',
     edition: geometryEdition,
     sourceUrl: geometrySourceUrl,
-    sourcePage: 8,
+    sourcePage: 9,
     condition: 'Отметьте три точки А, В и С, не лежащие на одной прямой, и через каждую пару точек проведите прямую. Сколько прямых получилось?',
     given: ['A, B, C — точки.', 'Не лежат на', 'одной прямой.'],
     goal: { title: 'Найти', text: 'число прямых.' },
