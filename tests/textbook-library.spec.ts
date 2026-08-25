@@ -6,26 +6,21 @@ async function openTasks(page: import('@playwright/test').Page) {
   await expect(page.getByRole('heading', { name: 'Выбери задачи' })).toBeVisible()
 }
 
-test.describe('задачи и корзина', () => {
-  test('добавляет задачи в корзину и просит вход только перед оплатой', async ({ page }) => {
+test.describe('выбор задач', () => {
+  test('ведёт к подтверждению условия до оплаты', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await openTasks(page)
-
-    const firstTask = page.getByRole('button', { name: 'Задача № 1 · 5 ₽' })
-    await firstTask.focus()
-    await page.keyboard.press('Space')
-    await expect(firstTask).toHaveAttribute('aria-pressed', 'true')
 
     const nextTask = page.getByRole('button', { name: 'Задача № 2 · 5 ₽' })
     await nextTask.click()
     await expect(nextTask).toHaveAttribute('aria-pressed', 'true')
-    await expect(page.getByRole('complementary', { name: 'Корзина' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Оплатить · 10 ₽' })).toBeEnabled()
-    await expect(page.getByText('2 задачи')).toBeVisible()
+    await expect(page.getByRole('complementary', { name: 'Выбранные' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Проверить условие' })).toBeEnabled()
 
-    await page.getByRole('button', { name: 'Оплатить · 10 ₽' }).click()
-    await expect(page.getByRole('dialog', { name: /Войди в аккаунт/ })).toBeVisible()
-    await expect(page.getByText('Войди в аккаунт и проверь баланс, чтобы оплатить корзину.')).toBeVisible()
+    await page.getByRole('button', { name: 'Проверить условие' }).click()
+    await expect(page).toHaveURL(/\/main$/)
+    await expect(page.getByText('Условие задачи № 2')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Да, это моя задача' })).toHaveCount(0)
   })
 
   test('сохраняет общую корзину разных предметов после обновления страницы', async ({ page }) => {
@@ -35,17 +30,17 @@ test.describe('задачи и корзина', () => {
     await page.getByRole('button', { name: 'Задача № 1 · 5 ₽' }).click()
     await page.getByRole('button', { name: /Физика.*8 класс/ }).click()
     await page.getByRole('button', { name: 'Задача № 2 · 5 ₽' }).click()
-    await expect(page.getByRole('button', { name: 'Оплатить · 10 ₽' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Проверить условие' })).toBeVisible()
 
     await page.reload()
     await expect(page).toHaveURL(/\/cdz$/)
-    await expect(page.getByRole('button', { name: 'Убрать из корзины: Геометрия, задача № 1' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Убрать из корзины: Физика, задача № 2' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Убрать из выбранных: Геометрия, задача № 1' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Убрать из выбранных: Физика, задача № 2' })).toBeVisible()
 
-    await page.getByRole('button', { name: 'Убрать из корзины: Геометрия, задача № 1' }).click()
-    await expect(page.getByRole('button', { name: 'Оплатить · 5 ₽' })).toBeVisible()
-    await page.getByRole('button', { name: 'Очистить корзину' }).click()
-    await expect(page.getByRole('button', { name: 'Оплатить' })).toBeDisabled()
+    await page.getByRole('button', { name: 'Убрать из выбранных: Геометрия, задача № 1' }).click()
+    await expect(page.getByRole('button', { name: 'Проверить условие' })).toBeEnabled()
+    await page.getByRole('button', { name: 'Очистить выбранные' }).click()
+    await expect(page.getByRole('button', { name: 'Проверить условие' })).toBeDisabled()
   })
 
   test('показывает задачи выбранной главы без просмотра учебника', async ({ page }) => {
@@ -77,12 +72,12 @@ test.describe('задачи и корзина', () => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await page.goto('/main')
 
-    await page.getByRole('textbox', { name: 'Номер задачи' }).fill('123')
+    await page.getByRole('textbox', { name: 'Номер задачи' }).fill('2')
 
-    await expect(page.getByText('Условие задачи № 123')).toBeVisible()
-    await expect(page.getByText('В равнобедренном треугольнике ABC AB = BC, ∠B = 40°. Найдите углы при основании.')).toBeVisible()
-    await expect(page.getByRole('img', { name: /Равнобедренный треугольник ABC/ })).toBeVisible()
-    await expect(page.getByRole('button', { name: /Открыть готовое/ })).toBeEnabled()
+    await expect(page.getByText('Условие задачи № 2')).toBeVisible()
+    await expect(page.getByText('Отметьте три точки А, В и С, не лежащие на одной прямой, и через каждую пару точек проведите прямую. Сколько прямых получилось?')).toBeVisible()
+    await expect(page.getByRole('img', { name: /Три точки A, B и C/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Проверить условие' })).toBeEnabled()
   })
 
   test('не переполняется и сохраняет touch-targets на телефоне', async ({ page }) => {

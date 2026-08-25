@@ -20,7 +20,7 @@ The product is a copying service, not a productivity tracker. Its primary promis
 
 ## Operating Context
 
-On the primary path the student uses a saved textbook and enters only the task number. The product checks the shared solution base first. A ready match opens immediately; only a missing task starts a new solution. Processing stages are system-owned status information and are never user-selectable.
+On the primary path the student uses a saved textbook and enters a task number. The product finds and shows the exact condition for that textbook identity; the student confirms it before an existing answer is reused, a new answer is generated, or a balance entry is made. Processing stages are system-owned status information and are never user-selectable.
 
 ## Capabilities and Constraints
 
@@ -51,7 +51,7 @@ The product name is Homework Copilot. The visual identity is intentionally being
 ## Product Principles
 
 - Put “Списать задачу” first on Home. Keep the saved textbook visible and require only the task number after that context is chosen.
-- Check the shared solution base before starting any new work.
+- Check the shared solution base only after the displayed condition is confirmed.
 - Make the finished solution complete and easy to copy into a notebook.
 - Preserve personal work for later review.
 - Do not add streaks, productivity scoring, completion percentages, or educational gamification without a concrete product reason and a real data source.

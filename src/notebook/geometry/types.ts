@@ -6,6 +6,11 @@ export type GeometryDiagramSpec = {
   vertices: readonly string[]
   apexAngle?: string
   equalSides?: readonly ['AB', 'BC']
+  auxiliaryKind?: 'median' | 'bisector' | 'height'
+  auxiliaryLabel?: string
+  rightAngleAt?: string
+  parallelTo?: string
+  exteriorAngle?: string
 }
 
 export type GeometryNotebookPageSpec = {

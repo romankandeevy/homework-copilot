@@ -200,7 +200,7 @@ The closed field shows subject, class, book title, and authors. Opening it revea
 
 ### Task Number Field
 
-The number uses the monospace face and accepts identifiers such as `123` or `18.5`. The whole input-and-action group receives the focus ring. Error copy stays adjacent and explicit; empty input disables submission.
+The number uses the monospace face and accepts identifiers such as `2` or `18`. The whole input-and-action group receives the focus ring. Error copy stays adjacent and explicit; empty input disables submission.
 
 ### Navigation
 

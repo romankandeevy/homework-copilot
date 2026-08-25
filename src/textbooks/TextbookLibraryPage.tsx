@@ -134,22 +134,16 @@ export default function TextbookLibraryPage({
   items,
   selectedTextbookId,
   onSelectTextbook,
-  onSolveTasks,
-  onOpenWallet,
-  balance,
+  onCheckTask,
 }: {
   items: readonly TextbookLibraryItem[]
   selectedTextbookId: string
   onSelectTextbook: (id: string) => void
-  onSolveTasks: (textbookId: string, taskNumbers: readonly string[]) => Promise<number>
-  onOpenWallet: () => void
-  balance: number | null
+  onCheckTask: (textbookId: string, task: string) => void
 }) {
   const selectedTextbook = items.find((textbook) => textbook.id === selectedTextbookId) ?? items[0]
   const [progressByBook, setProgressByBook] = useState<ReaderProgress>(getInitialProgress)
   const [query, setQuery] = useState('')
-  const [isSolving, setIsSolving] = useState(false)
-  const [batchNotice, setBatchNotice] = useState('')
   const taskListRef = useRef<HTMLOListElement>(null)
 
   const reader = selectedTextbook ? getReaderModel(selectedTextbook) : fallbackModel
@@ -191,7 +185,6 @@ export default function TextbookLibraryPage({
   }
 
   const toggleTask = (task: number) => {
-    setBatchNotice('')
     updateProgress((current) => {
       const selected = new Set(current.selectedTasks)
       if (selected.has(task)) selected.delete(task)
@@ -201,7 +194,6 @@ export default function TextbookLibraryPage({
   }
 
   const toggleChapterTasks = () => {
-    setBatchNotice('')
     updateProgress((current) => {
       const selected = new Set(current.selectedTasks)
       if (allChapterTasksSelected) chapterTasks.forEach((task) => selected.delete(task))
@@ -211,12 +203,10 @@ export default function TextbookLibraryPage({
   }
 
   const clearTasks = () => {
-    setBatchNotice('')
     updateProgress((current) => ({ ...current, selectedTasks: [] }))
   }
 
   const removeCartItem = (textbookId: string, task: number) => {
-    setBatchNotice('')
     setProgressByBook((current) => {
       const progress = current[textbookId]
       if (!progress) return current
@@ -225,64 +215,15 @@ export default function TextbookLibraryPage({
   }
 
   const clearCart = () => {
-    setBatchNotice('')
     setProgressByBook((current) => Object.fromEntries(
       Object.entries(current).map(([textbookId, progress]) => [textbookId, { ...progress, selectedTasks: [] }]),
     ))
   }
 
   const changeChapter = (nextIndex: number) => {
-    setBatchNotice('')
     setQuery('')
     if (typeof taskListRef.current?.scrollTo === 'function') taskListRef.current.scrollTo({ top: 0 })
     updateProgress((current) => ({ ...current, chapterIndex: Math.max(0, Math.min(nextIndex, reader.chapters.length - 1)) }))
-  }
-
-  const payForCart = async () => {
-    if (cartItems.length === 0 || isSolving) return
-
-    if (balance !== null && balance < totalPrice) {
-      setBatchNotice(`Для оплаты не хватает ${totalPrice - balance} ₽. Пополни баланс.`)
-      onOpenWallet()
-      return
-    }
-
-    setIsSolving(true)
-    setBatchNotice('')
-    const purchasedByBook = new Map<string, Set<number>>()
-    let purchasedCount = 0
-
-    try {
-      for (const textbook of items) {
-        const tasks = cartItems.filter((item) => item.textbook.id === textbook.id).map((item) => item.task)
-        if (tasks.length === 0) continue
-
-        const paidCount = await onSolveTasks(textbook.id, tasks.map(String))
-        if (paidCount > 0) {
-          purchasedByBook.set(textbook.id, new Set(tasks.slice(0, paidCount)))
-          purchasedCount += paidCount
-        }
-        if (paidCount < tasks.length) break
-      }
-
-      if (purchasedCount === 0) {
-        setBatchNotice('Войди в аккаунт и проверь баланс, чтобы оплатить корзину.')
-        return
-      }
-
-      setProgressByBook((current) => Object.fromEntries(Object.entries(current).map(([textbookId, progress]) => {
-        const purchased = purchasedByBook.get(textbookId)
-        if (!purchased) return [textbookId, progress]
-        return [textbookId, { ...progress, selectedTasks: progress.selectedTasks.filter((task) => !purchased.has(task)) }]
-      })))
-      setBatchNotice(purchasedCount === cartItems.length
-        ? `Оплачено: ${purchasedCount} ${taskPlural(purchasedCount)}.`
-        : `Оплачено: ${purchasedCount} ${taskPlural(purchasedCount)}. Остальные остались в корзине.`)
-    } catch {
-      setBatchNotice('Не получилось оплатить корзину. Попробуй ещё раз.')
-    } finally {
-      setIsSolving(false)
-    }
   }
 
   return (
@@ -291,7 +232,7 @@ export default function TextbookLibraryPage({
         <div>
           <span className="textbook-reader-eyebrow"><BookBookmark size={18} weight="duotone" aria-hidden="true" /> Задачи · 8 класс</span>
           <h1 id="textbook-reader-title">Выбери задачи</h1>
-          <p>Добавь нужные номера в корзину и оплати всё сразу.</p>
+          <p>Выбери номер. Перед решением сверим его условие с выбранным изданием.</p>
         </div>
       </header>
 
@@ -312,7 +253,7 @@ export default function TextbookLibraryPage({
                     key={textbook.id}
                     aria-pressed={active}
                     className={active ? 'is-active' : ''}
-                    onClick={() => { setBatchNotice(''); setQuery(''); onSelectTextbook(textbook.id) }}
+                    onClick={() => { setQuery(''); onSelectTextbook(textbook.id) }}
                   >
                     <Icon size={21} weight="duotone" aria-hidden="true" />
                     <span><strong>{textbook.subject}</strong><small>{textbook.grade}</small></span>
@@ -370,7 +311,7 @@ export default function TextbookLibraryPage({
 
         <aside className="textbook-cart" aria-labelledby="textbook-cart-title">
           <div className="textbook-cart-heading">
-            <span id="textbook-cart-title"><ShoppingCartSimple size={19} weight="duotone" aria-hidden="true" /> Корзина</span>
+            <span id="textbook-cart-title"><ShoppingCartSimple size={19} weight="duotone" aria-hidden="true" /> Выбранные</span>
             <small>{cartItems.length} {taskPlural(cartItems.length)}</small>
           </div>
           {cartItems.length > 0 ? (
@@ -380,27 +321,28 @@ export default function TextbookLibraryPage({
                   <li key={`${textbook.id}-${task}`}>
                     <span><strong>{textbook.subject}</strong><small>Задача № {task}</small></span>
                     <strong>{price} ₽</strong>
-                    <button type="button" aria-label={`Убрать из корзины: ${textbook.subject}, задача № ${task}`} disabled={isSolving} onClick={() => removeCartItem(textbook.id, task)}>
+                    <button type="button" aria-label={`Убрать из выбранных: ${textbook.subject}, задача № ${task}`} onClick={() => removeCartItem(textbook.id, task)}>
                       <X size={16} weight="bold" aria-hidden="true" />
                     </button>
                   </li>
                 ))}
               </ol>
-              <button className="textbook-cart-clear" type="button" disabled={isSolving} onClick={clearCart}>Очистить корзину</button>
+              <button className="textbook-cart-clear" type="button" onClick={clearCart}>Очистить выбранные</button>
             </>
           ) : (
-            <p className="textbook-cart-empty">Корзина пока пуста. Добавь задачи по любому предмету.</p>
+            <p className="textbook-cart-empty">Пока ничего не выбрано.</p>
           )}
           <div className="textbook-cart-summary">
-            <span>К оплате</span>
+            <span>После подтверждения</span>
             <strong>{totalPrice} ₽</strong>
           </div>
-          <button className="textbook-cart-topup" type="button" onClick={onOpenWallet}>Пополнить баланс <ArrowRight size={17} weight="bold" aria-hidden="true" /></button>
-          <button className="textbook-cart-submit" type="button" disabled={cartItems.length === 0 || isSolving} onClick={() => { void payForCart() }}>
-            {isSolving ? 'Оплачиваем…' : `Оплатить${cartItems.length ? ` · ${totalPrice} ₽` : ''}`}
-            {!isSolving && <ArrowRight size={18} weight="bold" aria-hidden="true" />}
+          <button className="textbook-cart-submit" type="button" disabled={cartItems.length === 0} onClick={() => {
+            const first = cartItems[0]
+            if (first) onCheckTask(first.textbook.id, String(first.task))
+          }}>
+            Проверить условие
+            <ArrowRight size={18} weight="bold" aria-hidden="true" />
           </button>
-          {batchNotice && <p className="textbook-cart-notice" role="status" aria-live="polite">{batchNotice}</p>}
         </aside>
       </div>
     </section>

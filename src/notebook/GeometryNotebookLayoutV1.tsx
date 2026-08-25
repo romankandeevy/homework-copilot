@@ -35,7 +35,7 @@ function paginateSolution(spec: GeometryNotebookPageSpec): readonly PageSegment[
 }
 
 function TriangleDiagram({ diagram }: { diagram: GeometryDiagramSpec }) {
-  const { triangle, labels, apexAngle, angleArc, leftTick, rightTick, intersectingSegments, quadrilateral, circle } = layout.zones.diagram
+  const { triangle, labels, apexAngle, angleArc, leftTick, rightTick, rightAngle, exteriorAngle, auxiliaryLabel, parallelLine, parallelLabel, intersectingSegments, quadrilateral, circle } = layout.zones.diagram
   if (diagram.kind === 'none') return null
 
   if (diagram.kind === 'intersecting-segments') {
@@ -81,6 +81,12 @@ function TriangleDiagram({ diagram }: { diagram: GeometryDiagramSpec }) {
   return (
     <g className="geometry-diagram" role="img" aria-label={diagram.description}>
       <path className="diagram-line" d={trianglePath} />
+      {diagram.kind === 'parallel-line-triangle' && (
+        <>
+          <path className="diagram-auxiliary" d={parallelLine} />
+          <text className="diagram-angle-label" x={parallelLabel.x} y={parallelLabel.y}>p ∥ {diagram.parallelTo ?? 'AB'}</text>
+        </>
+      )}
       {diagram.kind === 'isosceles-triangle' && (
         <>
           <path className="diagram-mark" d={leftTick} />
@@ -90,10 +96,19 @@ function TriangleDiagram({ diagram }: { diagram: GeometryDiagramSpec }) {
         </>
       )}
       {diagram.kind === 'median-triangle' && (
-        <path className="diagram-auxiliary" d={`M ${triangle.b.x} ${triangle.b.y} L ${(triangle.a.x + triangle.c.x) / 2} ${triangle.a.y}`} />
+        <>
+          <path className="diagram-auxiliary" d={`M ${triangle.b.x} ${triangle.b.y} L ${(triangle.a.x + triangle.c.x) / 2} ${triangle.a.y}`} />
+          <text className="diagram-vertex" x={auxiliaryLabel.x} y={auxiliaryLabel.y}>{diagram.auxiliaryLabel ?? 'M'}</text>
+        </>
       )}
       {diagram.kind === 'right-triangle' && (
-        <path className="diagram-mark" d={`M ${triangle.a.x + 24} ${triangle.a.y} L ${triangle.a.x + 24} ${triangle.a.y - 24} L ${triangle.a.x + 48} ${triangle.a.y - 24}`} />
+        <>
+          <path className="diagram-mark" d={diagram.rightAngleAt === 'C' ? rightAngle.atC : rightAngle.atA} />
+          {diagram.exteriorAngle && <>
+            <path className="diagram-auxiliary" d={exteriorAngle.extensionAtA} />
+            <text className="diagram-angle-label" x={exteriorAngle.label.x} y={exteriorAngle.label.y}>{diagram.exteriorAngle}</text>
+          </>}
+        </>
       )}
       <text className="diagram-vertex" x={labels.a.x} y={labels.a.y}>{diagram.vertices[0] ?? 'A'}</text>
       <text className="diagram-vertex" x={labels.b.x} y={labels.b.y}>{diagram.vertices[1] ?? 'B'}</text>

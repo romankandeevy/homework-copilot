@@ -31,7 +31,6 @@ import {
 import LegalPage from './LegalPage'
 import NotebookCanvas from './NotebookCanvas'
 import { GeometryNotebookLayoutV1 } from './notebook/GeometryNotebookLayoutV1'
-import { geometryFixtures } from './notebook/fixtures'
 import type { GeometryNotebookPageSpec } from './notebook/geometry/types'
 import type { Database } from './lib/database.types'
 import type { AccountData } from './lib/supabase'
@@ -41,10 +40,14 @@ import { useModalIsolation } from './lib/useModalIsolation'
 import { getSolutionPrice } from './lib/solutionPricing'
 import {
   loadGeneratedSolutions,
+  parseStoredHomeworkSolution,
   prepareTaskPhoto,
+  recognizeTaskPhoto,
   requestHomeworkSolution,
   saveGeneratedSolutions,
 } from './lib/homeworkSolution'
+import { findVerifiedTextbookTask, normalizeTaskCondition } from './textbooks/taskCatalog'
+import type { VerifiedTextbookTask } from './textbooks/taskCatalog'
 import TextbookLibraryPage from './textbooks/TextbookLibraryPage'
 import './App.css'
 
@@ -85,6 +88,8 @@ type SolutionState = {
 type PersonalSolution = SolutionState & {
   time: string
 }
+
+type SharedHomeworkSolution = Database['public']['Tables']['homework_solution_catalog']['Row']
 
 const themeStorageKey = 'homework-copilot:theme'
 const selectedTextbookStorageKey = 'homework-copilot:selected-textbook'
@@ -148,9 +153,9 @@ const textbooks: readonly Textbook[] = [
     subject: 'Геометрия',
     grade: '8 класс',
     title: 'Геометрия. 7-9 классы',
-    authors: 'Л. С. Атанасян, В. Ф. Бутузов и др.',
-    edition: 'Просвещение',
-    solvedTasks: ['123'],
+    authors: 'Л. С. Атанасян, В. Ф. Бутузов, С. Б. Кадомцев, Э. Г. Позняк, И. И. Юдина',
+    edition: '14-е издание, Просвещение, 2023',
+    solvedTasks: [],
     icon: BookOpenText,
     sourceUrl: '/textbooks/geometry-7-9-atanasyan.pdf',
     sourceType: 'pdf',
@@ -292,6 +297,7 @@ function ProductTopbar({
             <button className={`navigation-item${active ? ' is-active' : ''}`} type="button" key={label} aria-current={active ? 'page' : undefined} onClick={() => onNavigate(label)}>
               <Icon size={19} weight="duotone" aria-hidden="true" />
               <span className="navigation-label">{label}</span>
+              {label === 'ЦДЗ' && <span className="navigation-status" aria-hidden="true">Скоро</span>}
             </button>
           )
         })}
@@ -521,35 +527,34 @@ function TextbookPicker({
   )
 }
 
-function TaskConditionPreview({ textbookId, taskNumber }: { textbookId: TextbookId; taskNumber: string }) {
-  const task = textbookId === 'geometry'
-    ? geometryFixtures.find((fixture) => fixture.number === taskNumber)
-    : undefined
-
-  if (!task) return null
-
+function TaskConditionPreview({ task }: { task: VerifiedTextbookTask }) {
   const isMedian = task.diagram.kind === 'median-triangle'
   const isRight = task.diagram.kind === 'right-triangle'
+  const isParallel = task.diagram.kind === 'parallel-line-triangle'
 
   return (
     <section className="task-condition-preview" aria-labelledby="task-condition-title">
       <div className="task-condition-copy">
-        <span id="task-condition-title">Условие задачи № {task.number}</span>
+        <span id="task-condition-title">Условие задачи № {task.task}</span>
         <p>{task.condition}</p>
+        <small>Источник: учебник «{task.textbookTitle}», {task.edition}{task.sourcePage ? `, с. ${task.sourcePage}` : ''}.</small>
       </div>
       <svg className="task-condition-diagram" viewBox="0 0 156 116" role="img" aria-label={task.diagram.description}>
-        <path d={isRight ? 'M32 91V24L128 91Z' : 'M22 92L78 20L134 92Z'} />
+        <path d={isRight ? 'M22 20L134 92L22 92Z' : 'M22 92L78 20L134 92Z'} />
         {isMedian && <path d="M78 20V92" />}
-        {isRight && <path d="M32 76H47V91" />}
-        {!isMedian && !isRight && <>
+        {isRight && <path d="M22 77H37V92" />}
+        {isParallel && <path d="M39 76L103 76" />}
+        {task.diagram.kind === 'three-point-lines' && <path d="M22 92L78 20L134 92Z" />}
+        {!isMedian && !isRight && !isParallel && task.diagram.kind !== 'three-point-lines' && <>
           <path d="M42 67l8 6M108 73l8-6" />
           <path d="M68 34q10 10 20 0" />
           <text x="78" y="53" textAnchor="middle">40°</text>
         </>}
-        <text x={isRight ? 24 : 12} y={isRight ? 105 : 107}>A</text>
-        <text x={isRight ? 25 : 74} y={isRight ? 18 : 15}>B</text>
-        <text x="137" y="107">C</text>
-        {isMedian && <text x="74" y="108">M</text>}
+        <text x="12" y={isRight ? 18 : 107}>{task.diagram.vertices[0] ?? 'A'}</text>
+        <text x={isRight ? 137 : 74} y={isRight ? 107 : 15}>{task.diagram.vertices[1] ?? 'B'}</text>
+        <text x="137" y="107">{task.diagram.vertices[2] ?? 'C'}</text>
+        {isMedian && <text x="74" y="108">{task.diagram.vertices[3] ?? 'F'}</text>}
+        {isParallel && <text x="108" y="73">p</text>}
       </svg>
     </section>
   )
@@ -572,18 +577,21 @@ function CopyTask({
   onTaskNumberChange: (value: string) => void
   onTextbookChange: (id: TextbookId) => void
   onCreateTextbook: (textbook: Textbook) => void
-  onSubmit: (task: string, ready: boolean, source: HomeworkSource, idempotencyKey: string, photo?: File) => Promise<boolean>
+  onSubmit: (task: string, ready: boolean, source: HomeworkSource, idempotencyKey: string, photo?: File, verifiedTask?: VerifiedTextbookTask, confirmedCondition?: string) => Promise<boolean>
   textbookPickerOpen: boolean
   onTextbookPickerOpenChange: (open: boolean) => void
 }) {
   const [error, setError] = useState('')
   const [photo, setPhoto] = useState<File | null>(null)
+  const [pendingTask, setPendingTask] = useState<VerifiedTextbookTask | null>(null)
+  const [pendingPhoto, setPendingPhoto] = useState<{ file: File; condition: string } | null>(null)
+  const [pendingKey, setPendingKey] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const photoInputRef = useRef<HTMLInputElement>(null)
   const submissionRef = useRef(false)
   const normalizedTask = taskNumber.trim()
-  const readyInBase = textbook.solvedTasks.includes(normalizedTask)
-  const canSubmit = Boolean(normalizedTask || photo)
+  const verifiedTask = normalizedTask ? findVerifiedTextbookTask(textbook.id, textbook.edition, normalizedTask) : null
+  const canSubmit = Boolean(photo || verifiedTask)
   const solutionPrice = photo ? 15 : normalizedTask ? getSolutionPrice(textbook.id, normalizedTask) : 5
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -598,7 +606,9 @@ function CopyTask({
       submissionRef.current = true
       setIsSubmitting(true)
       try {
-        await onSubmit(photo.name, false, 'photo', submissionKey, photo)
+        const condition = await recognizeTaskPhoto(photo)
+        setPendingPhoto({ file: photo, condition })
+        setPendingKey(submissionKey)
       } catch (submissionError) {
         setError(submissionError instanceof Error ? submissionError.message : 'Не получилось отправить фотографию задачи')
       } finally {
@@ -611,17 +621,54 @@ function CopyTask({
       setError('Номер задачи: от 1 до 4 цифр')
       return
     }
+    if (!verifiedTask) {
+      setError('Точное условие этой задачи в выбранном издании не найдено. Решение не запускается.')
+      return
+    }
     setError('')
+    setPendingTask(verifiedTask)
+    setPendingKey(submissionKey)
+  }
+
+  const confirmTask = async () => {
+    if (!pendingTask || !pendingKey || submissionRef.current) return
     submissionRef.current = true
     setIsSubmitting(true)
+    setError('')
     try {
-      await onSubmit(normalizedTask, readyInBase, 'number', submissionKey)
+      await onSubmit(pendingTask.task, true, 'number', pendingKey, undefined, pendingTask)
+      setPendingTask(null)
+      setPendingKey('')
     } catch (submissionError) {
       setError(submissionError instanceof Error ? submissionError.message : 'Не получилось отправить задачу')
     } finally {
       submissionRef.current = false
       setIsSubmitting(false)
     }
+  }
+
+  const confirmPhoto = async () => {
+    if (!pendingPhoto || !pendingKey || submissionRef.current) return
+    submissionRef.current = true
+    setIsSubmitting(true)
+    setError('')
+    try {
+      await onSubmit(pendingPhoto.file.name, true, 'photo', pendingKey, pendingPhoto.file, undefined, pendingPhoto.condition)
+      setPendingPhoto(null)
+      setPendingKey('')
+    } catch (submissionError) {
+      setError(submissionError instanceof Error ? submissionError.message : 'Не получилось отправить задачу')
+    } finally {
+      submissionRef.current = false
+      setIsSubmitting(false)
+    }
+  }
+
+  const rejectTask = () => {
+    setPendingTask(null)
+    setPendingPhoto(null)
+    setPendingKey('')
+    setError('Выбери другой номер и сверь его с учебником.')
   }
 
   const changeTaskNumber = (value: string) => {
@@ -631,6 +678,9 @@ function CopyTask({
       return
     }
     if (error) setError('')
+    setPendingTask(null)
+    setPendingPhoto(null)
+    setPendingKey('')
     if (nextValue) {
       setPhoto(null)
       if (photoInputRef.current) photoInputRef.current.value = ''
@@ -645,12 +695,17 @@ function CopyTask({
       return
     }
     setError('')
+    setPendingTask(null)
+    setPendingPhoto(null)
+    setPendingKey('')
     setPhoto(file)
     onTaskNumberChange('')
   }
 
   const removePhoto = () => {
     setPhoto(null)
+    setPendingPhoto(null)
+    setPendingKey('')
     if (photoInputRef.current) photoInputRef.current.value = ''
   }
 
@@ -664,7 +719,37 @@ function CopyTask({
       <form className="copy-task-form" aria-label="Списать задачу" onSubmit={submit}>
         <TextbookPicker selected={textbook} items={textbooks} onSelect={onTextbookChange} onCreate={onCreateTextbook} open={textbookPickerOpen} onOpenChange={onTextbookPickerOpenChange} />
 
-        {normalizedTask && !photo && <TaskConditionPreview textbookId={textbook.id} taskNumber={normalizedTask} />}
+        {verifiedTask && !photo && <TaskConditionPreview task={verifiedTask} />}
+        {normalizedTask && !photo && !verifiedTask && normalizedTask.length > 0 && (
+          <p className="task-condition-missing" role="status">Точного условия № {normalizedTask} в выбранном издании пока нет. Решение не будет придумано по одному номеру.</p>
+        )}
+        {pendingTask && !photo && (
+          <section className="task-confirmation" aria-labelledby="task-confirmation-title">
+            <div>
+              <strong id="task-confirmation-title">Нашли задачу № {pendingTask.task}</strong>
+              <p>{pendingTask.condition}</p>
+              <p>После подтверждения спишем {solutionPrice} ₽.</p>
+            </div>
+            <div className="task-confirmation-actions">
+              <button type="button" onClick={() => { void confirmTask() }} disabled={isSubmitting}>Да, это моя задача</button>
+              <button type="button" onClick={rejectTask} disabled={isSubmitting}>Условие неверное / выбрать другое</button>
+            </div>
+          </section>
+        )}
+        {pendingPhoto && (
+          <section className="task-confirmation" aria-labelledby="photo-condition-title">
+            <div>
+              <strong id="photo-condition-title">Распознали условие с фото</strong>
+              <label htmlFor="photo-condition">Проверь и при необходимости исправь текст</label>
+              <textarea id="photo-condition" value={pendingPhoto.condition} onChange={(event) => setPendingPhoto((current) => current ? { ...current, condition: event.target.value } : current)} />
+              <p>После подтверждения спишем {solutionPrice} ₽.</p>
+            </div>
+            <div className="task-confirmation-actions">
+              <button type="button" onClick={() => { void confirmPhoto() }} disabled={isSubmitting || !pendingPhoto.condition.trim()}>Да, это моя задача</button>
+              <button type="button" onClick={rejectTask} disabled={isSubmitting}>Условие неверное / выбрать другое</button>
+            </div>
+          </section>
+        )}
 
         <div className="task-entry-row">
           <div className="task-number-field">
@@ -713,8 +798,8 @@ function CopyTask({
             </div>
           </div>
 
-          <button className="copy-task-submit" type="submit" disabled={!canSubmit || isSubmitting}>
-            {isSubmitting ? 'Подожди…' : photo ? `Списать по фото за ${solutionPrice} ₽` : readyInBase && normalizedTask ? `Открыть готовое за ${solutionPrice} ₽` : `Списать за ${solutionPrice} ₽`}
+          <button className="copy-task-submit" type="submit" disabled={!canSubmit || isSubmitting || Boolean(pendingTask || pendingPhoto)}>
+            {isSubmitting ? 'Подожди…' : photo ? 'Распознать условие' : 'Проверить условие'}
             {!isSubmitting && <ArrowRight size={20} weight="bold" aria-hidden="true" />}
           </button>
         </div>
@@ -722,12 +807,14 @@ function CopyTask({
         {error && <p className="task-number-error" id="task-entry-error" role="alert">{error}</p>}
         {!error && !canSubmit && <p className="task-entry-helper" id="task-entry-helper">Введи номер задачи или добавь фото.</p>}
         {!error && (normalizedTask || photo) && (
-            <p className={`base-match${readyInBase ? ' is-ready' : ''}`} aria-live="polite">
+            <p className="base-match" aria-live="polite">
               {photo
-                ? <><CheckCircle size={18} weight="duotone" aria-hidden="true" /> Фото выбрано. Распознаем условие и подготовим решение.</>
-                : readyInBase
-                ? <><CheckCircle size={18} weight="duotone" aria-hidden="true" /> Уже есть в общей базе. Откроется сразу.</>
-                : <><ClockCountdown size={18} weight="duotone" aria-hidden="true" /> В базе пока нет. Обычно решение занимает несколько секунд.</>}
+                ? pendingPhoto
+                  ? <><CheckCircle size={18} weight="duotone" aria-hidden="true" /> Условие распознано. Подтверди его перед решением.</>
+                  : <><ClockCountdown size={18} weight="duotone" aria-hidden="true" /> Сначала распознаем условие с фотографии.</>
+                : pendingTask
+                ? <><CheckCircle size={18} weight="duotone" aria-hidden="true" /> Условие найдено. Подтверди его перед списанием.</>
+                : <><ClockCountdown size={18} weight="duotone" aria-hidden="true" /> Сначала проверим условие именно в выбранном издании.</>}
             </p>
         )}
       </form>
@@ -874,12 +961,14 @@ function SolutionsPage({
   textbooks: items,
   onOpenAccount,
   onOpenSolution,
+  onOpenSharedSolution,
 }: {
   user: User | null
   personalSolutions: readonly PersonalSolution[]
   textbooks: readonly Textbook[]
   onOpenAccount: () => void
   onOpenSolution: (state: SolutionState) => void
+  onOpenSharedSolution: (textbookId: TextbookId, task: string) => void
 }) {
   const [query, setQuery] = useState('')
   const [activeSection, setActiveSection] = useState<'personal' | 'shared'>(user ? 'personal' : 'shared')
@@ -945,7 +1034,7 @@ function SolutionsPage({
             {results.map(({ textbook, task }) => {
               const Icon = textbook.icon
               return (
-                <button type="button" key={`${textbook.id}-${task}`} onClick={() => onOpenSolution({ mode: 'ready', textbookId: textbook.id, task, source: 'number' })}>
+                <button type="button" key={`${textbook.id}-${task}`} onClick={() => onOpenSharedSolution(textbook.id, task)}>
                   <Icon size={32} weight="duotone" aria-hidden="true" />
                   <span><strong>{textbook.subject} · {textbook.grade}</strong><small>Задача № {task}</small></span>
                   <span className="solution-base-open">Открыть решение</span>
@@ -994,18 +1083,14 @@ function asGeometryNotebookSpec(solution: HomeworkSolution): GeometryNotebookPag
 function UnderstandingPage({
   solution,
   generatedSolution,
-  onGoToCdz,
+  onGoHome,
 }: {
   solution: SolutionState | null
   generatedSolution?: HomeworkSolution
-  onGoToCdz: () => void
+  onGoHome: () => void
 }) {
   const [copied, setCopied] = useState(false)
-  const notebookFixture = solution?.textbookId === 'geometry'
-    ? generatedSolution
-      ? asGeometryNotebookSpec(generatedSolution)
-      : geometryFixtures.find((fixture) => fixture.number === solution.task)
-    : undefined
+  const notebookFixture = generatedSolution ? asGeometryNotebookSpec(generatedSolution) : undefined
 
   const copySolution = async () => {
     const source = generatedSolution ?? (notebookFixture ? {
@@ -1039,8 +1124,8 @@ function UnderstandingPage({
           <Check size={18} weight="bold" aria-hidden="true" />
         </button>
       )}
-      <button className="route-secondary-action" type="button" onClick={onGoToCdz}>
-        К ЦДЗ <ArrowRight size={18} weight="bold" aria-hidden="true" />
+      <button className="route-secondary-action" type="button" onClick={onGoHome}>
+        ← На главную <House size={18} weight="bold" aria-hidden="true" />
       </button>
     </div>
   )
@@ -1113,7 +1198,7 @@ function UnderstandingPage({
         <section><Hash size={30} weight="duotone" aria-hidden="true" /><h2>Укажи задачу</h2><p>Если ответ уже есть в базе, его можно открыть без ожидания.</p></section>
         <section><Notebook size={30} weight="duotone" aria-hidden="true" /><h2>Проверь ответ</h2><p>Готовое решение оформлено так, чтобы его было удобно переписать в тетрадь.</p></section>
       </div>
-      <button className="route-primary-action" type="button" onClick={onGoToCdz}>К ЦДЗ <ArrowRight size={18} weight="bold" aria-hidden="true" /></button>
+      <button className="route-primary-action" type="button" onClick={onGoHome}>← На главную <House size={18} weight="bold" aria-hidden="true" /></button>
     </section>
   )
 }
@@ -1141,6 +1226,7 @@ function HomePage() {
   const [solutionState, setSolutionState] = useState<SolutionState | null>(null)
   const [selectedSolution, setSelectedSolution] = useState<SolutionState | null>(() => currentNavigationRoute().solution)
   const [generatedSolutions, setGeneratedSolutions] = useState<HomeworkSolution[]>(loadGeneratedSolutions)
+  const [sharedSolutions, setSharedSolutions] = useState<SharedHomeworkSolution[]>([])
   const [textbookPickerOpen, setTextbookPickerOpen] = useState(false)
   const [supabaseClient, setSupabaseClient] = useState<SupabaseClient<Database> | null>(null)
   const [user, setUser] = useState<User | null>(null)
@@ -1162,16 +1248,26 @@ function HomePage() {
   )
   const availableTextbooks = useMemo(
     () => [...textbooks, ...customTextbooks].map((textbook) => {
+      const sharedTasks = sharedSolutions
+        .filter((solution) => {
+          const verifiedTask = findVerifiedTextbookTask(textbook.id, textbook.edition, solution.task)
+          return solution.textbook_id === textbook.id
+            && solution.textbook_edition === textbook.edition
+            && solution.source_url === textbook.sourceUrl
+            && verifiedTask !== null
+            && solution.condition_normalized === normalizeTaskCondition(verifiedTask.condition)
+        })
+        .map((solution) => solution.task)
       const generatedTasks = visibleGeneratedSolutions
         .filter((solution) => solution.textbookId === textbook.id && solution.source === 'number')
         .map((solution) => solution.task)
-      if (generatedTasks.length === 0) return textbook
+      if (generatedTasks.length === 0 && sharedTasks.length === 0) return textbook
       return {
         ...textbook,
-        solvedTasks: [...new Set([...textbook.solvedTasks, ...generatedTasks])],
+        solvedTasks: [...new Set([...textbook.solvedTasks, ...sharedTasks, ...generatedTasks])],
       }
     }),
-    [customTextbooks, visibleGeneratedSolutions],
+    [customTextbooks, sharedSolutions, visibleGeneratedSolutions],
   )
   const personalSolutions = useMemo<PersonalSolution[]>(
     () => user
@@ -1243,6 +1339,61 @@ function HomePage() {
   useEffect(() => {
     saveGeneratedSolutions(generatedSolutions)
   }, [generatedSolutions])
+
+  const refreshSharedSolutions = useCallback(async () => {
+    if (!supabaseClient) return
+
+    const { data, error } = await supabaseClient
+      .from('homework_solution_catalog')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(500)
+
+    if (!error && data) setSharedSolutions(data)
+  }, [supabaseClient])
+
+  useEffect(() => {
+    if (!supabaseClient) return
+
+    void refreshSharedSolutions()
+    const onFocus = () => { void refreshSharedSolutions() }
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [refreshSharedSolutions, supabaseClient])
+
+  useEffect(() => {
+    if (!supabaseClient || !user) return
+    let active = true
+
+    const restorePurchasedSolutions = async () => {
+      const { data, error } = await supabaseClient
+        .from('homework_solutions')
+        .select('solution, created_at')
+        .order('created_at', { ascending: false })
+        .limit(100)
+
+      if (!active || error || !data) return
+
+      const restored = data
+        .map(({ solution }) => parseStoredHomeworkSolution(solution, user.id))
+        .filter((solution): solution is HomeworkSolution => solution !== null)
+
+      setGeneratedSolutions((current) => [
+        ...restored,
+        ...current.filter((local) => !restored.some(
+          (remote) => remote.textbookId === local.textbookId
+            && remote.task === local.task
+            && remote.textbookEdition === local.textbookEdition
+            && remote.sourceUrl === local.sourceUrl
+            && remote.conditionNormalized === local.conditionNormalized
+            && remote.ownerId === local.ownerId,
+        )),
+      ])
+    }
+
+    void restorePurchasedSolutions()
+    return () => { active = false }
+  }, [supabaseClient, user])
 
   useEffect(() => () => {
     if (typeof URL.revokeObjectURL !== 'function') return
@@ -1450,10 +1601,12 @@ function HomePage() {
 
   const submitTask = async (
     task: string,
-    ready: boolean,
+    _ready: boolean,
     source: HomeworkSource,
     idempotencyKey: string,
     photo?: File,
+    verifiedTask?: VerifiedTextbookTask,
+    confirmedCondition?: string,
     textbookId = selectedTextbookId,
     openWhenReady = true,
   ) => {
@@ -1463,11 +1616,33 @@ function HomePage() {
       : task
     const solutionPrice = getSolutionPrice(textbookId, task, source)
 
+    if (source === 'number' && !verifiedTask) {
+      throw new Error('Точное условие задачи в выбранном издании не найдено. Решение не запускается')
+    }
+    if (source === 'photo' && !confirmedCondition?.trim()) {
+      throw new Error('Сначала распознай и подтверди условие с фотографии')
+    }
+
     if (supabaseClient && !user) {
       rememberAccountTrigger()
       setAccountNotice('Войди или зарегистрируйся, чтобы сохранить решение и списать его с баланса')
       setAccountOpen(true)
       return false
+    }
+
+    const previouslyGenerated = visibleGeneratedSolutions.find((solution) => (
+      solution.textbookId === textbookId
+      && solution.task === resolvedTask
+      && solution.source === source
+      && solution.textbookEdition === textbook.edition
+      && solution.sourceUrl === (verifiedTask?.sourceUrl ?? textbook.sourceUrl ?? '')
+      && (!(verifiedTask?.condition ?? confirmedCondition) || solution.conditionNormalized === normalizeTaskCondition(verifiedTask?.condition ?? confirmedCondition ?? ''))
+    ))
+    if (previouslyGenerated) {
+      const nextState: SolutionState = { mode: 'ready', textbookId, task: resolvedTask, source }
+      setSolutionState(nextState)
+      if (openWhenReady) openSolution(nextState)
+      return true
     }
 
     if (supabaseClient && user && account && account.balance < solutionPrice) {
@@ -1478,71 +1653,8 @@ function HomePage() {
       return false
     }
 
-    const previouslyGenerated = visibleGeneratedSolutions.find(
-      (solution) => solution.textbookId === textbookId && solution.task === resolvedTask,
-    )
-    if (previouslyGenerated) {
-      const nextState: SolutionState = { mode: 'ready', textbookId, task: resolvedTask, source }
-      setSolutionState(nextState)
-      return true
-    }
-
-    const approvedFixture = source === 'number' && textbookId === 'geometry'
-      ? geometryFixtures.find((fixture) => fixture.number === resolvedTask)
-      : undefined
     const processingState: SolutionState = { mode: 'processing', textbookId, task: resolvedTask, source }
     const readyState: SolutionState = { ...processingState, mode: 'ready' }
-
-    if (ready || approvedFixture) {
-      if (supabaseClient && user) {
-        const { error: spendError } = await supabaseClient.rpc('spend_solution_credit', {
-          p_description: `Решение задачи № ${task} · ${solutionPrice} ₽`,
-          p_idempotency_key: idempotencyKey,
-          p_source: source,
-          p_task_number: source === 'number' ? Number(task) : null,
-          p_textbook_id: textbookId,
-        })
-        if (spendError) {
-          rememberAccountTrigger()
-          setAccountNotice(spendError.message.includes('insufficient balance')
-            ? `На балансе меньше ${solutionPrice} ₽`
-            : `Не получилось списать ${solutionPrice} ₽ с баланса`)
-          setAccountOpen(true)
-          return false
-        }
-        await refreshAccount()
-      }
-
-      if (approvedFixture && user) {
-        const savedFixture: HomeworkSolution = {
-          textbookId,
-          task: resolvedTask,
-          source,
-          subject: textbook.subject,
-          textbookTitle: textbook.title,
-          condition: approvedFixture.condition,
-          given: [...approvedFixture.given],
-          goal: approvedFixture.goal,
-          steps: [...approvedFixture.solution],
-          answer: approvedFixture.answer ?? '',
-          diagram: {
-            ...approvedFixture.diagram,
-            vertices: [...approvedFixture.diagram.vertices],
-          },
-          sourceVerified: true,
-          createdAt: new Date().toISOString(),
-          ownerId: user.id,
-        }
-        setGeneratedSolutions((current) => [
-          savedFixture,
-          ...current.filter((entry) => entry.textbookId !== textbookId || entry.task !== resolvedTask || entry.ownerId !== user.id),
-        ])
-      }
-
-      setSolutionState(readyState)
-      if (!ready && openWhenReady) openSolution(readyState)
-      return true
-    }
 
     setSolutionState(processingState)
 
@@ -1569,6 +1681,11 @@ function HomePage() {
           authors: textbook.authors,
           edition: textbook.edition,
           idempotencyKey,
+          sourceUrl: verifiedTask?.sourceUrl ?? textbook.sourceUrl ?? 'photo',
+          ...(verifiedTask || confirmedCondition ? {
+            condition: verifiedTask?.condition ?? confirmedCondition,
+            ...(verifiedTask?.sourcePage ? { sourcePage: verifiedTask.sourcePage } : {}),
+          } : {}),
           ...(imageDataUrl ? { imageDataUrl } : {}),
         },
         accessToken,
@@ -1579,11 +1696,14 @@ function HomePage() {
         ...current.filter(
           (entry) => entry.textbookId !== textbookId
             || entry.task !== resolvedTask
+            || entry.source !== generatedSolution.source
+            || entry.textbookEdition !== generatedSolution.textbookEdition
+            || entry.conditionNormalized !== generatedSolution.conditionNormalized
             || entry.ownerId !== generatedSolution.ownerId,
         ),
       ])
       setSolutionState(readyState)
-      if (supabaseClient && user) await refreshAccount()
+      if (supabaseClient && user) await Promise.all([refreshAccount(), refreshSharedSolutions()])
       if (openWhenReady) openSolution(readyState)
       return true
     } catch (error) {
@@ -1601,18 +1721,13 @@ function HomePage() {
     setCustomTextbooks((current) => [...current, textbook])
     setSelectedTextbookId(textbook.id)
   }
-  const purchaseTextbookTasks = async (textbookId: TextbookId, taskNumbers: readonly string[]) => {
-    const textbook = getTextbook(textbookId, availableTextbooks)
-    let purchasedCount = 0
-    for (const task of taskNumbers) {
-      const idempotencyKey = typeof crypto.randomUUID === 'function'
-        ? `textbook-${crypto.randomUUID()}`
-        : `textbook-${Date.now()}-${task}-${Math.random().toString(16).slice(2)}`
-      const accepted = await submitTask(task, textbook.solvedTasks.includes(task), 'number', idempotencyKey, undefined, textbookId, false)
-      if (!accepted) break
-      purchasedCount += 1
-    }
-    return purchasedCount
+  const checkTextbookTask = (textbookId: TextbookId, task: string) => {
+    setSelectedTextbookId(textbookId)
+    setTaskNumber(task)
+    navigate('Главная')
+  }
+  const openSharedSolution = (textbookId: TextbookId, task: string) => {
+    checkTextbookTask(textbookId, task)
   }
 
   if (!authReady || (user && !accountReady)) {
@@ -1658,20 +1773,18 @@ function HomePage() {
             generatedSolution={visibleGeneratedSolutions.find(
               (solution) => solution.textbookId === selectedSolution.textbookId && solution.task === selectedSolution.task,
             )}
-            onGoToCdz={() => navigate('ЦДЗ')}
+            onGoHome={() => navigate('Главная')}
           />
         ) : activeNavigation === 'Расписание' ? (
           <Suspense fallback={<div className="route-loading" role="status">Загружаем расписание…</div>}><SchedulePage userId={user?.id ?? null} grade={account?.profile.grade ?? 8} /></Suspense>
         ) : activeNavigation === 'Решения' ? (
-          <SolutionsPage user={user} personalSolutions={personalSolutions} textbooks={availableTextbooks} onOpenAccount={openAccount} onOpenSolution={openSolution} />
+          <SolutionsPage user={user} personalSolutions={personalSolutions} textbooks={availableTextbooks} onOpenAccount={openAccount} onOpenSolution={openSolution} onOpenSharedSolution={openSharedSolution} />
         ) : (
           <TextbookLibraryPage
             items={availableTextbooks}
             selectedTextbookId={selectedTextbookId}
             onSelectTextbook={setSelectedTextbookId}
-            onSolveTasks={purchaseTextbookTasks}
-            onOpenWallet={openWallet}
-            balance={account?.balance ?? null}
+            onCheckTask={checkTextbookTask}
           />
         )}
       </div>

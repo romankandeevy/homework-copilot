@@ -17,9 +17,9 @@ The page is proportionally scaled as one canvas on narrow screens; its contents 
 - task number in the upper-left work area;
 - Given at upper left; a horizontal divider touching the vertical divider with no gap;
 - Find/Prove below the horizontal divider, with the diagram to the right of the vertical divider;
-- exactly one angle arc at B for the approved isosceles fixture;
+- diagram marks only when the verified semantic task calls for them;
 - left-aligned solution and answer beneath the header block.
 
-All layout constants live in `src/notebook/layouts/geometryNotebookLayoutV1.ts`. Its invariants are covered by unit tests. The approved fixture and screenshots are covered by Playwright in `tests/geometry-notebook.visual.spec.ts` at 390×844, 430×932, and the logical canvas size.
+All layout constants live in `src/notebook/layouts/geometryNotebookLayoutV1.ts`. Its invariants are covered by unit tests. Verified catalogue tasks and screenshots are covered by Playwright in `tests/geometry-notebook.visual.spec.ts` at 390×844, 430×932, and the logical canvas size.
 
 Run visual checks with `npm run test:visual`. Snapshot updates must be an explicit, reviewed design decision; `--update-snapshots` is never part of regular test commands.

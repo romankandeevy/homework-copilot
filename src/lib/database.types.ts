@@ -6,6 +6,114 @@ export type Database = {
   }
   public: {
     Tables: {
+      homework_solution_access: {
+        Row: {
+          idempotency_key: string
+          purchased_at: string
+          solution_id: string
+          user_id: string
+        }
+        Insert: {
+          idempotency_key: string
+          purchased_at?: string
+          solution_id: string
+          user_id: string
+        }
+        Update: {
+          idempotency_key?: string
+          purchased_at?: string
+          solution_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      homework_solution_catalog: {
+        Row: {
+          condition_normalized: string
+          created_at: string
+          source_page: number | null
+          source_url: string
+          solution_id: string
+          subject: string
+          task: string
+          textbook_edition: string
+          textbook_id: string
+          textbook_title: string
+        }
+        Insert: {
+          condition_normalized: string
+          created_at?: string
+          source_page?: number | null
+          source_url: string
+          solution_id: string
+          subject: string
+          task: string
+          textbook_edition: string
+          textbook_id: string
+          textbook_title: string
+        }
+        Update: {
+          condition_normalized?: string
+          created_at?: string
+          source_page?: number | null
+          source_url?: string
+          solution_id?: string
+          subject?: string
+          task?: string
+          textbook_edition?: string
+          textbook_id?: string
+          textbook_title?: string
+        }
+        Relationships: []
+      }
+      homework_solutions: {
+        Row: {
+          condition_normalized: string
+          created_at: string
+          created_by: string | null
+          id: string
+          solution: Json
+          source_page: number | null
+          source: string
+          source_url: string
+          subject: string
+          task: string
+          textbook_edition: string
+          textbook_id: string
+          textbook_title: string
+        }
+        Insert: {
+          condition_normalized: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          solution: Json
+          source_page?: number | null
+          source: string
+          source_url: string
+          subject: string
+          task: string
+          textbook_edition: string
+          textbook_id: string
+          textbook_title: string
+        }
+        Update: {
+          condition_normalized?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          solution?: Json
+          source_page?: number | null
+          source?: string
+          source_url?: string
+          subject?: string
+          task?: string
+          textbook_edition?: string
+          textbook_id?: string
+          textbook_title?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_path: string | null
@@ -108,6 +216,21 @@ export type Database = {
     }
     Views: { [_ in never]: never }
     Functions: {
+      complete_homework_solution: {
+        Args: {
+          p_condition: string
+          p_condition_normalized: string
+          p_edition: string
+          p_idempotency_key: string
+          p_solution?: Json | null
+          p_source_page: number | null
+          p_source_url: string
+          p_source: string
+          p_task: string
+          p_textbook_id: string
+        }
+        Returns: Json
+      }
       spend_solution_credit: {
         Args: {
           p_description?: string

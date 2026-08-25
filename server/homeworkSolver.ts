@@ -3,8 +3,9 @@ import { createClient } from '@supabase/supabase-js'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { homeworkDiagramKinds } from '../src/lib/homeworkContract.ts'
 import type { HomeworkDiagram, HomeworkSolution, SolveHomeworkRequest } from '../src/lib/homeworkContract.ts'
-import type { Database } from '../src/lib/database.types.ts'
+import type { Database, Json } from '../src/lib/database.types.ts'
 import { getSolutionPrice } from '../src/lib/solutionPricing.ts'
+import { findVerifiedTextbookTask, normalizeTaskCondition } from '../src/textbooks/taskCatalog.ts'
 
 type SolverOptions = {
   apiKey?: string
@@ -49,12 +50,17 @@ const responseSchema = {
     diagram: {
       type: 'object',
       additionalProperties: false,
-      required: ['kind', 'description', 'vertices', 'apexAngle'],
+      required: ['kind', 'description', 'vertices'],
       properties: {
         kind: { type: 'string', enum: [...homeworkDiagramKinds] },
         description: { type: 'string' },
         vertices: { type: 'array', items: { type: 'string' } },
         apexAngle: { type: 'string' },
+        auxiliaryKind: { type: 'string', enum: ['median', 'bisector', 'height'] },
+        auxiliaryLabel: { type: 'string' },
+        rightAngleAt: { type: 'string' },
+        parallelTo: { type: 'string' },
+        exteriorAngle: { type: 'string' },
       },
     },
     sourceVerified: { type: 'boolean' },
@@ -74,7 +80,7 @@ const solutionInstructions = [
   'Каждый элемент given и steps — отдельная короткая строка, которую можно переписать в тетрадь.',
   'В given передай не больше трёх строк; goal.text и каждая строка steps должны быть компактными.',
   'diagram описывает только смысл фигуры и подписи вершин, никогда координаты, SVG, HTML или CSS.',
-  'Для геометрии выбери подходящий kind из triangle, isosceles-triangle, median-triangle, right-triangle, intersecting-segments, parallelogram, rectangle, rhombus, square, trapezoid, circle; иначе используй none.',
+  'Для геометрии выбери подходящий kind из triangle, three-point-lines, isosceles-triangle, median-triangle, right-triangle, intersecting-segments, parallel-line-triangle, parallelogram, rectangle, rhombus, square, trapezoid, circle; иначе используй none.',
   'Для физики обязательно укажи единицы измерения и переводы в СИ; для химии уравняй реакции и покажи расчёт.',
 ].join(' ')
 
@@ -117,6 +123,13 @@ function normalizeDiagram(value: unknown, request: SolveHomeworkRequest, conditi
     description: text(candidate.description, condition.slice(0, 180) || 'Чертёж к задаче'),
     vertices: vertices.length > 0 ? vertices : inferredVertices,
     ...(text(candidate.apexAngle) ? { apexAngle: text(candidate.apexAngle) } : {}),
+    ...(text(candidate.auxiliaryKind) && ['median', 'bisector', 'height'].includes(text(candidate.auxiliaryKind))
+      ? { auxiliaryKind: text(candidate.auxiliaryKind) as HomeworkDiagram['auxiliaryKind'] }
+      : {}),
+    ...(text(candidate.auxiliaryLabel) ? { auxiliaryLabel: text(candidate.auxiliaryLabel) } : {}),
+    ...(text(candidate.rightAngleAt) ? { rightAngleAt: text(candidate.rightAngleAt) } : {}),
+    ...(text(candidate.parallelTo) ? { parallelTo: text(candidate.parallelTo) } : {}),
+    ...(text(candidate.exteriorAngle) ? { exteriorAngle: text(candidate.exteriorAngle) } : {}),
   }
 }
 
@@ -146,6 +159,9 @@ export function normalizeKieSolution(raw: unknown, request: SolveHomeworkRequest
   if (!condition || steps.length === 0) {
     throw new HomeworkSolverError(502, 'Kie.ai вернул неполное решение. Попробуй ещё раз')
   }
+  if (request.condition && normalizeTaskCondition(condition) !== normalizeTaskCondition(request.condition)) {
+    throw new HomeworkSolverError(422, 'Решение вернуло другое условие. Решение не сохранено')
+  }
 
   const goalValue = candidate.goal && typeof candidate.goal === 'object' ? candidate.goal as Record<string, unknown> : {}
   const goalTitle = text(goalValue.title) === 'Доказать' ? 'Доказать' : 'Найти'
@@ -155,6 +171,10 @@ export function normalizeKieSolution(raw: unknown, request: SolveHomeworkRequest
     textbookId: request.textbookId,
     task: request.task,
     source: request.source,
+    textbookEdition: request.edition,
+    sourceUrl: request.sourceUrl ?? '',
+    ...(request.sourcePage ? { sourcePage: request.sourcePage } : {}),
+    conditionNormalized: normalizeTaskCondition(condition),
     subject: request.subject,
     textbookTitle: request.textbookTitle,
     condition,
@@ -199,6 +219,31 @@ export async function solveWithKie(
   options: SolverOptions,
   ownerId?: string,
 ): Promise<HomeworkSolution> {
+  const verifiedTask = request.source === 'number'
+    ? findVerifiedTextbookTask(request.textbookId, request.edition, request.task)
+    : null
+  if (verifiedTask?.solution) {
+    return {
+      textbookId: request.textbookId,
+      task: request.task,
+      source: request.source,
+      textbookEdition: verifiedTask.edition,
+      sourceUrl: verifiedTask.sourceUrl,
+      ...(verifiedTask.sourcePage ? { sourcePage: verifiedTask.sourcePage } : {}),
+      conditionNormalized: normalizeTaskCondition(verifiedTask.condition),
+      subject: request.subject,
+      textbookTitle: request.textbookTitle,
+      condition: verifiedTask.condition,
+      given: [...verifiedTask.given],
+      goal: verifiedTask.goal,
+      steps: [...verifiedTask.solution],
+      answer: verifiedTask.answer,
+      diagram: { ...verifiedTask.diagram, vertices: [...verifiedTask.diagram.vertices] },
+      sourceVerified: true,
+      createdAt: new Date().toISOString(),
+      ...(ownerId ? { ownerId } : {}),
+    }
+  }
   if (!options.apiKey) {
     throw new HomeworkSolverError(503, 'Kie.ai не подключён: добавь KIE_API_KEY в .env.local и перезапусти сервер')
   }
@@ -285,6 +330,23 @@ function validateRequest(value: unknown): SolveHomeworkRequest {
   if (source === 'number' && !/^\d{1,4}$/.test(text(candidate.task))) {
     throw new HomeworkSolverError(400, 'Номер задачи должен содержать от 1 до 4 цифр')
   }
+  const condition = text(candidate.condition)
+  const sourceUrl = text(candidate.sourceUrl)
+  const sourcePageValue = Number(candidate.sourcePage)
+  const sourcePage = Number.isInteger(sourcePageValue) && sourcePageValue > 0 ? sourcePageValue : undefined
+  if (source === 'number') {
+    const verifiedTask = findVerifiedTextbookTask(text(candidate.textbookId), text(candidate.edition), text(candidate.task))
+    if (!verifiedTask
+      || text(candidate.subject) !== verifiedTask.subject
+      || text(candidate.grade) !== verifiedTask.grade
+      || text(candidate.textbookTitle) !== verifiedTask.textbookTitle
+      || text(candidate.authors) !== verifiedTask.authors
+      || normalizeTaskCondition(condition) !== normalizeTaskCondition(verifiedTask.condition)
+      || sourceUrl !== verifiedTask.sourceUrl
+      || sourcePage !== verifiedTask.sourcePage) {
+      throw new HomeworkSolverError(422, 'Точное условие этой задачи в выбранном издании не найдено. Решение не запускается')
+    }
+  }
   const imageDataUrl = text(candidate.imageDataUrl)
   if (source === 'photo' && !/^data:image\/(?:jpeg|png|webp|heic|heif);base64,/i.test(imageDataUrl)) {
     throw new HomeworkSolverError(400, 'Добавь фотографию задачи в формате JPEG, PNG или WebP')
@@ -303,7 +365,9 @@ function validateRequest(value: unknown): SolveHomeworkRequest {
     authors: text(candidate.authors).slice(0, 300),
     edition: text(candidate.edition).slice(0, 150),
     idempotencyKey: text(candidate.idempotencyKey).slice(0, 150),
-    ...(text(candidate.condition) ? { condition: text(candidate.condition).slice(0, 5000) } : {}),
+    ...(condition ? { condition: condition.slice(0, 5000) } : {}),
+    ...(sourceUrl ? { sourceUrl: sourceUrl.slice(0, 500) } : {}),
+    ...(sourcePage ? { sourcePage } : {}),
     ...(imageDataUrl ? { imageDataUrl } : {}),
   }
 }
@@ -327,7 +391,7 @@ async function authenticateAccount(request: IncomingMessage, options: SolverOpti
   return { client, userId: data.user.id }
 }
 
-async function ensureAccountBalance(account: AuthenticatedAccount | null) {
+async function ensureAccountBalance(account: AuthenticatedAccount | null, request: SolveHomeworkRequest) {
   if (!account) return
   const { data, error } = await account.client
     .from('wallet_accounts')
@@ -336,40 +400,47 @@ async function ensureAccountBalance(account: AuthenticatedAccount | null) {
     .single()
 
   if (error) throw new HomeworkSolverError(502, 'Не получилось проверить баланс')
-  if (data.balance <= 0) throw new HomeworkSolverError(402, 'На балансе недостаточно средств для решения задачи')
+  const price = getSolutionPrice(request.textbookId, request.task, request.source)
+  if (data.balance < price) throw new HomeworkSolverError(402, 'На балансе меньше ' + price + ' ₽')
 }
 
-async function chargeCompletedSolution(account: AuthenticatedAccount | null, request: SolveHomeworkRequest) {
-  if (!account) return
+async function completeStoredSolution(
+  account: AuthenticatedAccount | null,
+  request: SolveHomeworkRequest,
+  solution?: HomeworkSolution,
+): Promise<HomeworkSolution | null> {
+  if (!account) return solution ?? null
   const price = getSolutionPrice(request.textbookId, request.task, request.source)
-  const description = request.source === 'photo'
-    ? 'Решение задачи по фото · ' + price + ' ₽'
-    : 'Решение задачи № ' + request.task + ' · ' + price + ' ₽'
-  let { error } = await account.client.rpc('spend_solution_credit', {
-    p_description: description,
+  const condition = solution?.condition ?? request.condition ?? ''
+  const conditionNormalized = solution?.conditionNormalized ?? normalizeTaskCondition(condition)
+  const { data, error } = await account.client.rpc('complete_homework_solution', {
     p_idempotency_key: request.idempotencyKey,
+    ...(solution ? { p_solution: solution as unknown as Json } : {}),
+    p_condition: condition,
+    p_condition_normalized: conditionNormalized,
+    p_edition: request.edition,
     p_source: request.source,
-    p_task_number: request.source === 'number' ? Number(request.task) : null,
+    p_source_page: request.sourcePage ?? null,
+    p_source_url: request.sourceUrl ?? '',
+    p_task: request.task,
     p_textbook_id: request.textbookId,
   })
-
-  if (error?.code === 'PGRST202') {
-    ;({ error } = await account.client.rpc('spend_solution_credit', {
-      p_description: request.source === 'photo'
-        ? 'Решение задачи по фото'
-        : 'Решение задачи № ' + request.task,
-      p_idempotency_key: request.idempotencyKey,
-    }))
-  }
 
   if (error) {
     throw new HomeworkSolverError(
       error.message.includes('insufficient balance') ? 402 : 502,
       error.message.includes('insufficient balance')
         ? 'На балансе меньше ' + price + ' ₽'
-        : 'Не получилось списать ' + price + ' ₽ с баланса',
+        : 'Не получилось безопасно сохранить готовое решение',
     )
   }
+
+  if (!data) return null
+  if (typeof data !== 'object' || Array.isArray(data) || typeof data.condition !== 'string') {
+    throw new HomeworkSolverError(502, 'База решений вернула некорректный ответ')
+  }
+
+  return data as unknown as HomeworkSolution
 }
 
 async function readJsonBody(request: IncomingMessage): Promise<unknown> {
@@ -459,15 +530,24 @@ export async function handleHomeworkSolverRequest(
   }
 
   try {
-    if (!options.apiKey) {
-      throw new HomeworkSolverError(503, 'Kie.ai не подключён: добавь KIE_API_KEY в .env.local и перезапусти сервер')
-    }
     const task = validateRequest(await readJsonBody(request))
     const account = await authenticateAccount(request, options)
-    await ensureAccountBalance(account)
+    const existingSolution = await completeStoredSolution(account, task)
+    if (existingSolution) {
+      sendJson(response, 200, { solution: existingSolution })
+      return
+    }
+
+    await ensureAccountBalance(account, task)
+    if (!options.apiKey && task.source === 'photo') {
+      throw new HomeworkSolverError(503, 'Kie.ai не подключён: добавь KIE_API_KEY в .env.local и перезапусти сервер')
+    }
     const solution = await solveWithKie(task, options, account?.userId)
-    await chargeCompletedSolution(account, task)
-    sendJson(response, 200, { solution })
+    const completedSolution = await completeStoredSolution(account, task, solution)
+    if (!completedSolution) {
+      throw new HomeworkSolverError(502, 'Не получилось сохранить готовое решение')
+    }
+    sendJson(response, 200, { solution: completedSolution })
   } catch (error) {
     if (error instanceof HomeworkSolverError) {
       sendJson(response, error.status, { error: error.message })

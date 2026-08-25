@@ -48,6 +48,17 @@ export const geometryNotebookLayoutV1 = {
       angleArc: 'M 722 181 Q 756 210 790 181',
       leftTick: 'M 609 317 L 632 332',
       rightTick: 'M 879 332 L 902 317',
+      rightAngle: {
+        atA: 'M 503 535 L 503 511 L 527 511',
+        atC: 'M 1008 535 L 1008 511 L 984 511',
+      },
+      exteriorAngle: {
+        extensionAtA: 'M 479 535 L 370 535',
+        label: { x: 390, y: 505 },
+      },
+      auxiliaryLabel: { x: 744, y: 565 },
+      parallelLine: 'M 728 535 L 880 319',
+      parallelLabel: { x: 811, y: 429 },
       intersectingSegments: {
         first: 'M 505 477 L 1000 198',
         second: 'M 521 195 L 981 491',
@@ -100,7 +111,7 @@ export const geometryNotebookLayoutV1 = {
     pencilOpacity: 0.84,
   },
   invariants: {
-    angleArcCountAtB: 1,
+    hasAngleArcAtB: true,
     solutionAlignment: 'left',
     baselineAligned: true,
   },
@@ -111,8 +122,8 @@ export type GeometryNotebookLayoutV1 = typeof geometryNotebookLayoutV1
 export function assertGeometryNotebookLayoutV1(layout: GeometryNotebookLayoutV1 = geometryNotebookLayoutV1) {
   const { horizontal, vertical } = layout.zones.divider
 
-  if (layout.invariants.angleArcCountAtB !== 1) {
-    throw new Error('GeometryNotebookLayoutV1 must render exactly one angle arc at B.')
+  if (!layout.invariants.hasAngleArcAtB) {
+    throw new Error('GeometryNotebookLayoutV1 must keep the B angle-arc path.')
   }
 
   if (horizontal.endX !== vertical.x) {

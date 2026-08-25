@@ -1,9 +1,11 @@
 export const homeworkDiagramKinds = [
   'triangle',
+  'three-point-lines',
   'isosceles-triangle',
   'median-triangle',
   'right-triangle',
   'intersecting-segments',
+  'parallel-line-triangle',
   'parallelogram',
   'rectangle',
   'rhombus',
@@ -21,12 +23,21 @@ export type HomeworkDiagram = {
   description: string
   vertices: string[]
   apexAngle?: string
+  auxiliaryKind?: 'median' | 'bisector' | 'height'
+  auxiliaryLabel?: string
+  rightAngleAt?: string
+  parallelTo?: string
+  exteriorAngle?: string
 }
 
 export type HomeworkSolution = {
   textbookId: string
   task: string
   source: HomeworkSource
+  textbookEdition: string
+  sourceUrl: string
+  sourcePage?: number
+  conditionNormalized: string
   subject: string
   textbookTitle: string
   condition: string
@@ -53,6 +64,8 @@ export type SolveHomeworkRequest = {
   authors: string
   edition: string
   condition?: string
+  sourceUrl?: string
+  sourcePage?: number
   imageDataUrl?: string
   idempotencyKey: string
 }

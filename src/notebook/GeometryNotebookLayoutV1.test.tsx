@@ -9,13 +9,15 @@ describe('GeometryNotebookLayoutV1', () => {
   it('keeps the approved divider joint and diagram invariants', () => {
     expect(assertGeometryNotebookLayoutV1()).toBe(true)
     expect(layout.zones.divider.horizontal.endX).toBe(layout.zones.divider.vertical.x)
-    expect(layout.invariants.angleArcCountAtB).toBe(1)
+    expect(layout.invariants.hasAngleArcAtB).toBe(true)
   })
 
-  it('renders one angle arc at B for fixture 123', () => {
+  it('renders the verified three-point task without an invented angle mark', () => {
     const { container } = render(<GeometryNotebookLayoutV1 spec={geometryFixtures[0]} />)
 
-    expect(container.querySelectorAll('[data-angle-arc="B"]')).toHaveLength(1)
+    expect(screen.getByText('№ 2', { selector: '.notebook-number' })).toBeInTheDocument()
+    expect(container.querySelectorAll('[data-angle-arc="B"]')).toHaveLength(0)
+    expect(screen.getByLabelText(/Три точки A, B и C/)).toBeInTheDocument()
     expect(screen.getByText('Решение.', { selector: '.notebook-title' })).toBeInTheDocument()
   })
 })

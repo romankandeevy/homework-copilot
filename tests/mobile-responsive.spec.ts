@@ -106,8 +106,8 @@ test.describe('адаптация под телефон', () => {
     const search = page.getByRole('textbox', { name: 'Найти решение' })
     await search.fill('999')
     await expect(page.getByRole('heading', { name: 'Совпадений нет' })).toBeVisible()
-    await search.fill('123')
-    await expect(page.getByRole('button', { name: /№ 123/ })).toBeVisible()
+    await search.fill('2')
+    await expect(page.getByRole('heading', { name: 'Совпадений нет' })).toBeVisible()
     await expectNoPageOverflow(page)
   })
 

@@ -459,7 +459,7 @@ function Actions() {
           <div className="panel-title"><h3>Карточки</h3><span>Выбор и hover</span></div>
           <button className={`assignment-card${selectedCard ? ' is-selected' : ''}`} type="button" onClick={() => setSelectedCard(!selectedCard)} aria-pressed={selectedCard}>
             <span className="assignment-icon"><BookOpenText size={22} weight="duotone" /></span>
-            <span><small>Геометрия</small><strong>Равнобедренный треугольник</strong><em>Задача № 123</em></span>
+            <span><small>Геометрия</small><strong>Три точки и прямые</strong><em>Задача № 2</em></span>
             <span className="selection-check"><Check size={15} weight="bold" /></span>
           </button>
           <div className="compact-card-list">
@@ -608,7 +608,7 @@ function NavigationPatterns() {
       <SectionHeading title="Навигация" description="Путь всегда читается как маршрут: где я, что было раньше, куда можно перейти дальше. Активное состояние использует форму и цвет одновременно." />
 
       <div className="navigation-lab">
-        <nav className="breadcrumbs" aria-label="Хлебные крошки"><a href="#overview">Главная</a><ArrowRight size={14} /><a href="#navigation">Мои решения</a><ArrowRight size={14} /><span>Задача № 123</span></nav>
+        <nav className="breadcrumbs" aria-label="Хлебные крошки"><a href="#overview">Главная</a><ArrowRight size={14} /><a href="#navigation">Мои решения</a><ArrowRight size={14} /><span>Задача № 2</span></nav>
 
         <div className="tabs" role="tablist" aria-label="Разделы решения">
           {tabs.map((item, index) => <button type="button" role="tab" id={`solution-tab-${index}`} aria-controls="solution-tabpanel" key={item} aria-selected={tab === item} tabIndex={tab === item ? 0 : -1} className={tab === item ? 'is-active' : ''} onClick={() => setTab(item)} onKeyDown={(event) => handleTabKeyDown(event, index)}>{item}</button>)}
