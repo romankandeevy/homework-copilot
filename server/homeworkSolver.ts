@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { homeworkDiagramKinds } from '../src/lib/homeworkContract.ts'
 import type { HomeworkDiagram, HomeworkSolution, SolveHomeworkRequest } from '../src/lib/homeworkContract.ts'
-import type { Database } from '../src/lib/database.types.ts'
+import type { Database, Json } from '../src/lib/database.types.ts'
 import { getSolutionPrice } from '../src/lib/solutionPricing.ts'
 
 type SolverOptions = {
@@ -327,7 +327,7 @@ async function authenticateAccount(request: IncomingMessage, options: SolverOpti
   return { client, userId: data.user.id }
 }
 
-async function ensureAccountBalance(account: AuthenticatedAccount | null) {
+async function ensureAccountBalance(account: AuthenticatedAccount | null, request: SolveHomeworkRequest) {
   if (!account) return
   const { data, error } = await account.client
     .from('wallet_accounts')
@@ -336,40 +336,40 @@ async function ensureAccountBalance(account: AuthenticatedAccount | null) {
     .single()
 
   if (error) throw new HomeworkSolverError(502, 'Не получилось проверить баланс')
-  if (data.balance <= 0) throw new HomeworkSolverError(402, 'На балансе недостаточно средств для решения задачи')
+  const price = getSolutionPrice(request.textbookId, request.task, request.source)
+  if (data.balance < price) throw new HomeworkSolverError(402, 'На балансе меньше ' + price + ' ₽')
 }
 
-async function chargeCompletedSolution(account: AuthenticatedAccount | null, request: SolveHomeworkRequest) {
-  if (!account) return
+async function completeStoredSolution(
+  account: AuthenticatedAccount | null,
+  request: SolveHomeworkRequest,
+  solution?: HomeworkSolution,
+): Promise<HomeworkSolution | null> {
+  if (!account) return solution ?? null
   const price = getSolutionPrice(request.textbookId, request.task, request.source)
-  const description = request.source === 'photo'
-    ? 'Решение задачи по фото · ' + price + ' ₽'
-    : 'Решение задачи № ' + request.task + ' · ' + price + ' ₽'
-  let { error } = await account.client.rpc('spend_solution_credit', {
-    p_description: description,
+  const { data, error } = await account.client.rpc('complete_homework_solution', {
     p_idempotency_key: request.idempotencyKey,
+    ...(solution ? { p_solution: solution as unknown as Json } : {}),
     p_source: request.source,
-    p_task_number: request.source === 'number' ? Number(request.task) : null,
+    p_task: request.task,
     p_textbook_id: request.textbookId,
   })
-
-  if (error?.code === 'PGRST202') {
-    ;({ error } = await account.client.rpc('spend_solution_credit', {
-      p_description: request.source === 'photo'
-        ? 'Решение задачи по фото'
-        : 'Решение задачи № ' + request.task,
-      p_idempotency_key: request.idempotencyKey,
-    }))
-  }
 
   if (error) {
     throw new HomeworkSolverError(
       error.message.includes('insufficient balance') ? 402 : 502,
       error.message.includes('insufficient balance')
         ? 'На балансе меньше ' + price + ' ₽'
-        : 'Не получилось списать ' + price + ' ₽ с баланса',
+        : 'Не получилось безопасно сохранить готовое решение',
     )
   }
+
+  if (!data) return null
+  if (typeof data !== 'object' || Array.isArray(data) || typeof data.condition !== 'string') {
+    throw new HomeworkSolverError(502, 'База решений вернула некорректный ответ')
+  }
+
+  return data as unknown as HomeworkSolution
 }
 
 async function readJsonBody(request: IncomingMessage): Promise<unknown> {
@@ -464,10 +464,19 @@ export async function handleHomeworkSolverRequest(
     }
     const task = validateRequest(await readJsonBody(request))
     const account = await authenticateAccount(request, options)
-    await ensureAccountBalance(account)
+    const existingSolution = await completeStoredSolution(account, task)
+    if (existingSolution) {
+      sendJson(response, 200, { solution: existingSolution })
+      return
+    }
+
+    await ensureAccountBalance(account, task)
     const solution = await solveWithKie(task, options, account?.userId)
-    await chargeCompletedSolution(account, task)
-    sendJson(response, 200, { solution })
+    const completedSolution = await completeStoredSolution(account, task, solution)
+    if (!completedSolution) {
+      throw new HomeworkSolverError(502, 'Не получилось сохранить готовое решение')
+    }
+    sendJson(response, 200, { solution: completedSolution })
   } catch (error) {
     if (error instanceof HomeworkSolverError) {
       sendJson(response, error.status, { error: error.message })

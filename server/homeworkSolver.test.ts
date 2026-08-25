@@ -213,18 +213,90 @@ describe('Kie.ai homework solver', () => {
     expect(valid.body().solution).toMatchObject({ task: '126', answer: '90°.' })
   })
 
-  it('returns an actionable 503 before asking for payment when Kie.ai is not configured', async () => {
+  it('requires a real signed-in account when production persistence is configured', async () => {
     const http = createHttp('POST', task)
-    await handleHomeworkSolverRequest(http.request, http.response, {})
+    const fetchMock = vi.fn<typeof fetch>()
 
-    expect(http.response.statusCode).toBe(503)
-    expect(http.body().error).toContain('KIE_API_KEY')
+    await handleHomeworkSolverRequest(http.request, http.response, {
+      apiKey: 'test-key',
+      supabaseUrl: 'https://example.supabase.co',
+      supabasePublishableKey: 'publishable-test-key',
+      fetchImpl: fetchMock,
+    })
+
+    expect(http.response.statusCode).toBe(401)
+    expect(http.body().error).toBe('Войди в аккаунт, чтобы решить задачу')
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('charges exactly once using the currently deployed legacy billing function', async () => {
+  it('stores a generated answer and its payment together after the provider succeeds', async () => {
+    const saved = normalizeKieSolution(providerSolution, task, 'student-1')
     const rpc = vi.fn()
-      .mockResolvedValueOnce({ error: { code: 'PGRST202', message: 'Function not found' } })
-      .mockResolvedValueOnce({ error: null })
+      .mockResolvedValueOnce({ data: null, error: null })
+      .mockResolvedValueOnce({ data: saved, error: null })
+    const single = vi.fn().mockResolvedValue({ data: { balance: 20 }, error: null })
+    const eq = vi.fn(() => ({ single }))
+    const select = vi.fn(() => ({ eq }))
+    vi.mocked(createClient).mockReturnValueOnce({
+      auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'student-1' } }, error: null }) },
+      from: vi.fn(() => ({ select })),
+      rpc,
+    } as never)
+
+    const http = createHttp('POST', task)
+    http.request.headers.authorization = 'Bearer test-session'
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(providerResponse())
+    await handleHomeworkSolverRequest(http.request, http.response, {
+      apiKey: 'test-key',
+      supabaseUrl: 'https://project.supabase.co',
+      supabasePublishableKey: 'publishable-test-key',
+      fetchImpl: fetchMock,
+    })
+
+    expect(http.response.statusCode).toBe(200)
+    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(rpc).toHaveBeenCalledTimes(2)
+    expect(rpc.mock.calls[0]).toEqual(['complete_homework_solution', {
+      p_idempotency_key: 'solution-test-126',
+      p_source: 'number',
+      p_task: '126',
+      p_textbook_id: 'geometry',
+    }])
+    expect(rpc.mock.calls[1][1]).toMatchObject({
+      p_idempotency_key: 'solution-test-126',
+      p_solution: { ownerId: 'student-1', answer: '90°.' },
+    })
+  })
+
+  it('opens an existing shared answer without calling the provider again', async () => {
+    const saved = normalizeKieSolution(providerSolution, task, 'student-1')
+    const rpc = vi.fn().mockResolvedValue({ data: saved, error: null })
+    const from = vi.fn()
+    vi.mocked(createClient).mockReturnValueOnce({
+      auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'student-1' } }, error: null }) },
+      from,
+      rpc,
+    } as never)
+
+    const http = createHttp('POST', task)
+    http.request.headers.authorization = 'Bearer test-session'
+    const fetchMock = vi.fn<typeof fetch>()
+    await handleHomeworkSolverRequest(http.request, http.response, {
+      apiKey: 'test-key',
+      supabaseUrl: 'https://project.supabase.co',
+      supabasePublishableKey: 'publishable-test-key',
+      fetchImpl: fetchMock,
+    })
+
+    expect(http.response.statusCode).toBe(200)
+    expect(http.body().solution).toMatchObject({ task: '126', answer: '90°.' })
+    expect(rpc).toHaveBeenCalledOnce()
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(from).not.toHaveBeenCalled()
+  })
+
+  it('rejects insufficient balance before spending provider credits', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: null })
     const single = vi.fn().mockResolvedValue({ data: { balance: 3 }, error: null })
     const eq = vi.fn(() => ({ single }))
     const select = vi.fn(() => ({ eq }))
@@ -236,23 +308,25 @@ describe('Kie.ai homework solver', () => {
 
     const http = createHttp('POST', task)
     http.request.headers.authorization = 'Bearer test-session'
+    const fetchMock = vi.fn<typeof fetch>()
     await handleHomeworkSolverRequest(http.request, http.response, {
       apiKey: 'test-key',
       supabaseUrl: 'https://project.supabase.co',
       supabasePublishableKey: 'publishable-test-key',
-      fetchImpl: vi.fn<typeof fetch>().mockResolvedValue(providerResponse()),
+      fetchImpl: fetchMock,
     })
 
-    expect(http.response.statusCode).toBe(200)
-    expect(rpc).toHaveBeenCalledTimes(2)
-    expect(rpc.mock.calls[0][1]).toMatchObject({
-      p_idempotency_key: 'solution-test-126',
-      p_source: 'number',
-      p_task_number: 126,
-    })
-    expect(rpc.mock.calls[1][1]).toEqual({
-      p_description: 'Решение задачи № 126',
-      p_idempotency_key: 'solution-test-126',
-    })
+    expect(http.response.statusCode).toBe(402)
+    expect(http.body().error).toBe('На балансе меньше 5 ₽')
+    expect(rpc).toHaveBeenCalledOnce()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('returns an actionable 503 before asking for payment when Kie.ai is not configured', async () => {
+    const http = createHttp('POST', task)
+    await handleHomeworkSolverRequest(http.request, http.response, {})
+
+    expect(http.response.statusCode).toBe(503)
+    expect(http.body().error).toContain('KIE_API_KEY')
   })
 })

@@ -41,6 +41,7 @@ import { useModalIsolation } from './lib/useModalIsolation'
 import { getSolutionPrice } from './lib/solutionPricing'
 import {
   loadGeneratedSolutions,
+  parseStoredHomeworkSolution,
   prepareTaskPhoto,
   requestHomeworkSolution,
   saveGeneratedSolutions,
@@ -85,6 +86,8 @@ type SolutionState = {
 type PersonalSolution = SolutionState & {
   time: string
 }
+
+type SharedHomeworkSolution = Database['public']['Tables']['homework_solution_catalog']['Row']
 
 const themeStorageKey = 'homework-copilot:theme'
 const selectedTextbookStorageKey = 'homework-copilot:selected-textbook'
@@ -874,12 +877,14 @@ function SolutionsPage({
   textbooks: items,
   onOpenAccount,
   onOpenSolution,
+  onOpenSharedSolution,
 }: {
   user: User | null
   personalSolutions: readonly PersonalSolution[]
   textbooks: readonly Textbook[]
   onOpenAccount: () => void
   onOpenSolution: (state: SolutionState) => void
+  onOpenSharedSolution: (textbookId: TextbookId, task: string) => void
 }) {
   const [query, setQuery] = useState('')
   const [activeSection, setActiveSection] = useState<'personal' | 'shared'>(user ? 'personal' : 'shared')
@@ -945,7 +950,7 @@ function SolutionsPage({
             {results.map(({ textbook, task }) => {
               const Icon = textbook.icon
               return (
-                <button type="button" key={`${textbook.id}-${task}`} onClick={() => onOpenSolution({ mode: 'ready', textbookId: textbook.id, task, source: 'number' })}>
+                <button type="button" key={`${textbook.id}-${task}`} onClick={() => onOpenSharedSolution(textbook.id, task)}>
                   <Icon size={32} weight="duotone" aria-hidden="true" />
                   <span><strong>{textbook.subject} · {textbook.grade}</strong><small>Задача № {task}</small></span>
                   <span className="solution-base-open">Открыть решение</span>
@@ -1141,6 +1146,7 @@ function HomePage() {
   const [solutionState, setSolutionState] = useState<SolutionState | null>(null)
   const [selectedSolution, setSelectedSolution] = useState<SolutionState | null>(() => currentNavigationRoute().solution)
   const [generatedSolutions, setGeneratedSolutions] = useState<HomeworkSolution[]>(loadGeneratedSolutions)
+  const [sharedSolutions, setSharedSolutions] = useState<SharedHomeworkSolution[]>([])
   const [textbookPickerOpen, setTextbookPickerOpen] = useState(false)
   const [supabaseClient, setSupabaseClient] = useState<SupabaseClient<Database> | null>(null)
   const [user, setUser] = useState<User | null>(null)
@@ -1162,16 +1168,19 @@ function HomePage() {
   )
   const availableTextbooks = useMemo(
     () => [...textbooks, ...customTextbooks].map((textbook) => {
+      const sharedTasks = sharedSolutions
+        .filter((solution) => solution.textbook_id === textbook.id)
+        .map((solution) => solution.task)
       const generatedTasks = visibleGeneratedSolutions
         .filter((solution) => solution.textbookId === textbook.id && solution.source === 'number')
         .map((solution) => solution.task)
-      if (generatedTasks.length === 0) return textbook
+      if (generatedTasks.length === 0 && sharedTasks.length === 0) return textbook
       return {
         ...textbook,
-        solvedTasks: [...new Set([...textbook.solvedTasks, ...generatedTasks])],
+        solvedTasks: [...new Set([...textbook.solvedTasks, ...sharedTasks, ...generatedTasks])],
       }
     }),
-    [customTextbooks, visibleGeneratedSolutions],
+    [customTextbooks, sharedSolutions, visibleGeneratedSolutions],
   )
   const personalSolutions = useMemo<PersonalSolution[]>(
     () => user
@@ -1243,6 +1252,58 @@ function HomePage() {
   useEffect(() => {
     saveGeneratedSolutions(generatedSolutions)
   }, [generatedSolutions])
+
+  const refreshSharedSolutions = useCallback(async () => {
+    if (!supabaseClient) return
+
+    const { data, error } = await supabaseClient
+      .from('homework_solution_catalog')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(500)
+
+    if (!error && data) setSharedSolutions(data)
+  }, [supabaseClient])
+
+  useEffect(() => {
+    if (!supabaseClient) return
+
+    void refreshSharedSolutions()
+    const onFocus = () => { void refreshSharedSolutions() }
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [refreshSharedSolutions, supabaseClient])
+
+  useEffect(() => {
+    if (!supabaseClient || !user) return
+    let active = true
+
+    const restorePurchasedSolutions = async () => {
+      const { data, error } = await supabaseClient
+        .from('homework_solutions')
+        .select('solution, created_at')
+        .order('created_at', { ascending: false })
+        .limit(100)
+
+      if (!active || error || !data) return
+
+      const restored = data
+        .map(({ solution }) => parseStoredHomeworkSolution(solution, user.id))
+        .filter((solution): solution is HomeworkSolution => solution !== null)
+
+      setGeneratedSolutions((current) => [
+        ...restored,
+        ...current.filter((local) => !restored.some(
+          (remote) => remote.textbookId === local.textbookId
+            && remote.task === local.task
+            && remote.ownerId === local.ownerId,
+        )),
+      ])
+    }
+
+    void restorePurchasedSolutions()
+    return () => { active = false }
+  }, [supabaseClient, user])
 
   useEffect(() => () => {
     if (typeof URL.revokeObjectURL !== 'function') return
@@ -1470,6 +1531,16 @@ function HomePage() {
       return false
     }
 
+    const previouslyGenerated = visibleGeneratedSolutions.find(
+      (solution) => solution.textbookId === textbookId && solution.task === resolvedTask,
+    )
+    if (previouslyGenerated) {
+      const nextState: SolutionState = { mode: 'ready', textbookId, task: resolvedTask, source }
+      setSolutionState(nextState)
+      if (openWhenReady) openSolution(nextState)
+      return true
+    }
+
     if (supabaseClient && user && account && account.balance < solutionPrice) {
       rememberAccountTrigger()
       setAccountView('wallet')
@@ -1478,22 +1549,13 @@ function HomePage() {
       return false
     }
 
-    const previouslyGenerated = visibleGeneratedSolutions.find(
-      (solution) => solution.textbookId === textbookId && solution.task === resolvedTask,
-    )
-    if (previouslyGenerated) {
-      const nextState: SolutionState = { mode: 'ready', textbookId, task: resolvedTask, source }
-      setSolutionState(nextState)
-      return true
-    }
-
     const approvedFixture = source === 'number' && textbookId === 'geometry'
       ? geometryFixtures.find((fixture) => fixture.number === resolvedTask)
       : undefined
     const processingState: SolutionState = { mode: 'processing', textbookId, task: resolvedTask, source }
     const readyState: SolutionState = { ...processingState, mode: 'ready' }
 
-    if (ready || approvedFixture) {
+    if ((ready || approvedFixture) && !(supabaseClient && user)) {
       if (supabaseClient && user) {
         const { error: spendError } = await supabaseClient.rpc('spend_solution_credit', {
           p_description: `Решение задачи № ${task} · ${solutionPrice} ₽`,
@@ -1583,7 +1645,7 @@ function HomePage() {
         ),
       ])
       setSolutionState(readyState)
-      if (supabaseClient && user) await refreshAccount()
+      if (supabaseClient && user) await Promise.all([refreshAccount(), refreshSharedSolutions()])
       if (openWhenReady) openSolution(readyState)
       return true
     } catch (error) {
@@ -1613,6 +1675,12 @@ function HomePage() {
       purchasedCount += 1
     }
     return purchasedCount
+  }
+  const openSharedSolution = (textbookId: TextbookId, task: string) => {
+    const idempotencyKey = typeof crypto.randomUUID === 'function'
+      ? `shared-${crypto.randomUUID()}`
+      : `shared-${Date.now()}-${task}-${Math.random().toString(16).slice(2)}`
+    void submitTask(task, true, 'number', idempotencyKey, undefined, textbookId)
   }
 
   if (!authReady || (user && !accountReady)) {
@@ -1663,7 +1731,7 @@ function HomePage() {
         ) : activeNavigation === 'Расписание' ? (
           <Suspense fallback={<div className="route-loading" role="status">Загружаем расписание…</div>}><SchedulePage userId={user?.id ?? null} grade={account?.profile.grade ?? 8} /></Suspense>
         ) : activeNavigation === 'Решения' ? (
-          <SolutionsPage user={user} personalSolutions={personalSolutions} textbooks={availableTextbooks} onOpenAccount={openAccount} onOpenSolution={openSolution} />
+          <SolutionsPage user={user} personalSolutions={personalSolutions} textbooks={availableTextbooks} onOpenAccount={openAccount} onOpenSolution={openSolution} onOpenSharedSolution={openSharedSolution} />
         ) : (
           <TextbookLibraryPage
             items={availableTextbooks}

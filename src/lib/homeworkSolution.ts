@@ -1,6 +1,22 @@
 import type { HomeworkSolution, SolveHomeworkRequest } from './homeworkContract'
+import type { Json } from './database.types'
 
 export const generatedSolutionsStorageKey = 'homework-copilot:generated-solutions-v1'
+
+export function parseStoredHomeworkSolution(value: Json | unknown, ownerId?: string): HomeworkSolution | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+
+  const candidate = value as Record<string, unknown>
+  if (
+    typeof candidate.textbookId !== 'string'
+    || typeof candidate.task !== 'string'
+    || typeof candidate.condition !== 'string'
+    || !Array.isArray(candidate.steps)
+  ) return null
+
+  const solution = candidate as HomeworkSolution
+  return ownerId ? { ...solution, ownerId } : solution
+}
 
 export function loadGeneratedSolutions(): HomeworkSolution[] {
   try {
@@ -8,14 +24,9 @@ export function loadGeneratedSolutions(): HomeworkSolution[] {
     const parsed: unknown = stored ? JSON.parse(stored) : []
     if (!Array.isArray(parsed)) return []
 
-    return parsed.filter((entry): entry is HomeworkSolution => Boolean(
-      entry
-      && typeof entry === 'object'
-      && typeof entry.textbookId === 'string'
-      && typeof entry.task === 'string'
-      && typeof entry.condition === 'string'
-      && Array.isArray(entry.steps),
-    ))
+    return parsed
+      .map((entry) => parseStoredHomeworkSolution(entry))
+      .filter((entry): entry is HomeworkSolution => entry !== null)
   } catch {
     return []
   }
