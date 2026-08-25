@@ -1,4 +1,9 @@
 {
+  "functions": {
+    "api/solve.ts": {
+      "includeFiles": "{server/**,src/lib/**}"
+    }
+  },
   "redirects": [
     {
       "source": "/",
@@ -6,7 +11,7 @@
       "permanent": false
     },
     {
-      "source": "/:path*",
+      "source": "/:path((?!api/).*)",
       "destination": "https://www.homeworkcopilot.ru/:path*",
       "permanent": false
     }
@@ -15,7 +20,9 @@
     { "source": "/main", "destination": "/index.html" },
     { "source": "/solutions", "destination": "/index.html" },
     { "source": "/solutions/:textbookId/:task", "destination": "/index.html" },
+    { "source": "/cdz", "destination": "/index.html" },
     { "source": "/base", "destination": "/index.html" },
+    { "source": "/tasks", "destination": "/index.html" },
     { "source": "/textbooks", "destination": "/index.html" },
     { "source": "/schedule", "destination": "/index.html" },
     { "source": "/privacy", "destination": "/index.html" },

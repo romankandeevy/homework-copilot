@@ -12,8 +12,8 @@ The page is proportionally scaled as one canvas on narrow screens; its contents 
 
 ## Fixed properties
 
-- white squared paper, blue grid and red left margin;
-- blue handwritten ink and the approved handwriting font stack;
+- plain white paper;
+- black handwritten ink using the approved `Segoe Print` stack;
 - task number in the upper-left work area;
 - Given at upper left; a horizontal divider touching the vertical divider with no gap;
 - Find/Prove below the horizontal divider, with the diagram to the right of the vertical divider;

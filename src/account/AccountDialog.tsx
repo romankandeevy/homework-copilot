@@ -1,10 +1,10 @@
-import { useEffect, useId, useState } from 'react'
-import type { FormEvent, RefObject } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
+import type { FormEvent, KeyboardEvent, RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import type { User } from '@supabase/supabase-js'
 import {
   ArrowRight,
-  Camera,
+  CaretDown,
   Check,
   CheckCircle,
   ClockCountdown,
@@ -21,12 +21,8 @@ import {
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import type { AccountData } from '../lib/supabase'
 import { supabase } from '../lib/supabase'
-import { getInitials } from '../lib/account'
 import { formatRubles } from '../lib/currency'
 import { useModalIsolation } from '../lib/useModalIsolation'
-import { AccountAvatar } from './AccountAvatar'
-import { avatarPresets, getAvatarPresetId } from './avatarPresets'
-import type { AvatarPresetId } from './avatarPresets'
 import PasswordStrength from './PasswordStrength'
 import { isStrongPassword } from './passwordStrengthRules'
 import './AccountDialog.css'
@@ -104,6 +100,122 @@ function authErrorMessage(message: string) {
 
 function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
+}
+
+const gradeOptions = Array.from({ length: 11 }, (_, index) => index + 1)
+
+function GradeSelect({ value, onChange, compact = false }: { value: string; onChange: (value: string) => void; compact?: boolean }) {
+  const listboxId = useId()
+  const containerRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const [open, setOpen] = useState(false)
+  const [highlighted, setHighlighted] = useState(Number(value))
+
+  useEffect(() => {
+    if (!open) return
+
+    const dismiss = (event: PointerEvent) => {
+      if (!containerRef.current?.contains(event.target as Node)) setOpen(false)
+    }
+
+    document.addEventListener('pointerdown', dismiss)
+    return () => document.removeEventListener('pointerdown', dismiss)
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    containerRef.current?.querySelector<HTMLElement>(`[data-grade="${highlighted}"]`)?.scrollIntoView?.({ block: 'nearest' })
+  }, [highlighted, open])
+
+  const choose = (grade: number) => {
+    onChange(String(grade))
+    setHighlighted(grade)
+    setOpen(false)
+    triggerRef.current?.focus()
+  }
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape' && open) {
+      event.preventDefault()
+      event.stopPropagation()
+      setOpen(false)
+      triggerRef.current?.focus()
+      return
+    }
+
+    if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+      event.preventDefault()
+      if (!open) {
+        setHighlighted(Number(value))
+        setOpen(true)
+        return
+      }
+
+      setHighlighted((current) => {
+        if (event.key === 'Home') return 1
+        if (event.key === 'End') return gradeOptions.length
+        return Math.min(gradeOptions.length, Math.max(1, current + (event.key === 'ArrowDown' ? 1 : -1)))
+      })
+      return
+    }
+
+    if (event.key === 'Enter' && open && event.target === triggerRef.current) {
+      event.preventDefault()
+      choose(highlighted)
+    }
+  }
+
+  return (
+    <div
+      className="account-grade-select"
+      ref={containerRef}
+      onKeyDown={handleKeyDown}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false)
+      }}
+    >
+      <button
+        ref={triggerRef}
+        className="account-grade-trigger"
+        type="button"
+        role="combobox"
+        aria-label="Класс"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={open ? listboxId : undefined}
+        aria-activedescendant={open ? `${listboxId}-${highlighted}` : undefined}
+        onClick={() => {
+          setHighlighted(Number(value))
+          setOpen((current) => !current)
+        }}
+      >
+        <span>{compact ? value : `${value} класс`}</span>
+        <CaretDown size={15} weight="bold" aria-hidden="true" />
+      </button>
+
+      {open && (
+        <div id={listboxId} className="account-grade-menu" role="listbox" aria-label="Выбрать класс">
+          {gradeOptions.map((grade) => (
+            <button
+              id={`${listboxId}-${grade}`}
+              key={grade}
+              data-grade={grade}
+              className={`account-grade-option${grade === highlighted ? ' is-highlighted' : ''}`}
+              type="button"
+              role="option"
+              aria-selected={String(grade) === value}
+              tabIndex={-1}
+              onPointerEnter={() => setHighlighted(grade)}
+              onClick={() => choose(grade)}
+            >
+              <span>{grade} класс</span>
+              {String(grade) === value && <Check size={15} weight="bold" aria-hidden="true" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { passwordRecovery: boolean; pendingVerificationEmail?: string; notice?: string }) {
@@ -405,12 +517,10 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
                 <input value={fullName} onChange={(event) => setFullName(event.target.value)} autoComplete="name" maxLength={80} placeholder="Как к тебе обращаться" required autoFocus />
               </div>
             </label>
-            <label className="account-grade-field">
+            <div className="account-grade-field">
               <span>Класс</span>
-              <select value={grade} onChange={(event) => setGrade(event.target.value)} aria-label="Класс">
-                {Array.from({ length: 11 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}</option>)}
-              </select>
-            </label>
+              <GradeSelect value={grade} onChange={setGrade} compact />
+            </div>
           </div>
         )}
 
@@ -521,49 +631,6 @@ function ProfileView({ user, account, notice, initialView, theme, onToggleTheme,
     setLoading(false)
   }
 
-  const uploadAvatar = async (file: File | null) => {
-    if (!supabase || !file || loading) return
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) {
-      setError('Выбери JPG, PNG или WEBP до 5 МБ')
-      return
-    }
-
-    setLoading(true)
-    setStatus('')
-    setError('')
-    const avatarPath = `${user.id}/avatar`
-    const { error: uploadError } = await supabase.storage.from('profile-avatars').upload(avatarPath, file, {
-      cacheControl: '3600',
-      contentType: file.type,
-      upsert: true,
-    })
-
-    if (uploadError) setError('Не получилось загрузить фото')
-    else {
-      const { error: updateError } = await supabase.from('profiles').update({ avatar_path: avatarPath }).eq('id', user.id)
-      if (updateError) setError('Фото загружено, но профиль не обновился')
-      else {
-        await onReloadAccount()
-        setStatus('Фото обновлено')
-      }
-    }
-    setLoading(false)
-  }
-
-  const selectAvatar = async (preset: AvatarPresetId) => {
-    if (!supabase || loading) return
-    setLoading(true)
-    setStatus('')
-    setError('')
-    const { error: updateError } = await supabase.from('profiles').update({ avatar_path: `preset:${preset}` }).eq('id', user.id)
-    if (updateError) setError('Не получилось выбрать аватар')
-    else {
-      await onReloadAccount()
-      setStatus('Аватар обновлён')
-    }
-    setLoading(false)
-  }
-
   const signOut = async () => {
     if (!supabase || loading) return
     setLoading(true)
@@ -575,17 +642,11 @@ function ProfileView({ user, account, notice, initialView, theme, onToggleTheme,
   }
 
   const displayName = account?.profile.full_name || user.email || 'Ученик'
-  const selectedPreset = getAvatarPresetId(account?.profile.avatar_path)
 
   return (
     <div className="account-profile-view">
       <header className="account-profile-header">
         <div className="account-profile-identity">
-          <div className="account-avatar-large">
-            {account?.avatarUrl
-              ? <img src={account.avatarUrl} alt="Фото профиля" />
-              : <AccountAvatar preset={selectedPreset} initials={getInitials(displayName, user.email)} />}
-          </div>
           <div>
             <span>Аккаунт</span>
             <h2 id="account-dialog-title">{displayName}</h2>
@@ -603,20 +664,6 @@ function ProfileView({ user, account, notice, initialView, theme, onToggleTheme,
 
       {activeView === 'profile' ? (
         <div className="account-profile-main">
-          <section className="account-profile-section account-avatar-section" aria-labelledby="avatar-section-title">
-            <header><div><h3 id="avatar-section-title">Аватар</h3><p>Выбери готовый или загрузи своё фото.</p></div>
-              <><input id="profile-avatar" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { void uploadAvatar(event.target.files?.[0] ?? null); event.currentTarget.value = '' }} /><label className="account-avatar-button" htmlFor="profile-avatar"><Camera size={18} weight="duotone" aria-hidden="true" /> Загрузить фото</label></>
-            </header>
-            <div className="account-avatar-presets">
-              {avatarPresets.map((preset) => (
-                <button key={preset.id} type="button" className={selectedPreset === preset.id ? 'is-selected' : ''} aria-label={`Выбрать аватар «${preset.label}»`} aria-pressed={selectedPreset === preset.id} onClick={() => { void selectAvatar(preset.id) }} disabled={loading}>
-                  <AccountAvatar preset={preset.id} initials="" />
-                  <span>{preset.label}</span>
-                </button>
-              ))}
-            </div>
-          </section>
-
           <section className="account-profile-section" aria-labelledby="profile-data-title">
             <header><div><h3 id="profile-data-title">Личные данные</h3><p>Имя и класс используются в интерфейсе.</p></div></header>
           <form className="account-profile-form" onSubmit={saveProfile}>
@@ -624,12 +671,10 @@ function ProfileView({ user, account, notice, initialView, theme, onToggleTheme,
               <span>Имя</span>
               <input value={fullName} onChange={(event) => setFullName(event.target.value)} maxLength={80} autoComplete="name" required />
             </label>
-            <label>
+            <div className="account-grade-field">
               <span>Класс</span>
-              <select value={grade} onChange={(event) => setGrade(event.target.value)}>
-                {Array.from({ length: 11 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value} класс</option>)}
-              </select>
-            </label>
+              <GradeSelect value={grade} onChange={setGrade} />
+            </div>
             <label className="account-email-field">
               <span>Почта</span>
               <input value={user.email ?? ''} readOnly />

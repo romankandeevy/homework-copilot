@@ -4,25 +4,21 @@ export const geometryNotebookLayoutV1 = {
   page: {
     width: 1086,
     height: 1448,
-    gridCell: 47.5,
     viewBox: '0 0 1086 1448',
   },
   colors: {
     paper: '#fffefd',
-    grid: '#99d5f2',
-    margin: '#ec7d89',
-    ink: '#0751a9',
+    ink: '#000000',
+    pencil: '#565656',
   },
   typography: {
-    family: "'Comic Sans MS', 'Segoe Print', 'Ink Free', cursive",
+    family: "'Segoe Print', 'Ink Free', 'Comic Sans MS', cursive",
     numberSize: 42,
     bodySize: 42,
+    goalSize: 34,
     titleSize: 44,
     solutionSize: 40,
     weight: 700,
-  },
-  marginLine: {
-    x: 36.5,
   },
   zones: {
     number: { x: 64, y: 62 },
@@ -52,6 +48,40 @@ export const geometryNotebookLayoutV1 = {
       angleArc: 'M 722 181 Q 756 210 790 181',
       leftTick: 'M 609 317 L 632 332',
       rightTick: 'M 879 332 L 902 317',
+      intersectingSegments: {
+        first: 'M 505 477 L 1000 198',
+        second: 'M 521 195 L 981 491',
+        labels: {
+          a: { x: 478, y: 520 },
+          b: { x: 1008, y: 196 },
+          c: { x: 485, y: 190 },
+          d: { x: 992, y: 524 },
+          o: { x: 773, y: 354 },
+        },
+      },
+      quadrilateral: {
+        paths: {
+          parallelogram: 'M 508 476 L 620 205 L 990 205 L 878 476 Z',
+          rectangle: 'M 505 228 L 1006 228 L 1006 472 L 505 472 Z',
+          rhombus: 'M 500 348 L 754 162 L 1008 348 L 754 534 Z',
+          square: 'M 615 178 L 951 178 L 951 514 L 615 514 Z',
+          trapezoid: 'M 497 485 L 638 211 L 883 211 L 1030 485 Z',
+        },
+        labels: {
+          a: { x: 477, y: 516 },
+          b: { x: 595, y: 191 },
+          c: { x: 1005, y: 191 },
+          d: { x: 1021, y: 518 },
+        },
+      },
+      circle: {
+        center: { x: 759, y: 339 },
+        radius: 187,
+        labels: {
+          center: { x: 772, y: 327 },
+          edge: { x: 936, y: 323 },
+        },
+      },
     },
     solution: {
       x: 64,
@@ -67,11 +97,12 @@ export const geometryNotebookLayoutV1 = {
     divider: 3.4,
     triangle: 4.2,
     marker: 3.5,
+    pencilOpacity: 0.84,
   },
   invariants: {
     angleArcCountAtB: 1,
     solutionAlignment: 'left',
-    gridAligned: true,
+    baselineAligned: true,
   },
 } as const
 
@@ -88,8 +119,8 @@ export function assertGeometryNotebookLayoutV1(layout: GeometryNotebookLayoutV1 
     throw new Error('GeometryNotebookLayoutV1 dividers must meet without a gap.')
   }
 
-  if (layout.invariants.solutionAlignment !== 'left' || !layout.invariants.gridAligned) {
-    throw new Error('GeometryNotebookLayoutV1 text must remain left aligned and grid aligned.')
+  if (layout.invariants.solutionAlignment !== 'left' || !layout.invariants.baselineAligned) {
+    throw new Error('GeometryNotebookLayoutV1 text must remain left aligned and baseline aligned.')
   }
 
   return true

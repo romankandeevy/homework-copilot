@@ -111,11 +111,6 @@
   --color-disabled-on-accent-border: oklch(79% 0 0);
   --color-on-accent: oklch(99% 0 0);
   --color-brand-accent: oklch(52% 0.18 260);
-  --color-avatar-spark: oklch(55% 0.18 275);
-  --color-avatar-wave: oklch(48% 0.14 235);
-  --color-avatar-grid: oklch(46% 0.11 250);
-  --color-avatar-signal: oklch(52% 0.16 265);
-  --color-avatar-focus: oklch(43% 0.08 255);
 
   --color-info: oklch(59% 0.15 245);
   --color-info-soft: oklch(94% 0.025 245);
@@ -192,11 +187,6 @@
   --color-disabled-on-accent-border: oklch(37% 0 0);
   --color-on-accent: oklch(99% 0 0);
   --color-brand-accent: oklch(70% 0.15 260);
-  --color-avatar-spark: oklch(60% 0.17 275);
-  --color-avatar-wave: oklch(57% 0.14 235);
-  --color-avatar-grid: oklch(55% 0.11 250);
-  --color-avatar-signal: oklch(59% 0.16 265);
-  --color-avatar-focus: oklch(52% 0.08 255);
   --color-info-soft: oklch(25% 0.04 245);
   --color-success-strong: oklch(76% 0.1 154);
   --color-success-soft: oklch(25% 0.035 154);

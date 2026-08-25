@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { CaretLeft, CaretRight, FileText, ImageSquare, MagnifyingGlassMinus, MagnifyingGlassPlus } from '@phosphor-icons/react'
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from 'pdfjs-dist'
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
@@ -18,9 +18,6 @@ export default function TextbookPdfReader({ sourceUrl, title }: { sourceUrl: str
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 })
   const [isRendering, setIsRendering] = useState(true)
   const [error, setError] = useState('')
-  // The raster page is the source of truth: it preserves every glyph, figure,
-  // caption, margin and printed page number exactly as it appears in the book.
-  // OCR is an optional reading aid and must never replace that composition.
   const [readingMode, setReadingMode] = useState<'original' | 'text'>('original')
   const [recognizedPage, setRecognizedPage] = useState<TextbookOcrPage | null>(null)
   const [recognitionMessage, setRecognitionMessage] = useState('Подготавливаем страницу')
@@ -94,7 +91,7 @@ export default function TextbookPdfReader({ sourceUrl, title }: { sourceUrl: str
   useEffect(() => {
     const canvas = canvasRef.current
     const readerViewport = viewportRef.current
-    if (!document || !canvas || !readerViewport || viewportSize.width === 0 || viewportSize.height === 0) return
+    if (!document || readingMode !== 'original' || !canvas || !readerViewport || viewportSize.width === 0 || viewportSize.height === 0) return
 
     let cancelled = false
     let renderTask: RenderTask | null = null
@@ -222,21 +219,26 @@ export default function TextbookPdfReader({ sourceUrl, title }: { sourceUrl: str
             <MagnifyingGlassPlus size={18} weight="bold" aria-hidden="true" />
           </button>
         </div>
-        <span className="textbook-pdf-scan-status" title="Каждая страница показывается из исходного PDF без перестановки элементов">
-          {scanManifest ? `Полный скан · ${scanManifest.pageCount} страниц` : 'Скан PDF'}
+        <span className="textbook-pdf-scan-status" title={readingMode === 'text' ? 'Текст страницы распознан и подготовлен для чтения' : 'Каждая страница показывается из исходного PDF без перестановки элементов'}>
+          {readingMode === 'text' ? 'Режим чтения' : scanManifest ? `Полный скан · ${scanManifest.pageCount} страниц` : 'Скан PDF'}
         </span>
       </div>
 
       <div className={`textbook-pdf-viewport${readingMode === 'text' ? ' is-reading-text' : ''}`} ref={viewportRef}>
         <div className={`textbook-scan-page${readingMode === 'text' ? ' is-reading-text' : ''}`} data-page-number={pageNumber}>
-          <canvas
-            ref={canvasRef}
-            className={`textbook-pdf-page${document && !error ? ' is-visible' : ''}`}
-            role="img"
-            aria-label={`Точный скан страницы ${pageNumber} учебника «${title}» с исходными картинками, схемами, формулами, подписями и номером страницы`}
-          />
-          {readingMode === 'text' ? (
-            <article className="textbook-ocr-page" aria-label={`Читаемый текст страницы ${pageNumber}`}>
+          {readingMode === 'original' ? (
+            <canvas
+              ref={canvasRef}
+              className={`textbook-pdf-page${document && !error ? ' is-visible' : ''}`}
+              role="img"
+              aria-label={`Точный скан страницы ${pageNumber} учебника «${title}» с исходными картинками, схемами, формулами, подписями и номером страницы`}
+            />
+          ) : (
+            <article
+              className="textbook-ocr-page"
+              aria-label={`Читаемый текст страницы ${pageNumber}`}
+              style={{ '--textbook-reading-scale': zoom } as CSSProperties}
+            >
             <header className="textbook-ocr-page-header">
               <span>Текст страницы {String(pageNumber).padStart(3, '0')}</span>
               <span>{recognizedPage ? 'Распознано' : 'Распознавание'}</span>
@@ -261,9 +263,9 @@ export default function TextbookPdfReader({ sourceUrl, title }: { sourceUrl: str
                 <span>Русский текст станет чётким и удобным для чтения.</span>
               </div>
             )}
-              <p className="textbook-ocr-source-note">Это распознанный текст для удобного чтения. Точный порядок, отступы, рисунки, формулы, подписи и номер страницы сохранены в скане выше.</p>
+              <p className="textbook-ocr-source-note">Иллюстрации, формулы и оригинальная вёрстка доступны в режиме «Точный скан».</p>
             </article>
-          ) : null}
+          )}
         </div>
         {error ? (
           <p className="textbook-pdf-status is-error" role="alert">{error}</p>

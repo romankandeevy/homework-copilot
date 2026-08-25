@@ -2,20 +2,15 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Icon } from '@phosphor-icons/react'
 import {
   ArrowRight,
-  ArrowSquareOut,
   BookBookmark,
   CaretLeft,
   CaretRight,
   Check,
-  FilePdf,
-  Hash,
   MagnifyingGlass,
-  Plus,
-  Stack,
-  UploadSimple,
+  ShoppingCartSimple,
+  X,
 } from '@phosphor-icons/react'
-import { getSolutionBatchTotal, getSolutionPrice } from '../lib/solutionPricing'
-import TextbookPdfReader from './TextbookPdfReader'
+import { getSolutionPrice } from '../lib/solutionPricing'
 import './TextbookLibraryPage.css'
 
 type TextbookSourceType = 'pdf' | 'epub' | 'image' | 'link' | 'official'
@@ -93,8 +88,8 @@ const fallbackModel: ReaderModel = {
   badge: 'Мой учебник',
   taskCount: 120,
   chapters: [
-    { label: '01', title: 'Начало работы', focus: 'Номера и заметки', description: 'Выбери номера из этого издания — они останутся в очереди, пока ты не запустишь решение.', start: 1, end: 40 },
-    { label: '02', title: 'Практика', focus: 'Разбор по шагам', description: 'Собери задачи в одну очередь, чтобы не терять контекст между номерами.', start: 41, end: 80 },
+    { label: '01', title: 'Начало работы', focus: 'Номера и заметки', description: 'Выбери номера из этого издания — они останутся в корзине до оплаты.', start: 1, end: 40 },
+    { label: '02', title: 'Практика', focus: 'Разбор по шагам', description: 'Собери нужные задачи в корзину и оплати их вместе.', start: 41, end: 80 },
     { label: '03', title: 'Повторение', focus: 'Проверка ответа', description: 'Перед отправкой сверь номер и условие с тем изданием, которое читаешь.', start: 81, end: 120 },
   ],
 }
@@ -140,23 +135,21 @@ export default function TextbookLibraryPage({
   selectedTextbookId,
   onSelectTextbook,
   onSolveTasks,
-  onAddTextbookFile,
   onOpenWallet,
+  balance,
 }: {
   items: readonly TextbookLibraryItem[]
   selectedTextbookId: string
   onSelectTextbook: (id: string) => void
   onSolveTasks: (textbookId: string, taskNumbers: readonly string[]) => Promise<number>
-  onAddTextbookFile: (file: File) => void
   onOpenWallet: () => void
+  balance: number | null
 }) {
   const selectedTextbook = items.find((textbook) => textbook.id === selectedTextbookId) ?? items[0]
   const [progressByBook, setProgressByBook] = useState<ReaderProgress>(getInitialProgress)
   const [query, setQuery] = useState('')
   const [isSolving, setIsSolving] = useState(false)
   const [batchNotice, setBatchNotice] = useState('')
-  const [sourceError, setSourceError] = useState('')
-  const [openedSourceBookId, setOpenedSourceBookId] = useState<string | null>(null)
   const taskListRef = useRef<HTMLOListElement>(null)
 
   const reader = selectedTextbook ? getReaderModel(selectedTextbook) : fallbackModel
@@ -172,7 +165,13 @@ export default function TextbookLibraryPage({
   }, [chapterTasks, normalizedQuery])
   const selectedInChapter = chapterTasks.filter((task) => selectedTasks.includes(task)).length
   const allChapterTasksSelected = selectedInChapter === chapterTasks.length
-  const totalPrice = getSolutionBatchTotal(selectedTextbook?.id ?? '', selectedTasks)
+  const cartItems = items.flatMap((textbook) => {
+    const taskCount = getReaderModel(textbook).taskCount
+    return (progressByBook[textbook.id]?.selectedTasks ?? [])
+      .filter((task) => task <= taskCount)
+      .map((task) => ({ textbook, task, price: getSolutionPrice(textbook.id, task) }))
+  })
+  const totalPrice = cartItems.reduce((total, item) => total + item.price, 0)
 
   useEffect(() => {
     try {
@@ -216,6 +215,22 @@ export default function TextbookLibraryPage({
     updateProgress((current) => ({ ...current, selectedTasks: [] }))
   }
 
+  const removeCartItem = (textbookId: string, task: number) => {
+    setBatchNotice('')
+    setProgressByBook((current) => {
+      const progress = current[textbookId]
+      if (!progress) return current
+      return { ...current, [textbookId]: { ...progress, selectedTasks: progress.selectedTasks.filter((item) => item !== task) } }
+    })
+  }
+
+  const clearCart = () => {
+    setBatchNotice('')
+    setProgressByBook((current) => Object.fromEntries(
+      Object.entries(current).map(([textbookId, progress]) => [textbookId, { ...progress, selectedTasks: [] }]),
+    ))
+  }
+
   const changeChapter = (nextIndex: number) => {
     setBatchNotice('')
     setQuery('')
@@ -223,60 +238,68 @@ export default function TextbookLibraryPage({
     updateProgress((current) => ({ ...current, chapterIndex: Math.max(0, Math.min(nextIndex, reader.chapters.length - 1)) }))
   }
 
-  const addSourceFile = (file: File | null, input: HTMLInputElement) => {
-    input.value = ''
-    if (!file) return
-    if (!/\.(pdf|epub|png|jpe?g|webp)$/i.test(file.name)) {
-      setSourceError('Подойдёт PDF, EPUB или изображение учебника.')
+  const payForCart = async () => {
+    if (cartItems.length === 0 || isSolving) return
+
+    if (balance !== null && balance < totalPrice) {
+      setBatchNotice(`Для оплаты не хватает ${totalPrice - balance} ₽. Пополни баланс.`)
+      onOpenWallet()
       return
     }
-    setSourceError('')
-    onAddTextbookFile(file)
-  }
 
-  const solveSelected = async () => {
-    if (selectedTasks.length === 0 || isSolving) return
     setIsSolving(true)
     setBatchNotice('')
-    const orderedTasks = selectedTasks.map(String)
-    const queuedCount = await onSolveTasks(selectedTextbook.id, orderedTasks)
-    setIsSolving(false)
+    const purchasedByBook = new Map<string, Set<number>>()
+    let purchasedCount = 0
 
-    if (queuedCount === 0) {
-      setBatchNotice('Войди в аккаунт и проверь баланс, чтобы запустить очередь.')
-      return
+    try {
+      for (const textbook of items) {
+        const tasks = cartItems.filter((item) => item.textbook.id === textbook.id).map((item) => item.task)
+        if (tasks.length === 0) continue
+
+        const paidCount = await onSolveTasks(textbook.id, tasks.map(String))
+        if (paidCount > 0) {
+          purchasedByBook.set(textbook.id, new Set(tasks.slice(0, paidCount)))
+          purchasedCount += paidCount
+        }
+        if (paidCount < tasks.length) break
+      }
+
+      if (purchasedCount === 0) {
+        setBatchNotice('Войди в аккаунт и проверь баланс, чтобы оплатить корзину.')
+        return
+      }
+
+      setProgressByBook((current) => Object.fromEntries(Object.entries(current).map(([textbookId, progress]) => {
+        const purchased = purchasedByBook.get(textbookId)
+        if (!purchased) return [textbookId, progress]
+        return [textbookId, { ...progress, selectedTasks: progress.selectedTasks.filter((task) => !purchased.has(task)) }]
+      })))
+      setBatchNotice(purchasedCount === cartItems.length
+        ? `Оплачено: ${purchasedCount} ${taskPlural(purchasedCount)}.`
+        : `Оплачено: ${purchasedCount} ${taskPlural(purchasedCount)}. Остальные остались в корзине.`)
+    } catch {
+      setBatchNotice('Не получилось оплатить корзину. Попробуй ещё раз.')
+    } finally {
+      setIsSolving(false)
     }
-
-    updateProgress((current) => ({ ...current, selectedTasks: current.selectedTasks.slice(queuedCount) }))
-    setBatchNotice(queuedCount === orderedTasks.length
-      ? `В очередь добавлено: ${queuedCount}.`
-      : `В очередь добавлено: ${queuedCount}. Остальные оставлены в выборе.`)
   }
-
-  const hasReadableSource = Boolean(selectedTextbook.sourceUrl && (
-    selectedTextbook.sourceType === 'pdf'
-    || selectedTextbook.sourceType === 'image'
-  ))
-  const showsSourcePreview = Boolean(selectedTextbook.previewBeforeReading && selectedTextbook.sourceUrl && openedSourceBookId !== selectedTextbook.id)
-  const hasOfficialSource = Boolean(selectedTextbook.sourceUrl && selectedTextbook.sourceType === 'official')
 
   return (
     <section className="textbook-reader-page" aria-labelledby="textbook-reader-title" data-subject={selectedTextbook.id}>
       <header className="textbook-reader-header">
         <div>
-          <span className="textbook-reader-eyebrow"><BookBookmark size={18} weight="duotone" aria-hidden="true" /> Учебники · 8 класс</span>
-          <h1 id="textbook-reader-title">Учебник без лишнего шума</h1>
-          <p>Выбери предмет, отметь номера и отправь их в одну очередь.</p>
+          <span className="textbook-reader-eyebrow"><BookBookmark size={18} weight="duotone" aria-hidden="true" /> Задачи · 8 класс</span>
+          <h1 id="textbook-reader-title">Выбери задачи</h1>
+          <p>Добавь нужные номера в корзину и оплати всё сразу.</p>
         </div>
-        <label className="textbook-reader-add" htmlFor="textbook-reader-file"><UploadSimple size={18} weight="bold" aria-hidden="true" /> Загрузить учебник</label>
-        <input id="textbook-reader-file" className="textbook-reader-file-input" type="file" accept=".pdf,.epub,image/jpeg,image/png,image/webp" onChange={(event) => addSourceFile(event.target.files?.[0] ?? null, event.currentTarget)} />
       </header>
 
       <div className="textbook-reader-layout">
-        <aside className="textbook-reader-rail" aria-label="Учебники и список задач">
+        <aside className="textbook-reader-rail" aria-label="Предметы и список задач">
           <section className="textbook-book-switcher" aria-labelledby="textbook-book-switcher-title">
             <div className="textbook-rail-heading">
-              <span id="textbook-book-switcher-title">Учебники</span>
+              <span id="textbook-book-switcher-title">Предмет</span>
               <small>{items.length} · 8 класс</small>
             </div>
             <div className="textbook-book-options">
@@ -289,16 +312,26 @@ export default function TextbookLibraryPage({
                     key={textbook.id}
                     aria-pressed={active}
                     className={active ? 'is-active' : ''}
-                    onClick={() => { setBatchNotice(''); setSourceError(''); setQuery(''); setOpenedSourceBookId(null); onSelectTextbook(textbook.id) }}
+                    onClick={() => { setBatchNotice(''); setQuery(''); onSelectTextbook(textbook.id) }}
                   >
                     <Icon size={21} weight="duotone" aria-hidden="true" />
-                    <span><strong>{textbook.subject} · {textbook.grade}</strong><small>{textbook.authors}</small></span>
+                    <span><strong>{textbook.subject}</strong><small>{textbook.grade}</small></span>
                     {active && <Check size={16} weight="bold" aria-hidden="true" />}
                   </button>
                 )
               })}
             </div>
           </section>
+
+          <nav className="textbook-chapter-nav" aria-label="Разделы задач">
+            <button type="button" aria-label="Предыдущая глава" disabled={chapterIndex === 0} onClick={() => changeChapter(chapterIndex - 1)}><CaretLeft size={19} weight="bold" aria-hidden="true" /></button>
+            <div>
+              {reader.chapters.map((item, index) => (
+                <button type="button" key={item.label} className={index === chapterIndex ? 'is-active' : ''} aria-current={index === chapterIndex ? 'page' : undefined} onClick={() => changeChapter(index)}><span>{item.label}</span><strong>{item.title}</strong></button>
+              ))}
+            </div>
+            <button type="button" aria-label="Следующая глава" disabled={chapterIndex === reader.chapters.length - 1} onClick={() => changeChapter(chapterIndex + 1)}><CaretRight size={19} weight="bold" aria-hidden="true" /></button>
+          </nav>
 
           <section className="textbook-task-index" aria-labelledby="textbook-task-index-title">
             <div className="textbook-rail-heading textbook-task-heading">
@@ -313,7 +346,7 @@ export default function TextbookLibraryPage({
             <div className="textbook-task-index-actions">
               <button type="button" onClick={toggleChapterTasks}>{allChapterTasksSelected ? `Снять ${chapterTasks.length}` : `Выбрать все ${chapterTasks.length}`}</button>
               <small>{selectedInChapter} выбрано в главе</small>
-              {selectedTasks.length > 0 && <button type="button" onClick={clearTasks}>Сбросить всё</button>}
+              {selectedTasks.length > 0 && <button type="button" onClick={clearTasks}>Убрать выбранные</button>}
             </div>
             <ol ref={taskListRef} className="textbook-task-list" aria-label={`Номера задач главы ${chapter.label}`}>
               {visibleTasks.map((task) => {
@@ -335,122 +368,39 @@ export default function TextbookLibraryPage({
           </section>
         </aside>
 
-        <section className="textbook-reader-stage" aria-labelledby="textbook-stage-title">
-          <div className="textbook-stage-toolbar">
-            <span className="textbook-stage-status"><Stack size={17} weight="duotone" aria-hidden="true" /> {reader.badge}</span>
-            <span>{selectedTextbook.grade} · {selectedTextbook.edition}</span>
+        <aside className="textbook-cart" aria-labelledby="textbook-cart-title">
+          <div className="textbook-cart-heading">
+            <span id="textbook-cart-title"><ShoppingCartSimple size={19} weight="duotone" aria-hidden="true" /> Корзина</span>
+            <small>{cartItems.length} {taskPlural(cartItems.length)}</small>
           </div>
-
-          {showsSourcePreview ? (
-            <div className="textbook-reader-book" key={`${selectedTextbook.id}-${chapterIndex}`}>
-              <article className="textbook-reader-cover">
-                <span className="textbook-cover-grade">{selectedTextbook.grade}</span>
-                <div className="textbook-cover-art" aria-hidden="true"><span /><span /><span /></div>
-                <div>
-                  <p>{selectedTextbook.subject}</p>
-                  <h2>{selectedTextbook.title}</h2>
-                  <small>{selectedTextbook.authors}</small>
-                </div>
-                <span className="textbook-cover-code">HC / {selectedTextbook.id.slice(0, 3).toUpperCase()}</span>
-              </article>
-
-              <article className="textbook-reader-page-sheet">
-                <span className="textbook-page-kicker">Глава {chapter.label} · {chapter.focus}</span>
-                <h2 id="textbook-stage-title">{chapter.title}</h2>
-                <p>{chapter.description}</p>
-                <div className="textbook-reader-open-book">
-                  <FilePdf size={22} weight="duotone" aria-hidden="true" />
-                  <div>
-                    <strong>Оригинал учебника</strong>
-                    <span>Читай и листай PDF прямо здесь.</span>
-                  </div>
-                  <button className="textbook-reader-source-action" type="button" onClick={() => setOpenedSourceBookId(selectedTextbook.id)}>Открыть учебник <ArrowRight size={17} weight="bold" aria-hidden="true" /></button>
-                </div>
-                <footer><span>Задачи № {chapter.start}–{chapter.end}</span><span>8 класс</span></footer>
-              </article>
-            </div>
-          ) : hasReadableSource ? (
-            <div className={`textbook-reader-source is-${selectedTextbook.sourceType}`}>
-              <div className="textbook-reader-source-header">
-                <h2 id="textbook-stage-title">{selectedTextbook.title}</h2>
-                {selectedTextbook.previewBeforeReading && <button type="button" onClick={() => setOpenedSourceBookId(null)}><CaretLeft size={17} weight="bold" aria-hidden="true" /> К превью</button>}
-              </div>
-              {selectedTextbook.sourceType === 'image' ? (
-                <img src={selectedTextbook.sourceUrl} alt={`Страница учебника «${selectedTextbook.title}»`} />
-              ) : (
-                <TextbookPdfReader sourceUrl={selectedTextbook.sourceUrl!} title={selectedTextbook.title} />
-              )}
-              <div className="textbook-reader-source-actions">
-                <a href={selectedTextbook.sourceUrl} target="_blank" rel="noreferrer"><ArrowSquareOut size={17} weight="bold" aria-hidden="true" /> Открыть отдельно</a>
-              </div>
-            </div>
-          ) : hasOfficialSource ? (
-            <section className="textbook-reader-preview" aria-labelledby="textbook-stage-title">
-              <FilePdf size={32} weight="duotone" aria-hidden="true" />
-              <div>
-                <span>Глава {chapter.label} · {chapter.focus}</span>
-                <h2 id="textbook-stage-title">{chapter.title}</h2>
-                <p>{chapter.description}</p>
-                <p className="textbook-reader-preview-help">Электронный учебник откроется у издателя.</p>
-                <a className="textbook-reader-source-action" href={selectedTextbook.sourceUrl} target="_blank" rel="noreferrer"><ArrowSquareOut size={17} weight="bold" aria-hidden="true" /> Открыть учебник</a>
-              </div>
-            </section>
-          ) : selectedTextbook.sourceUrl ? (
-            <section className="textbook-reader-source-empty" aria-labelledby="textbook-stage-title">
-              <BookBookmark size={32} weight="duotone" aria-hidden="true" />
-              <div>
-                <span>Учебник по ссылке</span>
-                <h2 id="textbook-stage-title">{selectedTextbook.title}</h2>
-                <p>Открой источник в отдельной вкладке.</p>
-                <a className="textbook-reader-source-action" href={selectedTextbook.sourceUrl} target="_blank" rel="noreferrer"><ArrowSquareOut size={17} weight="bold" aria-hidden="true" /> Открыть учебник</a>
-              </div>
-            </section>
+          {cartItems.length > 0 ? (
+            <>
+              <ol className="textbook-cart-list" aria-label="Задачи в корзине">
+                {cartItems.map(({ textbook, task, price }) => (
+                  <li key={`${textbook.id}-${task}`}>
+                    <span><strong>{textbook.subject}</strong><small>Задача № {task}</small></span>
+                    <strong>{price} ₽</strong>
+                    <button type="button" aria-label={`Убрать из корзины: ${textbook.subject}, задача № ${task}`} disabled={isSolving} onClick={() => removeCartItem(textbook.id, task)}>
+                      <X size={16} weight="bold" aria-hidden="true" />
+                    </button>
+                  </li>
+                ))}
+              </ol>
+              <button className="textbook-cart-clear" type="button" disabled={isSolving} onClick={clearCart}>Очистить корзину</button>
+            </>
           ) : (
-            <section className="textbook-reader-source-empty" aria-labelledby="textbook-stage-title">
-              <BookBookmark size={32} weight="duotone" aria-hidden="true" />
-              <div>
-                <span>Учебник не добавлен</span>
-                <h2 id="textbook-stage-title">Загрузи свой PDF</h2>
-                <p>PDF можно читать и листать прямо здесь.</p>
-                <label className="textbook-reader-source-action" htmlFor="textbook-reader-file"><Plus size={17} weight="bold" aria-hidden="true" /> Добавить PDF</label>
-              </div>
-            </section>
+            <p className="textbook-cart-empty">Корзина пока пуста. Добавь задачи по любому предмету.</p>
           )}
-          {sourceError && <p className="textbook-reader-source-error" role="alert">{sourceError}</p>}
-
-          <nav className="textbook-chapter-nav" aria-label="Оглавление учебника">
-            <button type="button" aria-label="Предыдущая глава" disabled={chapterIndex === 0} onClick={() => changeChapter(chapterIndex - 1)}><CaretLeft size={19} weight="bold" aria-hidden="true" /></button>
-            <div>
-              {reader.chapters.map((item, index) => (
-                <button type="button" key={item.label} className={index === chapterIndex ? 'is-active' : ''} aria-current={index === chapterIndex ? 'page' : undefined} onClick={() => changeChapter(index)}><span>{item.label}</span><strong>{item.title}</strong></button>
-              ))}
-            </div>
-            <button type="button" aria-label="Следующая глава" disabled={chapterIndex === reader.chapters.length - 1} onClick={() => changeChapter(chapterIndex + 1)}><CaretRight size={19} weight="bold" aria-hidden="true" /></button>
-          </nav>
-        </section>
-
-        <aside className="textbook-queue" aria-labelledby="textbook-queue-title">
-          <div className="textbook-queue-heading">
-            <span id="textbook-queue-title"><Hash size={19} weight="duotone" aria-hidden="true" /> Очередь</span>
-            <small>{selectedTasks.length} выбрано</small>
+          <div className="textbook-cart-summary">
+            <span>К оплате</span>
+            <strong>{totalPrice} ₽</strong>
           </div>
-          {selectedTasks.length > 0 ? (
-            <ol className="textbook-queue-list">
-              {selectedTasks.map((task) => <li key={task}><span>№ {task}</span><strong>{getSolutionPrice(selectedTextbook.id, task)} ₽</strong></li>)}
-            </ol>
-          ) : (
-            <p className="textbook-queue-empty">Отметь одну или несколько задач из выбранной главы.</p>
-          )}
-          <div className="textbook-queue-summary">
-            <span>Цена зависит от сложности: 5–15 ₽</span>
-            <strong>{selectedTasks.length} {taskPlural(selectedTasks.length)} · {totalPrice} ₽</strong>
-          </div>
-          <button className="textbook-queue-topup" type="button" onClick={onOpenWallet}>Пополнить баланс <ArrowRight size={17} weight="bold" aria-hidden="true" /></button>
-          <button className="textbook-queue-submit" type="button" disabled={selectedTasks.length === 0 || isSolving} onClick={() => { void solveSelected() }}>
-            {isSolving ? 'Добавляем…' : `Решить выбранные${selectedTasks.length ? ` · ${selectedTasks.length}` : ''}`}
+          <button className="textbook-cart-topup" type="button" onClick={onOpenWallet}>Пополнить баланс <ArrowRight size={17} weight="bold" aria-hidden="true" /></button>
+          <button className="textbook-cart-submit" type="button" disabled={cartItems.length === 0 || isSolving} onClick={() => { void payForCart() }}>
+            {isSolving ? 'Оплачиваем…' : `Оплатить${cartItems.length ? ` · ${totalPrice} ₽` : ''}`}
             {!isSolving && <ArrowRight size={18} weight="bold" aria-hidden="true" />}
           </button>
-          {batchNotice && <p className="textbook-queue-notice" role="status" aria-live="polite">{batchNotice}</p>}
+          {batchNotice && <p className="textbook-cart-notice" role="status" aria-live="polite">{batchNotice}</p>}
         </aside>
       </div>
     </section>

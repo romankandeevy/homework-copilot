@@ -16,68 +16,49 @@ async function expectNoPageOverflow(page: import('@playwright/test').Page) {
 }
 
 test.describe('адаптация под телефон', () => {
-  test('тема стоит слева от профиля внизу сайдбара', async ({ page }) => {
+  test('тема и профиль находятся справа в верхней навигации', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await page.goto('/')
 
-    const footer = page.locator('.sidebar-footer')
-    const theme = footer.getByRole('button', { name: 'Включить тёмную тему' })
-    const profile = footer.getByRole('button', { name: 'Войти или зарегистрироваться' })
-    const [footerBox, themeBox, profileBox] = await Promise.all([
-      footer.boundingBox(),
+    const topbar = page.locator('.product-topbar')
+    const actions = page.locator('.topbar-actions')
+    const theme = actions.getByRole('button', { name: 'Включить тёмную тему' })
+    const profile = actions.getByRole('button', { name: 'Войти или зарегистрироваться' })
+    const [topbarBox, themeBox, profileBox] = await Promise.all([
+      topbar.boundingBox(),
       theme.boundingBox(),
       profile.boundingBox(),
     ])
 
-    expect(footerBox).not.toBeNull()
+    expect(topbarBox).not.toBeNull()
     expect(themeBox).not.toBeNull()
     expect(profileBox).not.toBeNull()
     expect(themeBox!.x + themeBox!.width).toBeLessThan(profileBox!.x)
     expect(Math.abs(themeBox!.y - profileBox!.y)).toBeLessThan(1)
-    expect(footerBox!.y).toBeGreaterThan(780)
-    await expect(page.locator('.mobile-profile-button')).toBeHidden()
+    expect(topbarBox!.y).toBe(0)
+    expect(topbarBox!.width).toBe(1440)
+    await expect(page.locator('.product-sidebar')).toHaveCount(0)
   })
 
-  test('маркер активного раздела остаётся напротив иконки при прокрутке', async ({ page }) => {
+  test('верхняя навигация отмечает активный раздел и остаётся сверху при прокрутке', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await page.goto('/')
 
-    const marker = page.locator('.product-seam span')
-    const navigationItems = page.locator('.product-sidebar .navigation-item')
-    const activeItemBox = await navigationItems.first().boundingBox()
-    const inactiveItemBox = await navigationItems.nth(1).boundingBox()
-    const activeIconBox = await navigationItems.first().locator('.navigation-icon').boundingBox()
-    const inactiveIconBox = await navigationItems.nth(1).locator('.navigation-icon').boundingBox()
-    const activeLabelBox = await navigationItems.first().locator('.navigation-label').boundingBox()
-    const inactiveLabelBox = await navigationItems.nth(1).locator('.navigation-label').boundingBox()
-
-    expect(activeItemBox).not.toBeNull()
-    expect(inactiveItemBox).not.toBeNull()
-    expect(activeIconBox).not.toBeNull()
-    expect(inactiveIconBox).not.toBeNull()
-    expect(activeLabelBox).not.toBeNull()
-    expect(inactiveLabelBox).not.toBeNull()
-    expect(activeItemBox!.x - inactiveItemBox!.x).toBeCloseTo(0, 0)
-    expect(activeIconBox!.x - inactiveIconBox!.x).toBeCloseTo(24, 0)
-    expect(activeLabelBox!.x - inactiveLabelBox!.x).toBeCloseTo(0, 0)
-    await expect(page.locator('.navigation-route')).toHaveCount(1)
-    await expect(page.locator('.product-seam')).toHaveCount(1)
+    const topbar = page.locator('.product-topbar')
+    const navigationItems = topbar.locator('.navigation-item')
+    await expect(navigationItems).toHaveCount(4)
+    await expect(page.getByRole('button', { name: 'Учебники', exact: true })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Задачи', exact: true })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Мои решения', exact: true })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'База решений', exact: true })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'ЦДЗ', exact: true })).toHaveCount(1)
 
     for (let index = 0; index < await navigationItems.count(); index += 1) {
       const item = navigationItems.nth(index)
       await item.click()
       await expect(item).toHaveAttribute('aria-current', 'page')
-      await expect.poll(async () => {
-        const markerBox = await marker.boundingBox()
-        const iconBox = await item.locator('.navigation-icon').boundingBox()
-        if (!markerBox || !iconBox) return Number.POSITIVE_INFINITY
-        return Math.abs((markerBox.y + markerBox.height / 2) - (iconBox.y + iconBox.height / 2))
-      }).toBeLessThan(1)
+      await expect(topbar).toBeVisible()
     }
-
-    const activeIcon = navigationItems.last().locator('.navigation-icon')
-    const markerBefore = await marker.boundingBox()
-    expect(markerBefore).not.toBeNull()
 
     const canScroll = await page.evaluate(() => document.documentElement.scrollHeight > window.innerHeight)
     if (canScroll) {
@@ -85,29 +66,49 @@ test.describe('адаптация под телефон', () => {
       await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
     }
 
-    const markerAfter = await marker.boundingBox()
-    const iconAfter = await activeIcon.boundingBox()
-    expect(markerAfter).not.toBeNull()
-    expect(iconAfter).not.toBeNull()
-    expect(Math.abs(markerAfter!.y - markerBefore!.y)).toBeLessThan(1)
-    expect(Math.abs((markerAfter!.y + markerAfter!.height / 2) - (iconAfter!.y + iconAfter!.height / 2))).toBeLessThan(1)
+    const topbarBox = await topbar.boundingBox()
+    expect(topbarBox).not.toBeNull()
+    expect(topbarBox!.y).toBe(0)
   })
 
-  test('логотип остаётся внутри узкого сайдбара на широком экране', async ({ page }) => {
+  test('логотип и все разделы помещаются в верхнюю строку на широком экране', async ({ page }) => {
     await page.setViewportSize({ width: 1920, height: 935 })
     await page.goto('/')
 
-    const [brandBox, sidebarBox, seamBox] = await Promise.all([
-      page.locator('.sidebar-brand .brand-lockup').boundingBox(),
-      page.locator('.product-sidebar').boundingBox(),
-      page.locator('.product-seam').boundingBox(),
+    const [brandBox, navigationBox, topbarBox] = await Promise.all([
+      page.locator('.topbar-brand .brand-lockup').boundingBox(),
+      page.locator('.product-navigation').boundingBox(),
+      page.locator('.product-topbar').boundingBox(),
     ])
 
     expect(brandBox).not.toBeNull()
-    expect(sidebarBox).not.toBeNull()
-    expect(seamBox).not.toBeNull()
-    expect(sidebarBox!.width).toBe(272)
-    expect(brandBox!.x + brandBox!.width).toBeLessThan(seamBox!.x)
+    expect(navigationBox).not.toBeNull()
+    expect(topbarBox).not.toBeNull()
+    expect(brandBox!.x + brandBox!.width).toBeLessThan(navigationBox!.x)
+    expect(topbarBox!.height).toBeLessThanOrEqual(80)
+  })
+
+  test('личные решения и общая база находятся на одной странице', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto('/')
+    await page.getByRole('button', { name: 'Решения', exact: true }).click()
+
+    await expect(page).toHaveURL(/\/solutions$/)
+    const personalTab = page.getByRole('tab', { name: 'Мои решения' })
+    const sharedTab = page.getByRole('tab', { name: 'База решений' })
+    await expect(sharedTab).toHaveAttribute('aria-selected', 'true')
+    await expect(page.getByRole('heading', { name: 'База решений' })).toBeVisible()
+    await personalTab.click()
+    await expect(personalTab).toHaveAttribute('aria-selected', 'true')
+    await expect(page.getByRole('heading', { name: 'Мои решения' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'База решений' })).toHaveCount(0)
+    await sharedTab.click()
+    const search = page.getByRole('textbox', { name: 'Найти решение' })
+    await search.fill('999')
+    await expect(page.getByRole('heading', { name: 'Совпадений нет' })).toBeVisible()
+    await search.fill('123')
+    await expect(page.getByRole('button', { name: /№ 123/ })).toBeVisible()
+    await expectNoPageOverflow(page)
   })
 
   test('карточки на главной совпадают по высоте, цвету и расположению кнопок', async ({ page }) => {
@@ -143,21 +144,42 @@ test.describe('адаптация под телефон', () => {
     expect(firstCard.buttonTop).toBe(secondCard.buttonTop)
   })
 
+  test('главная карточка чёрная в светлой теме и белая в тёмной', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/')
+
+    const card = page.locator('.copy-task')
+    const title = card.getByRole('heading', { name: 'Списать задачу' })
+    const textbook = card.getByRole('button', { name: /Учебник Геометрия/ })
+
+    await expect(card).toHaveCSS('background-color', 'rgb(0, 0, 0)')
+    await expect(title).toHaveCSS('color', 'rgb(255, 255, 255)')
+    await expect(textbook).toHaveCSS('color', 'rgb(255, 255, 255)')
+
+    await page.locator('.topbar-actions').getByRole('button', { name: 'Включить тёмную тему' }).click()
+
+    await expect(card).toHaveCSS('background-color', 'rgb(255, 255, 255)')
+    await expect(title).toHaveCSS('color', 'rgb(0, 0, 0)')
+    await expect(textbook).toHaveCSS('color', 'rgb(0, 0, 0)')
+  })
+
   for (const viewport of phoneViewports) {
     test(`главная не переполняется на ${viewport.width}px`, async ({ page }) => {
       await page.setViewportSize(viewport)
       await page.goto('/')
 
       await expectNoPageOverflow(page)
-      const mobileNavigation = page.locator('.mobile-navigation')
-      await expect(mobileNavigation).toBeVisible()
+      const topbar = page.locator('.product-topbar')
+      const navigation = page.getByRole('navigation', { name: 'Основная навигация' })
+      await expect(topbar).toBeVisible()
+      await expect(navigation).toBeVisible()
       const [contentBox, navigationBox] = await Promise.all([
         page.locator('.product-content').boundingBox(),
-        mobileNavigation.boundingBox(),
+        navigation.boundingBox(),
       ])
       expect(contentBox).not.toBeNull()
       expect(navigationBox).not.toBeNull()
-      expect(Math.abs(contentBox!.y + contentBox!.height - navigationBox!.y)).toBeLessThan(1)
+      expect(navigationBox!.y + navigationBox!.height).toBeLessThanOrEqual(contentBox!.y)
 
       const smallButtons = await page.locator('button').evaluateAll((buttons) => buttons
         .map((button) => {
@@ -241,13 +263,21 @@ test.describe('адаптация под телефон', () => {
     await page.setViewportSize({ width: 320, height: 812 })
     await page.goto('/')
 
-    await page.locator('.page-header').getByRole('button', { name: 'Войти', exact: true }).click()
+    await page.locator('.topbar-actions').getByRole('button', { name: 'Войти или зарегистрироваться' }).click()
     const dialog = page.getByRole('dialog', { name: 'Войди в аккаунт' })
     await expect(dialog).toBeVisible()
     await page.getByRole('tab', { name: 'Регистрация' }).click()
     await expect(page.getByRole('heading', { name: 'Создай аккаунт' })).toBeVisible()
     await expect(page.getByRole('textbox', { name: 'Имя' })).toBeVisible()
     await expect(page.getByRole('textbox', { name: 'Почта' })).toBeVisible()
+    const grade = page.getByRole('combobox', { name: 'Класс' })
+    await grade.click()
+    const gradeList = page.getByRole('listbox', { name: 'Выбрать класс' })
+    await expect(gradeList).toBeVisible()
+    await expect(page.getByRole('option', { name: '8 класс' })).toHaveAttribute('aria-selected', 'true')
+    await page.getByRole('option', { name: '9 класс' }).click()
+    await expect(grade).toContainText('9')
+    await expect(gradeList).toBeHidden()
     const createAccount = page.getByRole('button', { name: 'Создать аккаунт' })
     await expect(createAccount).toBeDisabled()
     await page.getByRole('textbox', { name: 'Имя' }).fill('Рома')

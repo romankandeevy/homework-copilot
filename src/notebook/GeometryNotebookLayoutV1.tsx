@@ -35,7 +35,47 @@ function paginateSolution(spec: GeometryNotebookPageSpec): readonly PageSegment[
 }
 
 function TriangleDiagram({ diagram }: { diagram: GeometryDiagramSpec }) {
-  const { triangle, labels, apexAngle, angleArc, leftTick, rightTick } = layout.zones.diagram
+  const { triangle, labels, apexAngle, angleArc, leftTick, rightTick, intersectingSegments, quadrilateral, circle } = layout.zones.diagram
+  if (diagram.kind === 'none') return null
+
+  if (diagram.kind === 'intersecting-segments') {
+    return (
+      <g className="geometry-diagram" role="img" aria-label={diagram.description}>
+        <path className="diagram-line" d={intersectingSegments.first} />
+        <path className="diagram-line" d={intersectingSegments.second} />
+        <text className="diagram-vertex" x={intersectingSegments.labels.a.x} y={intersectingSegments.labels.a.y}>{diagram.vertices[0] ?? 'A'}</text>
+        <text className="diagram-vertex" x={intersectingSegments.labels.b.x} y={intersectingSegments.labels.b.y}>{diagram.vertices[1] ?? 'B'}</text>
+        <text className="diagram-vertex" x={intersectingSegments.labels.c.x} y={intersectingSegments.labels.c.y}>{diagram.vertices[2] ?? 'C'}</text>
+        <text className="diagram-vertex" x={intersectingSegments.labels.d.x} y={intersectingSegments.labels.d.y}>{diagram.vertices[3] ?? 'D'}</text>
+        <text className="diagram-vertex" x={intersectingSegments.labels.o.x} y={intersectingSegments.labels.o.y}>{diagram.vertices[4] ?? 'O'}</text>
+      </g>
+    )
+  }
+
+  if (diagram.kind === 'circle') {
+    return (
+      <g className="geometry-diagram" role="img" aria-label={diagram.description}>
+        <circle className="diagram-line" cx={circle.center.x} cy={circle.center.y} r={circle.radius} />
+        <path className="diagram-auxiliary" d={`M ${circle.center.x} ${circle.center.y} L ${circle.center.x + circle.radius} ${circle.center.y}`} />
+        <text className="diagram-vertex" x={circle.labels.center.x} y={circle.labels.center.y}>{diagram.vertices[0] ?? 'O'}</text>
+        <text className="diagram-vertex" x={circle.labels.edge.x} y={circle.labels.edge.y}>{diagram.vertices[1] ?? 'A'}</text>
+      </g>
+    )
+  }
+
+  if (diagram.kind in quadrilateral.paths) {
+    const kind = diagram.kind as keyof typeof quadrilateral.paths
+    return (
+      <g className="geometry-diagram" role="img" aria-label={diagram.description}>
+        <path className="diagram-line" d={quadrilateral.paths[kind]} />
+        <text className="diagram-vertex" x={quadrilateral.labels.a.x} y={quadrilateral.labels.a.y}>{diagram.vertices[0] ?? 'A'}</text>
+        <text className="diagram-vertex" x={quadrilateral.labels.b.x} y={quadrilateral.labels.b.y}>{diagram.vertices[1] ?? 'B'}</text>
+        <text className="diagram-vertex" x={quadrilateral.labels.c.x} y={quadrilateral.labels.c.y}>{diagram.vertices[2] ?? 'C'}</text>
+        <text className="diagram-vertex" x={quadrilateral.labels.d.x} y={quadrilateral.labels.d.y}>{diagram.vertices[3] ?? 'D'}</text>
+      </g>
+    )
+  }
+
   const trianglePath = `M ${triangle.a.x} ${triangle.a.y} L ${triangle.b.x} ${triangle.b.y} L ${triangle.c.x} ${triangle.c.y} Z`
 
   return (
@@ -55,29 +95,21 @@ function TriangleDiagram({ diagram }: { diagram: GeometryDiagramSpec }) {
       {diagram.kind === 'right-triangle' && (
         <path className="diagram-mark" d={`M ${triangle.a.x + 24} ${triangle.a.y} L ${triangle.a.x + 24} ${triangle.a.y - 24} L ${triangle.a.x + 48} ${triangle.a.y - 24}`} />
       )}
-      <text className="diagram-vertex" x={labels.a.x} y={labels.a.y}>{diagram.vertices[0]}</text>
-      <text className="diagram-vertex" x={labels.b.x} y={labels.b.y}>{diagram.vertices[1]}</text>
-      <text className="diagram-vertex" x={labels.c.x} y={labels.c.y}>{diagram.vertices[2]}</text>
+      <text className="diagram-vertex" x={labels.a.x} y={labels.a.y}>{diagram.vertices[0] ?? 'A'}</text>
+      <text className="diagram-vertex" x={labels.b.x} y={labels.b.y}>{diagram.vertices[1] ?? 'B'}</text>
+      <text className="diagram-vertex" x={labels.c.x} y={labels.c.y}>{diagram.vertices[2] ?? 'C'}</text>
     </g>
   )
 }
 
 function NotebookSheet({ spec, segment }: { spec: GeometryNotebookPageSpec; segment: PageSegment }) {
-  const { page, colors, marginLine, zones, typography, strokes } = layout
+  const { page, colors, zones, typography, strokes } = layout
   const isContinuation = segment.continuation
 
   return (
     <article className="geometry-notebook-page" data-testid="geometry-notebook-page" aria-label={`Лист тетради: задача ${spec.number}${isContinuation ? ', продолжение' : ''}`}>
       <svg viewBox={page.viewBox} preserveAspectRatio="xMidYMin meet" aria-hidden="false">
-        <defs>
-          <pattern id="geometry-notebook-grid-v1" width={page.gridCell} height={page.gridCell} patternUnits="userSpaceOnUse">
-            <path d={`M ${page.gridCell} 0 L 0 0 0 ${page.gridCell}`} fill="none" stroke={colors.grid} strokeWidth="1.2" />
-          </pattern>
-        </defs>
         <rect width={page.width} height={page.height} fill={colors.paper} />
-        <rect width={page.width} height={page.height} fill="url(#geometry-notebook-grid-v1)" />
-        <line className="notebook-margin" x1={marginLine.x} x2={marginLine.x} y1="0" y2={page.height} />
-
         {!isContinuation && (
           <>
             <text className="notebook-number" x={zones.number.x} y={zones.number.y}>№ {spec.number}</text>
@@ -87,7 +119,7 @@ function NotebookSheet({ spec, segment }: { spec: GeometryNotebookPageSpec; segm
             ))}
             <line className="notebook-divider" x1={zones.divider.horizontal.startX} x2={zones.divider.horizontal.endX} y1={zones.divider.horizontal.y} y2={zones.divider.horizontal.y} />
             <line className="notebook-divider" x1={zones.divider.vertical.x} x2={zones.divider.vertical.x} y1={zones.divider.vertical.startY} y2={zones.divider.vertical.endY} />
-            <text className="notebook-body" x={zones.goal.x} y={zones.goal.y}>{spec.goal.title}: {spec.goal.text}</text>
+            <text className="notebook-goal" x={zones.goal.x} y={zones.goal.y}>{spec.goal.title}: {spec.goal.text}</text>
             <TriangleDiagram diagram={spec.diagram} />
           </>
         )}
@@ -100,19 +132,19 @@ function NotebookSheet({ spec, segment }: { spec: GeometryNotebookPageSpec; segm
           <text className="notebook-answer" x={zones.solution.x} y={zones.solution.firstLineY + (segment.lines.length - 1) * zones.solution.lineStep + zones.solution.answerGap}>Ответ: {segment.answer}</text>
         )}
         <style>{`
-          .notebook-number,.notebook-title,.notebook-body,.notebook-solution,.notebook-answer,.diagram-vertex,.diagram-angle-label { fill: ${colors.ink}; font-family: ${typography.family}; font-weight: ${typography.weight}; letter-spacing: .25px; }
+          .notebook-number,.notebook-title,.notebook-body,.notebook-goal,.notebook-solution,.notebook-answer,.diagram-vertex,.diagram-angle-label { fill: ${colors.ink}; font-family: ${typography.family}; font-weight: ${typography.weight}; letter-spacing: .25px; }
           .notebook-number { font-size: ${typography.numberSize}px; }
           .notebook-title { font-size: ${typography.titleSize}px; }
           .notebook-body { font-size: ${typography.bodySize}px; }
+          .notebook-goal { font-size: ${typography.goalSize}px; }
           .notebook-solution,.notebook-answer { font-size: ${typography.solutionSize}px; }
-          .notebook-margin { stroke: ${colors.margin}; stroke-width: 2px; }
           .notebook-divider { stroke: ${colors.ink}; stroke-width: ${strokes.divider}px; stroke-linecap: square; }
-          .diagram-line,.diagram-mark,.diagram-angle-arc,.diagram-auxiliary { fill: none; stroke: ${colors.ink}; stroke-linecap: round; stroke-linejoin: round; }
+          .geometry-diagram { opacity: ${strokes.pencilOpacity}; }
+          .diagram-line,.diagram-mark,.diagram-angle-arc,.diagram-auxiliary { fill: none; stroke: ${colors.pencil}; stroke-linecap: round; stroke-linejoin: round; }
           .diagram-line { stroke-width: ${strokes.triangle}px; }
           .diagram-mark,.diagram-angle-arc { stroke-width: ${strokes.marker}px; }
           .diagram-auxiliary { stroke-width: ${strokes.marker}px; stroke-dasharray: 10 7; }
-          .diagram-vertex { font-size: ${typography.bodySize}px; }
-          .diagram-angle-label { font-size: ${typography.bodySize}px; }
+          .diagram-vertex,.diagram-angle-label { fill: ${colors.pencil}; font-size: ${typography.bodySize}px; }
         `}</style>
       </svg>
     </article>

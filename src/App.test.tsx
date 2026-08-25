@@ -1,7 +1,37 @@
 import '@testing-library/jest-dom/vitest'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import App from './App'
+import type { SolveHomeworkRequest } from './lib/homeworkContract'
+
+function mockGeneratedSolution(request: SolveHomeworkRequest) {
+  return {
+    textbookId: request.textbookId,
+    task: request.task,
+    source: request.source,
+    subject: request.subject,
+    textbookTitle: request.textbookTitle,
+    condition: request.source === 'photo'
+      ? 'По фотографии найдите угол треугольника.'
+      : 'Проверенное условие задачи № ' + request.task + '.',
+    given: ['△ABC', '∠A = 40°'],
+    goal: { title: 'Найти', text: '∠B.' },
+    steps: ['∠A + ∠B = 90°.', '∠B = 50°.'],
+    answer: '50°.',
+    diagram: {
+      kind: request.textbookId === 'geometry' ? 'right-triangle' : 'none',
+      description: 'Прямоугольный треугольник ABC.',
+      vertices: ['A', 'B', 'C'],
+    },
+    sourceVerified: true,
+    createdAt: '2026-08-25T12:00:00.000Z',
+  }
+}
+
+function openTasks() {
+  window.history.pushState({}, '', '/cdz')
+  fireEvent(window, new PopStateEvent('popstate'))
+}
 
 describe('Homework Copilot home', () => {
   beforeEach(() => {
@@ -9,6 +39,14 @@ describe('Homework Copilot home', () => {
     window.localStorage.clear()
     window.sessionStorage.clear()
     window.history.replaceState({}, '', '/')
+    vi.stubGlobal('fetch', vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body ?? '{}')) as SolveHomeworkRequest
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ solution: mockGeneratedSolution(request) }),
+      } as Response
+    }))
   })
 
   it('shows the textbook context, a truthful signed-out state and the shared solution base', () => {
@@ -39,19 +77,24 @@ describe('Homework Copilot home', () => {
     expect(baseCard.querySelector('.home-action-card-icon svg')).toHaveAttribute('width', '34')
   })
 
-  it('opens the real account flow from the sidebar profile', async () => {
+  it('opens the real account flow from the top navigation profile', async () => {
     render(<App />)
 
     const accountTrigger = screen.getAllByRole('button', { name: 'Войти или зарегистрироваться' })[0]
     accountTrigger.focus()
     fireEvent.click(accountTrigger)
-    expect(await screen.findByRole('dialog', { name: 'Войди в аккаунт' })).toBeInTheDocument()
+    expect(await screen.findByRole('dialog', { name: 'Войди в аккаунт' }, { timeout: 5000 })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('tab', { name: 'Регистрация' }))
     expect(screen.getByRole('heading', { name: 'Создай аккаунт' })).toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: 'Имя' })).toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: 'Почта' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Класс')).toHaveValue('8')
+    const grade = screen.getByRole('combobox', { name: 'Класс' })
+    expect(grade).toHaveTextContent('8')
+    fireEvent.click(grade)
+    expect(screen.getByRole('listbox', { name: 'Выбрать класс' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('option', { name: '9 класс' }))
+    expect(grade).toHaveTextContent('9')
     expect(screen.getByRole('button', { name: 'Создать аккаунт' })).toBeDisabled()
 
     fireEvent.change(screen.getByRole('textbox', { name: 'Имя' }), { target: { value: 'Рома' } })
@@ -180,37 +223,127 @@ describe('Homework Copilot home', () => {
     expect(screen.getByText(/Решение найдено в общей базе/)).toBeInTheDocument()
   })
 
-  it('switches the whole shell theme from desktop and mobile controls', () => {
+  it('generates a numbered geometry solution, opens the notebook, and keeps it after a reload', async () => {
     render(<App />)
 
-    const themeControls = screen.getAllByRole('button', { name: 'Включить тёмную тему' })
-    expect(themeControls).toHaveLength(2)
-    fireEvent.click(themeControls[0])
-    expect(document.documentElement).toHaveAttribute('data-theme', 'dark')
-    expect(window.localStorage.getItem('homework-copilot:theme')).toBe('dark')
-    expect(screen.getAllByRole('button', { name: 'Включить светлую тему' })).toHaveLength(2)
+    fireEvent.change(screen.getByRole('textbox', { name: 'Номер задачи' }), { target: { value: '126' } })
+    fireEvent.click(screen.getByRole('button', { name: /^Списать/ }))
+
+    expect(await screen.findByRole('heading', { name: 'Решение № 126' })).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/solutions/geometry/126')
+    expect(screen.getByText('Проверенное условие задачи № 126.')).toBeInTheDocument()
+    expect(screen.getByText('Ответ: 50°.')).toBeInTheDocument()
+    await waitFor(() => expect(window.localStorage.getItem('homework-copilot:generated-solutions-v1')).toContain('"task":"126"'))
+
+    const fetchMock = vi.mocked(fetch)
+    const taskCalls = fetchMock.mock.calls.filter(([, options]) => {
+      const payload = JSON.parse(String(options?.body ?? '{}')) as { task?: string }
+      return payload.task === '126'
+    })
+    expect(taskCalls).toHaveLength(1)
+    const [, init] = taskCalls[0]
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      textbookId: 'geometry',
+      task: '126',
+      source: 'number',
+      textbookTitle: 'Геометрия. 7-9 классы',
+    })
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Решения' })[0])
+    expect(screen.getByRole('button', { name: /№ 126/ })).toBeInTheDocument()
   })
 
-  it('opens the implemented solutions, base and textbook routes', () => {
+  it('sends the real photo contents and opens its finished solution', async () => {
     render(<App />)
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Мои решения' })[0])
+    const photo = new File(['real image bytes'], 'task.png', { type: 'image/png' })
+    fireEvent.change(screen.getByLabelText(/Добавить фото/), { target: { files: [photo] } })
+    fireEvent.click(screen.getByRole('button', { name: /Списать по фото/ }))
+
+    expect(await screen.findByRole('heading', { name: 'Решение по фото' })).toBeInTheDocument()
+    expect(window.location.pathname).toMatch(/^\/solutions\/geometry\/photo-/)
+    expect(screen.getByText('По фотографии найдите угол треугольника.')).toBeInTheDocument()
+
+    const [, init] = vi.mocked(fetch).mock.calls[0]
+    const payload = JSON.parse(String(init?.body)) as SolveHomeworkRequest
+    expect(payload.source).toBe('photo')
+    expect(payload.imageDataUrl).toMatch(/^data:image\/png;base64,/)
+  })
+
+  it('shows an actionable provider error and does not leave the task processing forever', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: false,
+      status: 503,
+      json: async () => ({ error: 'Kie.ai не подключён: добавь KIE_API_KEY в .env.local и перезапусти сервер' }),
+    } as Response)
+    render(<App />)
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Номер задачи' }), { target: { value: '126' } })
+    fireEvent.click(screen.getByRole('button', { name: /^Списать/ }))
+
+    expect(await screen.findByRole('heading', { name: 'Не получилось решить задачу' })).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('KIE_API_KEY')
+    expect(screen.getByText('Деньги за неготовое решение не списаны.')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Готовим № 126' })).not.toBeInTheDocument()
+  })
+
+  it('opens already approved geometry fixtures even before Kie.ai is configured', async () => {
+    render(<App />)
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Номер задачи' }), { target: { value: '124' } })
+    fireEvent.click(screen.getByRole('button', { name: /^Списать/ }))
+
+    expect(await screen.findByRole('heading', { name: 'Решение № 124' })).toBeInTheDocument()
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled()
+  })
+
+  it('switches the whole shell theme from the top navigation control', () => {
+    render(<App />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Включить тёмную тему' }))
+    expect(document.documentElement).toHaveAttribute('data-theme', 'dark')
+    expect(window.localStorage.getItem('homework-copilot:theme')).toBe('dark')
+    expect(screen.getByRole('button', { name: 'Включить светлую тему' })).toBeInTheDocument()
+  })
+
+  it('combines personal and shared solutions on one route and keeps task selection separate', () => {
+    render(<App />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Решения' }))
     expect(window.location.pathname).toBe('/solutions')
+    expect(screen.getByRole('heading', { name: 'Решения', level: 1 })).toBeInTheDocument()
+    const personalTab = screen.getByRole('tab', { name: 'Мои решения' })
+    const sharedTab = screen.getByRole('tab', { name: 'База решений' })
+    expect(screen.getByRole('tablist', { name: 'Раздел решений' })).toBeInTheDocument()
+    expect(sharedTab).toHaveAttribute('aria-selected', 'true')
+    expect(personalTab).toHaveAttribute('aria-selected', 'false')
+    expect(screen.queryByRole('heading', { name: 'Мои решения' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'База решений' })).toBeInTheDocument()
+
+    fireEvent.click(personalTab)
     expect(screen.getByRole('heading', { name: 'Мои решения' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Твои решения появятся после входа' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'База решений' })).not.toBeInTheDocument()
+
+    fireEvent.keyDown(personalTab, { key: 'ArrowRight' })
+    expect(sharedTab).toHaveFocus()
+    expect(sharedTab).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('heading', { name: 'База решений' })).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Найти решение' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /№ 123/ })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Списать задачу' })).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'База решений' })[0])
-    expect(window.location.pathname).toBe('/base')
-    expect(screen.getByRole('heading', { name: 'База решений' })).toBeInTheDocument()
-    expect(screen.getByRole('textbox', { name: 'Найти в базе' })).toBeInTheDocument()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Найти решение' }), { target: { value: '999' } })
+    expect(screen.getByRole('heading', { name: 'Совпадений нет' })).toBeInTheDocument()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Найти решение' }), { target: { value: '123' } })
     expect(screen.getByRole('button', { name: /№ 123/ })).toBeInTheDocument()
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Учебники' })[0])
-    expect(window.location.pathname).toBe('/textbooks')
-    expect(screen.getByRole('heading', { name: 'Учебник без лишнего шума' })).toBeInTheDocument()
+    openTasks()
+    expect(window.location.pathname).toBe('/cdz')
+    expect(screen.getByRole('heading', { name: 'Выбери задачи' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Открыть учебник' })).not.toBeInTheDocument()
     expect(screen.getByText(/Глава 01:/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Решить выбранные/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Оплатить' })).toBeDisabled()
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Главная' })[0])
     expect(window.location.pathname).toBe('/main')
@@ -218,30 +351,50 @@ describe('Homework Copilot home', () => {
   })
 
   it('opens a section directly and keeps it after the app mounts again', () => {
-    window.history.replaceState({}, '', '/textbooks')
+    window.history.replaceState({}, '', '/cdz')
     const firstRender = render(<App />)
 
-    expect(screen.getByRole('heading', { name: 'Учебник без лишнего шума' })).toBeInTheDocument()
-    expect(window.location.pathname).toBe('/textbooks')
+    expect(screen.getByRole('heading', { name: 'Выбери задачи' })).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/cdz')
 
     firstRender.unmount()
     render(<App />)
 
-    expect(screen.getByRole('heading', { name: 'Учебник без лишнего шума' })).toBeInTheDocument()
-    expect(window.location.pathname).toBe('/textbooks')
+    expect(screen.getByRole('heading', { name: 'Выбери задачи' })).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/cdz')
+  })
+
+  it('redirects the old textbook route to tasks without opening a reader', () => {
+    window.history.replaceState({}, '', '/textbooks')
+    render(<App />)
+
+    expect(window.location.pathname).toBe('/cdz')
+    expect(screen.getByRole('heading', { name: 'Выбери задачи' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Открыть учебник' })).not.toBeInTheDocument()
+  })
+
+  it('redirects the former shared-base route to the combined solutions page', () => {
+    window.history.replaceState({}, '', '/base')
+    render(<App />)
+
+    expect(window.location.pathname).toBe('/solutions')
+    expect(screen.getByRole('tab', { name: 'Мои решения' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'База решений' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('heading', { name: 'База решений' })).toBeInTheDocument()
   })
 
   it('restores the matching section when browser history changes', () => {
     render(<App />)
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'База решений' })[0])
-    expect(window.location.pathname).toBe('/base')
+    openTasks()
+    expect(window.location.pathname).toBe('/cdz')
 
     window.history.replaceState({}, '', '/solutions')
     fireEvent(window, new PopStateEvent('popstate'))
 
-    expect(screen.getByRole('heading', { name: 'Мои решения' })).toBeInTheDocument()
-    expect(document.title).toBe('Мои решения — Homework Copilot')
+    expect(screen.getByRole('heading', { name: 'Решения', level: 1 })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Мои решения' })).toBeInTheDocument()
+    expect(document.title).toBe('Решения — Homework Copilot')
   })
 
   it('opens the approved notebook directly from a shareable solution route', () => {
@@ -252,67 +405,92 @@ describe('Homework Copilot home', () => {
     expect(window.location.pathname).toBe('/solutions/geometry/123')
     expect(document.title).toBe('Решение № 123 — Homework Copilot')
 
-    fireEvent.click(screen.getByRole('button', { name: 'К учебникам' }))
-    expect(window.location.pathname).toBe('/textbooks')
-    expect(screen.getByRole('heading', { name: 'Учебник без лишнего шума' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'К ЦДЗ' }))
+    expect(window.location.pathname).toBe('/cdz')
+    expect(screen.getByRole('heading', { name: 'Выбери задачи' })).toBeInTheDocument()
   })
 
-  it('selects several textbook tasks and queues them together', async () => {
+  it('normalizes legacy /tasks URLs to /cdz on mount', () => {
+    window.history.replaceState({}, '', '/tasks')
     render(<App />)
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Учебники' })[0])
+    expect(screen.getByRole('heading', { name: 'Выбери задачи' })).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/cdz')
+  })
+
+  it('adds several textbook tasks to the cart and pays at checkout', async () => {
+    render(<App />)
+
+    openTasks()
     fireEvent.click(screen.getByRole('button', { name: 'Задача № 1 · 5 ₽' }))
     fireEvent.click(screen.getByRole('button', { name: 'Задача № 2 · 5 ₽' }))
 
-    const submit = screen.getByRole('button', { name: 'Решить выбранные · 2' })
+    expect(screen.getByRole('complementary', { name: 'Корзина' })).toBeInTheDocument()
+    const submit = screen.getByRole('button', { name: 'Оплатить · 10 ₽' })
     expect(submit).toBeEnabled()
     fireEvent.click(submit)
 
-    expect(await screen.findByText('В очередь добавлено: 2.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Решить выбранные/ })).toBeDisabled()
+    expect(await screen.findByText('Оплачено: 2 задачи.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Оплатить' })).toBeDisabled()
+  })
+
+  it('keeps tasks from different textbooks in one cart and removes them independently', async () => {
+    render(<App />)
+
+    openTasks()
+    fireEvent.click(screen.getByRole('button', { name: 'Задача № 1 · 5 ₽' }))
+    fireEvent.click(screen.getByRole('button', { name: /Физика.*8 класс/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Задача № 2 · 5 ₽' }))
+
+    expect(screen.getByRole('button', { name: 'Оплатить · 10 ₽' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Убрать из корзины: Геометрия, задача № 1' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Убрать из корзины: Физика, задача № 2' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Убрать из корзины: Геометрия, задача № 1' }))
+    expect(screen.getByRole('button', { name: 'Оплатить · 5 ₽' })).toBeEnabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Оплатить · 5 ₽' }))
+    expect(await screen.findByText('Оплачено: 1 задача.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Оплатить' })).toBeDisabled()
   })
 
   it('keeps the chosen textbook after a reload', async () => {
     const firstRender = render(<App />)
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Учебники' })[0])
-    fireEvent.click(screen.getByRole('button', { name: /Физика.*Перышкин/ }))
+    openTasks()
+    fireEvent.click(screen.getByRole('button', { name: /Физика.*8 класс/ }))
     await waitFor(() => expect(window.localStorage.getItem('homework-copilot:selected-textbook')).toBe('physics'))
 
     firstRender.unmount()
     render(<App />)
-    fireEvent.click(screen.getAllByRole('button', { name: 'Учебники' })[0])
-    expect(screen.getByRole('button', { name: /Физика.*Перышкин/ })).toHaveAttribute('aria-pressed', 'true')
+    openTasks()
+    expect(screen.getByRole('button', { name: /Физика.*8 класс/ })).toHaveAttribute('aria-pressed', 'true')
   })
 
-  it('opens the supplied physics textbook from its preview', () => {
+  it('shows an authentic task condition and its diagram before solving', () => {
     render(<App />)
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Учебники' })[0])
-    fireEvent.click(screen.getByRole('button', { name: /Физика.*Перышкин/ }))
-    expect(screen.getByRole('heading', { name: 'Тепловые явления' })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Открыть учебник' }))
-    expect(screen.getByRole('region', { name: 'Учебник: Физика. 8 класс' })).toHaveAttribute('data-pdf-source', '/textbooks/physics-8-peryshkin-2026.pdf')
-    expect(screen.getByRole('button', { name: 'Показать точный скан' })).toHaveAttribute('aria-pressed', 'true')
-    fireEvent.click(screen.getByRole('button', { name: 'Показать читаемый текст' }))
-    expect(screen.getByRole('button', { name: 'Показать читаемый текст' })).toHaveAttribute('aria-pressed', 'true')
-    expect(document.querySelector('iframe')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Условие задачи №/)).not.toBeInTheDocument()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Номер задачи' }), { target: { value: '123' } })
+
+    expect(screen.getByText('Условие задачи № 123')).toBeInTheDocument()
+    expect(screen.getByText('В равнобедренном треугольнике ABC AB = BC, ∠B = 40°. Найдите углы при основании.')).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: /Равнобедренный треугольник ABC/ })).toBeInTheDocument()
   })
 
-  it('opens the supplied chemistry textbook from its preview', () => {
+  it('never invents a condition for a task missing from the source data', () => {
     render(<App />)
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Учебники' })[0])
-    fireEvent.click(screen.getByRole('button', { name: /Химия.*Габриелян/ }))
-    expect(screen.getByRole('heading', { name: 'Вещество и язык химии' })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Открыть учебник' }))
-    expect(screen.getByRole('region', { name: 'Учебник: Химия. 8 класс. Базовый уровень' })).toHaveAttribute('data-pdf-source', '/textbooks/chemistry-8-gabrielyan-2025.pdf')
+    fireEvent.change(screen.getByRole('textbox', { name: 'Номер задачи' }), { target: { value: '126' } })
+
+    expect(screen.queryByText(/Условие задачи №/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Списать/ })).toBeEnabled()
   })
 
   it('shows only tasks from the chosen chapter', () => {
     render(<App />)
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Учебники' })[0])
+    openTasks()
     expect(screen.getByRole('button', { name: 'Задача № 1 · 5 ₽' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Задача № 61 · 5 ₽' })).not.toBeInTheDocument()
 
@@ -320,10 +498,8 @@ describe('Homework Copilot home', () => {
 
     expect(screen.getByRole('button', { name: 'Задача № 61 · 5 ₽' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Задача № 1 · 5 ₽' })).not.toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Площадь' })).toBeInTheDocument()
-    expect(screen.getByText('Глава 02 · Формула и разбиение')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Открыть учебник' }))
-    expect(screen.getByRole('region', { name: 'Учебник: Геометрия. 7-9 классы' })).toHaveAttribute('data-pdf-source', '/textbooks/geometry-7-9-atanasyan.pdf')
+    expect(screen.getByText('Глава 02: Площадь')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Открыть учебник' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Пополнить баланс' })).toBeInTheDocument()
   })
 
@@ -345,15 +521,25 @@ describe('Homework Copilot home', () => {
     expect(screen.getByLabelText('Загрузить фото расписания')).toHaveAttribute('accept', 'image/*')
   })
 
-  it('routes the rounded sidebar line around the active icon', () => {
+  it('shows all app routes in the top navigation and marks the active one', () => {
     render(<App />)
 
-    const path = document.querySelector('.navigation-route path')
-    expect(path).toHaveAttribute('d', 'M-1 18 H24 C46 18 64 18 64 39 V39 C64 39 64 39 64 39 V87 C64 99 40 99 40 111 V340 C40 350 32 360 16 360 H-1')
-    expect(document.querySelector('.product-seam span')).toBeInTheDocument()
+    const navigation = screen.getByRole('navigation', { name: 'Основная навигация' })
+    expect(navigation.querySelectorAll('.navigation-item')).toHaveLength(4)
+    expect(screen.getByRole('button', { name: 'Главная' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.queryByRole('button', { name: 'Учебники' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Задачи' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Мои решения' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'База решений' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'ЦДЗ' })).toBeInTheDocument()
+    expect(document.querySelector('.product-sidebar')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Мои решения' })[0])
-    expect(path).toHaveAttribute('d', 'M-1 18 H24 C34 18 40 24 40 34 V77 C40 89 64 89 64 101 V149 C64 161 40 161 40 173 V340 C40 350 32 360 16 360 H-1')
+    fireEvent.click(screen.getByRole('button', { name: 'Решения' }))
+    expect(screen.getByRole('button', { name: 'Решения' })).toHaveAttribute('aria-current', 'page')
+
+    fireEvent.click(screen.getByRole('button', { name: 'ЦДЗ' }))
+    expect(window.location.pathname).toBe('/cdz')
+    expect(screen.getByRole('heading', { name: 'Выбери задачи' })).toBeInTheDocument()
   })
 
   it('publishes the privacy policy at its direct route', () => {
