@@ -1,7 +1,27 @@
 import '@testing-library/jest-dom/vitest'
-import { beforeEach, describe, expect, it } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import App from './App'
+
+const generatedSolution = {
+  textbookId: 'geometry',
+  task: '126',
+  source: 'number',
+  subject: 'Геометрия',
+  textbookTitle: 'Геометрия. 7-9 классы',
+  condition: 'В треугольнике ABC ∠A = 40°, ∠B = 50°. Найдите ∠C.',
+  given: ['△ABC', '∠A = 40°', '∠B = 50°'],
+  goal: { title: 'Найти', text: '∠C.' },
+  steps: ['∠A + ∠B + ∠C = 180°.', '∠C = 90°.'],
+  answer: '90°.',
+  diagram: {
+    kind: 'right-triangle',
+    description: 'Прямоугольный треугольник ABC.',
+    vertices: ['A', 'B', 'C'],
+  },
+  sourceVerified: true,
+  createdAt: '2026-08-25T12:00:00.000Z',
+} as const
 
 describe('Homework Copilot home', () => {
   beforeEach(() => {
@@ -9,6 +29,10 @@ describe('Homework Copilot home', () => {
     window.localStorage.clear()
     window.sessionStorage.clear()
     window.history.replaceState({}, '', '/')
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
   })
 
   it('shows the textbook context, a truthful signed-out state and the shared solution base', () => {
@@ -146,6 +170,76 @@ describe('Homework Copilot home', () => {
     expect(screen.getByText('task.png')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /Списать по фото/ }))
     expect(screen.getByRole('heading', { name: 'Готовим задачу с фото' })).toBeInTheDocument()
+  })
+
+  it('requests and opens a real generated geometry solution', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ solution: generatedSolution }),
+    } as Response)
+    render(<App />)
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Номер задачи' }), { target: { value: '126' } })
+    fireEvent.click(screen.getByRole('button', { name: /^Списать/ }))
+
+    expect(await screen.findByRole('heading', { name: 'Решение № 126' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Скопировать решение' })).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledOnce()
+    const [endpoint, options] = fetchMock.mock.calls[0]
+    expect(endpoint).toBe('/api/solve')
+    expect(JSON.parse(String(options?.body))).toMatchObject({
+      textbookId: 'geometry',
+      task: '126',
+      source: 'number',
+    })
+    await waitFor(() => {
+      expect(window.localStorage.getItem('homework-copilot:generated-solutions-v1')).toContain('∠C = 90°.')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'К задачам' }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Мои решения' })[0])
+    fireEvent.click(screen.getByRole('button', { name: /№ 126/ }))
+    expect(screen.getByRole('heading', { name: 'Решение № 126' })).toBeInTheDocument()
+  })
+
+  it('sends the actual photograph and opens its generated solution', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        solution: { ...generatedSolution, task: 'photo-test', source: 'photo' },
+      }),
+    } as Response)
+    render(<App />)
+
+    const photo = new File(['actual-photo-bytes'], 'task.png', { type: 'image/png' })
+    fireEvent.change(screen.getByLabelText(/Добавить фото/), { target: { files: [photo] } })
+    fireEvent.click(screen.getByRole('button', { name: /Списать по фото/ }))
+
+    expect(await screen.findByRole('heading', { name: 'Решение № фото' })).toBeInTheDocument()
+    await waitFor(() => {
+      const requests = fetchMock.mock.calls.map(([, options]) => JSON.parse(String(options?.body)) as {
+        source: string
+        imageDataUrl?: string
+      })
+      expect(requests).toContainEqual(expect.objectContaining({
+        source: 'photo',
+        imageDataUrl: 'data:image/png;base64,YWN0dWFsLXBob3RvLWJ5dGVz',
+      }))
+    })
+  })
+
+  it('shows a provider error instead of an endless processing state', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: false,
+      json: async () => ({ error: 'Добавь фотографию задания' }),
+    } as Response)
+    render(<App />)
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Номер задачи' }), { target: { value: '126' } })
+    fireEvent.click(screen.getByRole('button', { name: /^Списать/ }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Добавь фотографию задания')
+    expect(screen.getByRole('heading', { name: 'Не получилось решить задачу' })).toBeInTheDocument()
   })
 
   it('opens a ready shared solution without a waiting state', () => {

@@ -1,7 +1,7 @@
 export type GeometryDiagramSpec = {
   kind: 'isosceles-triangle' | 'median-triangle' | 'right-triangle'
   description: string
-  vertices: readonly ['A', 'B', 'C']
+  vertices: readonly [string, string, string]
   apexAngle?: string
   equalSides?: readonly ['AB', 'BC']
 }

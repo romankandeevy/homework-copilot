@@ -2028,6 +2028,29 @@
   font-size: var(--text-small);
 }
 
+.generated-solution-page {
+  display: grid;
+  gap: var(--space-6);
+  padding-bottom: var(--space-8);
+}
+
+.generated-solution-notebook {
+  width: 100%;
+  overflow: hidden;
+}
+
+.generated-solution-notebook svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.generated-solution-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
 @media (max-width: 980px) {
   .product-shell {
     display: grid;

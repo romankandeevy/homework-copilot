@@ -31,11 +31,21 @@ import {
 } from '@phosphor-icons/react'
 import LegalPage from './LegalPage'
 import NotebookCanvas from './NotebookCanvas'
+import { GeometryNotebookLayoutV1 } from './notebook/GeometryNotebookLayoutV1'
+import { geometryFixtures } from './notebook/fixtures'
+import type { GeometryNotebookPageSpec } from './notebook/geometry/types'
 import type { Database } from './lib/database.types'
 import type { AccountData } from './lib/supabase'
+import type { HomeworkSolution } from './lib/homeworkContract'
 import { getInitials } from './lib/account'
 import { formatRubles } from './lib/currency'
 import { useModalIsolation } from './lib/useModalIsolation'
+import {
+  loadGeneratedSolutions,
+  prepareTaskPhoto,
+  requestHomeworkSolution,
+  saveGeneratedSolutions,
+} from './lib/homeworkSolution'
 import { AccountAvatar } from './account/AccountAvatar'
 import { getAvatarPresetId } from './account/avatarPresets'
 import './App.css'
@@ -63,10 +73,11 @@ type Textbook = {
 }
 
 type SolutionState = {
-  mode: 'processing' | 'ready'
+  mode: 'processing' | 'ready' | 'error'
   textbookId: TextbookId
   task: string
   source: 'number' | 'photo'
+  error?: string
 }
 
 const navigation = [
@@ -481,7 +492,7 @@ function CopyTask({
   onTaskNumberChange: (value: string) => void
   onTextbookChange: (id: TextbookId) => void
   onCreateTextbook: (textbook: Textbook) => void
-  onSubmit: (task: string, ready: boolean, source: 'number' | 'photo', idempotencyKey: string) => Promise<boolean>
+  onSubmit: (task: string, ready: boolean, source: 'number' | 'photo', idempotencyKey: string, photo?: File) => Promise<boolean>
 }) {
   const [error, setError] = useState('')
   const [photo, setPhoto] = useState<File | null>(null)
@@ -503,7 +514,7 @@ function CopyTask({
       setError('')
       submissionRef.current = true
       setIsSubmitting(true)
-      await onSubmit(photo.name, false, 'photo', submissionKey)
+      await onSubmit(photo.name, false, 'photo', submissionKey, photo)
       submissionRef.current = false
       setIsSubmitting(false)
       return
@@ -627,8 +638,25 @@ function CopyTask({
   )
 }
 
-function SolutionStatus({ state, textbooks: items }: { state: SolutionState; textbooks: readonly Textbook[] }) {
+function SolutionStatus({
+  state,
+  textbooks: items,
+  onOpenSolution,
+}: {
+  state: SolutionState
+  textbooks: readonly Textbook[]
+  onOpenSolution: (state: SolutionState) => void
+}) {
   const textbook = getTextbook(state.textbookId, items)
+
+  if (state.mode === 'error') {
+    return (
+      <section className="active-solution" aria-labelledby="solution-error-title">
+        <h2 id="solution-error-title">Не получилось решить задачу</h2>
+        <p role="alert">{state.error ?? 'Попробуй ещё раз или добавь фотографию задания.'}</p>
+      </section>
+    )
+  }
 
   if (state.mode === 'ready') {
     return (
@@ -638,7 +666,7 @@ function SolutionStatus({ state, textbooks: items }: { state: SolutionState; tex
           <h2 id="ready-solution-title">№ {state.task} уже готова</h2>
           <p>{textbook.subject}. {textbook.title}. Решение найдено в общей базе, ждать не нужно.</p>
         </div>
-        <button type="button">Открыть решение <ArrowRight size={18} weight="bold" aria-hidden="true" /></button>
+        <button type="button" onClick={() => onOpenSolution(state)}>Открыть решение <ArrowRight size={18} weight="bold" aria-hidden="true" /></button>
       </section>
     )
   }
@@ -702,7 +730,23 @@ function MyTextbooks({ items, selectedId, onSelect }: { items: readonly Textbook
   )
 }
 
-function MySolutions() {
+function MySolutions({
+  generatedSolutions,
+  onOpenSolution,
+}: {
+  generatedSolutions: readonly HomeworkSolution[]
+  onOpenSolution: (solution: HomeworkSolution) => void
+}) {
+  const entries = [
+    ...generatedSolutions.map((solution) => ({
+      textbookId: solution.textbookId,
+      task: solution.source === 'photo' ? 'фото' : solution.task,
+      time: 'Только что',
+      solution,
+    })),
+    ...personalSolutions.map((entry) => ({ ...entry, solution: undefined })),
+  ]
+
   return (
     <section className="my-solutions" aria-labelledby="my-solutions-title">
       <header className="section-heading">
@@ -710,11 +754,11 @@ function MySolutions() {
         <button className="section-link" type="button">Все мои решения <ArrowRight size={17} weight="bold" aria-hidden="true" /></button>
       </header>
       <div className="solution-list">
-        {personalSolutions.map(({ textbookId, task, time }) => {
+        {entries.map(({ textbookId, task, time, solution }) => {
           const textbook = getTextbook(textbookId)
           const Icon = textbook.icon
           return (
-            <button type="button" key={`${textbookId}-${task}`}>
+            <button type="button" key={`${textbookId}-${task}`} onClick={() => { if (solution) onOpenSolution(solution) }}>
               <Icon size={32} weight="duotone" aria-hidden="true" />
               <span><small>{textbook.subject} · {textbook.title}</small><strong>№ {task}</strong></span>
               <time>{time}</time>
@@ -766,6 +810,80 @@ function ComingSoon({ section }: { section: NavigationLabel }) {
   )
 }
 
+function GeneratedSolutionPage({
+  solution,
+  onBack,
+}: {
+  solution: HomeworkSolution
+  onBack: () => void
+}) {
+  const [copied, setCopied] = useState(false)
+  const notebook: GeometryNotebookPageSpec | undefined = solution.textbookId === 'geometry'
+    ? {
+        id: solution.textbookId + '-' + solution.task,
+        number: solution.source === 'photo' ? 'фото' : solution.task,
+        condition: solution.condition,
+        given: solution.given,
+        goal: solution.goal,
+        diagram: {
+          kind: solution.diagram.kind === 'right-triangle'
+            ? 'right-triangle'
+            : solution.diagram.kind === 'median-triangle'
+              ? 'median-triangle'
+              : 'isosceles-triangle',
+          description: solution.diagram.description,
+          vertices: [
+            solution.diagram.vertices[0] || 'A',
+            solution.diagram.vertices[1] || 'B',
+            solution.diagram.vertices[2] || 'C',
+          ],
+          ...(solution.diagram.apexAngle ? { apexAngle: solution.diagram.apexAngle } : {}),
+        },
+        solution: solution.steps,
+        ...(solution.answer ? { answer: solution.answer } : {}),
+      }
+    : undefined
+
+  const copySolution = async () => {
+    if (!navigator.clipboard?.writeText) return
+    await navigator.clipboard.writeText([
+      'Условие: ' + solution.condition,
+      'Дано: ' + solution.given.join(', '),
+      solution.goal.title + ': ' + solution.goal.text,
+      'Решение:',
+      ...solution.steps,
+      ...(solution.answer ? ['Ответ: ' + solution.answer] : []),
+    ].join('\n'))
+    setCopied(true)
+  }
+
+  return (
+    <section className="home-content generated-solution-page" aria-labelledby="generated-solution-title">
+      <header className="section-heading">
+        <div>
+          <h1 id="generated-solution-title">Решение № {solution.source === 'photo' ? 'фото' : solution.task}</h1>
+          <p>Готовый ответ можно переписать в тетрадь или скопировать.</p>
+        </div>
+      </header>
+      {notebook ? (
+        <div className="generated-solution-notebook"><GeometryNotebookLayoutV1 spec={notebook} /></div>
+      ) : (
+        <section className="active-solution" aria-label="Готовое решение задачи">
+          <h2>Условие</h2><p>{solution.condition}</p>
+          {solution.given.length > 0 && <><h2>Дано</h2>{solution.given.map((line) => <p key={line}>{line}</p>)}</>}
+          <h2>{solution.goal.title}</h2><p>{solution.goal.text}</p>
+          <h2>Решение</h2>{solution.steps.map((line, index) => <p key={line + index}>{line}</p>)}
+          {solution.answer && <><h2>Ответ</h2><p>{solution.answer}</p></>}
+        </section>
+      )}
+      <div className="generated-solution-actions">
+        <button className="copy-task-submit" type="button" onClick={() => { void copySolution() }}>{copied ? 'Скопировано' : 'Скопировать решение'}</button>
+        <button className="copy-task-submit" type="button" onClick={onBack}>К задачам <ArrowRight size={18} weight="bold" aria-hidden="true" /></button>
+      </div>
+    </section>
+  )
+}
+
 function HomePage() {
   const [theme, setTheme] = useState<Theme>(() => document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light')
   const [activeNavigation, setActiveNavigation] = useState<NavigationLabel>('Главная')
@@ -773,6 +891,8 @@ function HomePage() {
   const [selectedTextbookId, setSelectedTextbookId] = useState<TextbookId>('geometry')
   const [customTextbooks, setCustomTextbooks] = useState<Textbook[]>([])
   const [solutionState, setSolutionState] = useState<SolutionState | null>(null)
+  const [generatedSolutions, setGeneratedSolutions] = useState<HomeworkSolution[]>(loadGeneratedSolutions)
+  const [openedSolution, setOpenedSolution] = useState<HomeworkSolution | null>(null)
   const [supabaseClient, setSupabaseClient] = useState<SupabaseClient<Database> | null>(null)
   const [user, setUser] = useState<User | null>(null)
   const [account, setAccount] = useState<AccountData | null>(null)
@@ -792,6 +912,10 @@ function HomePage() {
     '--navigation-item-height': `${navigationItemStep}px`,
     '--active-navigation-offset': `${activeNavigationIndex * navigationItemStep}px`,
   } as CSSProperties
+
+  useEffect(() => {
+    saveGeneratedSolutions(generatedSolutions)
+  }, [generatedSolutions])
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -980,14 +1104,20 @@ function HomePage() {
     cleanUrl.searchParams.delete('auth')
     window.history.replaceState({}, '', `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`)
   }, [])
-  const submitTask = async (task: string, ready: boolean, source: 'number' | 'photo', idempotencyKey: string) => {
+  const submitTask = async (
+    task: string,
+    ready: boolean,
+    source: 'number' | 'photo',
+    idempotencyKey: string,
+    photo?: File,
+  ) => {
     if (supabaseClient && !user) {
       setAccountNotice('Войди или зарегистрируйся, чтобы сохранить решение и списать его с баланса')
       setAccountOpen(true)
       return false
     }
 
-    if (supabaseClient && user) {
+    if (ready && supabaseClient && user) {
       const { error: spendError } = await supabaseClient.rpc('spend_solution_credit', {
         p_description: source === 'photo' ? 'Решение задачи по фото' : `Решение задачи № ${task}`,
         p_idempotency_key: idempotencyKey,
@@ -1000,8 +1130,98 @@ function HomePage() {
       await refreshAccount()
     }
 
-    setSolutionState({ mode: ready ? 'ready' : 'processing', textbookId: selectedTextbookId, task, source })
-    return true
+    const resolvedTask = source === 'photo' ? 'photo-' + idempotencyKey.slice(-36) : task
+    const nextState: SolutionState = {
+      mode: ready ? 'ready' : 'processing',
+      textbookId: selectedTextbookId,
+      task: resolvedTask,
+      source,
+    }
+    setSolutionState(nextState)
+    if (ready) return true
+
+    try {
+      const imageDataUrl = source === 'photo' && photo ? await prepareTaskPhoto(photo) : undefined
+      if (source === 'photo' && !imageDataUrl) throw new Error('Добавь фотографию задачи')
+
+      let accessToken: string | undefined
+      if (supabaseClient && user) {
+        const { data, error } = await supabaseClient.auth.getSession()
+        accessToken = data.session?.access_token
+        if (error || !accessToken) throw new Error('Сессия закончилась. Войди в аккаунт ещё раз')
+      }
+
+      const generated = await requestHomeworkSolution(
+        import.meta.env.VITE_HOMEWORK_API_URL || '/api/solve',
+        {
+          textbookId: selectedTextbookId,
+          task: resolvedTask,
+          source,
+          subject: selectedTextbook.subject,
+          grade: selectedTextbook.grade,
+          textbookTitle: selectedTextbook.title,
+          authors: selectedTextbook.authors,
+          edition: selectedTextbook.edition,
+          idempotencyKey,
+          ...(imageDataUrl ? { imageDataUrl } : {}),
+        },
+        accessToken,
+      )
+
+      setGeneratedSolutions((current) => [
+        generated,
+        ...current.filter((entry) => entry.textbookId !== generated.textbookId || entry.task !== generated.task),
+      ])
+      setSolutionState({ ...nextState, mode: 'ready' })
+      if (user) await refreshAccount()
+      setOpenedSolution(generated)
+      setActiveNavigation('Мои решения')
+      return true
+    } catch (error) {
+      setSolutionState({
+        ...nextState,
+        mode: 'error',
+        error: error instanceof Error ? error.message : 'Не получилось подготовить решение',
+      })
+      return false
+    }
+  }
+
+  const navigate = (label: NavigationLabel) => {
+    setOpenedSolution(null)
+    setActiveNavigation(label)
+  }
+
+  const openSolution = (state: SolutionState) => {
+    const generated = generatedSolutions.find((entry) => entry.textbookId === state.textbookId && entry.task === state.task)
+    if (generated) {
+      setOpenedSolution(generated)
+      setActiveNavigation('Мои решения')
+      return
+    }
+
+    const fixture = state.textbookId === 'geometry'
+      ? geometryFixtures.find((entry) => entry.number === state.task)
+      : undefined
+    if (!fixture) return
+
+    const textbook = getTextbook(state.textbookId, availableTextbooks)
+    setOpenedSolution({
+      textbookId: state.textbookId,
+      task: state.task,
+      source: state.source,
+      subject: textbook.subject,
+      textbookTitle: textbook.title,
+      condition: fixture.condition,
+      given: [...fixture.given],
+      goal: fixture.goal,
+      steps: [...fixture.solution],
+      answer: fixture.answer ?? '',
+      diagram: { ...fixture.diagram, vertices: [...fixture.diagram.vertices] },
+      sourceVerified: true,
+      createdAt: new Date().toISOString(),
+    })
+    setActiveNavigation('Мои решения')
   }
   const createTextbook = (textbook: Textbook) => {
     setCustomTextbooks((current) => [...current, textbook])
@@ -1019,13 +1239,15 @@ function HomePage() {
 
   return (
     <main className="product-shell" style={shellStyle}>
-      <ProductSidebar theme={theme} activeLabel={activeNavigation} onNavigate={setActiveNavigation} onToggleTheme={toggleTheme} user={user} account={account} onOpenAccount={openAccount} />
+      <ProductSidebar theme={theme} activeLabel={activeNavigation} onNavigate={navigate} onToggleTheme={toggleTheme} user={user} account={account} onOpenAccount={openAccount} />
       <div className="product-seam" aria-hidden="true"><span /></div>
       <div className="product-content">
         {activeNavigation === 'Главная'
           ? <PageHeader theme={theme} onToggleTheme={toggleTheme} user={user} account={account} onOpenWallet={openWallet} />
           : <InternalUtilityHeader theme={theme} onToggleTheme={toggleTheme} user={user} account={account} onOpenWallet={openWallet} />}
-        {activeNavigation === 'Главная' ? (
+        {openedSolution ? (
+          <GeneratedSolutionPage solution={openedSolution} onBack={() => navigate('Главная')} />
+        ) : activeNavigation === 'Главная' ? (
           <div className="home-content">
             <CopyTask
               taskNumber={taskNumber}
@@ -1038,8 +1260,8 @@ function HomePage() {
             />
             <div className="home-grid">
               <div className="home-column home-column-primary">
-                {solutionState && <SolutionStatus state={solutionState} textbooks={availableTextbooks} />}
-                {user ? <MySolutions /> : <GuestWorkspace onOpenAccount={openAccount} />}
+                {solutionState && <SolutionStatus state={solutionState} textbooks={availableTextbooks} onOpenSolution={openSolution} />}
+                {user ? <MySolutions generatedSolutions={generatedSolutions} onOpenSolution={setOpenedSolution} /> : <GuestWorkspace onOpenAccount={openAccount} />}
               </div>
               <div className="home-column home-column-secondary">
                 {user && <MyTextbooks items={availableTextbooks} selectedId={selectedTextbookId} onSelect={setSelectedTextbookId} />}
@@ -1047,11 +1269,13 @@ function HomePage() {
               </div>
             </div>
           </div>
+        ) : activeNavigation === 'Мои решения' && generatedSolutions.length > 0 ? (
+          <div className="home-content"><MySolutions generatedSolutions={generatedSolutions} onOpenSolution={setOpenedSolution} /></div>
         ) : activeNavigation === 'Расписание' ? (
           <Suspense fallback={<div className="route-loading" role="status">Загружаем расписание…</div>}><SchedulePage userId={user?.id ?? null} grade={account?.profile.grade ?? 8} /></Suspense>
         ) : <ComingSoon section={activeNavigation} />}
       </div>
-      <MobileNavigation activeLabel={activeNavigation} onNavigate={setActiveNavigation} />
+      <MobileNavigation activeLabel={activeNavigation} onNavigate={navigate} />
       {accountOpen && (
         <Suspense fallback={null}>
           <AccountDialog

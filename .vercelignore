@@ -1,0 +1,8 @@
+.env
+.env.*
+dist
+docs
+node_modules
+public/textbooks
+tests
+test-results
