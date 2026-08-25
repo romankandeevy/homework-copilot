@@ -1,7 +1,9 @@
+import type { HomeworkDiagramKind } from '../../lib/homeworkContract'
+
 export type GeometryDiagramSpec = {
-  kind: 'isosceles-triangle' | 'median-triangle' | 'right-triangle'
+  kind: HomeworkDiagramKind
   description: string
-  vertices: readonly [string, string, string]
+  vertices: readonly string[]
   apexAngle?: string
   equalSides?: readonly ['AB', 'BC']
 }

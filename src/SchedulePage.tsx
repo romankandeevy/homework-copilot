@@ -693,6 +693,25 @@ function SchedulePage({ userId = null, grade = 8 }: { userId?: string | null; gr
                 className={activeDay === day.id ? 'is-active' : ''}
                 key={day.id}
                 onClick={() => setActiveDay(day.id)}
+                onKeyDown={(event) => {
+                  const currentIndex = weekdays.findIndex(({ id }) => id === day.id)
+                  const nextIndex = event.key === 'ArrowRight'
+                    ? (currentIndex + 1) % weekdays.length
+                    : event.key === 'ArrowLeft'
+                      ? (currentIndex + weekdays.length - 1) % weekdays.length
+                      : event.key === 'Home'
+                        ? 0
+                        : event.key === 'End'
+                          ? weekdays.length - 1
+                          : null
+
+                  if (nextIndex === null) return
+                  event.preventDefault()
+                  const nextDay = weekdays[nextIndex]!
+                  setActiveDay(nextDay.id)
+                  document.getElementById(`schedule-day-${nextDay.id}`)?.focus()
+                }}
+                tabIndex={activeDay === day.id ? 0 : -1}
               >
                 <span>{day.short}</span>
                 <strong>{day.label}</strong>

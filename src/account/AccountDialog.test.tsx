@@ -25,7 +25,6 @@ const account: AccountData = {
     idempotency_key: 'welcome-credit',
     created_at: '2026-08-24T00:00:00.000Z',
   }],
-  avatarUrl: null,
 }
 
 describe('AccountDialog profile', () => {
@@ -35,12 +34,20 @@ describe('AccountDialog profile', () => {
 
     expect(screen.getByRole('navigation', { name: 'Раздел аккаунта' })).toBeInTheDocument()
     expect(screen.getByRole('region', { name: '20 ₽' })).toBeInTheDocument()
-    expect(screen.getByText('одно готовое решение')).toBeInTheDocument()
+    expect(screen.getByText('одно решение, зависит от сложности')).toBeInTheDocument()
     expect(screen.queryByText('Журнал нельзя изменить')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Профиль' }))
-    expect(screen.getByRole('heading', { name: 'Аватар' })).toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: /Выбрать аватар/ })).toHaveLength(6)
+    expect(screen.queryByRole('heading', { name: 'Аватар' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Выбрать аватар/ })).not.toBeInTheDocument()
+    expect(screen.queryByText('Загрузить фото')).not.toBeInTheDocument()
+    const grade = screen.getByRole('combobox', { name: 'Класс' })
+    expect(grade).toHaveTextContent('8 класс')
+    fireEvent.click(grade)
+    expect(screen.getByRole('option', { name: '8 класс' })).toHaveAttribute('aria-selected', 'true')
+    fireEvent.keyDown(grade, { key: 'ArrowDown' })
+    fireEvent.keyDown(grade, { key: 'Enter' })
+    expect(grade).toHaveTextContent('9 класс')
     expect(screen.getByRole('button', { name: 'Тёмная' })).toHaveAttribute('aria-pressed', 'true')
     fireEvent.click(screen.getByRole('button', { name: 'Светлая' }))
     expect(toggleTheme).toHaveBeenCalledOnce()
