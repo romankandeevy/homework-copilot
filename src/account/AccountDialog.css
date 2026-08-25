@@ -5,12 +5,12 @@
   inset: 0;
   place-items: center;
   padding: max(var(--space-4), env(safe-area-inset-top)) max(var(--space-4), env(safe-area-inset-right)) max(var(--space-4), env(safe-area-inset-bottom)) max(var(--space-4), env(safe-area-inset-left));
-  background: oklch(5% 0.018 258 / 0.82);
+  background: oklch(0% 0 0 / 0.82);
   backdrop-filter: blur(0.3rem);
 }
 
 .account-dialog-backdrop.is-auth-backdrop {
-  background: oklch(10.5% 0.032 260 / 0.96);
+  background: oklch(10.5% 0 0 / 0.96);
   backdrop-filter: none;
 }
 
@@ -27,21 +27,21 @@
 }
 
 .account-dialog.is-auth {
-  --auth-canvas: oklch(14.5% 0.034 260);
-  --auth-panel: oklch(18% 0.038 260);
-  --auth-field: oklch(22% 0.04 260);
-  --auth-field-hover: oklch(25% 0.045 260);
-  --auth-line: oklch(38% 0.055 260);
-  --auth-text: oklch(97.5% 0.008 255);
-  --auth-muted: oklch(76% 0.035 255);
-  --auth-subtle: oklch(65% 0.035 255);
-  --auth-accent: oklch(57% 0.2 260);
-  --auth-accent-hover: oklch(62% 0.19 258);
+  --auth-canvas: oklch(14.5% 0 0);
+  --auth-panel: oklch(18.5% 0 0);
+  --auth-field: oklch(22.5% 0 0);
+  --auth-field-hover: oklch(27% 0 0);
+  --auth-line: oklch(38% 0 0);
+  --auth-text: oklch(97.5% 0 0);
+  --auth-muted: oklch(76% 0 0);
+  --auth-subtle: oklch(68% 0 0);
+  --auth-accent: oklch(57% 0.18 260);
+  --auth-accent-hover: oklch(63% 0.17 260);
   width: min(100%, 58rem);
   border: 1px solid var(--auth-line);
   background: var(--auth-canvas);
   color: var(--auth-text);
-  box-shadow: 0 1.75rem 5rem oklch(4% 0.02 260 / 0.52);
+  box-shadow: 0 1.75rem 5rem oklch(0% 0 0 / 0.42);
   scrollbar-color: var(--auth-line) var(--auth-canvas);
   scrollbar-width: thin;
 }
@@ -82,7 +82,8 @@
   flex-direction: column;
   gap: var(--space-8);
   padding: var(--space-8);
-  background: var(--auth-accent);
+  border-right: 1px solid var(--auth-line);
+  background: var(--auth-field);
   color: white;
 }
 
@@ -90,9 +91,9 @@
 .account-auth-wordmark > span { font-family: var(--font-display); font-size: var(--text-body); font-weight: var(--weight-display); letter-spacing: var(--tracking-snug); }
 .account-auth-wordmark > strong { font-weight: var(--weight-semibold); }
 .account-auth-context-copy { display: grid; gap: var(--space-4); }
-.account-auth-context-copy > strong { max-width: 11ch; font-family: var(--font-display); font-size: var(--text-heading); font-weight: var(--weight-display); line-height: 1.12; letter-spacing: -0.025em; text-wrap: balance; }
+.account-auth-context-copy > strong { max-width: 11ch; font-family: var(--font-display); font-size: var(--text-heading); font-weight: var(--weight-display); line-height: 1.12; letter-spacing: 0; text-wrap: balance; }
 .account-auth-context-copy > p { max-width: 27ch; margin: 0; color: color-mix(in oklch, var(--auth-text) 78%, transparent); font-size: var(--text-small); line-height: var(--leading-body); }
-.account-auth-context-meta { display: flex; align-items: center; gap: var(--space-2); color: oklch(98% 0.01 255 / 0.82); font-size: var(--text-caption); font-weight: var(--weight-semibold); }
+.account-auth-context-meta { display: flex; align-items: center; gap: var(--space-2); color: oklch(98% 0 0 / 0.82); font-size: var(--text-caption); font-weight: var(--weight-semibold); }
 
 .account-auth-panel {
   display: grid;
@@ -197,7 +198,7 @@
   font-size: var(--text-statement);
   font-weight: var(--weight-semibold);
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.36em;
+  letter-spacing: 0;
   text-align: center;
   transition: border-color var(--motion-fast) var(--ease-out), background var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out);
 }
@@ -423,7 +424,7 @@
   .account-auth-brand { padding-right: 3rem; }
   .account-auth-brand h2 { font-size: var(--text-subtitle); }
   .account-email-check-lead { padding: var(--space-3); }
-  .account-otp-input { min-height: 4.75rem; padding-inline: 0.75rem 0.45rem; font-size: var(--text-heading); letter-spacing: 0.28em; }
+  .account-otp-input { min-height: 4.75rem; padding-inline: 0.75rem 0.45rem; font-size: var(--text-heading); letter-spacing: 0; }
   .account-field-row { grid-template-columns: minmax(0, 1fr) 5rem; }
   .password-strength-rules { grid-template-columns: 1fr; }
   .account-profile-header { padding: var(--space-4) 4.25rem var(--space-4) var(--space-4); }

@@ -109,7 +109,13 @@ export type Database = {
     Views: { [_ in never]: never }
     Functions: {
       spend_solution_credit: {
-        Args: { p_description?: string; p_idempotency_key: string }
+        Args: {
+          p_description?: string
+          p_idempotency_key: string
+          p_source?: string
+          p_task_number?: number | null
+          p_textbook_id?: string | null
+        }
         Returns: number
       }
     }

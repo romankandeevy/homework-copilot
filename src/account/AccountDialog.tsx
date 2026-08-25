@@ -654,7 +654,7 @@ function ProfileView({ user, account, notice, initialView, theme, onToggleTheme,
         <div className="account-wallet-view">
           <section className="account-wallet-hero" aria-labelledby="account-wallet-title">
             <div><span>Доступно сейчас</span><strong id="account-wallet-title">{account ? formatRubles(account.balance) : '…'}</strong></div>
-            <div className="account-wallet-rate"><strong>1 ₽</strong><span>одно готовое решение</span></div>
+            <div className="account-wallet-rate"><strong>5–15 ₽</strong><span>одно решение, зависит от сложности</span></div>
           </section>
 
           <section className="account-wallet-history" aria-labelledby="wallet-history-title">

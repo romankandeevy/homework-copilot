@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import App from './App'
 
 describe('Homework Copilot home', () => {
@@ -14,6 +14,7 @@ describe('Homework Copilot home', () => {
   it('shows the textbook context, a truthful signed-out state and the shared solution base', () => {
     render(<App />)
 
+    expect(window.location.pathname).toBe('/main')
     expect(screen.getByRole('heading', { name: 'Списать задачу' })).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: 'Войти' }).length).toBeGreaterThan(0)
     expect(screen.getAllByText('Геометрия, 8 класс').length).toBeGreaterThan(0)
@@ -24,6 +25,18 @@ describe('Homework Copilot home', () => {
     expect(screen.getByRole('heading', { name: 'База решений' })).toBeInTheDocument()
     expect(screen.getByText('Общие готовые решения по всем добавленным учебникам. Их можно открыть сразу.')).toBeInTheDocument()
     expect(screen.queryByText(/МЭШ/i)).not.toBeInTheDocument()
+  })
+
+  it('uses the same action card for personal solutions and the shared base', () => {
+    render(<App />)
+
+    const guestCard = screen.getByRole('region', { name: 'Твои решения появятся после входа' })
+    const baseCard = screen.getByRole('region', { name: 'База решений' })
+
+    expect(guestCard).toHaveClass('home-action-card')
+    expect(baseCard).toHaveClass('home-action-card')
+    expect(guestCard.querySelector('.home-action-card-icon svg')).toHaveAttribute('width', '34')
+    expect(baseCard.querySelector('.home-action-card-icon svg')).toHaveAttribute('width', '34')
   })
 
   it('opens the real account flow from the sidebar profile', async () => {
@@ -93,10 +106,10 @@ describe('Homework Copilot home', () => {
 
     fireEvent.click(screen.getByText('Сменить'))
     expect(screen.getByRole('dialog', { name: 'Выбери учебник' })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('option', { name: /Русский язык, 8 класс/ }))
+    fireEvent.click(screen.getByRole('option', { name: /Физика, 8 класс/ }))
 
     expect(screen.queryByRole('dialog', { name: 'Выбери учебник' })).not.toBeInTheDocument()
-    expect(screen.getAllByText('Русский язык, 8 класс').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Физика, 8 класс').length).toBeGreaterThan(0)
 
     fireEvent.change(input, { target: { value: '39' } })
     expect(screen.getByText(/В базе пока нет/)).toBeInTheDocument()
@@ -178,31 +191,147 @@ describe('Homework Copilot home', () => {
     expect(screen.getAllByRole('button', { name: 'Включить светлую тему' })).toHaveLength(2)
   })
 
-  it('opens the implemented solutions, base and understanding routes', () => {
+  it('opens the implemented solutions, base and textbook routes', () => {
     render(<App />)
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Мои решения' })[0])
+    expect(window.location.pathname).toBe('/solutions')
     expect(screen.getByRole('heading', { name: 'Мои решения' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Твои решения появятся после входа' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Списать задачу' })).not.toBeInTheDocument()
 
     fireEvent.click(screen.getAllByRole('button', { name: 'База решений' })[0])
+    expect(window.location.pathname).toBe('/base')
     expect(screen.getByRole('heading', { name: 'База решений' })).toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: 'Найти в базе' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /№ 123/ })).toBeInTheDocument()
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Разобраться' })[0])
-    expect(screen.getByRole('heading', { name: 'Разобраться' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Перейти к задаче/ })).toBeInTheDocument()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Учебники' })[0])
+    expect(window.location.pathname).toBe('/textbooks')
+    expect(screen.getByRole('heading', { name: 'Учебник без лишнего шума' })).toBeInTheDocument()
+    expect(screen.getByText(/Глава 01:/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Решить выбранные/ })).toBeDisabled()
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Главная' })[0])
+    expect(window.location.pathname).toBe('/main')
     expect(screen.getByRole('heading', { name: 'Списать задачу' })).toBeInTheDocument()
+  })
+
+  it('opens a section directly and keeps it after the app mounts again', () => {
+    window.history.replaceState({}, '', '/textbooks')
+    const firstRender = render(<App />)
+
+    expect(screen.getByRole('heading', { name: 'Учебник без лишнего шума' })).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/textbooks')
+
+    firstRender.unmount()
+    render(<App />)
+
+    expect(screen.getByRole('heading', { name: 'Учебник без лишнего шума' })).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/textbooks')
+  })
+
+  it('restores the matching section when browser history changes', () => {
+    render(<App />)
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'База решений' })[0])
+    expect(window.location.pathname).toBe('/base')
+
+    window.history.replaceState({}, '', '/solutions')
+    fireEvent(window, new PopStateEvent('popstate'))
+
+    expect(screen.getByRole('heading', { name: 'Мои решения' })).toBeInTheDocument()
+    expect(document.title).toBe('Мои решения — Homework Copilot')
+  })
+
+  it('opens the approved notebook directly from a shareable solution route', () => {
+    window.history.replaceState({}, '', '/solutions/geometry/123')
+    render(<App />)
+
+    expect(screen.getByRole('heading', { name: 'Решение № 123' })).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/solutions/geometry/123')
+    expect(document.title).toBe('Решение № 123 — Homework Copilot')
+
+    fireEvent.click(screen.getByRole('button', { name: 'К учебникам' }))
+    expect(window.location.pathname).toBe('/textbooks')
+    expect(screen.getByRole('heading', { name: 'Учебник без лишнего шума' })).toBeInTheDocument()
+  })
+
+  it('selects several textbook tasks and queues them together', async () => {
+    render(<App />)
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Учебники' })[0])
+    fireEvent.click(screen.getByRole('button', { name: 'Задача № 1 · 5 ₽' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Задача № 2 · 5 ₽' }))
+
+    const submit = screen.getByRole('button', { name: 'Решить выбранные · 2' })
+    expect(submit).toBeEnabled()
+    fireEvent.click(submit)
+
+    expect(await screen.findByText('В очередь добавлено: 2.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Решить выбранные/ })).toBeDisabled()
+  })
+
+  it('keeps the chosen textbook after a reload', async () => {
+    const firstRender = render(<App />)
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Учебники' })[0])
+    fireEvent.click(screen.getByRole('button', { name: /Физика.*Перышкин/ }))
+    await waitFor(() => expect(window.localStorage.getItem('homework-copilot:selected-textbook')).toBe('physics'))
+
+    firstRender.unmount()
+    render(<App />)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Учебники' })[0])
+    expect(screen.getByRole('button', { name: /Физика.*Перышкин/ })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('opens the supplied physics textbook from its preview', () => {
+    render(<App />)
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Учебники' })[0])
+    fireEvent.click(screen.getByRole('button', { name: /Физика.*Перышкин/ }))
+    expect(screen.getByRole('heading', { name: 'Тепловые явления' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Открыть учебник' }))
+    expect(screen.getByRole('region', { name: 'Учебник: Физика. 8 класс' })).toHaveAttribute('data-pdf-source', '/textbooks/physics-8-peryshkin-2026.pdf')
+    expect(screen.getByRole('button', { name: 'Показать точный скан' })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(screen.getByRole('button', { name: 'Показать читаемый текст' }))
+    expect(screen.getByRole('button', { name: 'Показать читаемый текст' })).toHaveAttribute('aria-pressed', 'true')
+    expect(document.querySelector('iframe')).not.toBeInTheDocument()
+  })
+
+  it('opens the supplied chemistry textbook from its preview', () => {
+    render(<App />)
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Учебники' })[0])
+    fireEvent.click(screen.getByRole('button', { name: /Химия.*Габриелян/ }))
+    expect(screen.getByRole('heading', { name: 'Вещество и язык химии' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Открыть учебник' }))
+    expect(screen.getByRole('region', { name: 'Учебник: Химия. 8 класс. Базовый уровень' })).toHaveAttribute('data-pdf-source', '/textbooks/chemistry-8-gabrielyan-2025.pdf')
+  })
+
+  it('shows only tasks from the chosen chapter', () => {
+    render(<App />)
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Учебники' })[0])
+    expect(screen.getByRole('button', { name: 'Задача № 1 · 5 ₽' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Задача № 61 · 5 ₽' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /02\s*Площадь/ }))
+
+    expect(screen.getByRole('button', { name: 'Задача № 61 · 5 ₽' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Задача № 1 · 5 ₽' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Площадь' })).toBeInTheDocument()
+    expect(screen.getByText('Глава 02 · Формула и разбиение')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Открыть учебник' }))
+    expect(screen.getByRole('region', { name: 'Учебник: Геометрия. 7-9 классы' })).toHaveAttribute('data-pdf-source', '/textbooks/geometry-7-9-atanasyan.pdf')
+    expect(screen.getByRole('button', { name: 'Пополнить баланс' })).toBeInTheDocument()
   })
 
   it('opens an editable schedule and saves manual changes', async () => {
     render(<App />)
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Расписание' })[0])
+    expect(window.location.pathname).toBe('/schedule')
     expect(await screen.findByRole('heading', { name: 'Расписание' })).toBeInTheDocument()
     expect(screen.getByRole('table', { name: 'Учебное расписание на неделю' })).toBeInTheDocument()
 
@@ -221,6 +350,7 @@ describe('Homework Copilot home', () => {
 
     const path = document.querySelector('.navigation-route path')
     expect(path).toHaveAttribute('d', 'M-1 18 H24 C46 18 64 18 64 39 V39 C64 39 64 39 64 39 V87 C64 99 40 99 40 111 V340 C40 350 32 360 16 360 H-1')
+    expect(document.querySelector('.product-seam span')).toBeInTheDocument()
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Мои решения' })[0])
     expect(path).toHaveAttribute('d', 'M-1 18 H24 C34 18 40 24 40 34 V77 C40 89 64 89 64 101 V149 C64 161 40 161 40 173 V340 C40 350 32 360 16 360 H-1')

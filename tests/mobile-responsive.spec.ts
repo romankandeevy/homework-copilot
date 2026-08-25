@@ -60,6 +60,8 @@ test.describe('адаптация под телефон', () => {
     expect(activeItemBox!.x - inactiveItemBox!.x).toBeCloseTo(0, 0)
     expect(activeIconBox!.x - inactiveIconBox!.x).toBeCloseTo(24, 0)
     expect(activeLabelBox!.x - inactiveLabelBox!.x).toBeCloseTo(0, 0)
+    await expect(page.locator('.navigation-route')).toHaveCount(1)
+    await expect(page.locator('.product-seam')).toHaveCount(1)
 
     for (let index = 0; index < await navigationItems.count(); index += 1) {
       const item = navigationItems.nth(index)
@@ -89,6 +91,56 @@ test.describe('адаптация под телефон', () => {
     expect(iconAfter).not.toBeNull()
     expect(Math.abs(markerAfter!.y - markerBefore!.y)).toBeLessThan(1)
     expect(Math.abs((markerAfter!.y + markerAfter!.height / 2) - (iconAfter!.y + iconAfter!.height / 2))).toBeLessThan(1)
+  })
+
+  test('логотип остаётся внутри узкого сайдбара на широком экране', async ({ page }) => {
+    await page.setViewportSize({ width: 1920, height: 935 })
+    await page.goto('/')
+
+    const [brandBox, sidebarBox, seamBox] = await Promise.all([
+      page.locator('.sidebar-brand .brand-lockup').boundingBox(),
+      page.locator('.product-sidebar').boundingBox(),
+      page.locator('.product-seam').boundingBox(),
+    ])
+
+    expect(brandBox).not.toBeNull()
+    expect(sidebarBox).not.toBeNull()
+    expect(seamBox).not.toBeNull()
+    expect(sidebarBox!.width).toBe(272)
+    expect(brandBox!.x + brandBox!.width).toBeLessThan(seamBox!.x)
+  })
+
+  test('карточки на главной совпадают по высоте, цвету и расположению кнопок', async ({ page }) => {
+    await page.setViewportSize({ width: 1920, height: 935 })
+    await page.goto('/')
+
+    const cards = page.locator('.home-action-card')
+    await expect(cards).toHaveCount(2)
+
+    const [firstCard, secondCard] = await cards.evaluateAll((elements) => elements.map((element) => {
+      const style = getComputedStyle(element)
+      const icon = element.querySelector('.home-action-card-icon')!
+      const button = element.querySelector('button')!
+      const iconBox = icon.getBoundingClientRect()
+
+      return {
+        height: element.getBoundingClientRect().height,
+        background: style.backgroundColor,
+        border: style.borderColor,
+        iconColor: getComputedStyle(icon).color,
+        iconWidth: iconBox.width,
+        iconHeight: iconBox.height,
+        buttonTop: button.getBoundingClientRect().top,
+      }
+    }))
+
+    expect(firstCard.height).toBe(secondCard.height)
+    expect(firstCard.background).toBe(secondCard.background)
+    expect(firstCard.border).toBe(secondCard.border)
+    expect(firstCard.iconColor).toBe(secondCard.iconColor)
+    expect(firstCard.iconWidth).toBe(secondCard.iconWidth)
+    expect(firstCard.iconHeight).toBe(secondCard.iconHeight)
+    expect(firstCard.buttonTop).toBe(secondCard.buttonTop)
   })
 
   for (const viewport of phoneViewports) {

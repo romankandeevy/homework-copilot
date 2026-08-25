@@ -378,7 +378,7 @@
   display: grid;
   place-items: center;
   padding: var(--space-6);
-  background: oklch(8% 0.01 250 / 0.7);
+  background: oklch(0% 0 0 / 0.7);
   backdrop-filter: blur(10px);
 }
 

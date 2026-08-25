@@ -2,26 +2,26 @@
 name: Homework Copilot
 description: Textbook-first copying flow with instant shared answers and notebook-ready solutions.
 colors:
-  canvas: "oklch(97.5% 0.006 255)"
-  surface: "oklch(99% 0.0035 255)"
-  surface-raised: "oklch(99.7% 0.002 255)"
-  surface-sunken: "oklch(94.5% 0.008 255)"
-  border: "oklch(79% 0.014 255)"
-  border-strong: "oklch(59% 0.022 255)"
-  text-subtle: "oklch(49% 0.018 255)"
-  text-muted: "oklch(39% 0.022 255)"
-  text: "oklch(22% 0.025 258)"
-  strong: "oklch(16% 0.024 258)"
-  on-strong: "oklch(98% 0.004 255)"
-  accent-soft: "oklch(92.5% 0.04 255)"
-  accent: "oklch(54% 0.2 260)"
-  accent-surface: "oklch(54% 0.2 260)"
-  dark-accent-surface: "oklch(44% 0.15 260)"
-  accent-hover: "oklch(49% 0.21 260)"
-  disabled-on-accent: "oklch(43% 0.045 258)"
-  disabled-on-accent-border: "oklch(48% 0.07 258)"
-  on-accent: "oklch(98% 0.004 255)"
-  brand-accent: "oklch(49% 0.205 260)"
+  canvas: "oklch(98.5% 0 0)"
+  surface: "oklch(100% 0 0)"
+  surface-raised: "oklch(97.5% 0 0)"
+  surface-sunken: "oklch(95% 0 0)"
+  border: "oklch(83% 0 0)"
+  border-strong: "oklch(57% 0 0)"
+  text-subtle: "oklch(48% 0 0)"
+  text-muted: "oklch(38% 0 0)"
+  text: "oklch(22% 0 0)"
+  strong: "oklch(16% 0 0)"
+  on-strong: "oklch(99% 0 0)"
+  accent-soft: "oklch(94% 0.025 260)"
+  accent: "oklch(55% 0.19 260)"
+  accent-surface: "oklch(100% 0 0)"
+  dark-accent-surface: "oklch(18.5% 0 0)"
+  accent-hover: "oklch(49% 0.19 260)"
+  disabled-on-accent: "oklch(92% 0 0)"
+  disabled-on-accent-border: "oklch(79% 0 0)"
+  on-accent: "oklch(99% 0 0)"
+  brand-accent: "oklch(52% 0.18 260)"
   info: "oklch(59% 0.15 245)"
   success: "oklch(58% 0.13 154)"
   success-strong: "oklch(43% 0.12 154)"
@@ -33,13 +33,13 @@ typography:
     fontSize: "clamp(2.7rem, 4.8vw, 5.5rem)"
     fontWeight: 400
     lineHeight: 0.99
-    letterSpacing: "-0.04em"
+    letterSpacing: "0"
   heading:
     fontFamily: "Unbounded Variable, Arial Black, sans-serif"
     fontSize: "1.5rem"
     fontWeight: 400
     lineHeight: 1.12
-    letterSpacing: "-0.025em"
+    letterSpacing: "0"
   body:
     fontFamily: "Onest, Segoe UI, sans-serif"
     fontSize: "1rem"
@@ -55,7 +55,7 @@ typography:
     fontSize: "0.6875rem"
     fontWeight: 620
     lineHeight: 1.45
-    letterSpacing: "0.04em"
+    letterSpacing: "0"
 rounded:
   xs: "0.25rem"
   control: "0.5rem"
@@ -84,8 +84,8 @@ components:
     padding: "0 {spacing.4}"
     height: "2.75rem"
   task-action:
-    backgroundColor: "{colors.strong}"
-    textColor: "{colors.on-strong}"
+    backgroundColor: "{colors.accent}"
+    textColor: "{colors.on-accent}"
     typography: "{typography.label}"
     rounded: "{rounded.control}"
     padding: "0 {spacing.6}"
@@ -109,13 +109,13 @@ components:
 
 **Creative North Star: "The Guided Margin"**
 
-Homework Copilot feels like a precise route drawn through a clean school notebook: cool paper, ink-blue structure, cobalt direction, and no ornamental dashboard noise. The system is dense enough to make the next action obvious, but never busy enough to compete with the task the student came to copy.
+Homework Copilot feels like a precise route drawn through a clean school notebook: neutral paper, monochrome graphite structure, one cobalt signal, and no ornamental dashboard noise. The system is dense enough to make the next action obvious, but never busy enough to compete with the task the student came to copy.
 
 The primary journey is textbook-first. An exact book and a task number form one search key: if the shared solution base already contains that pair, the answer opens immediately; otherwise the same surface starts a new notebook-ready solution. Shared catalogue and personal history stay visibly separate because they answer different questions.
 
 **Key Characteristics:**
 
-- Cool-neutral canvas with crisp, bordered working surfaces.
+- Neutral Graphite Mono canvas with crisp, bordered working surfaces.
 - One cobalt signal for the primary route, active location, and decisive state.
 - Editorial display type at weight 400, compact interface copy, and monospace metadata.
 - Route lines, nodes, and measured motion that explain location rather than decorate it.
@@ -123,12 +123,12 @@ The primary journey is textbook-first. An exact book and a task number form one 
 
 ## Colors
 
-The palette combines cool paper and blue graphite with one saturated cobalt signal; semantic colors appear only when they communicate a real state.
+The palette combines neutral paper and untinted graphite with one restrained cobalt signal; semantic colors appear only when they communicate a real state.
 
 ### Primary
 
 - **Cobalt Ink:** points to the primary copying action, active navigation, selected book, and progress.
-- **Dark Cobalt Surface:** only the large Home panel shifts to `oklch(44% 0.15 260)` in dark mode; interactive cobalt stays bright for navigation and focus.
+- **Graphite Surface:** large Home panels remain neutral in both themes; interactive cobalt is reserved for navigation, focus, and the primary action.
 - **Deep Graphite:** carries decisive controls and the strongest text hierarchy.
 
 ### Neutral
@@ -160,7 +160,7 @@ The palette combines cool paper and blue graphite with one saturated cobalt sign
 - **Heading:** weight 400 in the same family; used for section and state titles.
 - **Body:** regular Onest with relaxed reading leading; used for explanation and supporting copy.
 - **Label:** semibold Onest; used for actions, navigation, and list titles.
-- **Mono label:** semibold JetBrains Mono with wide tracking and uppercase treatment; used for task identifiers and field labels.
+- **Mono label:** semibold JetBrains Mono with natural spacing and uppercase treatment; used for task identifiers and field labels.
 
 ### Named Rules
 
@@ -192,7 +192,7 @@ The sidebar route stays on one measured icon grid. Only the active icon shifts t
 
 ### Primary Copying Surface
 
-The cobalt panel is the visual and functional start of Home. It contains the exact textbook selector, task-number field, base-match feedback, and one adaptive action: **«Открыть готовое»** for an existing shared solution or **«Списать»** for a new request. The action and result copy update together, never independently.
+The neutral graphite panel is the visual and functional start of Home. It contains the exact textbook selector, task-number field, base-match feedback, and one adaptive cobalt action: **«Открыть готовое»** for an existing shared solution or **«Списать»** for a new request. The action and result copy update together, never independently.
 
 ### Textbook Picker
 
@@ -204,7 +204,7 @@ The number uses the monospace face and accepts identifiers such as `123` or `18.
 
 ### Navigation
 
-The five destinations remain, in order: **Главная**, **Мои решения**, **База решений**, **Разобраться**, **Расписание**. Desktop uses the routed sidebar and a single theme control at bottom-left. Mobile uses the same order in bottom navigation. Active state combines cobalt, movement, label contrast, and `aria-current`.
+The five destinations remain, in order: **Главная** (`/main`), **Мои решения** (`/solutions`), **База решений** (`/base`), **Учебники** (`/textbooks`), **Расписание** (`/schedule`). Each route can be opened directly, refreshed, and restored with browser history. Desktop uses the routed sidebar and a single theme control at bottom-left. Mobile uses the same order in bottom navigation. Active state combines cobalt, movement, label contrast, and `aria-current`.
 
 ### Shared Base and Personal History
 

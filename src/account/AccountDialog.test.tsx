@@ -35,7 +35,7 @@ describe('AccountDialog profile', () => {
 
     expect(screen.getByRole('navigation', { name: 'Раздел аккаунта' })).toBeInTheDocument()
     expect(screen.getByRole('region', { name: '20 ₽' })).toBeInTheDocument()
-    expect(screen.getByText('одно готовое решение')).toBeInTheDocument()
+    expect(screen.getByText('одно решение, зависит от сложности')).toBeInTheDocument()
     expect(screen.queryByText('Журнал нельзя изменить')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Профиль' }))

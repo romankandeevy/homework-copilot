@@ -34,8 +34,10 @@ test.describe('недельное расписание', () => {
     await subject.fill('История')
     await expect(subject).toHaveValue('История')
 
+    await expect(page).toHaveURL(/\/schedule$/)
     await page.reload()
-    await page.getByRole('button', { name: 'Расписание' }).click()
+    await expect(page).toHaveURL(/\/schedule$/)
+    await expect(page.getByRole('heading', { name: 'Расписание' })).toBeVisible()
     await expect(page.getByLabel('Предмет, понедельник, урок 1 в недельной таблице')).toHaveValue('История')
   })
 
