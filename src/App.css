@@ -92,6 +92,18 @@
 }
 .navigation-item.is-active > svg { color: var(--color-brand-accent); }
 
+.navigation-status {
+  display: inline-flex;
+  min-height: 1.35rem;
+  align-items: center;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-control);
+  background: var(--color-accent-soft);
+  color: var(--color-brand-accent);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-semibold);
+}
+
 .navigation-icon,
 .catalog-pick-icon,
 .recent-icon,
@@ -1973,6 +1985,14 @@
   white-space: nowrap;
 }
 
+.my-solutions {
+  min-height: 12rem;
+  padding: var(--space-6);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
+}
+
 .my-solutions > .section-heading {
   min-height: 4.5rem;
   align-items: end;
@@ -2116,7 +2136,8 @@
   .base-match { align-items: flex-start; font-size: var(--text-caption); }
   .ready-solution { grid-template-columns: auto minmax(0, 1fr); padding: var(--space-5) var(--space-4); }
   .ready-solution button { grid-column: 1 / -1; width: 100%; }
-  .textbooks-section { padding: var(--space-5) var(--space-4); }
+  .textbooks-section,
+  .my-solutions { padding: var(--space-5) var(--space-4); }
   .textbooks-section > .section-heading,
   .my-solutions > .section-heading { align-items: flex-start; }
   .section-action { font-size: 0; }

@@ -532,6 +532,7 @@ describe('Homework Copilot home', () => {
     expect(screen.queryByRole('button', { name: 'Мои решения' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'База решений' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'ЦДЗ' })).toBeInTheDocument()
+    expect(screen.getByText('Скоро')).toHaveClass('navigation-status')
     expect(document.querySelector('.product-sidebar')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Решения' }))

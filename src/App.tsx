@@ -295,6 +295,7 @@ function ProductTopbar({
             <button className={`navigation-item${active ? ' is-active' : ''}`} type="button" key={label} aria-current={active ? 'page' : undefined} onClick={() => onNavigate(label)}>
               <Icon size={19} weight="duotone" aria-hidden="true" />
               <span className="navigation-label">{label}</span>
+              {label === 'ЦДЗ' && <span className="navigation-status" aria-hidden="true">Скоро</span>}
             </button>
           )
         })}
