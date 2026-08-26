@@ -1837,6 +1837,7 @@
 }
 .solution-notebook-preview .geometry-notebook-document { width: min(100%, 52rem); margin: auto; }
 .solution-notebook-preview .geometry-notebook-page { width: 100%; box-shadow: none; }
+.solution-source-diagram-error { color: var(--color-danger); font-size: var(--text-small); }
 
 .solution-actions {
   display: flex;

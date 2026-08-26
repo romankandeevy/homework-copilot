@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import sys
 from pathlib import Path
 
@@ -17,8 +18,32 @@ COLUMNS = 4
 ROWS = 4
 
 
+def load_index(path: Path) -> dict:
+    source = path.read_text(encoding="utf-8")
+    if path.suffix.lower() != ".sql":
+        return json.loads(source)
+
+    match = re.search(r"\$geometry_tasks\$(\[.*?\])\$geometry_tasks\$", source, re.DOTALL)
+    if not match:
+        raise RuntimeError(f"Geometry task payload not found in {path}")
+    index = {"tasks": json.loads(match.group(1))}
+    tasks_by_number = {str(task["task"]): task for task in index["tasks"]}
+    correction_pattern = re.compile(r"\('(\d+)',\s*'(\[\{.*?\}\])'::jsonb\)")
+
+    for migration in sorted(path.parent.glob("*.sql")):
+        if migration.name <= path.name:
+            continue
+        for task_number, payload in correction_pattern.findall(migration.read_text(encoding="utf-8")):
+            task = tasks_by_number.get(task_number)
+            if task is not None:
+                task["diagram_regions"] = json.loads(payload)
+                task["has_diagram"] = True
+
+    return index
+
+
 def main() -> None:
-    index = json.loads(INDEX_FILE.read_text(encoding="utf-8"))
+    index = load_index(INDEX_FILE)
     entries = [
         (task["task"], region)
         for task in index["tasks"]

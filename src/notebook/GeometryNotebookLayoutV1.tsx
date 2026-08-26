@@ -9,27 +9,60 @@ type PageSegment = {
   continuation: boolean
 }
 
+function wrapText(line: string, maxCharacters: number) {
+  if (line.length <= maxCharacters) return [line]
+  const words = line.split(/\s+/).filter(Boolean)
+  const wrapped: string[] = []
+  let current = ''
+
+  for (const word of words) {
+    if (current && `${current} ${word}`.length > maxCharacters) {
+      wrapped.push(current)
+      current = word
+    } else {
+      current = current ? `${current} ${word}` : word
+    }
+  }
+  if (current) wrapped.push(current)
+  return wrapped.length > 0 ? wrapped : [line]
+}
+
+function fitLinesToZone(
+  lineCount: number,
+  firstLineY: number,
+  preferredLineStep: number,
+  lastLineY: number,
+  preferredFontSize: number,
+  fontToLineRatio: number,
+) {
+  const lineStep = lineCount > 1
+    ? Math.min(preferredLineStep, (lastLineY - firstLineY) / (lineCount - 1))
+    : preferredLineStep
+  return {
+    lineStep,
+    fontSize: Math.min(preferredFontSize, lineStep * fontToLineRatio),
+  }
+}
+
 function paginateSolution(spec: GeometryNotebookPageSpec): readonly PageSegment[] {
-  const maxLines = spec.answer
-    ? layout.zones.solution.maxLinesWithAnswer
-    : layout.zones.solution.maxLinesWithoutAnswer
   const segments: PageSegment[] = []
+  let start = 0
 
-  for (let start = 0; start < spec.solution.length; start += maxLines) {
+  do {
+    const continuation = start > 0
+    const zone = continuation ? layout.zones.solution.continuation : layout.zones.solution
+    const remaining = spec.solution.length - start
+    const fitsWithAnswer = Boolean(spec.answer) && remaining <= zone.maxLinesWithAnswer
+    const maxLines = fitsWithAnswer ? zone.maxLinesWithAnswer : zone.maxLinesWithoutAnswer
+    const lines = spec.solution.slice(start, start + maxLines)
+    start += lines.length
+    const isFinal = start >= spec.solution.length
     segments.push({
-      lines: spec.solution.slice(start, start + maxLines),
-      continuation: start > 0,
+      lines,
+      continuation,
+      ...(isFinal && spec.answer ? { answer: spec.answer } : {}),
     })
-  }
-
-  if (segments.length === 0) {
-    segments.push({ lines: [], continuation: false })
-  }
-
-  const finalSegment = segments.at(-1)
-  if (finalSegment && spec.answer) {
-    finalSegment.answer = spec.answer
-  }
+  } while (start < spec.solution.length)
 
   return segments
 }
@@ -120,6 +153,34 @@ function TriangleDiagram({ diagram }: { diagram: GeometryDiagramSpec }) {
 function NotebookSheet({ spec, segment }: { spec: GeometryNotebookPageSpec; segment: PageSegment }) {
   const { page, colors, zones, typography, strokes } = layout
   const isContinuation = segment.continuation
+  const solutionTitleY = isContinuation ? zones.solution.continuation.titleY : zones.solution.titleY
+  const solutionFirstLineY = isContinuation ? zones.solution.continuation.firstLineY : zones.solution.firstLineY
+  const compactGiven = spec.given.flatMap((line) => wrapText(line, zones.given.compact.maxCharacters))
+  const denseGiven = spec.given.flatMap((line) => wrapText(line, zones.given.dense.maxCharacters))
+  const usesCompactGiven = compactGiven.length > spec.given.length && compactGiven.length <= zones.given.compact.maxLines
+  const usesDenseGiven = compactGiven.length > zones.given.compact.maxLines
+  const givenLines = usesDenseGiven ? denseGiven : usesCompactGiven ? compactGiven : spec.given
+  const denseGivenLayout = fitLinesToZone(
+    givenLines.length,
+    zones.given.dense.firstLineY,
+    zones.given.dense.lineStep,
+    zones.given.dense.lastLineY,
+    zones.given.dense.fontSize,
+    zones.given.dense.fontToLineRatio,
+  )
+  const givenFirstLineY = usesDenseGiven ? zones.given.dense.firstLineY : usesCompactGiven ? zones.given.compact.firstLineY : zones.given.firstLineY
+  const givenLineStep = usesDenseGiven ? denseGivenLayout.lineStep : usesCompactGiven ? zones.given.compact.lineStep : zones.given.lineStep
+  const goalText = `${spec.goal.title}: ${spec.goal.text}`
+  const goalLines = wrapText(goalText, zones.goal.compact.maxCharacters)
+  const usesCompactGoal = goalLines.length > 1
+  const compactGoalLayout = fitLinesToZone(
+    goalLines.length,
+    zones.goal.y,
+    zones.goal.compact.lineStep,
+    zones.goal.compact.lastLineY,
+    zones.goal.compact.fontSize,
+    zones.goal.compact.fontToLineRatio,
+  )
 
   return (
     <article className="geometry-notebook-page" data-testid="geometry-notebook-page" aria-label={`Лист тетради: задача ${spec.number}${isContinuation ? ', продолжение' : ''}`}>
@@ -129,22 +190,48 @@ function NotebookSheet({ spec, segment }: { spec: GeometryNotebookPageSpec; segm
           <>
             <text className="notebook-number" x={zones.number.x} y={zones.number.y}>№ {spec.number}</text>
             <text className="notebook-title" x={zones.given.x} y={zones.given.titleY}>Дано:</text>
-            {spec.given.map((line, index) => (
-              <text className="notebook-body" key={line} x={zones.given.x} y={zones.given.firstLineY + index * zones.given.lineStep}>{line}</text>
+            {givenLines.map((line, index) => (
+              <text
+                className={`notebook-body${usesDenseGiven ? ' notebook-body-dense' : usesCompactGiven ? ' notebook-body-compact' : ''}`}
+                key={`${line}-${index}`}
+                x={zones.given.x}
+                y={givenFirstLineY + index * givenLineStep}
+                style={usesDenseGiven ? { fontSize: denseGivenLayout.fontSize } : undefined}
+              >{line}</text>
             ))}
             <line className="notebook-divider" x1={zones.divider.horizontal.startX} x2={zones.divider.horizontal.endX} y1={zones.divider.horizontal.y} y2={zones.divider.horizontal.y} />
             <line className="notebook-divider" x1={zones.divider.vertical.x} x2={zones.divider.vertical.x} y1={zones.divider.vertical.startY} y2={zones.divider.vertical.endY} />
-            <text className="notebook-goal" x={zones.goal.x} y={zones.goal.y}>{spec.goal.title}: {spec.goal.text}</text>
-            <TriangleDiagram diagram={spec.diagram} />
+            {goalLines.map((line, index) => (
+              <text
+                className={`notebook-goal${usesCompactGoal ? ' notebook-goal-compact' : ''}`}
+                key={`${line}-${index}`}
+                x={zones.goal.x}
+                y={zones.goal.y + index * compactGoalLayout.lineStep}
+                style={usesCompactGoal ? { fontSize: compactGoalLayout.fontSize } : undefined}
+              >{line}</text>
+            ))}
+            {spec.sourceDiagram ? (
+              <image
+                className="source-diagram-image"
+                x={zones.diagram.sourceImage.x}
+                y={zones.diagram.sourceImage.y}
+                width={zones.diagram.sourceImage.width}
+                height={zones.diagram.sourceImage.height}
+                href={spec.sourceDiagram.imageUrl}
+                preserveAspectRatio="xMidYMid meet"
+                role="img"
+                aria-label={spec.sourceDiagram.alt}
+              />
+            ) : <TriangleDiagram diagram={spec.diagram} />}
           </>
         )}
 
-        <text className="notebook-title" x={zones.solution.x} y={zones.solution.titleY}>{isContinuation ? 'Решение. (продолжение)' : 'Решение.'}</text>
+        <text className="notebook-title" x={zones.solution.x} y={solutionTitleY}>{isContinuation ? 'Решение. (продолжение)' : 'Решение.'}</text>
         {segment.lines.map((line, index) => (
-          <text className="notebook-solution" key={`${line}-${index}`} x={zones.solution.x} y={zones.solution.firstLineY + index * zones.solution.lineStep}>{line}</text>
+          <text className="notebook-solution" key={`${line}-${index}`} x={zones.solution.x} y={solutionFirstLineY + index * zones.solution.lineStep}>{line}</text>
         ))}
         {segment.answer && (
-          <text className="notebook-answer" x={zones.solution.x} y={zones.solution.firstLineY + (segment.lines.length - 1) * zones.solution.lineStep + zones.solution.answerGap}>Ответ: {segment.answer}</text>
+          <text className="notebook-answer" x={zones.solution.x} y={solutionFirstLineY + Math.max(0, segment.lines.length - 1) * zones.solution.lineStep + zones.solution.answerGap}>Ответ: {segment.answer}</text>
         )}
         <style>{`
           .notebook-number,.notebook-title,.notebook-body,.notebook-goal,.notebook-solution,.notebook-answer,.diagram-vertex,.diagram-angle-label { fill: ${colors.ink}; font-family: ${typography.family}; font-weight: ${typography.weight}; letter-spacing: .25px; }
@@ -152,6 +239,9 @@ function NotebookSheet({ spec, segment }: { spec: GeometryNotebookPageSpec; segm
           .notebook-title { font-size: ${typography.titleSize}px; }
           .notebook-body { font-size: ${typography.bodySize}px; }
           .notebook-goal { font-size: ${typography.goalSize}px; }
+          .notebook-body-compact { font-size: ${zones.given.compact.fontSize}px; }
+          .notebook-body-dense { font-size: ${zones.given.dense.fontSize}px; }
+          .notebook-goal-compact { font-size: ${zones.goal.compact.fontSize}px; }
           .notebook-solution,.notebook-answer { font-size: ${typography.solutionSize}px; }
           .notebook-divider { stroke: ${colors.ink}; stroke-width: ${strokes.divider}px; stroke-linecap: square; }
           .geometry-diagram { opacity: ${strokes.pencilOpacity}; }

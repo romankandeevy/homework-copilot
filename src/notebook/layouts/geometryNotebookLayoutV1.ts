@@ -27,12 +27,37 @@ export const geometryNotebookLayoutV1 = {
       titleY: 166,
       firstLineY: 230,
       lineStep: 64,
+      compact: {
+        maxCharacters: 22,
+        firstLineY: 230,
+        lineStep: 44,
+        fontSize: 32,
+        maxLines: 4,
+      },
+      dense: {
+        maxCharacters: 30,
+        firstLineY: 214,
+        lineStep: 32,
+        fontSize: 24,
+        lastLineY: 390,
+        fontToLineRatio: 0.8,
+      },
     },
     divider: {
       horizontal: { startX: 48, endX: 421, y: 416 },
       vertical: { x: 421, startY: 90, endY: 558 },
     },
-    goal: { x: 64, y: 473 },
+    goal: {
+      x: 64,
+      y: 473,
+      compact: {
+        maxCharacters: 20,
+        lineStep: 38,
+        fontSize: 28,
+        lastLineY: 545,
+        fontToLineRatio: 0.8,
+      },
+    },
     diagram: {
       triangle: {
         a: { x: 479, y: 535 },
@@ -93,6 +118,12 @@ export const geometryNotebookLayoutV1 = {
           edge: { x: 936, y: 323 },
         },
       },
+      sourceImage: {
+        x: 455,
+        y: 96,
+        width: 575,
+        height: 455,
+      },
     },
     solution: {
       x: 64,
@@ -100,8 +131,14 @@ export const geometryNotebookLayoutV1 = {
       firstLineY: 738,
       lineStep: 84,
       answerGap: 84,
-      maxLinesWithAnswer: 6,
-      maxLinesWithoutAnswer: 7,
+      maxLinesWithAnswer: 7,
+      maxLinesWithoutAnswer: 8,
+      continuation: {
+        titleY: 94,
+        firstLineY: 181,
+        maxLinesWithAnswer: 14,
+        maxLinesWithoutAnswer: 15,
+      },
     },
   },
   strokes: {

@@ -653,10 +653,7 @@ function CopyTask({
     setIsSubmitting(true)
     setError('')
     try {
-      const evidenceRegions = [
-        ...(verifiedTask.ocrConfidence < 90 ? [verifiedTask.sourceRegion] : []),
-        ...verifiedTask.diagramRegions,
-      ]
+      const evidenceRegions = [verifiedTask.sourceRegion, ...verifiedTask.diagramRegions]
       const sourceImageDataUrl = evidenceRegions.length > 0
         ? await renderTextbookTaskEvidenceImage(verifiedTask.sourceUrl, evidenceRegions)
         : undefined
@@ -1084,14 +1081,20 @@ function wrapNotebookLine(line: string, maxLength = 43) {
   return wrapped.length > 0 ? wrapped : [line]
 }
 
-function asGeometryNotebookSpec(solution: HomeworkSolution): GeometryNotebookPageSpec {
+function asGeometryNotebookSpec(
+  solution: HomeworkSolution,
+  sourceDiagram?: GeometryNotebookPageSpec['sourceDiagram'],
+): GeometryNotebookPageSpec {
   return {
     id: 'generated-' + solution.textbookId + '-' + solution.task,
     number: solution.source === 'photo' ? 'фото' : solution.task,
     condition: solution.condition,
     given: solution.given.slice(0, 3),
     goal: solution.goal,
-    diagram: solution.diagram,
+    diagram: solution.source === 'number'
+      ? { kind: 'none', description: '', vertices: [] }
+      : solution.diagram,
+    ...(sourceDiagram ? { sourceDiagram } : {}),
     solution: solution.steps.flatMap((step) => wrapNotebookLine(step)),
     ...(solution.answer ? { answer: solution.answer } : {}),
   }
@@ -1107,7 +1110,53 @@ function UnderstandingPage({
   onGoHome: () => void
 }) {
   const [copied, setCopied] = useState(false)
-  const notebookFixture = generatedSolution ? asGeometryNotebookSpec(generatedSolution) : undefined
+  const [sourceDiagram, setSourceDiagram] = useState<GeometryNotebookPageSpec['sourceDiagram']>()
+  const [sourceDiagramError, setSourceDiagramError] = useState('')
+
+  useEffect(() => {
+    let active = true
+    setSourceDiagram(undefined)
+    setSourceDiagramError('')
+
+    if (!generatedSolution || generatedSolution.source !== 'number' || generatedSolution.subject !== 'Геометрия') {
+      return () => { active = false }
+    }
+
+    const textbook = getTextbook(generatedSolution.textbookId)
+    if (!textbook.sourceUrl
+      || textbook.edition !== generatedSolution.textbookEdition
+      || textbook.sourceUrl !== generatedSolution.sourceUrl) {
+      setSourceDiagramError('Не получилось сверить чертёж с выбранным изданием')
+      return () => { active = false }
+    }
+
+    void lookupVerifiedTextbookTask({
+      textbookId: textbook.id,
+      subject: textbook.subject,
+      grade: textbook.grade,
+      textbookTitle: textbook.title,
+      authors: textbook.authors,
+      edition: textbook.edition,
+      sourceUrl: textbook.sourceUrl,
+    }, generatedSolution.task).then(async (verifiedTask) => {
+      if (!active || !verifiedTask?.hasDiagram) return
+      const imageUrl = await renderTextbookTaskEvidenceImage(verifiedTask.sourceUrl, verifiedTask.diagramRegions)
+      if (!active) return
+      const figures = verifiedTask.diagramRegions.map((region) => region.figure).join(', ')
+      setSourceDiagram({
+        imageUrl,
+        alt: `Исходный рисунок ${figures} из учебника для задачи № ${verifiedTask.task}`,
+      })
+    }).catch(() => {
+      if (active) setSourceDiagramError('Не получилось загрузить исходный чертёж из учебника')
+    })
+
+    return () => { active = false }
+  }, [generatedSolution])
+
+  const notebookFixture = generatedSolution?.subject === 'Геометрия'
+    ? asGeometryNotebookSpec(generatedSolution, sourceDiagram)
+    : undefined
 
   const copySolution = async () => {
     const source = generatedSolution ?? (notebookFixture ? {
@@ -1158,6 +1207,7 @@ function UnderstandingPage({
           <div className="solution-condition">
             <strong>Условие</strong>
             <p>{generatedSolution.condition}</p>
+            {sourceDiagramError && <p className="solution-source-diagram-error" role="alert">{sourceDiagramError}</p>}
           </div>
         )}
         <div className="solution-notebook-preview"><GeometryNotebookLayoutV1 spec={notebookFixture} /></div>

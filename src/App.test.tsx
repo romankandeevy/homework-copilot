@@ -5,6 +5,14 @@ import App from './App'
 import type { HomeworkSolution, SolveHomeworkRequest } from './lib/homeworkContract'
 import { normalizeTaskCondition } from './textbooks/taskCatalog'
 
+vi.mock('./textbooks/textbookTaskSource', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./textbooks/textbookTaskSource')>()
+  return {
+    ...actual,
+    renderTextbookTaskEvidenceImage: vi.fn(async () => 'data:image/jpeg;base64,c291cmNl'),
+  }
+})
+
 function mockGeneratedSolution(request: SolveHomeworkRequest): HomeworkSolution {
   const condition = request.condition ?? 'По фотографии найдите угол треугольника.'
   return {
@@ -80,6 +88,7 @@ describe('Homework Copilot task flow', () => {
       condition: 'Отметьте три точки А, В и С, не лежащие на одной прямой, и через каждую пару точек проведите прямую. Сколько прямых получилось?',
       sourceUrl: '/textbooks/geometry-7-9-atanasyan.pdf',
       sourcePage: 9,
+      imageDataUrl: 'data:image/jpeg;base64,c291cmNl',
     })
   })
 

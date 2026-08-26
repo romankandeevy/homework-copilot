@@ -141,7 +141,7 @@ describe('homework solver', () => {
       condition: verifiedTask.condition,
       conditionNormalized: 'отметьте три точки а,в и с,не лежащие на одной прямой,и через каждую пару точек проведите прямую.сколько прямых получилось?',
       answer: '3 прямые.',
-      diagram: { kind: 'three-point-lines', vertices: ['A', 'B', 'C'] },
+      diagram: { kind: 'none', vertices: [] },
       sourceVerified: true,
     })
     expect(fetchMock).not.toHaveBeenCalled()
@@ -166,7 +166,11 @@ describe('homework solver', () => {
     })
 
     expect(http.response.statusCode).toBe(200)
-    expect(http.body().solution).toMatchObject({ task: '3', condition: taskThreeCondition })
+    expect(http.body().solution).toMatchObject({
+      task: '3',
+      condition: taskThreeCondition,
+      diagram: { kind: 'none', vertices: [] },
+    })
     const requestPayload = JSON.parse(String(fetchMock.mock.calls[0][1]?.body)) as { tools?: unknown; response_format?: { type: string } }
     expect(requestPayload.tools).toBeUndefined()
     expect(requestPayload.response_format?.type).toBe('json_schema')
@@ -322,7 +326,7 @@ describe('homework solver', () => {
 
   it('returns an existing paid answer without calling the provider again', async () => {
     const saved = await solveWithKie(task, {}, 'student-1')
-    const rpc = vi.fn().mockResolvedValue({ data: saved, error: null })
+    const rpc = vi.fn().mockResolvedValue({ data: { ...saved, diagram: providerSolution.diagram }, error: null })
     const from = vi.fn()
     vi.mocked(createClient).mockReturnValueOnce({
       auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'student-1' } }, error: null }) },
@@ -337,7 +341,11 @@ describe('homework solver', () => {
       supabasePublishableKey: 'publishable-test-key',
     })
     expect(http.response.statusCode).toBe(200)
-    expect(http.body().solution).toMatchObject({ task: '2', answer: '3 прямые.' })
+    expect(http.body().solution).toMatchObject({
+      task: '2',
+      answer: '3 прямые.',
+      diagram: { kind: 'none', vertices: [] },
+    })
     expect(rpc).toHaveBeenCalledOnce()
     expect(from).not.toHaveBeenCalled()
   })

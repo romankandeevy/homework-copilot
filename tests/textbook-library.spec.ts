@@ -1,5 +1,53 @@
 import { expect, test } from '@playwright/test'
 
+const sourceUrl = '/textbooks/geometry-7-9-atanasyan.pdf'
+
+const verifiedTasks = {
+  '2': {
+    condition: 'Отметьте три точки А, В и С, не лежащие на одной прямой, и через каждую пару точек проведите прямую. Сколько прямых получилось?',
+    source_page: 9,
+    source_region: { page: 9, x: 94, y: 659, width: 696, height: 78, sourceWidth: 827, sourceHeight: 1100 },
+    diagram_regions: [],
+    ocr_confidence: 95,
+    has_diagram: false,
+  },
+  '3': {
+    condition: 'Проведите три прямые так, чтобы каждые две из них пересекались. Обозначьте все точки пересечения этих прямых. Сколько получилось точек? Рассмотрите все возможные случаи.',
+    source_page: 9,
+    source_region: { page: 9, x: 94, y: 724, width: 696, height: 79, sourceWidth: 827, sourceHeight: 1100 },
+    diagram_regions: [],
+    ocr_confidence: 95,
+    has_diagram: false,
+  },
+  '50': {
+    condition: 'На рисунке 43 изображены лучи с общим началом O. а) Найдите градусные меры углов AOX, BOX, AOB, COB, DOX; б) назовите углы, равные 20°; в) назовите равные углы; г) назовите все углы со стороной OA и найдите их градусные меры.',
+    source_page: 23,
+    source_region: { page: 23, x: 94, y: 129, width: 696, height: 168, sourceWidth: 827, sourceHeight: 1100 },
+    diagram_regions: [{ figure: 43, page: 23, x: 515, y: 135, width: 250, height: 200, sourceWidth: 828, sourceHeight: 1096 }],
+    ocr_confidence: 92,
+    has_diagram: true,
+  },
+} as const
+
+test.beforeEach(async ({ page }) => {
+  await page.route('**/rest/v1/homework_solution_catalog*', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+  })
+  await page.route('**/rest/v1/rpc/get_verified_homework_task', async (route) => {
+    const body = route.request().postDataJSON() as { p_task?: string }
+    const task = body.p_task ? verifiedTasks[body.p_task as keyof typeof verifiedTasks] : undefined
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(task ? [{
+        ...task,
+        condition_normalized: task.condition.toLocaleLowerCase('ru-RU'),
+        source_url: sourceUrl,
+      }] : []),
+    })
+  })
+})
+
 async function openTasks(page: import('@playwright/test').Page) {
   await page.goto('/cdz')
   await expect(page).toHaveURL(/\/cdz$/)
@@ -19,6 +67,7 @@ test.describe('выбор задач', () => {
 
     await page.getByRole('button', { name: 'Проверить условие' }).click()
     await expect(page).toHaveURL(/\/main$/)
+    await page.getByRole('button', { name: 'Проверить условие' }).click()
     await expect(page.getByText('Условие задачи № 2')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Условие верное' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Да, это моя задача' })).toHaveCount(0)
@@ -48,9 +97,9 @@ test.describe('выбор задач', () => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await openTasks(page)
 
-    await page.getByRole('button', { name: '02 Площадь', exact: true }).click()
-    await expect(page.getByText('Глава 02: Площадь')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Задача № 61 · 5 ₽' })).toBeVisible()
+    await page.getByRole('button', { name: '02 № 201–400', exact: true }).click()
+    await expect(page.getByText('Глава 02: № 201–400')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Задача № 201 · 10 ₽' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Задача № 1 · 5 ₽' })).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Открыть учебник' })).toHaveCount(0)
     await expect(page.locator('.textbook-pdf-reader')).toHaveCount(0)

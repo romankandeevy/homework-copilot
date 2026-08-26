@@ -89,6 +89,7 @@ const solutionInstructions = [
   'Каждый элемент given и steps — отдельная короткая строка, которую можно переписать в тетрадь.',
   'В given передай не больше трёх строк; goal.text и каждая строка steps должны быть компактными.',
   'diagram описывает только смысл фигуры и подписи вершин, никогда координаты, SVG, HTML или CSS.',
+  'Для задачи по номеру не реконструируй рисунок: верни diagram.kind=none, потому что исходный чертёж приложение берёт из проверенного PDF.',
   'Для геометрии выбери подходящий kind из triangle, three-point-lines, isosceles-triangle, median-triangle, right-triangle, intersecting-segments, parallel-line-triangle, parallelogram, rectangle, rhombus, square, trapezoid, circle; иначе используй none.',
   'Для физики обязательно укажи единицы измерения и переводы в СИ; для химии уравняй реакции и покажи расчёт.',
 ].join(' ')
@@ -100,6 +101,14 @@ function text(value: unknown, fallback = '') {
 function lines(value: unknown, limit: number) {
   if (!Array.isArray(value)) return []
   return value.map((entry) => text(entry)).filter(Boolean).slice(0, limit)
+}
+
+function emptyDiagram(): HomeworkDiagram {
+  return { kind: 'none', description: '', vertices: [] }
+}
+
+function enforceVerifiedNumberDiagram(solution: HomeworkSolution, request: SolveHomeworkRequest): HomeworkSolution {
+  return request.source === 'number' ? { ...solution, diagram: emptyDiagram() } : solution
 }
 
 function normalizeDiagram(value: unknown, request: SolveHomeworkRequest, condition: string): HomeworkDiagram {
@@ -192,7 +201,7 @@ export function normalizeKieSolution(raw: unknown, request: SolveHomeworkRequest
     goal: { title: goalTitle, text: goalText },
     steps,
     answer: text(candidate.answer),
-    diagram: normalizeDiagram(candidate.diagram, request, condition),
+    diagram: request.source === 'number' ? emptyDiagram() : normalizeDiagram(candidate.diagram, request, condition),
     sourceVerified: true,
     createdAt: new Date().toISOString(),
     ...(ownerId ? { ownerId } : {}),
@@ -248,7 +257,7 @@ export async function solveWithKie(
       goal: verifiedTask.goal,
       steps: [...verifiedTask.solution],
       answer: verifiedTask.answer,
-      diagram: { ...verifiedTask.diagram, vertices: [...verifiedTask.diagram.vertices] },
+      diagram: emptyDiagram(),
       sourceVerified: true,
       createdAt: new Date().toISOString(),
       ...(ownerId ? { ownerId } : {}),
@@ -515,7 +524,7 @@ async function completeStoredSolution(
     throw new HomeworkSolverError(502, 'База решений вернула некорректный ответ')
   }
 
-  return data as unknown as HomeworkSolution
+  return enforceVerifiedNumberDiagram(data as unknown as HomeworkSolution, request)
 }
 
 async function readJsonBody(request: IncomingMessage): Promise<unknown> {

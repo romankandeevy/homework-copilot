@@ -23,6 +23,10 @@ export type GeometryNotebookPageSpec = {
     text: string
   }
   diagram: GeometryDiagramSpec
+  sourceDiagram?: {
+    imageUrl: string
+    alt: string
+  }
   solution: readonly string[]
   answer?: string
 }
