@@ -1,7 +1,7 @@
 {
   "functions": {
     "api/solve.ts": {
-      "includeFiles": "{server/**,src/lib/**}"
+      "includeFiles": "{server/**,src/lib/**,src/textbooks/**}"
     }
   },
   "redirects": [
