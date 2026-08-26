@@ -130,6 +130,7 @@ describe('homework solver', () => {
     expect(result).toMatchObject({
       task: '2',
       condition: verifiedTask.condition,
+      conditionNormalized: 'отметьте три точки а,в и с,не лежащие на одной прямой,и через каждую пару точек проведите прямую.сколько прямых получилось?',
       answer: '3 прямые.',
       diagram: { kind: 'three-point-lines', vertices: ['A', 'B', 'C'] },
       sourceVerified: true,

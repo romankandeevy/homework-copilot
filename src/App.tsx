@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { FormEvent } from 'react'
+import type { FormEvent, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import type { SupabaseClient, User } from '@supabase/supabase-js'
 import {
@@ -528,7 +528,7 @@ function TextbookPicker({
   )
 }
 
-function TaskConditionPreview({ task }: { task: VerifiedTextbookTask }) {
+function TaskConditionPreview({ task, actions }: { task: VerifiedTextbookTask; actions?: ReactNode }) {
   const shouldShowDiagram = task.diagram.kind !== 'three-point-lines'
   const isMedian = task.diagram.kind === 'median-triangle'
   const isRight = task.diagram.kind === 'right-triangle'
@@ -540,6 +540,7 @@ function TaskConditionPreview({ task }: { task: VerifiedTextbookTask }) {
         <span id="task-condition-title">Условие задачи № {task.task}</span>
         <p>{task.condition}</p>
         <small>Источник: PDF учебника «{task.textbookTitle}»{task.sourcePage ? `, стр. ${task.sourcePage}` : ''}. Издание учебника: {task.edition}.</small>
+        {actions && <div className="task-condition-actions">{actions}</div>}
       </div>
       {shouldShowDiagram && (
         <svg className="task-condition-diagram" viewBox="0 0 156 116" role="img" aria-label={task.diagram.description}>
@@ -586,7 +587,6 @@ function CopyTask({
 }) {
   const [error, setError] = useState('')
   const [photo, setPhoto] = useState<File | null>(null)
-  const [pendingTask, setPendingTask] = useState<VerifiedTextbookTask | null>(null)
   const [pendingPhoto, setPendingPhoto] = useState<{ file: File; condition: string } | null>(null)
   const [pendingKey, setPendingKey] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -596,15 +596,16 @@ function CopyTask({
   const verifiedTask = normalizedTask ? findVerifiedTextbookTask(textbook.id, textbook.edition, normalizedTask) : null
   const canSubmit = Boolean(photo || verifiedTask)
   const solutionPrice = photo ? 15 : normalizedTask ? getSolutionPrice(textbook.id, normalizedTask) : 5
+  const createSubmissionKey = () => typeof crypto.randomUUID === 'function'
+    ? `solution-${crypto.randomUUID()}`
+    : `solution-${Date.now()}-${Math.random().toString(16).slice(2)}`
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (submissionRef.current) return
-    const submissionKey = typeof crypto.randomUUID === 'function'
-      ? `solution-${crypto.randomUUID()}`
-      : `solution-${Date.now()}-${Math.random().toString(16).slice(2)}`
 
     if (photo) {
+      const submissionKey = createSubmissionKey()
       setError('')
       submissionRef.current = true
       setIsSubmitting(true)
@@ -628,20 +629,15 @@ function CopyTask({
       setError('Точное условие этой задачи в выбранном издании не найдено. Решение не запускается.')
       return
     }
-    setError('')
-    setPendingTask(verifiedTask)
-    setPendingKey(submissionKey)
   }
 
   const confirmTask = async () => {
-    if (!pendingTask || !pendingKey || submissionRef.current) return
+    if (!verifiedTask || submissionRef.current) return
     submissionRef.current = true
     setIsSubmitting(true)
     setError('')
     try {
-      await onSubmit(pendingTask.task, true, 'number', pendingKey, undefined, pendingTask)
-      setPendingTask(null)
-      setPendingKey('')
+      await onSubmit(verifiedTask.task, true, 'number', createSubmissionKey(), undefined, verifiedTask)
     } catch (submissionError) {
       setError(submissionError instanceof Error ? submissionError.message : 'Не получилось отправить задачу')
     } finally {
@@ -668,7 +664,6 @@ function CopyTask({
   }
 
   const rejectTask = () => {
-    setPendingTask(null)
     setPendingPhoto(null)
     setPendingKey('')
     setError('Выбери другой номер и сверь его с учебником.')
@@ -681,7 +676,6 @@ function CopyTask({
       return
     }
     if (error) setError('')
-    setPendingTask(null)
     setPendingPhoto(null)
     setPendingKey('')
     if (nextValue) {
@@ -698,7 +692,6 @@ function CopyTask({
       return
     }
     setError('')
-    setPendingTask(null)
     setPendingPhoto(null)
     setPendingKey('')
     setPhoto(file)
@@ -722,22 +715,18 @@ function CopyTask({
       <form className="copy-task-form" aria-label="Списать задачу" onSubmit={submit}>
         <TextbookPicker selected={textbook} items={textbooks} onSelect={onTextbookChange} onCreate={onCreateTextbook} open={textbookPickerOpen} onOpenChange={onTextbookPickerOpenChange} />
 
-        {verifiedTask && !photo && <TaskConditionPreview task={verifiedTask} />}
+        {verifiedTask && !photo && (
+          <TaskConditionPreview
+            task={verifiedTask}
+            actions={<>
+              <small className="task-condition-charge">После подтверждения спишем {solutionPrice} ₽.</small>
+              <button className="task-condition-confirm" type="button" onClick={() => { void confirmTask() }} disabled={isSubmitting}>Условие верное</button>
+              <button className="task-condition-reject" type="button" onClick={rejectTask} disabled={isSubmitting}>Выбрать другой номер</button>
+            </>}
+          />
+        )}
         {normalizedTask && !photo && !verifiedTask && normalizedTask.length > 0 && (
           <p className="task-condition-missing" role="status">Точного условия № {normalizedTask} в выбранном издании пока нет. Решение не будет придумано по одному номеру.</p>
-        )}
-        {pendingTask && !photo && (
-          <section className="task-confirmation" aria-labelledby="task-confirmation-title">
-            <div>
-              <strong id="task-confirmation-title">Нашли задачу № {pendingTask.task}</strong>
-              <p>{pendingTask.condition}</p>
-              <p>После подтверждения спишем {solutionPrice} ₽.</p>
-            </div>
-            <div className="task-confirmation-actions">
-              <button type="button" onClick={() => { void confirmTask() }} disabled={isSubmitting}>Да, это моя задача</button>
-              <button type="button" onClick={rejectTask} disabled={isSubmitting}>Условие неверное / выбрать другое</button>
-            </div>
-          </section>
         )}
         {pendingPhoto && (
           <section className="task-confirmation" aria-labelledby="photo-condition-title">
@@ -801,10 +790,12 @@ function CopyTask({
             </div>
           </div>
 
-          <button className="copy-task-submit" type="submit" disabled={!canSubmit || isSubmitting || Boolean(pendingTask || pendingPhoto)}>
-            {isSubmitting ? 'Подожди…' : photo ? 'Распознать условие' : 'Проверить условие'}
-            {!isSubmitting && <ArrowRight size={20} weight="bold" aria-hidden="true" />}
-          </button>
+          {(!verifiedTask || photo) && (
+            <button className="copy-task-submit" type="submit" disabled={!canSubmit || isSubmitting || Boolean(pendingPhoto)}>
+              {isSubmitting ? 'Подожди…' : photo ? 'Распознать условие' : 'Проверить условие'}
+              {!isSubmitting && <ArrowRight size={20} weight="bold" aria-hidden="true" />}
+            </button>
+          )}
         </div>
 
         {error && <p className="task-number-error" id="task-entry-error" role="alert">{error}</p>}
@@ -815,9 +806,9 @@ function CopyTask({
                 ? pendingPhoto
                   ? <><CheckCircle size={18} weight="duotone" aria-hidden="true" /> Условие распознано. Подтверди его перед решением.</>
                   : <><ClockCountdown size={18} weight="duotone" aria-hidden="true" /> Сначала распознаем условие с фотографии.</>
-                : pendingTask
-                ? <><CheckCircle size={18} weight="duotone" aria-hidden="true" /> Условие найдено. Подтверди его перед списанием.</>
-                : <><ClockCountdown size={18} weight="duotone" aria-hidden="true" /> Сначала проверим условие именно в выбранном издании.</>}
+                : verifiedTask
+                  ? <><CheckCircle size={18} weight="duotone" aria-hidden="true" /> Условие найдено. Подтверди его перед списанием.</>
+                  : <><ClockCountdown size={18} weight="duotone" aria-hidden="true" /> Сначала проверим условие именно в выбранном издании.</>}
             </p>
         )}
       </form>

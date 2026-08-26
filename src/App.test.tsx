@@ -62,11 +62,14 @@ describe('Homework Copilot task flow', () => {
     expect(screen.getByText(/Источник: PDF учебника.*стр. 9\. Издание учебника: 14-е издание, Просвещение, 2023/)).toBeInTheDocument()
     expect(screen.queryByRole('img', { name: /Три точки A, B и C/ })).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Проверить условие' }))
-    expect(screen.getByRole('button', { name: 'Да, это моя задача' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Условие верное' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Выбрать другой номер' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Проверить условие' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Нашли задачу № 2')).not.toBeInTheDocument()
+    expect(screen.getAllByText('Отметьте три точки А, В и С, не лежащие на одной прямой, и через каждую пару точек проведите прямую. Сколько прямых получилось?')).toHaveLength(1)
     expect(fetchMock).not.toHaveBeenCalled()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Да, это моя задача' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Условие верное' }))
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
     const request = JSON.parse(String(fetchMock.mock.calls[0][1]?.body)) as SolveHomeworkRequest
     expect(request).toMatchObject({
@@ -91,8 +94,7 @@ describe('Homework Copilot task flow', () => {
     render(<App />)
 
     fireEvent.change(screen.getByRole('textbox', { name: 'Номер задачи' }), { target: { value: '2' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Проверить условие' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Условие неверное / выбрать другое' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Выбрать другой номер' }))
 
     expect(screen.getByText('Выбери другой номер и сверь его с учебником.')).toBeInTheDocument()
     expect(fetchMock).not.toHaveBeenCalled()
@@ -112,8 +114,7 @@ describe('Homework Copilot task flow', () => {
     render(<App />)
 
     fireEvent.change(screen.getByRole('textbox', { name: 'Номер задачи' }), { target: { value: '2' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Проверить условие' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Да, это моя задача' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Условие верное' }))
 
     expect(await screen.findByRole('heading', { name: 'Решение № 2' })).toBeInTheDocument()
     expect(screen.getByText('№ 2', { selector: '.notebook-number' })).toBeInTheDocument()
@@ -129,8 +130,7 @@ describe('Homework Copilot task flow', () => {
     render(<App />)
 
     fireEvent.change(screen.getByRole('textbox', { name: 'Номер задачи' }), { target: { value: '2' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Проверить условие' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Да, это моя задача' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Условие верное' }))
 
     expect(await screen.findByRole('heading', { name: 'Не получилось решить задачу' })).toBeInTheDocument()
     expect(screen.getByText('Точное условие не прошло проверку')).toBeInTheDocument()

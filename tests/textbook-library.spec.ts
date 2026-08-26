@@ -20,6 +20,7 @@ test.describe('выбор задач', () => {
     await page.getByRole('button', { name: 'Проверить условие' }).click()
     await expect(page).toHaveURL(/\/main$/)
     await expect(page.getByText('Условие задачи № 2')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Условие верное' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Да, это моя задача' })).toHaveCount(0)
   })
 
@@ -79,7 +80,8 @@ test.describe('выбор задач', () => {
     await expect(page.getByText(/Издание учебника: 14-е издание, Просвещение, 2023/)).toBeVisible()
     await expect(page.locator('.task-condition-preview')).toHaveClass(/task-condition-preview--copy-only/)
     await expect(page.getByRole('img', { name: /Три точки A, B и C/ })).toHaveCount(0)
-    await expect(page.getByRole('button', { name: 'Проверить условие' })).toBeEnabled()
+    await expect(page.getByRole('button', { name: 'Условие верное' })).toBeEnabled()
+    await expect(page.getByRole('button', { name: 'Проверить условие' })).toHaveCount(0)
   })
 
   test('не переполняется и сохраняет touch-targets на телефоне', async ({ page }) => {
