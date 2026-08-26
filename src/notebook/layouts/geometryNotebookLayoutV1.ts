@@ -59,6 +59,74 @@ export const geometryNotebookLayoutV1 = {
       },
     },
     diagram: {
+      threePointLines: {
+        paths: [
+          'M 476 550 L 798 100',
+          'M 712 100 L 1035 550',
+          'M 455 460 L 1040 460',
+        ],
+        points: {
+          a: { x: 540, y: 460 },
+          b: { x: 755, y: 160 },
+          c: { x: 970, y: 460 },
+        },
+        labels: {
+          a: { x: 510, y: 500 },
+          b: { x: 742, y: 140 },
+          c: { x: 982, y: 500 },
+        },
+      },
+      threeLinesCases: {
+        distinct: {
+          paths: [
+            'M 470 430 L 720 430',
+            'M 485 520 L 685 150',
+            'M 500 170 L 710 515',
+          ],
+          points: {
+            a: { x: 534, y: 430 },
+            b: { x: 592, y: 322 },
+            c: { x: 658, y: 430 },
+          },
+          labels: {
+            a: { x: 505, y: 465 },
+            b: { x: 568, y: 305 },
+            c: { x: 668, y: 465 },
+          },
+          caption: { x: 580, y: 548, text: 'n = 3' },
+        },
+        common: {
+          paths: [
+            'M 770 330 L 1025 330',
+            'M 790 510 L 1000 150',
+            'M 790 150 L 1000 510',
+          ],
+          point: { x: 895, y: 330 },
+          label: { x: 908, y: 315 },
+          caption: { x: 895, y: 548, text: 'n = 1' },
+        },
+      },
+      threeCollinearOneOffLines: {
+        paths: [
+          'M 455 450 L 1035 450',
+          'M 797 114 L 489 534',
+          'M 755 96 L 755 550',
+          'M 714 114 L 1022 534',
+        ],
+        points: {
+          a: { x: 550, y: 450 },
+          b: { x: 755, y: 450 },
+          c: { x: 960, y: 450 },
+          d: { x: 755, y: 170 },
+        },
+        labels: {
+          a: { x: 522, y: 490 },
+          b: { x: 708, y: 500 },
+          c: { x: 972, y: 490 },
+          d: { x: 700, y: 150 },
+          line: { x: 1010, y: 435 },
+        },
+      },
       triangle: {
         a: { x: 479, y: 535 },
         b: { x: 756, y: 142 },
@@ -127,6 +195,7 @@ export const geometryNotebookLayoutV1 = {
     },
     solution: {
       x: 64,
+      maxCharacters: 39,
       titleY: 651,
       firstLineY: 738,
       lineStep: 84,

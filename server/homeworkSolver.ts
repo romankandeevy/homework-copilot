@@ -5,6 +5,7 @@ import { homeworkDiagramKinds } from '../src/lib/homeworkContract.ts'
 import type { HomeworkDiagram, HomeworkSolution, SolveHomeworkRequest } from '../src/lib/homeworkContract.ts'
 import type { Database, Json } from '../src/lib/database.types.ts'
 import { getSolutionPrice } from '../src/lib/solutionPricing.ts'
+import { getVerifiedNumberedGeometrySolution } from '../src/lib/verifiedNumberedSolutions.ts'
 import { findVerifiedTextbookTask, geometryTextbookIdentity, normalizeTaskCondition } from '../src/textbooks/taskCatalog.ts'
 
 type SolverOptions = {
@@ -83,6 +84,8 @@ const solutionInstructions = [
   'Если фотография не читается, верни sourceVerified=false и не придумывай решение.',
   'Сохраняй проверенное или считанное условие в condition.',
   'Решение должно быть готовым для переписывания в школьную тетрадь: дано, найти или доказать, последовательные вычисления, ответ.',
+  'Пиши в первую очередь математическими обозначениями, а не пересказывай условие словами: A∈a, D∉a, ∠ABC, AB=BC, a∥b, a⟂b, a∩b=O, ⇒.',
+  'Словесные пояснения оставляй только там, где без них нельзя указать теорему или обоснование.',
   'Для геометрии допустимы только сокращения: п/у = прямоугольный, р/б = равнобедренный, св-во = свойство.',
   'Теорему обозначай кириллическим символом т в кружке: т⃝. Всё остальное пиши полными словами.',
   'Используй математические символы △, ∠, °, ∥, ⟂, =, ∼, ⇒; не используй LaTeX, Markdown или выдуманные сокращения.',
@@ -108,7 +111,8 @@ function emptyDiagram(): HomeworkDiagram {
 }
 
 function enforceVerifiedNumberDiagram(solution: HomeworkSolution, request: SolveHomeworkRequest): HomeworkSolution {
-  return request.source === 'number' ? { ...solution, diagram: emptyDiagram() } : solution
+  if (request.source !== 'number') return solution
+  return getVerifiedNumberedGeometrySolution(solution) ?? { ...solution, diagram: emptyDiagram() }
 }
 
 function normalizeDiagram(value: unknown, request: SolveHomeworkRequest, condition: string): HomeworkDiagram {
@@ -186,7 +190,7 @@ export function normalizeKieSolution(raw: unknown, request: SolveHomeworkRequest
   const goalTitle = text(goalValue.title) === 'Доказать' ? 'Доказать' : 'Найти'
   const goalText = text(goalValue.text, 'Ответ.').replace(/^(найти|доказать)\s*:?\s*/i, '')
 
-  return {
+  return enforceVerifiedNumberDiagram({
     textbookId: request.textbookId,
     task: request.task,
     source: request.source,
@@ -205,7 +209,7 @@ export function normalizeKieSolution(raw: unknown, request: SolveHomeworkRequest
     sourceVerified: true,
     createdAt: new Date().toISOString(),
     ...(ownerId ? { ownerId } : {}),
-  }
+  }, request)
 }
 
 function providerMessage(request: SolveHomeworkRequest) {
@@ -242,7 +246,7 @@ export async function solveWithKie(
     ? findVerifiedTextbookTask(request.textbookId, request.edition, request.task)
     : null
   if (verifiedTask?.solution) {
-    return {
+    return enforceVerifiedNumberDiagram({
       textbookId: request.textbookId,
       task: request.task,
       source: request.source,
@@ -261,7 +265,7 @@ export async function solveWithKie(
       sourceVerified: true,
       createdAt: new Date().toISOString(),
       ...(ownerId ? { ownerId } : {}),
-    }
+    }, request)
   }
   if (!options.apiKey) {
     throw new HomeworkSolverError(503, 'Kie.ai не подключён: добавь KIE_API_KEY в .env.local и перезапусти сервер')
@@ -493,7 +497,7 @@ async function completeStoredSolution(
   request: SolveHomeworkRequest,
   solution?: HomeworkSolution,
 ): Promise<HomeworkSolution | null> {
-  if (!account) return solution ?? null
+  if (!account) return solution ? enforceVerifiedNumberDiagram(solution, request) : null
   const price = getSolutionPrice(request.textbookId, request.task, request.source)
   const condition = solution?.condition ?? request.condition ?? ''
   const conditionNormalized = solution?.conditionNormalized ?? normalizeTaskCondition(condition)

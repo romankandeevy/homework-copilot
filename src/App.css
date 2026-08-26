@@ -1832,10 +1832,10 @@
   overflow: hidden;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-panel);
-  background: var(--color-surface-sunken);
+  background: transparent;
   box-shadow: var(--shadow-raised);
 }
-.solution-notebook-preview .geometry-notebook-document { width: min(100%, 52rem); margin: auto; }
+.solution-notebook-preview .geometry-notebook-document { width: 100%; margin: 0; }
 .solution-notebook-preview .geometry-notebook-page { width: 100%; box-shadow: none; }
 .solution-source-diagram-error { color: var(--color-danger); font-size: var(--text-small); }
 

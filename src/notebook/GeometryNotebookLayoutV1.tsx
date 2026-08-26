@@ -5,7 +5,7 @@ assertGeometryNotebookLayoutV1()
 
 type PageSegment = {
   lines: readonly string[]
-  answer?: string
+  answerLines?: readonly string[]
   continuation: boolean
 }
 
@@ -46,30 +46,92 @@ function fitLinesToZone(
 
 function paginateSolution(spec: GeometryNotebookPageSpec): readonly PageSegment[] {
   const segments: PageSegment[] = []
+  const solutionLines = spec.solution.flatMap((line) => wrapText(line, layout.zones.solution.maxCharacters))
+  const answerLines = spec.answer
+    ? wrapText(`Ответ: ${spec.answer}`, layout.zones.solution.maxCharacters)
+    : []
   let start = 0
 
   do {
     const continuation = start > 0
     const zone = continuation ? layout.zones.solution.continuation : layout.zones.solution
-    const remaining = spec.solution.length - start
-    const fitsWithAnswer = Boolean(spec.answer) && remaining <= zone.maxLinesWithAnswer
-    const maxLines = fitsWithAnswer ? zone.maxLinesWithAnswer : zone.maxLinesWithoutAnswer
-    const lines = spec.solution.slice(start, start + maxLines)
+    const remaining = solutionLines.length - start
+    const maxLinesWithAnswer = Math.min(
+      zone.maxLinesWithAnswer,
+      Math.max(0, zone.maxLinesWithoutAnswer - answerLines.length),
+    )
+    const fitsWithAnswer = answerLines.length > 0 && remaining <= maxLinesWithAnswer
+    const maxLines = fitsWithAnswer
+      ? maxLinesWithAnswer
+      : answerLines.length > 0
+        ? Math.min(zone.maxLinesWithoutAnswer, Math.max(1, remaining - 1))
+        : zone.maxLinesWithoutAnswer
+    const lines = solutionLines.slice(start, start + maxLines)
     start += lines.length
-    const isFinal = start >= spec.solution.length
+    const isFinal = start >= solutionLines.length
     segments.push({
       lines,
       continuation,
-      ...(isFinal && spec.answer ? { answer: spec.answer } : {}),
+      ...(isFinal && fitsWithAnswer ? { answerLines } : {}),
     })
-  } while (start < spec.solution.length)
+  } while (start < solutionLines.length)
 
   return segments
 }
 
 function TriangleDiagram({ diagram }: { diagram: GeometryDiagramSpec }) {
-  const { triangle, labels, apexAngle, angleArc, leftTick, rightTick, rightAngle, exteriorAngle, auxiliaryLabel, parallelLine, parallelLabel, intersectingSegments, quadrilateral, circle } = layout.zones.diagram
+  const { threePointLines, threeLinesCases, threeCollinearOneOffLines, triangle, labels, apexAngle, angleArc, leftTick, rightTick, rightAngle, exteriorAngle, auxiliaryLabel, parallelLine, parallelLabel, intersectingSegments, quadrilateral, circle } = layout.zones.diagram
   if (diagram.kind === 'none') return null
+
+  if (diagram.kind === 'three-point-extended-lines') {
+    return (
+      <g className="geometry-diagram" role="img" aria-label={diagram.description}>
+        {threePointLines.paths.map((path) => <path className="diagram-line" d={path} key={path} />)}
+        <circle className="diagram-point" cx={threePointLines.points.a.x} cy={threePointLines.points.a.y} r="6" />
+        <circle className="diagram-point" cx={threePointLines.points.b.x} cy={threePointLines.points.b.y} r="6" />
+        <circle className="diagram-point" cx={threePointLines.points.c.x} cy={threePointLines.points.c.y} r="6" />
+        <text className="diagram-vertex" x={threePointLines.labels.a.x} y={threePointLines.labels.a.y}>{diagram.vertices[0] ?? 'A'}</text>
+        <text className="diagram-vertex" x={threePointLines.labels.b.x} y={threePointLines.labels.b.y}>{diagram.vertices[1] ?? 'B'}</text>
+        <text className="diagram-vertex" x={threePointLines.labels.c.x} y={threePointLines.labels.c.y}>{diagram.vertices[2] ?? 'C'}</text>
+      </g>
+    )
+  }
+
+  if (diagram.kind === 'three-lines-cases') {
+    return (
+      <g className="geometry-diagram" role="img" aria-label={diagram.description}>
+        {threeLinesCases.distinct.paths.map((path) => <path className="diagram-line" d={path} key={path} />)}
+        <circle className="diagram-point" cx={threeLinesCases.distinct.points.a.x} cy={threeLinesCases.distinct.points.a.y} r="5" />
+        <circle className="diagram-point" cx={threeLinesCases.distinct.points.b.x} cy={threeLinesCases.distinct.points.b.y} r="5" />
+        <circle className="diagram-point" cx={threeLinesCases.distinct.points.c.x} cy={threeLinesCases.distinct.points.c.y} r="5" />
+        <text className="diagram-vertex" x={threeLinesCases.distinct.labels.a.x} y={threeLinesCases.distinct.labels.a.y}>{diagram.vertices[0] ?? 'A'}</text>
+        <text className="diagram-vertex" x={threeLinesCases.distinct.labels.b.x} y={threeLinesCases.distinct.labels.b.y}>{diagram.vertices[1] ?? 'B'}</text>
+        <text className="diagram-vertex" x={threeLinesCases.distinct.labels.c.x} y={threeLinesCases.distinct.labels.c.y}>{diagram.vertices[2] ?? 'C'}</text>
+        <text className="diagram-caption" textAnchor="middle" x={threeLinesCases.distinct.caption.x} y={threeLinesCases.distinct.caption.y}>{threeLinesCases.distinct.caption.text}</text>
+        {threeLinesCases.common.paths.map((path) => <path className="diagram-line" d={path} key={path} />)}
+        <circle className="diagram-point" cx={threeLinesCases.common.point.x} cy={threeLinesCases.common.point.y} r="6" />
+        <text className="diagram-vertex" x={threeLinesCases.common.label.x} y={threeLinesCases.common.label.y}>{diagram.vertices[3] ?? 'O'}</text>
+        <text className="diagram-caption" textAnchor="middle" x={threeLinesCases.common.caption.x} y={threeLinesCases.common.caption.y}>{threeLinesCases.common.caption.text}</text>
+      </g>
+    )
+  }
+
+  if (diagram.kind === 'three-collinear-one-off-lines') {
+    return (
+      <g className="geometry-diagram" role="img" aria-label={diagram.description}>
+        {threeCollinearOneOffLines.paths.map((path) => <path className="diagram-line" d={path} key={path} />)}
+        <circle className="diagram-point" cx={threeCollinearOneOffLines.points.a.x} cy={threeCollinearOneOffLines.points.a.y} r="6" />
+        <circle className="diagram-point" cx={threeCollinearOneOffLines.points.b.x} cy={threeCollinearOneOffLines.points.b.y} r="6" />
+        <circle className="diagram-point" cx={threeCollinearOneOffLines.points.c.x} cy={threeCollinearOneOffLines.points.c.y} r="6" />
+        <circle className="diagram-point" cx={threeCollinearOneOffLines.points.d.x} cy={threeCollinearOneOffLines.points.d.y} r="6" />
+        <text className="diagram-vertex" x={threeCollinearOneOffLines.labels.a.x} y={threeCollinearOneOffLines.labels.a.y}>{diagram.vertices[0] ?? 'A'}</text>
+        <text className="diagram-vertex" x={threeCollinearOneOffLines.labels.b.x} y={threeCollinearOneOffLines.labels.b.y}>{diagram.vertices[1] ?? 'B'}</text>
+        <text className="diagram-vertex" x={threeCollinearOneOffLines.labels.c.x} y={threeCollinearOneOffLines.labels.c.y}>{diagram.vertices[2] ?? 'C'}</text>
+        <text className="diagram-vertex" x={threeCollinearOneOffLines.labels.d.x} y={threeCollinearOneOffLines.labels.d.y}>{diagram.vertices[3] ?? 'D'}</text>
+        <text className="diagram-vertex" x={threeCollinearOneOffLines.labels.line.x} y={threeCollinearOneOffLines.labels.line.y}>a</text>
+      </g>
+    )
+  }
 
   if (diagram.kind === 'intersecting-segments') {
     return (
@@ -230,11 +292,11 @@ function NotebookSheet({ spec, segment }: { spec: GeometryNotebookPageSpec; segm
         {segment.lines.map((line, index) => (
           <text className="notebook-solution" key={`${line}-${index}`} x={zones.solution.x} y={solutionFirstLineY + index * zones.solution.lineStep}>{line}</text>
         ))}
-        {segment.answer && (
-          <text className="notebook-answer" x={zones.solution.x} y={solutionFirstLineY + Math.max(0, segment.lines.length - 1) * zones.solution.lineStep + zones.solution.answerGap}>Ответ: {segment.answer}</text>
-        )}
+        {segment.answerLines?.map((line, index) => (
+          <text className="notebook-answer" key={`${line}-${index}`} x={zones.solution.x} y={solutionFirstLineY + Math.max(0, segment.lines.length - 1) * zones.solution.lineStep + zones.solution.answerGap + index * zones.solution.lineStep}>{line}</text>
+        ))}
         <style>{`
-          .notebook-number,.notebook-title,.notebook-body,.notebook-goal,.notebook-solution,.notebook-answer,.diagram-vertex,.diagram-angle-label { fill: ${colors.ink}; font-family: ${typography.family}; font-weight: ${typography.weight}; letter-spacing: .25px; }
+          .notebook-number,.notebook-title,.notebook-body,.notebook-goal,.notebook-solution,.notebook-answer,.diagram-vertex,.diagram-angle-label,.diagram-caption { fill: ${colors.ink}; font-family: ${typography.family}; font-weight: ${typography.weight}; letter-spacing: .25px; }
           .notebook-number { font-size: ${typography.numberSize}px; }
           .notebook-title { font-size: ${typography.titleSize}px; }
           .notebook-body { font-size: ${typography.bodySize}px; }
@@ -247,9 +309,11 @@ function NotebookSheet({ spec, segment }: { spec: GeometryNotebookPageSpec; segm
           .geometry-diagram { opacity: ${strokes.pencilOpacity}; }
           .diagram-line,.diagram-mark,.diagram-angle-arc,.diagram-auxiliary { fill: none; stroke: ${colors.pencil}; stroke-linecap: round; stroke-linejoin: round; }
           .diagram-line { stroke-width: ${strokes.triangle}px; }
+          .diagram-point { fill: ${colors.pencil}; }
           .diagram-mark,.diagram-angle-arc { stroke-width: ${strokes.marker}px; }
           .diagram-auxiliary { stroke-width: ${strokes.marker}px; stroke-dasharray: 10 7; }
           .diagram-vertex,.diagram-angle-label { fill: ${colors.pencil}; font-size: ${typography.bodySize}px; }
+          .diagram-caption { fill: ${colors.pencil}; font-size: ${typography.goalSize}px; }
         `}</style>
       </svg>
     </article>

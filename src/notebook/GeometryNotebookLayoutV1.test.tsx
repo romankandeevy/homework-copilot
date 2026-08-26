@@ -84,4 +84,16 @@ describe('GeometryNotebookLayoutV1', () => {
 
     expect(screen.getAllByText(/финал$/)).toHaveLength(2)
   })
+
+  it('wraps long solution rows before they reach the page edge', () => {
+    render(<GeometryNotebookLayoutV1 spec={{
+      ...geometryFixtures[0],
+      solution: ['Итого прямых: прямая a и три прямые AD, BD, CD.'],
+      answer: '4 прямые',
+    }} />)
+
+    expect(screen.getByText('Итого прямых: прямая a и три прямые AD,')).toBeInTheDocument()
+    expect(screen.getByText('BD, CD.')).toBeInTheDocument()
+    expect(screen.getByText('Ответ: 4 прямые')).toBeInTheDocument()
+  })
 })

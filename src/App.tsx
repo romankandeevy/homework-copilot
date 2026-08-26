@@ -38,6 +38,7 @@ import type { HomeworkSolution, HomeworkSource } from './lib/homeworkContract'
 import { formatRubles } from './lib/currency'
 import { useModalIsolation } from './lib/useModalIsolation'
 import { getSolutionPrice } from './lib/solutionPricing'
+import { getVerifiedNumberedGeometrySolution } from './lib/verifiedNumberedSolutions'
 import {
   loadGeneratedSolutions,
   parseStoredHomeworkSolution,
@@ -1063,40 +1064,23 @@ function SolutionsPage({
   )
 }
 
-function wrapNotebookLine(line: string, maxLength = 43) {
-  if (line.length <= maxLength) return [line]
-  const words = line.split(/\s+/).filter(Boolean)
-  const wrapped: string[] = []
-  let current = ''
-
-  for (const word of words) {
-    if (current && (current + ' ' + word).length > maxLength) {
-      wrapped.push(current)
-      current = word
-    } else {
-      current = current ? current + ' ' + word : word
-    }
-  }
-  if (current) wrapped.push(current)
-  return wrapped.length > 0 ? wrapped : [line]
-}
-
 function asGeometryNotebookSpec(
   solution: HomeworkSolution,
   sourceDiagram?: GeometryNotebookPageSpec['sourceDiagram'],
 ): GeometryNotebookPageSpec {
+  const verifiedSolution = getVerifiedNumberedGeometrySolution(solution) ?? solution
   return {
-    id: 'generated-' + solution.textbookId + '-' + solution.task,
-    number: solution.source === 'photo' ? 'фото' : solution.task,
-    condition: solution.condition,
-    given: solution.given.slice(0, 3),
-    goal: solution.goal,
-    diagram: solution.source === 'number'
+    id: 'generated-' + verifiedSolution.textbookId + '-' + verifiedSolution.task,
+    number: verifiedSolution.source === 'photo' ? 'фото' : verifiedSolution.task,
+    condition: verifiedSolution.condition,
+    given: verifiedSolution.given.slice(0, 3),
+    goal: verifiedSolution.goal,
+    diagram: verifiedSolution.source === 'number' && verifiedSolution === solution
       ? { kind: 'none', description: '', vertices: [] }
-      : solution.diagram,
+      : verifiedSolution.diagram,
     ...(sourceDiagram ? { sourceDiagram } : {}),
-    solution: solution.steps.flatMap((step) => wrapNotebookLine(step)),
-    ...(solution.answer ? { answer: solution.answer } : {}),
+    solution: verifiedSolution.steps,
+    ...(verifiedSolution.answer ? { answer: verifiedSolution.answer } : {}),
   }
 }
 

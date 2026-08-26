@@ -79,9 +79,11 @@ async function mockTaskLookup(page: import('@playwright/test').Page) {
   await page.route('**/rest/v1/rpc/get_verified_homework_task', async (route) => {
     const body = route.request().postDataJSON() as { p_task?: string }
     const isDiagramTask = body.p_task === '50'
-    const condition = isDiagramTask
-      ? 'На рисунке 43 изображены лучи с общим началом O.'
-      : 'Проведите три прямые так, чтобы каждые две из них пересекались. Обозначьте все точки пересечения этих прямых. Сколько получилось точек? Рассмотрите все возможные случаи.'
+    const condition = body.p_task === '4'
+      ? 'Отметьте точки A, B, C, D так, чтобы точки A, B, C лежали на одной прямой, а точка D не лежала на ней. Через каждые две точки проведите прямую. Сколько получилось прямых?'
+      : isDiagramTask
+        ? 'На рисунке 43 изображены лучи с общим началом O.'
+        : 'Проведите три прямые так, чтобы каждые две из них пересекались. Обозначьте все точки пересечения этих прямых. Сколько получилось точек? Рассмотрите все возможные случаи.'
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -103,7 +105,7 @@ async function mockTaskLookup(page: import('@playwright/test').Page) {
   })
 }
 
-test('task 3 never renders a made-up triangle and fits on one sheet', async ({ page }, testInfo) => {
+test('task 3 renders the two correct intersection cases and fits on one sheet', async ({ page }, testInfo) => {
   const failures = trackRuntimeFailures(page)
   await page.setViewportSize({ width: 390, height: 844 })
   const condition = 'Проведите три прямые так, чтобы каждые две из них пересекались. Обозначьте все точки пересечения этих прямых. Сколько получилось точек? Рассмотрите все возможные случаи.'
@@ -114,12 +116,52 @@ test('task 3 never renders a made-up triangle and fits on one sheet', async ({ p
 
   await expect(page.getByRole('heading', { name: 'Решение № 3' })).toBeVisible()
   await expect(page.getByTestId('geometry-notebook-page')).toHaveCount(1)
-  await expect(page.locator('.geometry-diagram')).toHaveCount(0)
+  await expect(page.getByRole('img', { name: 'Два случая пересечения трёх прямых: три разные точки и одна общая точка.' })).toBeVisible()
+  await expect(page.locator('.geometry-diagram')).toHaveCount(1)
   await expect(page.locator('.source-diagram-image')).toHaveCount(0)
   await expect(page.getByText('Решение. (продолжение)')).toHaveCount(0)
-  await expect(page.getByText('Ответ: 3 точки или 1 точка')).toBeVisible()
+  await expect(page.getByText('Ответ: 1 или 3 точки')).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
   await page.screenshot({ path: testInfo.outputPath('task-3-mobile.png'), fullPage: true })
+  expect(failures).toEqual({ consoleErrors: [], pageErrors: [], failedResponses: [], failedRequests: [] })
+})
+
+test('task 4 uses symbols, the correct four-line drawing, and no grey side fields', async ({ page }, testInfo) => {
+  const failures = trackRuntimeFailures(page)
+  await page.setViewportSize({ width: 730, height: 900 })
+  const condition = 'Отметьте точки A, B, C, D так, чтобы точки A, B, C лежали на одной прямой, а точка D не лежала на ней. Через каждые две точки проведите прямую. Сколько получилось прямых?'
+  await seedSolution(page, solution('4', condition))
+  await mockTaskLookup(page)
+
+  await page.goto('/solutions/geometry/4')
+
+  await expect(page.getByRole('heading', { name: 'Решение № 4' })).toBeVisible()
+  await expect(page.getByRole('img', { name: 'Точки A, B, C лежат на прямой a, точка D не лежит на ней; проведены прямые AD, BD и CD.' })).toBeVisible()
+  await expect(page.getByText('A, B, C ∈ a')).toBeVisible()
+  await expect(page.getByText('D ∉ a')).toBeVisible()
+  await expect(page.getByText('n = n₁ + n₂ = 1 + 3 = 4.')).toBeVisible()
+  await expect(page.getByText('Ответ: 4 прямые')).toBeVisible()
+  await expect(page.locator('.source-diagram-image')).toHaveCount(0)
+  await expect(page.getByTestId('geometry-notebook-page')).toHaveCount(1)
+
+  const widths = await page.locator('.solution-notebook-preview').evaluate((preview) => {
+    const pageElement = preview.querySelector<HTMLElement>('.geometry-notebook-page')
+    return {
+      preview: preview.getBoundingClientRect().width,
+      notebook: pageElement?.getBoundingClientRect().width ?? 0,
+      background: getComputedStyle(preview).backgroundColor,
+    }
+  })
+  expect(Math.abs(widths.preview - widths.notebook)).toBeLessThanOrEqual(2)
+  expect(widths.background).toBe('rgba(0, 0, 0, 0)')
+
+  const overflowingText = await page.locator('.geometry-notebook-page text').evaluateAll((elements) => elements
+    .map((element) => ({ text: element.textContent, right: (element as SVGGraphicsElement).getBBox().x + (element as SVGGraphicsElement).getBBox().width }))
+    .filter((entry) => entry.right > 1086))
+  expect(overflowingText).toEqual([])
+
+  await page.getByTestId('geometry-notebook-page').screenshot({ path: testInfo.outputPath('task-4-sheet.png') })
+  await page.screenshot({ path: testInfo.outputPath('task-4-correct.png'), fullPage: true })
   expect(failures).toEqual({ consoleErrors: [], pageErrors: [], failedResponses: [], failedRequests: [] })
 })
 

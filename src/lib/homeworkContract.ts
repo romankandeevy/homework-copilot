@@ -1,6 +1,9 @@
 export const homeworkDiagramKinds = [
   'triangle',
   'three-point-lines',
+  'three-point-extended-lines',
+  'three-lines-cases',
+  'three-collinear-one-off-lines',
   'isosceles-triangle',
   'median-triangle',
   'right-triangle',

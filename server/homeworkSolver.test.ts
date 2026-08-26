@@ -38,6 +38,15 @@ const taskThree: SolveHomeworkRequest = {
   idempotencyKey: 'solution-test-geometry-3',
 }
 
+const taskFourCondition = 'Отметьте точки A, B, C, D так, чтобы точки A, B, C лежали на одной прямой, а точка D не лежала на ней. Через каждые две точки проведите прямую. Сколько получилось прямых?'
+const taskFour: SolveHomeworkRequest = {
+  ...task,
+  task: '4',
+  condition: taskFourCondition,
+  sourcePage: 9,
+  idempotencyKey: 'solution-test-geometry-4',
+}
+
 const photoTask: SolveHomeworkRequest = {
   ...task,
   task: 'photo-example',
@@ -140,8 +149,8 @@ describe('homework solver', () => {
       task: '2',
       condition: verifiedTask.condition,
       conditionNormalized: 'отметьте три точки а,в и с,не лежащие на одной прямой,и через каждую пару точек проведите прямую.сколько прямых получилось?',
-      answer: '3 прямые.',
-      diagram: { kind: 'none', vertices: [] },
+      answer: '3 прямые',
+      diagram: { kind: 'three-point-extended-lines', vertices: ['A', 'B', 'C'] },
       sourceVerified: true,
     })
     expect(fetchMock).not.toHaveBeenCalled()
@@ -169,11 +178,31 @@ describe('homework solver', () => {
     expect(http.body().solution).toMatchObject({
       task: '3',
       condition: taskThreeCondition,
-      diagram: { kind: 'none', vertices: [] },
+      answer: '1 или 3 точки',
+      diagram: { kind: 'three-lines-cases', vertices: ['A', 'B', 'C', 'O'] },
     })
     const requestPayload = JSON.parse(String(fetchMock.mock.calls[0][1]?.body)) as { tools?: unknown; response_format?: { type: string } }
     expect(requestPayload.tools).toBeUndefined()
     expect(requestPayload.response_format?.type).toBe('json_schema')
+  })
+
+  it('replaces a verbose task 4 response with the verified symbolic solution and drawing', () => {
+    const result = normalizeKieSolution({
+      ...providerSolution,
+      given: ['Точки A, B, C лежат на одной прямой', 'Точка D не лежит на прямой'],
+      steps: ['Длинное словесное решение без обозначений.'],
+      answer: '4.',
+      diagram: { kind: 'triangle', description: 'Неверный треугольник', vertices: ['A', 'B', 'C'] },
+    }, taskFour)
+
+    expect(result).toMatchObject({
+      condition: taskFourCondition,
+      given: ['A, B, C ∈ a', 'D ∉ a'],
+      goal: { title: 'Найти', text: 'n(прямых)' },
+      steps: ['AB ≡ AC ≡ BC ≡ a ⇒ n₁ = 1.', 'AD, BD, CD ⇒ n₂ = 3.', 'n = n₁ + n₂ = 1 + 3 = 4.'],
+      answer: '4 прямые',
+      diagram: { kind: 'three-collinear-one-off-lines', vertices: ['A', 'B', 'C', 'D'] },
+    })
   })
 
   it('requires the indexed source drawing when the task references a figure', async () => {
@@ -281,7 +310,7 @@ describe('homework solver', () => {
     expect(http.body().solution).toMatchObject({
       task: '2',
       condition: verifiedTask.condition,
-      answer: '3 прямые.',
+      answer: '3 прямые',
     })
   })
 
@@ -320,7 +349,7 @@ describe('homework solver', () => {
     })])
     expect(rpc.mock.calls[1][1]).toMatchObject({
       p_idempotency_key: task.idempotencyKey,
-      p_solution: { ownerId: 'student-1', answer: '3 прямые.' },
+      p_solution: { ownerId: 'student-1', answer: '3 прямые' },
     })
   })
 
@@ -343,8 +372,8 @@ describe('homework solver', () => {
     expect(http.response.statusCode).toBe(200)
     expect(http.body().solution).toMatchObject({
       task: '2',
-      answer: '3 прямые.',
-      diagram: { kind: 'none', vertices: [] },
+      answer: '3 прямые',
+      diagram: { kind: 'three-point-extended-lines', vertices: ['A', 'B', 'C'] },
     })
     expect(rpc).toHaveBeenCalledOnce()
     expect(from).not.toHaveBeenCalled()
