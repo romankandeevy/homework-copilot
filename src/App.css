@@ -2307,3 +2307,59 @@
 @media (max-width: 360px) {
   .topbar-brand .brand-name { display: none; }
 }
+
+.account-blocked-screen {
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  padding: var(--space-6);
+  background: var(--color-canvas);
+}
+
+.account-blocked-card {
+  width: min(100%, 34rem);
+  display: grid;
+  justify-items: start;
+  gap: var(--space-5);
+  padding: clamp(var(--space-6), 6vw, var(--space-10));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-overlay);
+}
+
+.account-blocked-card > span {
+  color: var(--color-danger);
+  font: var(--weight-semibold) var(--text-caption)/var(--leading-ui) var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.account-blocked-card h1 {
+  margin: 0;
+  color: var(--color-strong);
+  font: var(--weight-display) clamp(1.7rem, 5vw, 2.5rem)/var(--leading-title) var(--font-display);
+}
+
+.account-blocked-card p {
+  max-width: 42ch;
+  margin: 0;
+  color: var(--color-text-subtle);
+  line-height: var(--leading-copy);
+}
+
+.account-blocked-card .account-blocked-error { color: var(--color-danger); }
+
+.account-blocked-card button {
+  min-height: var(--size-control);
+  padding: 0 var(--space-5);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: var(--color-strong);
+  color: var(--color-on-strong);
+  font: var(--weight-semibold) var(--text-ui)/var(--leading-control) var(--font-body);
+  cursor: pointer;
+}
+
+.account-blocked-card button:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.account-blocked-card button:disabled { cursor: wait; opacity: 0.65; }

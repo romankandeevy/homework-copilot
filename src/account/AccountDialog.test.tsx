@@ -13,9 +13,11 @@ const account: AccountData = {
     grade: 8,
     avatar_path: 'preset:orbit',
     created_at: '2026-08-24T00:00:00.000Z',
+    last_seen_at: null,
     updated_at: '2026-08-24T00:00:00.000Z',
   },
   balance: 20,
+  control: null,
   entries: [{
     id: 'entry-1',
     user_id: user.id,

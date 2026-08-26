@@ -1,3 +1,4 @@
+-- Applied remotely under this migration version; retained here for history alignment.
 create or replace function private.solution_task_price(
   p_textbook_id text,
   p_task_number integer

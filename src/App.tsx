@@ -54,6 +54,7 @@ import './App.css'
 const DesignSystemPlayground = lazy(() => import('./DesignSystemPlayground'))
 const AccountDialog = lazy(() => import('./account/AccountDialog'))
 const SchedulePage = lazy(() => import('./SchedulePage'))
+const AdminDashboard = lazy(() => import('./AdminDashboard'))
 
 type Theme = 'light' | 'dark'
 type AccountView = 'profile' | 'wallet'
@@ -1202,6 +1203,38 @@ function UnderstandingPage({
   )
 }
 
+function AccountBlockedScreen({ reason, onSignOut }: { reason: string | null; onSignOut: () => Promise<void> }) {
+  const [leaving, setLeaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const leaveAccount = async () => {
+    if (leaving) return
+    setLeaving(true)
+    setError('')
+    try {
+      await onSignOut()
+    } catch {
+      setError('Не получилось выйти. Обнови страницу и попробуй ещё раз.')
+      setLeaving(false)
+    }
+  }
+
+  return (
+    <main className="account-blocked-screen">
+      <section className="account-blocked-card" aria-labelledby="account-blocked-title">
+        <BrandLockup />
+        <span>Доступ ограничен</span>
+        <h1 id="account-blocked-title">Аккаунт временно заблокирован</h1>
+        <p>{reason || 'Обратись в поддержку сервиса, чтобы уточнить причину и восстановить доступ.'}</p>
+        {error && <p className="account-blocked-error" role="alert">{error}</p>}
+        <button type="button" onClick={() => { void leaveAccount() }} disabled={leaving}>
+          {leaving ? 'Выходим…' : 'Выйти из аккаунта'}
+        </button>
+      </section>
+    </main>
+  )
+}
+
 function HomePage() {
   const [theme, setTheme] = useState<Theme>(() => {
     try {
@@ -1560,6 +1593,56 @@ function HomePage() {
     void refreshAccount()
   }, [refreshAccount])
 
+  useEffect(() => {
+    if (!supabaseClient || !user) return
+
+    const accountChannel = supabaseClient
+      .channel(`account-control:${user.id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'wallet_accounts',
+        filter: `user_id=eq.${user.id}`,
+      }, () => { void refreshAccount() })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'account_controls',
+        filter: `user_id=eq.${user.id}`,
+      }, () => { void refreshAccount() })
+      .subscribe()
+
+    return () => { void supabaseClient.removeChannel(accountChannel) }
+  }, [refreshAccount, supabaseClient, user])
+
+  useEffect(() => {
+    if (!supabaseClient || !user) return
+
+    const currentPath = () => currentApplicationPath()
+    const track = (event: 'session_started' | 'session_ended' | 'page_view') => {
+      void supabaseClient.rpc('track_my_activity', { p_event: event, p_path: currentPath() })
+    }
+    const onVisibilityChange = () => {
+      track(document.visibilityState === 'visible' ? 'session_started' : 'session_ended')
+    }
+    const onPageHide = () => track('session_ended')
+
+    track('session_started')
+    track('page_view')
+    const heartbeat = window.setInterval(() => {
+      if (document.visibilityState === 'visible') track('page_view')
+    }, 5 * 60 * 1000)
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    window.addEventListener('pagehide', onPageHide)
+
+    return () => {
+      window.clearInterval(heartbeat)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      window.removeEventListener('pagehide', onPageHide)
+      track('session_ended')
+    }
+  }, [supabaseClient, user])
+
   const toggleTheme = () => setTheme((current) => current === 'light' ? 'dark' : 'light')
   const rememberAccountTrigger = () => {
     accountTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
@@ -1586,6 +1669,11 @@ function HomePage() {
     cleanUrl.searchParams.delete('auth')
     window.history.replaceState({}, '', `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`)
   }, [])
+  const signOutBlockedAccount = useCallback(async () => {
+    if (!supabaseClient) return
+    const { error } = await supabaseClient.auth.signOut({ scope: 'local' })
+    if (error) throw error
+  }, [supabaseClient])
   const navigate = (label: NavigationLabel, solution: SolutionState | null = null) => {
     const destination = applicationRoutes.find((item) => item.label === label)
     if (!destination) return
@@ -1738,6 +1826,10 @@ function HomePage() {
     )
   }
 
+  if (user && account?.control?.is_banned) {
+    return <AccountBlockedScreen reason={account.control.ban_reason} onSignOut={signOutBlockedAccount} />
+  }
+
   return (
     <main className="product-shell">
       <ProductTopbar theme={theme} activeLabel={activeNavigation} onNavigate={navigate} onToggleTheme={toggleTheme} user={user} account={account} onOpenAccount={openAccount} onOpenWallet={openWallet} />
@@ -1810,7 +1902,7 @@ function HomePage() {
 
 function App() {
   const params = new URLSearchParams(window.location.search)
-  const pathname = window.location.pathname.replace(/\/+$/, '') || '/'
+  const pathname = currentApplicationPath()
 
   if (pathname === '/privacy') return <LegalPage kind="privacy" />
   if (pathname === '/terms') return <LegalPage kind="terms" />
@@ -1821,6 +1913,10 @@ function App() {
 
   if (params.get('design-system') === '1') {
     return <Suspense fallback={null}><DesignSystemPlayground /></Suspense>
+  }
+
+  if (pathname === '/admin') {
+    return <Suspense fallback={null}><AdminDashboard /></Suspense>
   }
 
   return <HomePage />

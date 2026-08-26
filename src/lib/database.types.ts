@@ -2,10 +2,37 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 
 export type Database = {
   __InternalSupabase: {
-    PostgrestVersion: '14.15'
+    PostgrestVersion: '14.17'
   }
   public: {
     Tables: {
+      account_controls: {
+        Row: {
+          ban_reason: string | null
+          banned_at: string | null
+          banned_by: string | null
+          is_banned: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ban_reason?: string | null
+          banned_at?: string | null
+          banned_by?: string | null
+          is_banned?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ban_reason?: string | null
+          banned_at?: string | null
+          banned_by?: string | null
+          is_banned?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       homework_solution_access: {
         Row: {
           idempotency_key: string
@@ -121,6 +148,7 @@ export type Database = {
           full_name: string
           grade: number
           id: string
+          last_seen_at: string | null
           updated_at: string
         }
         Insert: {
@@ -129,6 +157,7 @@ export type Database = {
           full_name?: string
           grade?: number
           id: string
+          last_seen_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -137,6 +166,7 @@ export type Database = {
           full_name?: string
           grade?: number
           id?: string
+          last_seen_at?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -216,6 +246,26 @@ export type Database = {
     }
     Views: { [_ in never]: never }
     Functions: {
+      admin_adjust_balance: {
+        Args: { p_amount: number; p_reason: string; p_user_id: string }
+        Returns: Json
+      }
+      admin_dashboard: {
+        Args: { p_period_days?: number }
+        Returns: Json
+      }
+      admin_list_users: {
+        Args: { p_limit?: number; p_search?: string }
+        Returns: Json
+      }
+      admin_set_user_ban: {
+        Args: { p_is_banned: boolean; p_reason?: string; p_user_id: string }
+        Returns: Json
+      }
+      admin_user_detail: {
+        Args: { p_user_id: string }
+        Returns: Json
+      }
       complete_homework_solution: {
         Args: {
           p_condition: string
@@ -241,6 +291,14 @@ export type Database = {
         }
         Returns: number
       }
+      get_admin_context: {
+        Args: never
+        Returns: Json
+      }
+      track_my_activity: {
+        Args: { p_event: string; p_path?: string }
+        Returns: undefined
+      }
     }
     Enums: { [_ in never]: never }
     CompositeTypes: { [_ in never]: never }
@@ -248,4 +306,5 @@ export type Database = {
 }
 
 export type Profile = Database['public']['Tables']['profiles']['Row']
+export type AccountControl = Database['public']['Tables']['account_controls']['Row']
 export type WalletEntry = Database['public']['Tables']['wallet_entries']['Row']
