@@ -529,33 +529,36 @@ function TextbookPicker({
 }
 
 function TaskConditionPreview({ task }: { task: VerifiedTextbookTask }) {
+  const shouldShowDiagram = task.diagram.kind !== 'three-point-lines'
   const isMedian = task.diagram.kind === 'median-triangle'
   const isRight = task.diagram.kind === 'right-triangle'
   const isParallel = task.diagram.kind === 'parallel-line-triangle'
 
   return (
-    <section className="task-condition-preview" aria-labelledby="task-condition-title">
+    <section className={`task-condition-preview${shouldShowDiagram ? '' : ' task-condition-preview--copy-only'}`} aria-labelledby="task-condition-title">
       <div className="task-condition-copy">
         <span id="task-condition-title">Условие задачи № {task.task}</span>
         <p>{task.condition}</p>
-        <small>Источник: PDF учебника «{task.textbookTitle}», {task.edition}{task.sourcePage ? `, стр. ${task.sourcePage}` : ''}.</small>
+        <small>Источник: PDF учебника «{task.textbookTitle}»{task.sourcePage ? `, стр. ${task.sourcePage}` : ''}. Издание учебника: {task.edition}.</small>
       </div>
-      <svg className="task-condition-diagram" viewBox="0 0 156 116" role="img" aria-label={task.diagram.description}>
-        <path d={isRight ? 'M22 20L134 92L22 92Z' : 'M22 92L78 20L134 92Z'} />
-        {isMedian && <path d="M78 20V92" />}
-        {isRight && <path d="M22 77H37V92" />}
-        {isParallel && <path d="M39 76L103 76" />}
-        {!isMedian && !isRight && !isParallel && task.diagram.kind !== 'three-point-lines' && <>
-          <path d="M42 67l8 6M108 73l8-6" />
-          <path d="M68 34q10 10 20 0" />
-          <text x="78" y="53" textAnchor="middle">40°</text>
-        </>}
-        <text x="12" y={isRight ? 18 : 107}>{task.diagram.vertices[0] ?? 'A'}</text>
-        <text x={isRight ? 137 : 74} y={isRight ? 107 : 15}>{task.diagram.vertices[1] ?? 'B'}</text>
-        <text x="137" y="107">{task.diagram.vertices[2] ?? 'C'}</text>
-        {isMedian && <text x="74" y="108">{task.diagram.vertices[3] ?? 'F'}</text>}
-        {isParallel && <text x="108" y="73">p</text>}
-      </svg>
+      {shouldShowDiagram && (
+        <svg className="task-condition-diagram" viewBox="0 0 156 116" role="img" aria-label={task.diagram.description}>
+          <path d={isRight ? 'M22 20L134 92L22 92Z' : 'M22 92L78 20L134 92Z'} />
+          {isMedian && <path d="M78 20V92" />}
+          {isRight && <path d="M22 77H37V92" />}
+          {isParallel && <path d="M39 76L103 76" />}
+          {!isMedian && !isRight && !isParallel && <>
+            <path d="M42 67l8 6M108 73l8-6" />
+            <path d="M68 34q10 10 20 0" />
+            <text x="78" y="53" textAnchor="middle">40°</text>
+          </>}
+          <text x="12" y={isRight ? 18 : 107}>{task.diagram.vertices[0] ?? 'A'}</text>
+          <text x={isRight ? 137 : 74} y={isRight ? 107 : 15}>{task.diagram.vertices[1] ?? 'B'}</text>
+          <text x="137" y="107">{task.diagram.vertices[2] ?? 'C'}</text>
+          {isMedian && <text x="74" y="108">{task.diagram.vertices[3] ?? 'F'}</text>}
+          {isParallel && <text x="108" y="73">p</text>}
+        </svg>
+      )}
     </section>
   )
 }

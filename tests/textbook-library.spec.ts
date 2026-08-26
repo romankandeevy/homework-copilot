@@ -68,7 +68,7 @@ test.describe('выбор задач', () => {
     await expect(page.getByRole('button', { name: /Физика.*8 класс/ })).toHaveAttribute('aria-pressed', 'true')
   })
 
-  test('показывает точное условие и рисунок задачи на главной', async ({ page }) => {
+  test('показывает точное условие без вводящей в заблуждение схемы', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await page.goto('/main')
 
@@ -76,7 +76,9 @@ test.describe('выбор задач', () => {
 
     await expect(page.getByText('Условие задачи № 2')).toBeVisible()
     await expect(page.getByText('Отметьте три точки А, В и С, не лежащие на одной прямой, и через каждую пару точек проведите прямую. Сколько прямых получилось?')).toBeVisible()
-    await expect(page.getByRole('img', { name: /Три точки A, B и C/ })).toBeVisible()
+    await expect(page.getByText(/Издание учебника: 14-е издание, Просвещение, 2023/)).toBeVisible()
+    await expect(page.locator('.task-condition-preview')).toHaveClass(/task-condition-preview--copy-only/)
+    await expect(page.getByRole('img', { name: /Три точки A, B и C/ })).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Проверить условие' })).toBeEnabled()
   })
 
