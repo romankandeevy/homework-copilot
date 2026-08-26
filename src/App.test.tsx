@@ -57,7 +57,10 @@ describe('Homework Copilot task flow', () => {
     render(<App />)
 
     fireEvent.change(screen.getByRole('textbox', { name: 'Номер задачи' }), { target: { value: '2' } })
-    expect(screen.getByText('Условие задачи № 2')).toBeInTheDocument()
+    expect(screen.queryByText('Условие задачи № 2')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Проверить условие' })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Проверить условие' }))
+    expect(await screen.findByText('Условие задачи № 2')).toBeInTheDocument()
     expect(screen.getByText('Отметьте три точки А, В и С, не лежащие на одной прямой, и через каждую пару точек проведите прямую. Сколько прямых получилось?')).toBeInTheDocument()
     expect(screen.getByText(/Источник: PDF учебника.*стр. 9\. Издание учебника: 14-е издание, Просвещение, 2023/)).toBeInTheDocument()
     expect(screen.queryByRole('img', { name: /Три точки A, B и C/ })).not.toBeInTheDocument()
@@ -80,33 +83,37 @@ describe('Homework Copilot task flow', () => {
     })
   })
 
-  it('does not offer a generated condition for an unknown number', () => {
+  it('does not offer a generated condition for an unknown number', async () => {
     render(<App />)
 
     fireEvent.change(screen.getByRole('textbox', { name: 'Номер задачи' }), { target: { value: '126' } })
     expect(screen.queryByText(/Условие задачи №/)).not.toBeInTheDocument()
-    expect(screen.getByText('Точного условия № 126 в выбранном издании пока нет. Решение не будет придумано по одному номеру.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Проверить условие' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Проверить условие' })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Проверить условие' }))
+    expect(await screen.findByText('Такого номера нет в выбранном издании. Проверь номер или добавь фото задачи.')).toBeInTheDocument()
   })
 
-  it('lets the student reject a found condition without creating a request', () => {
+  it('lets the student reject a found condition without creating a request', async () => {
     const fetchMock = installSuccessfulSolver()
     render(<App />)
 
     fireEvent.change(screen.getByRole('textbox', { name: 'Номер задачи' }), { target: { value: '2' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Проверить условие' }))
+    await screen.findByText('Условие задачи № 2')
     fireEvent.click(screen.getByRole('button', { name: 'Выбрать другой номер' }))
 
     expect(screen.getByText('Выбери другой номер и сверь его с учебником.')).toBeInTheDocument()
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('does not promote an unverified number as a textbook task', () => {
+  it('does not promote an unverified number as a textbook task', async () => {
     render(<App />)
     const input = screen.getByRole('textbox', { name: 'Номер задачи' })
 
     fireEvent.change(input, { target: { value: '124' } })
     expect(screen.queryByText('Условие задачи № 124')).not.toBeInTheDocument()
-    expect(screen.getByText('Точного условия № 124 в выбранном издании пока нет. Решение не будет придумано по одному номеру.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Проверить условие' }))
+    expect(await screen.findByText('Такого номера нет в выбранном издании. Проверь номер или добавь фото задачи.')).toBeInTheDocument()
   })
 
   it('opens the approved notebook solution and returns to the home screen', async () => {
@@ -114,6 +121,8 @@ describe('Homework Copilot task flow', () => {
     render(<App />)
 
     fireEvent.change(screen.getByRole('textbox', { name: 'Номер задачи' }), { target: { value: '2' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Проверить условие' }))
+    await screen.findByText('Условие задачи № 2')
     fireEvent.click(screen.getByRole('button', { name: 'Условие верное' }))
 
     expect(await screen.findByRole('heading', { name: 'Решение № 2' })).toBeInTheDocument()
@@ -130,6 +139,8 @@ describe('Homework Copilot task flow', () => {
     render(<App />)
 
     fireEvent.change(screen.getByRole('textbox', { name: 'Номер задачи' }), { target: { value: '2' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Проверить условие' }))
+    await screen.findByText('Условие задачи № 2')
     fireEvent.click(screen.getByRole('button', { name: 'Условие верное' }))
 
     expect(await screen.findByRole('heading', { name: 'Не получилось решить задачу' })).toBeInTheDocument()
@@ -137,7 +148,7 @@ describe('Homework Copilot task flow', () => {
     expect(screen.getByText('Деньги за неготовое решение не списаны.')).toBeInTheDocument()
   })
 
-  it('sends selected textbook tasks to confirmation instead of charging a cart', () => {
+  it('sends selected textbook tasks to confirmation instead of charging a cart', async () => {
     window.history.replaceState({}, '', '/cdz')
     render(<App />)
 
@@ -146,7 +157,8 @@ describe('Homework Copilot task flow', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Проверить условие' }))
 
     expect(window.location.pathname).toBe('/main')
-    expect(screen.getByText('Условие задачи № 2')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Проверить условие' }))
+    expect(await screen.findByText('Условие задачи № 2')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Оплатить/ })).not.toBeInTheDocument()
   })
 

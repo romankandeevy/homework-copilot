@@ -69,19 +69,36 @@ test.describe('выбор задач', () => {
     await expect(page.getByRole('button', { name: /Физика.*8 класс/ })).toHaveAttribute('aria-pressed', 'true')
   })
 
-  test('показывает точное условие без вводящей в заблуждение схемы', async ({ page }) => {
+  test('показывает точное условие из базы без выдуманной схемы', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await page.goto('/main')
 
-    await page.getByRole('textbox', { name: 'Номер задачи' }).fill('2')
+    await page.getByRole('textbox', { name: 'Номер задачи' }).fill('3')
+    await page.getByRole('button', { name: 'Проверить условие' }).click()
 
-    await expect(page.getByText('Условие задачи № 2')).toBeVisible()
-    await expect(page.getByText('Отметьте три точки А, В и С, не лежащие на одной прямой, и через каждую пару точек проведите прямую. Сколько прямых получилось?')).toBeVisible()
+    await expect(page.getByText('Условие задачи № 3')).toBeVisible()
+    await expect(page.getByText('Проведите три прямые так, чтобы каждые две из них пересекались. Обозначьте все точки пересечения этих прямых. Сколько получилось точек? Рассмотрите все возможные случаи.')).toBeVisible()
     await expect(page.getByText(/Издание учебника: 14-е издание, Просвещение, 2023/)).toBeVisible()
     await expect(page.locator('.task-condition-preview')).toHaveClass(/task-condition-preview--copy-only/)
-    await expect(page.getByRole('img', { name: /Три точки A, B и C/ })).toHaveCount(0)
+    await expect(page.locator('.task-source-preview')).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Условие верное' })).toBeEnabled()
     await expect(page.getByRole('button', { name: 'Проверить условие' })).toHaveCount(0)
+  })
+
+  test('показывает исходный чертёж вместе с условием', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/main')
+
+    await page.getByRole('textbox', { name: 'Номер задачи' }).fill('50')
+    await page.getByRole('button', { name: 'Проверить условие' }).click()
+
+    await expect(page.getByText('Условие задачи № 50')).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByText(/На рисунке 43 изображены лучи с общим началом O/)).toBeVisible()
+    await expect(page.getByText('Рисунок 43 из учебника')).toBeVisible()
+    const sourceDiagram = page.getByRole('img', { name: 'Рисунок 43 из учебника для задачи № 50' })
+    await expect(sourceDiagram).toBeVisible({ timeout: 30_000 })
+    await expect.poll(() => sourceDiagram.evaluate((image: HTMLImageElement) => image.naturalWidth), { timeout: 30_000 }).toBeGreaterThan(0)
+    await expect(page.getByRole('button', { name: 'Условие верное' })).toBeEnabled()
   })
 
   test('не переполняется и сохраняет touch-targets на телефоне', async ({ page }) => {

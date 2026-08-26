@@ -5,7 +5,7 @@ import { homeworkDiagramKinds } from '../src/lib/homeworkContract.ts'
 import type { HomeworkDiagram, HomeworkSolution, SolveHomeworkRequest } from '../src/lib/homeworkContract.ts'
 import type { Database, Json } from '../src/lib/database.types.ts'
 import { getSolutionPrice } from '../src/lib/solutionPricing.ts'
-import { findVerifiedTextbookTask, normalizeTaskCondition } from '../src/textbooks/taskCatalog.ts'
+import { findVerifiedTextbookTask, geometryTextbookIdentity, normalizeTaskCondition } from '../src/textbooks/taskCatalog.ts'
 
 type SolverOptions = {
   apiKey?: string
@@ -13,6 +13,15 @@ type SolverOptions = {
   supabaseUrl?: string
   supabasePublishableKey?: string
   fetchImpl?: typeof fetch
+  taskLookup?: (request: SolveHomeworkRequest) => Promise<VerifiedTaskRecord | null>
+}
+
+type VerifiedTaskRecord = {
+  condition: string
+  conditionNormalized: string
+  sourceUrl: string
+  sourcePage: number
+  hasDiagram: boolean
 }
 
 type AuthenticatedAccount = {
@@ -70,9 +79,9 @@ const responseSchema = {
 const solutionInstructions = [
   'Ты решаешь школьные задачи по российской программе 8 класса.',
   'Верни только корректный JSON без Markdown, вступлений и пояснений вне JSON.',
-  'Никогда не придумывай условие задачи: по номеру сначала найди именно указанный учебник, авторов и номер через поиск.',
-  'Если точное условие не найдено или фотография не читается, верни sourceVerified=false и не придумывай решение.',
-  'Сохраняй точное найденное или считанное условие в condition.',
+  'Никогда не ищи и не придумывай условие задачи: используй только проверенное условие и приложенный фрагмент учебника.',
+  'Если фотография не читается, верни sourceVerified=false и не придумывай решение.',
+  'Сохраняй проверенное или считанное условие в condition.',
   'Решение должно быть готовым для переписывания в школьную тетрадь: дано, найти или доказать, последовательные вычисления, ответ.',
   'Для геометрии допустимы только сокращения: п/у = прямоугольный, р/б = равнобедренный, св-во = свойство.',
   'Теорему обозначай кириллическим символом т в кружке: т⃝. Всё остальное пиши полными словами.',
@@ -150,16 +159,17 @@ export function normalizeKieSolution(raw: unknown, request: SolveHomeworkRequest
   }
 
   const candidate = parsed as Record<string, unknown>
-  if (candidate.sourceVerified !== true) {
+  if (request.source === 'photo' && candidate.sourceVerified !== true) {
     throw new HomeworkSolverError(422, 'Не удалось найти точное условие этой задачи. Добавь фотографию задания')
   }
 
-  const condition = text(candidate.condition)
+  const generatedCondition = text(candidate.condition)
+  const condition = request.source === 'number' && request.condition ? request.condition : generatedCondition
   const steps = lines(candidate.steps, 40)
   if (!condition || steps.length === 0) {
     throw new HomeworkSolverError(502, 'Kie.ai вернул неполное решение. Попробуй ещё раз')
   }
-  if (request.condition && normalizeTaskCondition(condition) !== normalizeTaskCondition(request.condition)) {
+  if (request.source === 'photo' && request.condition && normalizeTaskCondition(condition) !== normalizeTaskCondition(request.condition)) {
     throw new HomeworkSolverError(422, 'Решение вернуло другое условие. Решение не сохранено')
   }
 
@@ -249,7 +259,6 @@ export async function solveWithKie(
   }
 
   const model = options.model || 'gemini-2.5-flash'
-  const needsSourceSearch = request.source === 'number' && !request.condition
   const payload = {
     model,
     messages: [
@@ -257,14 +266,10 @@ export async function solveWithKie(
       providerMessage(request),
     ],
     temperature: 0.2,
-    ...(needsSourceSearch
-      ? { tools: [{ type: 'function', function: { name: 'googleSearch' } }] }
-      : {
-          response_format: {
-            type: 'json_schema',
-            json_schema: { name: 'homework_solution', strict: true, schema: responseSchema },
-          },
-        }),
+    response_format: {
+      type: 'json_schema',
+      json_schema: { name: 'homework_solution', strict: true, schema: responseSchema },
+    },
   }
 
   let response: Response
@@ -316,7 +321,59 @@ export async function solveWithKie(
   return normalizeKieSolution(content, request, ownerId)
 }
 
-function validateRequest(value: unknown): SolveHomeworkRequest {
+async function lookupVerifiedTask(request: SolveHomeworkRequest, options: SolverOptions): Promise<VerifiedTaskRecord | null> {
+  const localTask = findVerifiedTextbookTask(request.textbookId, request.edition, request.task)
+  if (localTask) {
+    return {
+      condition: localTask.condition,
+      conditionNormalized: localTask.conditionNormalized,
+      sourceUrl: localTask.sourceUrl,
+      sourcePage: localTask.sourcePage ?? localTask.sourceRegion.page,
+      hasDiagram: localTask.hasDiagram,
+    }
+  }
+  if (options.taskLookup) return options.taskLookup(request)
+  if (!options.supabaseUrl || !options.supabasePublishableKey) return null
+
+  let response: Response
+  try {
+    response = await fetch(`${options.supabaseUrl}/rest/v1/rpc/get_verified_homework_task`, {
+      method: 'POST',
+      headers: {
+        apikey: options.supabasePublishableKey,
+        Authorization: `Bearer ${options.supabasePublishableKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        p_textbook_id: request.textbookId,
+        p_edition: request.edition,
+        p_source_url: request.sourceUrl,
+        p_task: request.task,
+      }),
+      signal: AbortSignal.timeout(10_000),
+    })
+  } catch {
+    throw new HomeworkSolverError(502, 'Не получилось проверить условие в базе учебника')
+  }
+  if (!response.ok) throw new HomeworkSolverError(502, 'База учебника временно недоступна')
+
+  const payload = await response.json() as unknown
+  const row = Array.isArray(payload) && payload[0] && typeof payload[0] === 'object'
+    ? payload[0] as Record<string, unknown>
+    : null
+  if (!row) return null
+  const sourcePage = Number(row.source_page)
+  if (!text(row.condition) || !text(row.condition_normalized) || !Number.isInteger(sourcePage) || sourcePage < 1) return null
+  return {
+    condition: text(row.condition),
+    conditionNormalized: text(row.condition_normalized),
+    sourceUrl: text(row.source_url),
+    sourcePage,
+    hasDiagram: row.has_diagram === true,
+  }
+}
+
+async function validateRequest(value: unknown, options: SolverOptions): Promise<SolveHomeworkRequest> {
   if (!value || typeof value !== 'object') {
     throw new HomeworkSolverError(400, 'Передай учебник и задачу для решения')
   }
@@ -334,28 +391,18 @@ function validateRequest(value: unknown): SolveHomeworkRequest {
   const sourceUrl = text(candidate.sourceUrl)
   const sourcePageValue = Number(candidate.sourcePage)
   const sourcePage = Number.isInteger(sourcePageValue) && sourcePageValue > 0 ? sourcePageValue : undefined
-  if (source === 'number') {
-    const verifiedTask = findVerifiedTextbookTask(text(candidate.textbookId), text(candidate.edition), text(candidate.task))
-    if (!verifiedTask
-      || text(candidate.subject) !== verifiedTask.subject
-      || text(candidate.grade) !== verifiedTask.grade
-      || text(candidate.textbookTitle) !== verifiedTask.textbookTitle
-      || text(candidate.authors) !== verifiedTask.authors
-      || normalizeTaskCondition(condition) !== normalizeTaskCondition(verifiedTask.condition)
-      || sourceUrl !== verifiedTask.sourceUrl
-      || sourcePage !== verifiedTask.sourcePage) {
-      throw new HomeworkSolverError(422, 'Точное условие этой задачи в выбранном издании не найдено. Решение не запускается')
-    }
-  }
   const imageDataUrl = text(candidate.imageDataUrl)
-  if (source === 'photo' && !/^data:image\/(?:jpeg|png|webp|heic|heif);base64,/i.test(imageDataUrl)) {
+  if (imageDataUrl && !/^data:image\/(?:jpeg|png|webp|heic|heif);base64,/i.test(imageDataUrl)) {
+    throw new HomeworkSolverError(400, 'Изображение задачи должно быть в формате JPEG, PNG или WebP')
+  }
+  if (source === 'photo' && !imageDataUrl) {
     throw new HomeworkSolverError(400, 'Добавь фотографию задачи в формате JPEG, PNG или WebP')
   }
   if (imageDataUrl.length > 4_000_000) {
     throw new HomeworkSolverError(413, 'Фотография задачи слишком большая')
   }
 
-  return {
+  const request: SolveHomeworkRequest = {
     textbookId: text(candidate.textbookId).slice(0, 150),
     task: text(candidate.task).slice(0, 120),
     source,
@@ -370,6 +417,34 @@ function validateRequest(value: unknown): SolveHomeworkRequest {
     ...(sourcePage ? { sourcePage } : {}),
     ...(imageDataUrl ? { imageDataUrl } : {}),
   }
+
+  if (source === 'number') {
+    if (request.textbookId !== geometryTextbookIdentity.textbookId
+      || request.subject !== geometryTextbookIdentity.subject
+      || request.grade !== geometryTextbookIdentity.grade
+      || request.textbookTitle !== geometryTextbookIdentity.textbookTitle
+      || request.authors !== geometryTextbookIdentity.authors
+      || request.edition !== geometryTextbookIdentity.edition
+      || request.sourceUrl !== geometryTextbookIdentity.sourceUrl) {
+      throw new HomeworkSolverError(422, 'Выбранное издание учебника не совпадает с индексом задач')
+    }
+
+    const verifiedTask = await lookupVerifiedTask(request, options)
+    if (!verifiedTask
+      || normalizeTaskCondition(condition) !== verifiedTask.conditionNormalized
+      || sourceUrl !== verifiedTask.sourceUrl
+      || sourcePage !== verifiedTask.sourcePage) {
+      throw new HomeworkSolverError(422, 'Точное условие этой задачи в выбранном издании не найдено. Решение не запускается')
+    }
+    if (verifiedTask.hasDiagram && !imageDataUrl) {
+      throw new HomeworkSolverError(400, 'Для этой задачи нужен исходный чертёж из учебника')
+    }
+    request.condition = verifiedTask.condition
+    request.sourceUrl = verifiedTask.sourceUrl
+    request.sourcePage = verifiedTask.sourcePage
+  }
+
+  return request
 }
 
 async function authenticateAccount(request: IncomingMessage, options: SolverOptions): Promise<AuthenticatedAccount | null> {
@@ -530,7 +605,7 @@ export async function handleHomeworkSolverRequest(
   }
 
   try {
-    const task = validateRequest(await readJsonBody(request))
+    const task = await validateRequest(await readJsonBody(request), options)
     const account = await authenticateAccount(request, options)
     const existingSolution = await completeStoredSolution(account, task)
     if (existingSolution) {

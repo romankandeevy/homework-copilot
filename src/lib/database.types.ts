@@ -1,8 +1,16 @@
-export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
 
 export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: '14.17'
+    PostgrestVersion: "14.17"
   }
   public: {
     Tables: {
@@ -52,15 +60,23 @@ export type Database = {
           solution_id?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "homework_solution_access_solution_id_fkey"
+            columns: ["solution_id"]
+            isOneToOne: false
+            referencedRelation: "homework_solutions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       homework_solution_catalog: {
         Row: {
           condition_normalized: string
           created_at: string
+          solution_id: string
           source_page: number | null
           source_url: string
-          solution_id: string
           subject: string
           task: string
           textbook_edition: string
@@ -68,30 +84,38 @@ export type Database = {
           textbook_title: string
         }
         Insert: {
-          condition_normalized: string
+          condition_normalized?: string
           created_at?: string
-          source_page?: number | null
-          source_url: string
           solution_id: string
+          source_page?: number | null
+          source_url?: string
           subject: string
           task: string
-          textbook_edition: string
+          textbook_edition?: string
           textbook_id: string
           textbook_title: string
         }
         Update: {
           condition_normalized?: string
           created_at?: string
+          solution_id?: string
           source_page?: number | null
           source_url?: string
-          solution_id?: string
           subject?: string
           task?: string
           textbook_edition?: string
           textbook_id?: string
           textbook_title?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "homework_solution_catalog_solution_id_fkey"
+            columns: ["solution_id"]
+            isOneToOne: true
+            referencedRelation: "homework_solutions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       homework_solutions: {
         Row: {
@@ -100,8 +124,8 @@ export type Database = {
           created_by: string | null
           id: string
           solution: Json
-          source_page: number | null
           source: string
+          source_page: number | null
           source_url: string
           subject: string
           task: string
@@ -110,17 +134,17 @@ export type Database = {
           textbook_title: string
         }
         Insert: {
-          condition_normalized: string
+          condition_normalized?: string
           created_at?: string
           created_by?: string | null
           id?: string
           solution: Json
-          source_page?: number | null
           source: string
-          source_url: string
+          source_page?: number | null
+          source_url?: string
           subject: string
           task: string
-          textbook_edition: string
+          textbook_edition?: string
           textbook_id: string
           textbook_title: string
         }
@@ -130,8 +154,8 @@ export type Database = {
           created_by?: string | null
           id?: string
           solution?: Json
-          source_page?: number | null
           source?: string
+          source_page?: number | null
           source_url?: string
           subject?: string
           task?: string
@@ -192,6 +216,51 @@ export type Database = {
         }
         Relationships: []
       }
+      verified_homework_tasks: {
+        Row: {
+          condition: string
+          condition_normalized: string
+          diagram_regions: Json
+          has_diagram: boolean
+          ocr_confidence: number
+          solution_payload: Json | null
+          source_page: number | null
+          source_region: Json
+          source_url: string
+          task: string
+          textbook_edition: string
+          textbook_id: string
+        }
+        Insert: {
+          condition: string
+          condition_normalized: string
+          diagram_regions?: Json
+          has_diagram?: boolean
+          ocr_confidence: number
+          solution_payload?: Json | null
+          source_page?: number | null
+          source_region: Json
+          source_url: string
+          task: string
+          textbook_edition: string
+          textbook_id: string
+        }
+        Update: {
+          condition?: string
+          condition_normalized?: string
+          diagram_regions?: Json
+          has_diagram?: boolean
+          ocr_confidence?: number
+          solution_payload?: Json | null
+          source_page?: number | null
+          source_region?: Json
+          source_url?: string
+          task?: string
+          textbook_edition?: string
+          textbook_id?: string
+        }
+        Relationships: []
+      }
       wallet_accounts: {
         Row: {
           balance: number
@@ -244,16 +313,15 @@ export type Database = {
         Relationships: []
       }
     }
-    Views: { [_ in never]: never }
+    Views: {
+      [_ in never]: never
+    }
     Functions: {
       admin_adjust_balance: {
         Args: { p_amount: number; p_reason: string; p_user_id: string }
         Returns: Json
       }
-      admin_dashboard: {
-        Args: { p_period_days?: number }
-        Returns: Json
-      }
+      admin_dashboard: { Args: { p_period_days?: number }; Returns: Json }
       admin_list_users: {
         Args: { p_limit?: number; p_search?: string }
         Returns: Json
@@ -262,48 +330,187 @@ export type Database = {
         Args: { p_is_banned: boolean; p_reason?: string; p_user_id: string }
         Returns: Json
       }
-      admin_user_detail: {
-        Args: { p_user_id: string }
-        Returns: Json
-      }
+      admin_user_detail: { Args: { p_user_id: string }; Returns: Json }
       complete_homework_solution: {
         Args: {
           p_condition: string
           p_condition_normalized: string
           p_edition: string
           p_idempotency_key: string
-          p_solution?: Json | null
+          p_solution?: Json
+          p_source: string
           p_source_page: number | null
           p_source_url: string
-          p_source: string
           p_task: string
           p_textbook_id: string
         }
         Returns: Json
+      }
+      get_admin_context: { Args: never; Returns: Json }
+      get_verified_homework_task: {
+        Args: {
+          p_edition: string
+          p_source_url: string
+          p_task: string
+          p_textbook_id: string
+        }
+        Returns: {
+          condition: string
+          condition_normalized: string
+          diagram_regions: Json
+          has_diagram: boolean
+          ocr_confidence: number
+          source_page: number
+          source_region: Json
+          source_url: string
+        }[]
       }
       spend_solution_credit: {
         Args: {
           p_description?: string
           p_idempotency_key: string
           p_source?: string
-          p_task_number?: number | null
-          p_textbook_id?: string | null
+          p_task_number?: number
+          p_textbook_id?: string
         }
         Returns: number
-      }
-      get_admin_context: {
-        Args: never
-        Returns: Json
       }
       track_my_activity: {
         Args: { p_event: string; p_path?: string }
         Returns: undefined
       }
     }
-    Enums: { [_ in never]: never }
-    CompositeTypes: { [_ in never]: never }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
 }
+
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  public: {
+    Enums: {},
+  },
+} as const
 
 export type Profile = Database['public']['Tables']['profiles']['Row']
 export type AccountControl = Database['public']['Tables']['account_controls']['Row']

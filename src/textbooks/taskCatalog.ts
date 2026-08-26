@@ -1,6 +1,20 @@
 import type { HomeworkDiagram } from '../lib/homeworkContract.ts'
 
-export type VerifiedTextbookTask = {
+export type TextbookTaskSourceRegion = {
+  page: number
+  x: number
+  y: number
+  width: number
+  height: number
+  sourceWidth: number
+  sourceHeight: number
+}
+
+export type TextbookTaskDiagramRegion = TextbookTaskSourceRegion & {
+  figure: number
+}
+
+export type VerifiedTextbookTaskSource = {
   textbookId: string
   subject: string
   grade: string
@@ -11,6 +25,14 @@ export type VerifiedTextbookTask = {
   sourceUrl: string
   sourcePage?: number
   condition: string
+  conditionNormalized: string
+  sourceRegion: TextbookTaskSourceRegion
+  diagramRegions: readonly TextbookTaskDiagramRegion[]
+  ocrConfidence: number
+  hasDiagram: boolean
+}
+
+export type VerifiedTextbookTask = VerifiedTextbookTaskSource & {
   given: readonly string[]
   goal: {
     title: 'Найти' | 'Доказать'
@@ -42,6 +64,12 @@ const geometryTextbook = {
   authors: 'Л. С. Атанасян, В. Ф. Бутузов, С. Б. Кадомцев, Э. Г. Позняк, И. И. Юдина',
 } as const
 
+export const geometryTextbookIdentity = {
+  ...geometryTextbook,
+  edition: geometryEdition,
+  sourceUrl: geometrySourceUrl,
+} as const
+
 export const verifiedTextbookTasks: readonly VerifiedTextbookTask[] = [
   {
     ...geometryTextbook,
@@ -50,6 +78,11 @@ export const verifiedTextbookTasks: readonly VerifiedTextbookTask[] = [
     sourceUrl: geometrySourceUrl,
     sourcePage: 9,
     condition: 'Отметьте три точки А, В и С, не лежащие на одной прямой, и через каждую пару точек проведите прямую. Сколько прямых получилось?',
+    conditionNormalized: 'отметьте три точки а,в и с,не лежащие на одной прямой,и через каждую пару точек проведите прямую.сколько прямых получилось?',
+    sourceRegion: { page: 9, x: 94, y: 659, width: 696, height: 78, sourceWidth: 827, sourceHeight: 1100 },
+    diagramRegions: [],
+    ocrConfidence: 95,
+    hasDiagram: false,
     given: ['A, B, C — точки.', 'Не лежат на', 'одной прямой.'],
     goal: { title: 'Найти', text: 'число прямых.' },
     solution: [

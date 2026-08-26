@@ -46,8 +46,11 @@ import {
   requestHomeworkSolution,
   saveGeneratedSolutions,
 } from './lib/homeworkSolution'
-import { findVerifiedTextbookTask, normalizeTaskCondition } from './textbooks/taskCatalog'
-import type { VerifiedTextbookTask } from './textbooks/taskCatalog'
+import { normalizeTaskCondition } from './textbooks/taskCatalog'
+import type { VerifiedTextbookTaskSource } from './textbooks/taskCatalog'
+import { lookupVerifiedTextbookTask } from './textbooks/taskLookup'
+import { renderTextbookTaskEvidenceImage } from './textbooks/textbookTaskSource'
+import TextbookTaskSourcePreview from './textbooks/TextbookTaskSourcePreview'
 import TextbookLibraryPage from './textbooks/TextbookLibraryPage'
 import './App.css'
 
@@ -528,38 +531,17 @@ function TextbookPicker({
   )
 }
 
-function TaskConditionPreview({ task, actions }: { task: VerifiedTextbookTask; actions?: ReactNode }) {
-  const shouldShowDiagram = task.diagram.kind !== 'three-point-lines'
-  const isMedian = task.diagram.kind === 'median-triangle'
-  const isRight = task.diagram.kind === 'right-triangle'
-  const isParallel = task.diagram.kind === 'parallel-line-triangle'
-
+function TaskConditionPreview({ task, actions }: { task: VerifiedTextbookTaskSource; actions?: ReactNode }) {
+  const showSourceScan = task.hasDiagram || task.ocrConfidence < 80
   return (
-    <section className={`task-condition-preview${shouldShowDiagram ? '' : ' task-condition-preview--copy-only'}`} aria-labelledby="task-condition-title">
+    <section className="task-condition-preview task-condition-preview--copy-only" aria-labelledby="task-condition-title">
       <div className="task-condition-copy">
         <span id="task-condition-title">Условие задачи № {task.task}</span>
         <p>{task.condition}</p>
         <small>Источник: PDF учебника «{task.textbookTitle}»{task.sourcePage ? `, стр. ${task.sourcePage}` : ''}. Издание учебника: {task.edition}.</small>
+        {showSourceScan && <TextbookTaskSourcePreview task={task} />}
         {actions && <div className="task-condition-actions">{actions}</div>}
       </div>
-      {shouldShowDiagram && (
-        <svg className="task-condition-diagram" viewBox="0 0 156 116" role="img" aria-label={task.diagram.description}>
-          <path d={isRight ? 'M22 20L134 92L22 92Z' : 'M22 92L78 20L134 92Z'} />
-          {isMedian && <path d="M78 20V92" />}
-          {isRight && <path d="M22 77H37V92" />}
-          {isParallel && <path d="M39 76L103 76" />}
-          {!isMedian && !isRight && !isParallel && <>
-            <path d="M42 67l8 6M108 73l8-6" />
-            <path d="M68 34q10 10 20 0" />
-            <text x="78" y="53" textAnchor="middle">40°</text>
-          </>}
-          <text x="12" y={isRight ? 18 : 107}>{task.diagram.vertices[0] ?? 'A'}</text>
-          <text x={isRight ? 137 : 74} y={isRight ? 107 : 15}>{task.diagram.vertices[1] ?? 'B'}</text>
-          <text x="137" y="107">{task.diagram.vertices[2] ?? 'C'}</text>
-          {isMedian && <text x="74" y="108">{task.diagram.vertices[3] ?? 'F'}</text>}
-          {isParallel && <text x="108" y="73">p</text>}
-        </svg>
-      )}
     </section>
   )
 }
@@ -581,7 +563,7 @@ function CopyTask({
   onTaskNumberChange: (value: string) => void
   onTextbookChange: (id: TextbookId) => void
   onCreateTextbook: (textbook: Textbook) => void
-  onSubmit: (task: string, ready: boolean, source: HomeworkSource, idempotencyKey: string, photo?: File, verifiedTask?: VerifiedTextbookTask, confirmedCondition?: string) => Promise<boolean>
+  onSubmit: (task: string, ready: boolean, source: HomeworkSource, idempotencyKey: string, photo?: File, verifiedTask?: VerifiedTextbookTaskSource, confirmedCondition?: string, sourceImageDataUrl?: string) => Promise<boolean>
   textbookPickerOpen: boolean
   onTextbookPickerOpenChange: (open: boolean) => void
 }) {
@@ -590,15 +572,23 @@ function CopyTask({
   const [pendingPhoto, setPendingPhoto] = useState<{ file: File; condition: string } | null>(null)
   const [pendingKey, setPendingKey] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [verifiedTask, setVerifiedTask] = useState<VerifiedTextbookTaskSource | null>(null)
   const photoInputRef = useRef<HTMLInputElement>(null)
   const submissionRef = useRef(false)
   const normalizedTask = taskNumber.trim()
-  const verifiedTask = normalizedTask ? findVerifiedTextbookTask(textbook.id, textbook.edition, normalizedTask) : null
-  const canSubmit = Boolean(photo || verifiedTask)
+  const validTaskNumber = /^\d{1,4}$/.test(normalizedTask)
+  const canSubmit = Boolean(photo || validTaskNumber)
   const solutionPrice = photo ? 15 : normalizedTask ? getSolutionPrice(textbook.id, normalizedTask) : 5
   const createSubmissionKey = () => typeof crypto.randomUUID === 'function'
     ? `solution-${crypto.randomUUID()}`
     : `solution-${Date.now()}-${Math.random().toString(16).slice(2)}`
+
+  useEffect(() => {
+    setVerifiedTask(null)
+    setPendingPhoto(null)
+    setPendingKey('')
+    setError('')
+  }, [textbook.edition, textbook.id])
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -625,9 +615,35 @@ function CopyTask({
       setError('Номер задачи: от 1 до 4 цифр')
       return
     }
-    if (!verifiedTask) {
-      setError('Точное условие этой задачи в выбранном издании не найдено. Решение не запускается.')
+    if (!textbook.sourceUrl) {
+      setError('Для этого учебника пока доступна только проверка по фото')
       return
+    }
+    submissionRef.current = true
+    setIsSubmitting(true)
+    setError('')
+    try {
+      const foundTask = await lookupVerifiedTextbookTask({
+        textbookId: textbook.id,
+        subject: textbook.subject,
+        grade: textbook.grade,
+        textbookTitle: textbook.title,
+        authors: textbook.authors,
+        edition: textbook.edition,
+        sourceUrl: textbook.sourceUrl,
+      }, normalizedTask)
+      if (!foundTask) {
+        setVerifiedTask(null)
+        setError('Такого номера нет в выбранном издании. Проверь номер или добавь фото задачи.')
+        return
+      }
+      setVerifiedTask(foundTask)
+    } catch (lookupError) {
+      setVerifiedTask(null)
+      setError(lookupError instanceof Error ? lookupError.message : 'Не получилось проверить условие')
+    } finally {
+      submissionRef.current = false
+      setIsSubmitting(false)
     }
   }
 
@@ -637,7 +653,14 @@ function CopyTask({
     setIsSubmitting(true)
     setError('')
     try {
-      await onSubmit(verifiedTask.task, true, 'number', createSubmissionKey(), undefined, verifiedTask)
+      const evidenceRegions = [
+        ...(verifiedTask.ocrConfidence < 90 ? [verifiedTask.sourceRegion] : []),
+        ...verifiedTask.diagramRegions,
+      ]
+      const sourceImageDataUrl = evidenceRegions.length > 0
+        ? await renderTextbookTaskEvidenceImage(verifiedTask.sourceUrl, evidenceRegions)
+        : undefined
+      await onSubmit(verifiedTask.task, true, 'number', createSubmissionKey(), undefined, verifiedTask, undefined, sourceImageDataUrl)
     } catch (submissionError) {
       setError(submissionError instanceof Error ? submissionError.message : 'Не получилось отправить задачу')
     } finally {
@@ -664,6 +687,7 @@ function CopyTask({
   }
 
   const rejectTask = () => {
+    setVerifiedTask(null)
     setPendingPhoto(null)
     setPendingKey('')
     setError('Выбери другой номер и сверь его с учебником.')
@@ -676,6 +700,7 @@ function CopyTask({
       return
     }
     if (error) setError('')
+    setVerifiedTask(null)
     setPendingPhoto(null)
     setPendingKey('')
     if (nextValue) {
@@ -692,6 +717,7 @@ function CopyTask({
       return
     }
     setError('')
+    setVerifiedTask(null)
     setPendingPhoto(null)
     setPendingKey('')
     setPhoto(file)
@@ -724,9 +750,6 @@ function CopyTask({
               <button className="task-condition-reject" type="button" onClick={rejectTask} disabled={isSubmitting}>Выбрать другой номер</button>
             </>}
           />
-        )}
-        {normalizedTask && !photo && !verifiedTask && normalizedTask.length > 0 && (
-          <p className="task-condition-missing" role="status">Точного условия № {normalizedTask} в выбранном издании пока нет. Решение не будет придумано по одному номеру.</p>
         )}
         {pendingPhoto && (
           <section className="task-confirmation" aria-labelledby="photo-condition-title">
@@ -792,7 +815,7 @@ function CopyTask({
 
           {(!verifiedTask || photo) && (
             <button className="copy-task-submit" type="submit" disabled={!canSubmit || isSubmitting || Boolean(pendingPhoto)}>
-              {isSubmitting ? 'Подожди…' : photo ? 'Распознать условие' : 'Проверить условие'}
+              {isSubmitting ? 'Проверяем…' : photo ? 'Распознать условие' : 'Проверить условие'}
               {!isSubmitting && <ArrowRight size={20} weight="bold" aria-hidden="true" />}
             </button>
           )}
@@ -1275,14 +1298,9 @@ function HomePage() {
   const availableTextbooks = useMemo(
     () => [...textbooks, ...customTextbooks].map((textbook) => {
       const sharedTasks = sharedSolutions
-        .filter((solution) => {
-          const verifiedTask = findVerifiedTextbookTask(textbook.id, textbook.edition, solution.task)
-          return solution.textbook_id === textbook.id
-            && solution.textbook_edition === textbook.edition
-            && solution.source_url === textbook.sourceUrl
-            && verifiedTask !== null
-            && solution.condition_normalized === normalizeTaskCondition(verifiedTask.condition)
-        })
+        .filter((solution) => solution.textbook_id === textbook.id
+          && solution.textbook_edition === textbook.edition
+          && solution.source_url === textbook.sourceUrl)
         .map((solution) => solution.task)
       const generatedTasks = visibleGeneratedSolutions
         .filter((solution) => solution.textbookId === textbook.id && solution.source === 'number')
@@ -1686,8 +1704,9 @@ function HomePage() {
     source: HomeworkSource,
     idempotencyKey: string,
     photo?: File,
-    verifiedTask?: VerifiedTextbookTask,
+    verifiedTask?: VerifiedTextbookTaskSource,
     confirmedCondition?: string,
+    sourceImageDataUrl?: string,
     textbookId = selectedTextbookId,
     openWhenReady = true,
   ) => {
@@ -1740,8 +1759,9 @@ function HomePage() {
     setSolutionState(processingState)
 
     try {
-      const imageDataUrl = source === 'photo' && photo ? await prepareTaskPhoto(photo) : undefined
+      const imageDataUrl = source === 'photo' && photo ? await prepareTaskPhoto(photo) : sourceImageDataUrl
       if (source === 'photo' && !imageDataUrl) throw new Error('Добавь фотографию задачи')
+      if (source === 'number' && verifiedTask?.hasDiagram && !imageDataUrl) throw new Error('Не получилось загрузить чертёж из учебника')
 
       let accessToken: string | undefined
       if (supabaseClient && user) {

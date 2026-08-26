@@ -3,7 +3,7 @@ import { Readable } from 'node:stream'
 import { createClient } from '@supabase/supabase-js'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SolveHomeworkRequest } from '../src/lib/homeworkContract.ts'
-import { findVerifiedTextbookTask } from '../src/textbooks/taskCatalog.ts'
+import { findVerifiedTextbookTask, normalizeTaskCondition } from '../src/textbooks/taskCatalog.ts'
 import { handleHomeworkSolverRequest, normalizeKieSolution, solveWithKie } from './homeworkSolver.ts'
 
 vi.mock('@supabase/supabase-js', async (importOriginal) => {
@@ -27,6 +27,15 @@ const task: SolveHomeworkRequest = {
   sourcePage: verifiedTask.sourcePage,
   condition: verifiedTask.condition,
   idempotencyKey: 'solution-test-geometry-2',
+}
+
+const taskThreeCondition = 'Проведите три прямые так, чтобы каждые две из них пересекались. Обозначьте все точки пересечения этих прямых. Сколько получилось точек? Рассмотрите все возможные случаи.'
+const taskThree: SolveHomeworkRequest = {
+  ...task,
+  task: '3',
+  condition: taskThreeCondition,
+  sourcePage: 9,
+  idempotencyKey: 'solution-test-geometry-3',
 }
 
 const photoTask: SolveHomeworkRequest = {
@@ -135,6 +144,52 @@ describe('homework solver', () => {
       diagram: { kind: 'three-point-lines', vertices: ['A', 'B', 'C'] },
       sourceVerified: true,
     })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('solves a database-indexed number from its confirmed condition without web search', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(providerResponse({
+      ...providerSolution,
+      condition: 'Другое условие от модели.',
+    }))
+    const http = createHttp('POST', taskThree)
+    await handleHomeworkSolverRequest(http.request, http.response, {
+      apiKey: 'test-key',
+      fetchImpl: fetchMock,
+      taskLookup: async () => ({
+        condition: taskThreeCondition,
+        conditionNormalized: normalizeTaskCondition(taskThreeCondition),
+        sourceUrl: verifiedTask.sourceUrl,
+        sourcePage: 9,
+        hasDiagram: false,
+      }),
+    })
+
+    expect(http.response.statusCode).toBe(200)
+    expect(http.body().solution).toMatchObject({ task: '3', condition: taskThreeCondition })
+    const requestPayload = JSON.parse(String(fetchMock.mock.calls[0][1]?.body)) as { tools?: unknown; response_format?: { type: string } }
+    expect(requestPayload.tools).toBeUndefined()
+    expect(requestPayload.response_format?.type).toBe('json_schema')
+  })
+
+  it('requires the indexed source drawing when the task references a figure', async () => {
+    const condition = 'На рисунке 43 изображены лучи с общим началом O.'
+    const http = createHttp('POST', { ...task, task: '50', condition, sourcePage: 23 })
+    const fetchMock = vi.fn<typeof fetch>()
+    await handleHomeworkSolverRequest(http.request, http.response, {
+      apiKey: 'test-key',
+      fetchImpl: fetchMock,
+      taskLookup: async () => ({
+        condition,
+        conditionNormalized: normalizeTaskCondition(condition),
+        sourceUrl: verifiedTask.sourceUrl,
+        sourcePage: 23,
+        hasDiagram: true,
+      }),
+    })
+
+    expect(http.response.statusCode).toBe(400)
+    expect(http.body().error).toContain('чертёж')
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
