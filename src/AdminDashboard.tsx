@@ -11,10 +11,8 @@ import {
   EyeSlash,
   LockKey,
   MagnifyingGlass,
-  Prohibit,
   Pulse,
   SignOut,
-  TrendUp,
   UserCircle,
   UsersThree,
   Wallet,
@@ -26,6 +24,8 @@ import { supabase } from './lib/supabase'
 import './AdminDashboard.css'
 
 type AdminAccess = 'loading' | 'admin' | 'signed-out' | 'forbidden' | 'unavailable'
+type PeriodDays = 7 | 30 | 90
+type ChartMetric = 'sessionStarts' | 'openedSolutions' | 'charges'
 
 type AdminUser = {
   id: string
@@ -44,18 +44,29 @@ type AdminUser = {
 type DashboardSummary = {
   totalUsers: number
   newUsers: number
+  newUsersToday: number
   activeUsers: number
+  activeUsersToday: number
+  activeUsers7Days: number
   onlineUsers: number
   bannedUsers: number
+  sessionStarts: number
+  pageViews: number
+  totalWalletBalance: number
   solutionCharges: number
+  solutionChargesToday: number
   walletCredits: number
   openedSolutions: number
+  openedSolutionsToday: number
 }
 
 type DashboardSeriesItem = {
   date: string
   users: number
   newUsers: number
+  sessionStarts: number
+  pageViews: number
+  openedSolutions: number
   charges: number
 }
 
@@ -98,15 +109,31 @@ type UserDetail = {
   activity: ActivityItem[]
 }
 
+const numberFormatter = new Intl.NumberFormat('ru-RU')
+
+const periodOptions: { value: PeriodDays; label: string }[] = [
+  { value: 7, label: '7 дней' },
+  { value: 30, label: '30 дней' },
+  { value: 90, label: '90 дней' },
+]
+
 const emptySummary: DashboardSummary = {
   totalUsers: 0,
   newUsers: 0,
+  newUsersToday: 0,
   activeUsers: 0,
+  activeUsersToday: 0,
+  activeUsers7Days: 0,
   onlineUsers: 0,
   bannedUsers: 0,
+  sessionStarts: 0,
+  pageViews: 0,
+  totalWalletBalance: 0,
   solutionCharges: 0,
+  solutionChargesToday: 0,
   walletCredits: 0,
   openedSolutions: 0,
+  openedSolutionsToday: 0,
 }
 
 const emptyDashboard: DashboardData = {
@@ -115,6 +142,153 @@ const emptyDashboard: DashboardData = {
   series: [],
   recentActivity: [],
   recentAdminActions: [],
+}
+
+const chartOptions: Record<ChartMetric, {
+  label: string
+  description: string
+  totalLabel: string
+  value: (item: DashboardSeriesItem) => number
+}> = {
+  sessionStarts: {
+    label: 'Сессии',
+    description: 'Запуски сессий',
+    totalLabel: 'всего запусков сессий',
+    value: (item) => item.sessionStarts,
+  },
+  openedSolutions: {
+    label: 'Решения',
+    description: 'Открытые решения',
+    totalLabel: 'всего открыто решений',
+    value: (item) => item.openedSolutions,
+  },
+  charges: {
+    label: 'Списания',
+    description: 'Списано с баланса',
+    totalLabel: 'списано с баланса',
+    value: (item) => item.charges,
+  },
+}
+
+const isAdminPreview = import.meta.env.DEV && new URLSearchParams(window.location.search).get('admin-preview') === '1'
+
+const previewUsers: AdminUser[] = [
+  {
+    id: 'preview-user-1',
+    email: 'alina.demo@example.test',
+    fullName: 'Алина Смирнова',
+    grade: 8,
+    balance: 42,
+    createdAt: '2026-08-03T10:20:00.000Z',
+    lastSeenAt: '2026-08-26T09:18:00.000Z',
+    lastActivityAt: '2026-08-26T09:18:00.000Z',
+    isBanned: false,
+    banReason: null,
+    bannedAt: null,
+  },
+  {
+    id: 'preview-user-2',
+    email: 'misha.demo@example.test',
+    fullName: 'Миша Волков',
+    grade: 7,
+    balance: 8,
+    createdAt: '2026-08-18T14:40:00.000Z',
+    lastSeenAt: '2026-08-25T17:40:00.000Z',
+    lastActivityAt: '2026-08-25T17:40:00.000Z',
+    isBanned: false,
+    banReason: null,
+    bannedAt: null,
+  },
+  {
+    id: 'preview-user-3',
+    email: 'sofia.demo@example.test',
+    fullName: 'София Крылова',
+    grade: 8,
+    balance: 0,
+    createdAt: '2026-07-12T08:15:00.000Z',
+    lastSeenAt: '2026-08-21T12:06:00.000Z',
+    lastActivityAt: '2026-08-21T12:06:00.000Z',
+    isBanned: true,
+    banReason: 'Повторные попытки обойти правила сервиса',
+    bannedAt: '2026-08-22T11:32:00.000Z',
+  },
+]
+
+function previewDate(dayOffset: number) {
+  const date = new Date('2026-08-26T09:30:00.000Z')
+  date.setUTCDate(date.getUTCDate() + dayOffset)
+  return date.toISOString()
+}
+
+function createPreviewDashboard(periodDays: PeriodDays): DashboardData {
+  const series = Array.from({ length: periodDays }, (_, index) => {
+    const dayOffset = index - periodDays + 1
+    const activity = 8 + ((index * 7) % 13)
+    const openedSolutions = 2 + ((index * 3) % 6)
+    return {
+      date: previewDate(dayOffset).slice(0, 10),
+      users: 3 + ((index * 5) % 8),
+      newUsers: index % 5 === 0 ? 2 : index % 3 === 0 ? 1 : 0,
+      sessionStarts: activity,
+      pageViews: activity * 3 + (index % 4),
+      openedSolutions,
+      charges: openedSolutions * 5,
+    }
+  })
+
+  const sessionStarts = series.reduce((total, item) => total + item.sessionStarts, 0)
+  const pageViews = series.reduce((total, item) => total + item.pageViews, 0)
+  const openedSolutions = series.reduce((total, item) => total + item.openedSolutions, 0)
+  const newUsers = series.reduce((total, item) => total + item.newUsers, 0)
+
+  return {
+    periodDays,
+    summary: {
+      totalUsers: 184,
+      newUsers,
+      newUsersToday: 3,
+      activeUsers: 61,
+      activeUsersToday: 18,
+      activeUsers7Days: 43,
+      onlineUsers: 6,
+      bannedUsers: 1,
+      sessionStarts,
+      pageViews,
+      totalWalletBalance: 3_870,
+      solutionCharges: openedSolutions * 5,
+      solutionChargesToday: 35,
+      walletCredits: 860,
+      openedSolutions,
+      openedSolutionsToday: 7,
+    },
+    series,
+    recentActivity: [
+      { id: 'preview-activity-1', userId: 'preview-user-1', email: previewUsers[0].email, fullName: previewUsers[0].fullName, event: 'page_view', path: '/main', createdAt: previewDate(0) },
+      { id: 'preview-activity-2', userId: 'preview-user-2', email: previewUsers[1].email, fullName: previewUsers[1].fullName, event: 'session_started', path: '/solutions', createdAt: previewDate(-1) },
+      { id: 'preview-activity-3', userId: 'preview-user-1', email: previewUsers[0].email, fullName: previewUsers[0].fullName, event: 'session_ended', path: '/main', createdAt: previewDate(-1) },
+    ],
+    recentAdminActions: [
+      { id: 'preview-action-1', event: 'balance_adjusted', payload: { amount: 50, reason: 'Бонус за участие' }, createdAt: previewDate(-2) },
+      { id: 'preview-action-2', event: 'user_banned', payload: { reason: 'Повторные попытки обойти правила сервиса' }, createdAt: previewDate(-4) },
+    ],
+  }
+}
+
+function createPreviewUserDetail(userId: string): UserDetail | null {
+  const user = previewUsers.find((item) => item.id === userId)
+  if (!user) return null
+
+  return {
+    user,
+    walletEntries: [
+      { id: `${user.id}-wallet-1`, amount: 50, kind: 'credit', description: 'Бонус за участие', createdAt: previewDate(-2) },
+      { id: `${user.id}-wallet-2`, amount: -5, kind: 'debit', description: 'Открыто решение', createdAt: previewDate(-5) },
+    ],
+    activity: [
+      { id: `${user.id}-activity-1`, userId: user.id, email: user.email, fullName: user.fullName, event: 'page_view', path: '/main', createdAt: user.lastActivityAt },
+      { id: `${user.id}-activity-2`, userId: user.id, email: user.email, fullName: user.fullName, event: 'session_started', path: '/solutions', createdAt: previewDate(-1) },
+    ],
+  }
 }
 
 function isRecord(value: Json | undefined | null): value is Record<string, Json | undefined> {
@@ -183,12 +357,20 @@ function parseDashboard(value: Json | null): DashboardData {
     summary: {
       totalUsers: asNumber(summary.totalUsers),
       newUsers: asNumber(summary.newUsers),
+      newUsersToday: asNumber(summary.newUsersToday),
       activeUsers: asNumber(summary.activeUsers),
+      activeUsersToday: asNumber(summary.activeUsersToday),
+      activeUsers7Days: asNumber(summary.activeUsers7Days),
       onlineUsers: asNumber(summary.onlineUsers),
       bannedUsers: asNumber(summary.bannedUsers),
+      sessionStarts: asNumber(summary.sessionStarts),
+      pageViews: asNumber(summary.pageViews),
+      totalWalletBalance: asNumber(summary.totalWalletBalance),
       solutionCharges: asNumber(summary.solutionCharges),
+      solutionChargesToday: asNumber(summary.solutionChargesToday),
       walletCredits: asNumber(summary.walletCredits),
       openedSolutions: asNumber(summary.openedSolutions),
+      openedSolutionsToday: asNumber(summary.openedSolutionsToday),
     },
     series: asArray(source.series).map((item) => {
       const row = isRecord(item) ? item : {}
@@ -196,6 +378,9 @@ function parseDashboard(value: Json | null): DashboardData {
         date: asString(row.date),
         users: asNumber(row.users),
         newUsers: asNumber(row.newUsers),
+        sessionStarts: asNumber(row.sessionStarts),
+        pageViews: asNumber(row.pageViews),
+        openedSolutions: asNumber(row.openedSolutions),
         charges: asNumber(row.charges),
       }
     }),
@@ -268,23 +453,14 @@ function userName(user: Pick<AdminUser, 'fullName' | 'email'>) {
   return user.fullName.trim() || user.email
 }
 
-function MetricCard({ icon: Icon, label, value, note, tone = 'default' }: {
-  icon: typeof UsersThree
-  label: string
-  value: string
-  note: string
-  tone?: 'default' | 'success' | 'danger'
-}) {
-  return (
-    <article className={`admin-metric-card admin-metric-card--${tone}`}>
-      <span className="admin-metric-icon"><Icon size={20} weight="duotone" aria-hidden="true" /></span>
-      <div><span>{label}</span><strong>{value}</strong><small>{note}</small></div>
-    </article>
-  )
+function chartValueLabel(metric: ChartMetric, value: number) {
+  return metric === 'charges' ? formatRubles(value) : numberFormatter.format(value)
 }
 
 export default function AdminDashboard() {
   const [access, setAccess] = useState<AdminAccess>('loading')
+  const [periodDays, setPeriodDays] = useState<PeriodDays>(30)
+  const [chartMetric, setChartMetric] = useState<ChartMetric>('sessionStarts')
   const [dashboard, setDashboard] = useState<DashboardData>(emptyDashboard)
   const [dashboardLoading, setDashboardLoading] = useState(false)
   const [users, setUsers] = useState<AdminUser[]>([])
@@ -293,7 +469,8 @@ export default function AdminDashboard() {
   const [detail, setDetail] = useState<UserDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [amount, setAmount] = useState('')
-  const [reason, setReason] = useState('')
+  const [balanceReason, setBalanceReason] = useState('')
+  const [banReason, setBanReason] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
   const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
@@ -304,7 +481,7 @@ export default function AdminDashboard() {
     const previousTitle = document.title
     document.documentElement.dataset.theme = 'dark'
     document.documentElement.style.colorScheme = 'dark'
-    document.title = 'Пульт управления — Homework Copilot'
+    document.title = 'Пульт владельца — Homework Copilot'
     return () => {
       if (previousTheme) document.documentElement.dataset.theme = previousTheme
       else delete document.documentElement.dataset.theme
@@ -313,16 +490,25 @@ export default function AdminDashboard() {
     }
   }, [])
 
-  const loadDashboard = useCallback(async () => {
+  const loadDashboard = useCallback(async (days: PeriodDays) => {
+    if (isAdminPreview) {
+      setDashboard(createPreviewDashboard(days))
+      return
+    }
     if (!supabase) return
     setDashboardLoading(true)
-    const { data, error: dashboardError } = await supabase.rpc('admin_dashboard', { p_period_days: 30 })
+    const { data, error: dashboardError } = await supabase.rpc('admin_dashboard', { p_period_days: days })
     if (dashboardError) setError(databaseErrorMessage(dashboardError))
     else setDashboard(parseDashboard(data))
     setDashboardLoading(false)
   }, [])
 
   const loadUsers = useCallback(async (nextSearch: string) => {
+    if (isAdminPreview) {
+      const query = nextSearch.trim().toLocaleLowerCase('ru-RU')
+      setUsers(previewUsers.filter((user) => !query || `${userName(user)} ${user.email}`.toLocaleLowerCase('ru-RU').includes(query)))
+      return
+    }
     if (!supabase) return
     setUsersLoading(true)
     const { data, error: usersError } = await supabase.rpc('admin_list_users', {
@@ -335,6 +521,10 @@ export default function AdminDashboard() {
   }, [])
 
   const loadUserDetail = useCallback(async (userId: string) => {
+    if (isAdminPreview) {
+      setDetail(createPreviewUserDetail(userId))
+      return
+    }
     if (!supabase) return
     setDetailLoading(true)
     const { data, error: detailError } = await supabase.rpc('admin_user_detail', { p_user_id: userId })
@@ -348,6 +538,11 @@ export default function AdminDashboard() {
   }, [])
 
   const bootstrap = useCallback(async () => {
+    if (isAdminPreview) {
+      setAccess('admin')
+      await loadDashboard(30)
+      return
+    }
     if (!supabase) {
       setAccess('unavailable')
       return
@@ -372,7 +567,7 @@ export default function AdminDashboard() {
     }
 
     setAccess('admin')
-    await loadDashboard()
+    await loadDashboard(30)
   }, [loadDashboard])
 
   useEffect(() => { void bootstrap() }, [bootstrap])
@@ -383,30 +578,53 @@ export default function AdminDashboard() {
     return () => window.clearTimeout(timer)
   }, [access, loadUsers, search])
 
+  useEffect(() => {
+    if (!detail) return
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setDetail(null)
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [detail])
+
   const reloadAll = async () => {
     setError('')
     setNotice('')
-    await Promise.all([loadDashboard(), loadUsers(search)])
+    await Promise.all([loadDashboard(periodDays), loadUsers(search)])
     if (detail) await loadUserDetail(detail.user.id)
+  }
+
+  const changePeriod = (nextPeriod: PeriodDays) => {
+    if (nextPeriod === periodDays) return
+    setPeriodDays(nextPeriod)
+    setError('')
+    setNotice('')
+    void loadDashboard(nextPeriod)
   }
 
   const openUser = async (userId: string) => {
     setNotice('')
     setError('')
     setAmount('')
-    setReason('')
+    setBalanceReason('')
+    setBanReason('')
     await loadUserDetail(userId)
   }
 
   const adjustBalance = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!supabase || !detail || actionLoading) return
+    if (!detail || actionLoading) return
+    if (isAdminPreview) {
+      setNotice('Предпросмотр: изменения не записываются.')
+      return
+    }
+    if (!supabase) return
     const parsedAmount = Number(amount)
     if (!Number.isInteger(parsedAmount) || parsedAmount === 0 || Math.abs(parsedAmount) > 100000) {
       setError('Укажи целое число от −100 000 до 100 000, кроме нуля.')
       return
     }
-    if (reason.trim().length < 3) {
+    if (balanceReason.trim().length < 3) {
       setError('Укажи причину изменения баланса.')
       return
     }
@@ -416,22 +634,27 @@ export default function AdminDashboard() {
     const { error: adjustmentError } = await supabase.rpc('admin_adjust_balance', {
       p_user_id: detail.user.id,
       p_amount: parsedAmount,
-      p_reason: reason.trim(),
+      p_reason: balanceReason.trim(),
     })
     if (adjustmentError) setError(databaseErrorMessage(adjustmentError))
     else {
       setAmount('')
-      setReason('')
+      setBalanceReason('')
       setNotice(`Баланс ${userName(detail.user)} обновлён.`)
-      await Promise.all([loadDashboard(), loadUsers(search), loadUserDetail(detail.user.id)])
+      await Promise.all([loadDashboard(periodDays), loadUsers(search), loadUserDetail(detail.user.id)])
     }
     setActionLoading(false)
   }
 
   const toggleBan = async () => {
-    if (!supabase || !detail || actionLoading) return
+    if (!detail || actionLoading) return
+    if (isAdminPreview) {
+      setNotice('Предпросмотр: изменения не записываются.')
+      return
+    }
+    if (!supabase) return
     const nextIsBanned = !detail.user.isBanned
-    if (nextIsBanned && reason.trim().length < 3) {
+    if (nextIsBanned && banReason.trim().length < 3) {
       setError('Укажи причину блокировки.')
       return
     }
@@ -441,44 +664,51 @@ export default function AdminDashboard() {
     const { error: banError } = await supabase.rpc('admin_set_user_ban', {
       p_user_id: detail.user.id,
       p_is_banned: nextIsBanned,
-      p_reason: nextIsBanned ? reason.trim() : undefined,
+      p_reason: nextIsBanned ? banReason.trim() : undefined,
     })
     if (banError) setError(databaseErrorMessage(banError))
     else {
-      setReason('')
+      setBanReason('')
       setNotice(nextIsBanned ? 'Аккаунт заблокирован.' : 'Аккаунт разблокирован.')
-      await Promise.all([loadDashboard(), loadUsers(search), loadUserDetail(detail.user.id)])
+      await Promise.all([loadDashboard(periodDays), loadUsers(search), loadUserDetail(detail.user.id)])
     }
     setActionLoading(false)
   }
 
   const signOut = async () => {
+    if (isAdminPreview) {
+      setAccess('signed-out')
+      setDetail(null)
+      return
+    }
     if (!supabase) return
     await supabase.auth.signOut({ scope: 'local' })
     setAccess('signed-out')
     setDetail(null)
   }
 
-  const maxSeriesValue = useMemo(() => Math.max(
-    1,
-    ...dashboard.series.map((item) => Math.max(item.users, item.charges)),
-  ), [dashboard.series])
+  const chartSeries = useMemo(() => {
+    const getValue = chartOptions[chartMetric].value
+    return dashboard.series.map((item) => ({ item, value: getValue(item) }))
+  }, [chartMetric, dashboard.series])
+
+  const maxChartValue = useMemo(() => Math.max(1, ...chartSeries.map(({ value }) => value)), [chartSeries])
+  const chartTotal = useMemo(() => chartSeries.reduce((total, { value }) => total + value, 0), [chartSeries])
 
   if (access !== 'admin') {
-    const states: Record<Exclude<AdminAccess, 'admin'>, { eyebrow: string; title: string; copy: string }> = {
-      loading: { eyebrow: 'Проверка доступа', title: 'Открываем пульт', copy: 'Проверяем защищённую owner-сессию.' },
-      'signed-out': { eyebrow: 'Нужен вход', title: 'Войди в свой аккаунт', copy: 'После входа в owner-аккаунт пульт откроется автоматически.' },
-      forbidden: { eyebrow: '403', title: 'Доступ закрыт', copy: 'Этот адрес доступен только назначенному владельцу сервиса.' },
-      unavailable: { eyebrow: 'Нет подключения', title: 'Supabase не настроен', copy: 'Пульт нельзя открыть без защищённого подключения к данным.' },
+    const states: Record<Exclude<AdminAccess, 'admin'>, { title: string; copy: string }> = {
+      loading: { title: 'Открываем пульт', copy: 'Проверяем защищённую сессию владельца.' },
+      'signed-out': { title: 'Войди в свой аккаунт', copy: 'После входа в owner-аккаунт пульт откроется автоматически.' },
+      forbidden: { title: 'Доступ закрыт', copy: 'Этот адрес доступен только назначенному владельцу сервиса.' },
+      unavailable: { title: 'Supabase не настроен', copy: 'Пульт нельзя открыть без защищённого подключения к данным.' },
     }
     const state = states[access]
     return (
       <main className="admin-shell admin-shell--state">
         <section className="admin-state-card" aria-live="polite">
           <div className="admin-wordmark"><span>H</span> Homework Copilot</div>
-          <p>{state.eyebrow}</p>
           <h1>{state.title}</h1>
-          <span>{state.copy}</span>
+          <p>{state.copy}</p>
           {access === 'loading' ? <CircleNotch className="admin-state-spinner" size={24} weight="bold" aria-hidden="true" /> : <a href={import.meta.env.BASE_URL}>На сайт <ArrowLeft size={16} weight="bold" aria-hidden="true" /></a>}
         </section>
       </main>
@@ -486,12 +716,13 @@ export default function AdminDashboard() {
   }
 
   const summary = dashboard.summary
+  const selectedChart = chartOptions[chartMetric]
 
   return (
     <main className="admin-shell">
       <header className="admin-topbar">
         <a className="admin-wordmark" href={import.meta.env.BASE_URL}><span>H</span> Homework Copilot</a>
-        <div className="admin-topbar-title"><span>Owner console</span><strong>Пульт управления</strong></div>
+        <strong className="admin-topbar-title">Пульт владельца</strong>
         <div className="admin-topbar-actions">
           <button className="admin-icon-button" type="button" onClick={() => { void reloadAll() }} disabled={dashboardLoading || usersLoading} aria-label="Обновить данные"><ArrowClockwise size={19} weight="bold" aria-hidden="true" /></button>
           <button className="admin-signout" type="button" onClick={() => { void signOut() }}><SignOut size={17} weight="bold" aria-hidden="true" /> Выйти</button>
@@ -500,89 +731,126 @@ export default function AdminDashboard() {
 
       <div className="admin-layout">
         <aside className="admin-rail" aria-label="Разделы админки">
-          <div className="admin-rail-label">Наблюдение</div>
           <a href="#overview" className="is-active"><ChartLineUp size={18} weight="duotone" aria-hidden="true" /> Обзор</a>
           <a href="#users"><UsersThree size={18} weight="duotone" aria-hidden="true" /> Пользователи</a>
-          <a href="#events"><Pulse size={18} weight="duotone" aria-hidden="true" /> События</a>
-          <div className="admin-rail-status"><span /><div><strong>{summary.onlineUsers}</strong><small>онлайн сейчас</small></div></div>
+          <a href="#analytics"><Pulse size={18} weight="duotone" aria-hidden="true" /> Аналитика</a>
+          <a href="#events"><CheckCircle size={18} weight="duotone" aria-hidden="true" /> Журналы</a>
+          <div className="admin-rail-status"><span /><div><strong>{numberFormatter.format(summary.onlineUsers)}</strong><small>онлайн сейчас</small></div></div>
         </aside>
 
         <section className="admin-content">
           <section className="admin-overview" id="overview" aria-labelledby="admin-overview-title">
-            <div className="admin-section-heading">
-              <div><p>Контур сервиса · {dashboard.periodDays} дней</p><h1 id="admin-overview-title">Живые показатели</h1></div>
-              <span className="admin-live-badge"><i /> данные из Supabase</span>
-            </div>
-
-            <div className="admin-metric-grid">
-              <MetricCard icon={UsersThree} label="Всего пользователей" value={String(summary.totalUsers)} note={`+${summary.newUsers} за период`} />
-              <MetricCard icon={TrendUp} label="Активны за месяц" value={String(summary.activeUsers)} note="заходили хотя бы раз" tone="success" />
-              <MetricCard icon={Pulse} label="Сейчас онлайн" value={String(summary.onlineUsers)} note="активны последние 10 минут" tone="success" />
-              <MetricCard icon={Prohibit} label="Заблокировано" value={String(summary.bannedUsers)} note="ограничение включено" tone={summary.bannedUsers ? 'danger' : 'default'} />
-              <MetricCard icon={Wallet} label="Списано баланса" value={formatRubles(summary.solutionCharges)} note="не является выручкой" />
-              <MetricCard icon={CurrencyRub} label="Подтверждённый доход" value="0 ₽" note="платёжный провайдер не подключён" />
-            </div>
-
-            <div className="admin-insight-grid">
-              <article className="admin-panel admin-activity-chart">
-                <header><div><span>Динамика</span><h2>Активность и списания</h2></div><small>{summary.openedSolutions} открыто решений</small></header>
-                <div className="admin-chart" aria-label="Динамика ежедневной активности">
-                  {dashboard.series.map((item) => {
-                    const usersHeight = Math.max(4, (item.users / maxSeriesValue) * 100)
-                    const chargesHeight = Math.max(4, (item.charges / maxSeriesValue) * 100)
-                    return <div className="admin-chart-day" key={item.date} title={`${item.date}: ${item.users} активных, ${formatRubles(item.charges)} списано`}><div className="admin-chart-bars"><i style={{ height: `${usersHeight}%` }} /><b style={{ height: `${chargesHeight}%` }} /></div><span>{item.date.slice(8)}</span></div>
-                  })}
-                  {!dashboard.series.length && <p>Данных пока нет.</p>}
+            <header className="admin-page-heading">
+              <div>
+                <h1 id="admin-overview-title">Управление сервисом</h1>
+                <p>Пользователи, активность и баланс за выбранный период.</p>
+              </div>
+              <div className="admin-heading-controls">
+                <span className="admin-data-source"><i /> снимок из базы</span>
+                <div className="admin-period-control" role="group" aria-label="Период аналитики">
+                  {periodOptions.map((option) => <button key={option.value} type="button" className={periodDays === option.value ? 'is-selected' : ''} onClick={() => changePeriod(option.value)} aria-pressed={periodDays === option.value}>{option.label}</button>)}
                 </div>
-                <footer><span><i /> активные пользователи</span><span><b /> списано с баланса</span></footer>
+              </div>
+            </header>
+
+            <div className="admin-snapshot-grid">
+              <article className="admin-population-summary">
+                <header>
+                  <div className="admin-summary-heading"><span className="admin-panel-icon"><UsersThree size={21} weight="duotone" aria-hidden="true" /></span><div><h2>Пользователи</h2><p>Кому доступен сервис сейчас.</p></div></div>
+                  <span className="admin-online-count"><i /> {numberFormatter.format(summary.onlineUsers)} онлайн</span>
+                </header>
+                <div className="admin-population-body">
+                  <div className="admin-total-number"><span>Всего в сервисе</span><strong>{numberFormatter.format(summary.totalUsers)}</strong><small>профилей создано</small></div>
+                  <dl className="admin-summary-list">
+                    <div><dt>Активны сегодня</dt><dd>{numberFormatter.format(summary.activeUsersToday)}</dd><small>последний визит сегодня</small></div>
+                    <div><dt>Активны за 7 дней</dt><dd>{numberFormatter.format(summary.activeUsers7Days)}</dd><small>недельный охват</small></div>
+                    <div><dt>Активны за {dashboard.periodDays} дн.</dt><dd>{numberFormatter.format(summary.activeUsers)}</dd><small>заходили хотя бы раз</small></div>
+                    <div><dt>Новые пользователи</dt><dd>+{numberFormatter.format(summary.newUsers)}</dd><small>+{numberFormatter.format(summary.newUsersToday)} сегодня</small></div>
+                  </dl>
+                </div>
               </article>
 
-              <article className="admin-panel admin-control-note">
-                <span className="admin-panel-icon"><LockKey size={21} weight="duotone" aria-hidden="true" /></span>
-                <p>Контроль доступа</p>
-                <h2>Изменения защищены сервером</h2>
-                <span>Баланс, блокировки и журнал действий меняются только owner‑RPC. У ученика баланс обновляется без перезагрузки.</span>
+              <article className="admin-finance-summary">
+                <header className="admin-summary-heading"><span className="admin-panel-icon"><Wallet size={21} weight="duotone" aria-hidden="true" /></span><div><h2>Баланс и спрос</h2><p>Только реальные движения внутреннего баланса.</p></div></header>
+                <dl className="admin-finance-list">
+                  <div><dt>Баланс пользователей</dt><dd>{formatRubles(summary.totalWalletBalance)}</dd><small>суммарно в кошельках</small></div>
+                  <div><dt>Списано за период</dt><dd>{formatRubles(summary.solutionCharges)}</dd><small>{formatRubles(summary.solutionChargesToday)} сегодня</small></div>
+                  <div><dt>Начислено вручную</dt><dd>{formatRubles(summary.walletCredits)}</dd><small>за {dashboard.periodDays} дней</small></div>
+                  <div><dt>Открыто решений</dt><dd>{numberFormatter.format(summary.openedSolutions)}</dd><small>{numberFormatter.format(summary.openedSolutionsToday)} сегодня</small></div>
+                </dl>
+                <p className="admin-finance-disclosure"><CurrencyRub size={17} weight="duotone" aria-hidden="true" /> Выручка и прибыль появятся здесь после подключения платежей: сейчас их нельзя честно посчитать.</p>
               </article>
             </div>
           </section>
 
-          <section className="admin-panel admin-users-panel" id="users" aria-labelledby="admin-users-title">
-            <header className="admin-panel-heading">
-              <div><span>Управление</span><h2 id="admin-users-title">Пользователи</h2></div>
+          <section className="admin-users-workspace" id="users" aria-labelledby="admin-users-title">
+            <header className="admin-users-heading">
+              <div><h2 id="admin-users-title">Пользователи</h2><p>Открой карточку, чтобы посмотреть историю, изменить баланс или доступ.</p></div>
               <label className="admin-search"><MagnifyingGlass size={18} weight="bold" aria-hidden="true" /><span className="sr-only">Поиск пользователя</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Имя или почта" /></label>
             </header>
 
             <div className="admin-table-scroll">
               <table>
-                <thead><tr><th>Пользователь</th><th>Баланс</th><th>Последняя активность</th><th>Статус</th><th><span className="sr-only">Открыть</span></th></tr></thead>
+                <thead><tr><th>Пользователь</th><th>Баланс</th><th>Последняя активность</th><th className="admin-registered-column">Регистрация</th><th>Статус</th><th><span className="sr-only">Открыть</span></th></tr></thead>
                 <tbody>
-                  {usersLoading && <tr><td colSpan={5} className="admin-table-loading"><CircleNotch size={20} weight="bold" aria-hidden="true" /> Загружаем пользователей…</td></tr>}
+                  {usersLoading && <tr><td colSpan={6} className="admin-table-loading"><CircleNotch size={20} weight="bold" aria-hidden="true" /> Загружаем пользователей…</td></tr>}
                   {!usersLoading && users.map((item) => (
                     <tr key={item.id}>
                       <td><button className="admin-user-cell" type="button" onClick={() => { void openUser(item.id) }}><span>{userName(item)}</span><small>{item.email}{item.grade ? ` · ${item.grade} класс` : ''}</small></button></td>
                       <td className="admin-balance-cell">{formatRubles(item.balance)}</td>
                       <td>{formatDate(item.lastActivityAt || item.lastSeenAt)}</td>
+                      <td className="admin-registered-column">{formatDate(item.createdAt, false)}</td>
                       <td><span className={`admin-status ${item.isBanned ? 'is-banned' : 'is-active'}`}>{item.isBanned ? 'Заблокирован' : 'Активен'}</span></td>
-                      <td><button className="admin-row-open" type="button" onClick={() => { void openUser(item.id) }} aria-label={`Открыть ${userName(item)}`}><CaretRight size={19} weight="bold" aria-hidden="true" /></button></td>
+                      <td><button className="admin-row-open" type="button" onClick={() => { void openUser(item.id) }} aria-label={`Открыть ${userName(item)}`}>Открыть <CaretRight size={17} weight="bold" aria-hidden="true" /></button></td>
                     </tr>
                   ))}
-                  {!usersLoading && !users.length && <tr><td colSpan={5} className="admin-table-empty">Пользователи не найдены.</td></tr>}
+                  {!usersLoading && !users.length && <tr><td colSpan={6} className="admin-table-empty">Пользователи не найдены.</td></tr>}
                 </tbody>
               </table>
             </div>
           </section>
 
+          <section className="admin-analytics-layout" id="analytics" aria-label="Аналитика">
+            <article className="admin-chart-panel">
+              <header className="admin-chart-heading">
+                <div><h2>Динамика за {dashboard.periodDays} дней</h2><p>Один показатель за раз — без смешения рублей и действий.</p></div>
+                <div className="admin-chart-switch" role="group" aria-label="Показатель графика">
+                  {(Object.keys(chartOptions) as ChartMetric[]).map((metric) => <button key={metric} type="button" className={chartMetric === metric ? 'is-selected' : ''} onClick={() => setChartMetric(metric)} aria-pressed={chartMetric === metric}>{chartOptions[metric].label}</button>)}
+                </div>
+              </header>
+              <div className={`admin-chart admin-chart--${chartMetric}`} aria-label={selectedChart.description}>
+                {chartSeries.map(({ item, value }) => {
+                  const height = Math.max(5, (value / maxChartValue) * 100)
+                  return <div className="admin-chart-day" key={item.date} title={`${formatDate(item.date, false)}: ${chartValueLabel(chartMetric, value)}`}><div className="admin-chart-bar"><i style={{ height: `${height}%` }} /></div><span>{item.date.slice(8)}</span></div>
+                })}
+                {!chartSeries.length && <p>Данных пока нет.</p>}
+              </div>
+              <footer><span>{selectedChart.totalLabel}</span><strong>{chartValueLabel(chartMetric, chartTotal)}</strong></footer>
+            </article>
+
+            <article className="admin-signal-summary">
+              <header className="admin-summary-heading"><span className="admin-panel-icon"><Pulse size={21} weight="duotone" aria-hidden="true" /></span><div><h2>Сигналы сервиса</h2><p>Что произошло за {dashboard.periodDays} дней.</p></div></header>
+              <dl className="admin-signal-list">
+                <div><dt>Запуски сессий</dt><dd>{numberFormatter.format(summary.sessionStarts)}</dd><small>пользователь вошёл или вернулся</small></div>
+                <div><dt>Просмотры страниц</dt><dd>{numberFormatter.format(summary.pageViews)}</dd><small>события браузера</small></div>
+                <div><dt>Решения открыты</dt><dd>{numberFormatter.format(summary.openedSolutions)}</dd><small>за счёт внутреннего баланса</small></div>
+                <div className={summary.bannedUsers ? 'is-warning' : ''}><dt>Ограничен доступ</dt><dd>{numberFormatter.format(summary.bannedUsers)}</dd><small>{summary.bannedUsers ? 'требуют внимания' : 'все аккаунты доступны'}</small></div>
+              </dl>
+              <div className="admin-protection-note"><LockKey size={19} weight="duotone" aria-hidden="true" /><p>Баланс, блокировки и журнал меняются только защищёнными owner‑RPC. У ученика изменения приходят без перезагрузки.</p></div>
+            </article>
+          </section>
+
           <section className="admin-event-grid" id="events" aria-label="Журналы">
-            <article className="admin-panel admin-feed-panel">
-              <header><div><span>Пульс сервиса</span><h2>Последние действия</h2></div><Pulse size={22} weight="duotone" aria-hidden="true" /></header>
+            <article className="admin-feed-panel">
+              <header><div><h2>Последние действия</h2><p>Пульс сервиса в порядке времени.</p></div><Pulse size={22} weight="duotone" aria-hidden="true" /></header>
               <ol className="admin-feed">
                 {dashboard.recentActivity.map((item) => <li key={item.id}><i /><div><strong>{item.fullName || item.email}</strong><span>{eventLabel(item.event)}{item.path ? ` · ${item.path}` : ''}</span></div><time>{formatDate(item.createdAt)}</time></li>)}
                 {!dashboard.recentActivity.length && <li className="admin-feed-empty">Событий пока нет.</li>}
               </ol>
             </article>
 
-            <article className="admin-panel admin-feed-panel">
-              <header><div><span>Неподменяемый журнал</span><h2>Действия owner</h2></div><CheckCircle size={22} weight="duotone" aria-hidden="true" /></header>
+            <article className="admin-feed-panel">
+              <header><div><h2>Действия владельца</h2><p>Зафиксированы на сервере и не редактируются.</p></div><CheckCircle size={22} weight="duotone" aria-hidden="true" /></header>
               <ol className="admin-feed">
                 {dashboard.recentAdminActions.map((item) => <li key={item.id}><i /><div><strong>{eventLabel(item.event)}</strong><span>{asString(item.payload.reason) || (typeof item.payload.amount === 'number' ? `${item.payload.amount > 0 ? '+' : ''}${formatRubles(item.payload.amount)}` : 'зафиксировано сервером')}</span></div><time>{formatDate(item.createdAt)}</time></li>)}
                 {!dashboard.recentAdminActions.length && <li className="admin-feed-empty">Действий ещё не было.</li>}
@@ -595,24 +863,24 @@ export default function AdminDashboard() {
       {detailLoading && <div className="admin-drawer-loading" role="status"><CircleNotch size={24} weight="bold" aria-hidden="true" /></div>}
       {detail && (
         <aside className="admin-user-drawer" aria-labelledby="admin-user-drawer-title">
-          <header><button className="admin-icon-button" type="button" onClick={() => setDetail(null)} aria-label="Закрыть карточку пользователя"><X size={19} weight="bold" aria-hidden="true" /></button><span>Карточка пользователя</span></header>
+          <header className="admin-drawer-topbar"><span>Карточка пользователя</span><button className="admin-icon-button" type="button" onClick={() => setDetail(null)} aria-label="Закрыть карточку пользователя"><X size={19} weight="bold" aria-hidden="true" /></button></header>
           <section className="admin-drawer-user">
-            <div className="admin-avatar"><UserCircle size={36} weight="duotone" aria-hidden="true" /></div>
+            <div className="admin-avatar"><UserCircle size={38} weight="duotone" aria-hidden="true" /></div>
             <div><h2 id="admin-user-drawer-title">{userName(detail.user)}</h2><p>{detail.user.email}</p><span>{detail.user.grade ? `${detail.user.grade} класс` : 'Класс не указан'} · зарегистрирован {formatDate(detail.user.createdAt, false)}</span></div>
           </section>
 
-          <section className="admin-drawer-balance"><span>Текущий баланс</span><strong>{formatRubles(detail.user.balance)}</strong><small>Онлайн: {formatDate(detail.user.lastSeenAt)}</small></section>
+          <section className="admin-drawer-balance"><div><span>Текущий баланс</span><strong>{formatRubles(detail.user.balance)}</strong></div><dl><div><dt>Последний визит</dt><dd>{formatDate(detail.user.lastSeenAt)}</dd></div><div><dt>Статус</dt><dd>{detail.user.isBanned ? 'Заблокирован' : 'Активен'}</dd></div></dl></section>
 
           <form className="admin-action-form" onSubmit={adjustBalance}>
             <header><Wallet size={19} weight="duotone" aria-hidden="true" /><div><h3>Изменить баланс</h3><p>Положительное — начислить, отрицательное — списать.</p></div></header>
             <label><span>Сумма, ₽</span><input type="number" value={amount} onChange={(event) => setAmount(event.target.value)} min={-100000} max={100000} step="1" inputMode="numeric" placeholder="Например, 50" /></label>
-            <label><span>Причина</span><input value={reason} onChange={(event) => setReason(event.target.value)} minLength={3} maxLength={160} placeholder="За что меняем баланс" /></label>
-            <button className="admin-primary-action" type="submit" disabled={actionLoading}>{actionLoading ? 'Сохраняем…' : 'Применить изменение'}</button>
+            <label><span>Причина</span><input value={balanceReason} onChange={(event) => setBalanceReason(event.target.value)} minLength={3} maxLength={160} placeholder="За что меняем баланс" /></label>
+            <button className="admin-primary-action" type="submit" disabled={actionLoading}>{actionLoading ? 'Сохраняем…' : 'Изменить баланс'}</button>
           </form>
 
           <section className={`admin-ban-control${detail.user.isBanned ? ' is-banned' : ''}`}>
             <header><EyeSlash size={19} weight="duotone" aria-hidden="true" /><div><h3>{detail.user.isBanned ? 'Аккаунт заблокирован' : 'Блокировка доступа'}</h3><p>{detail.user.isBanned ? detail.user.banReason || 'Причина не указана' : 'Сразу остановит доступ к сервису и списания.'}</p></div></header>
-            {!detail.user.isBanned && <label><span>Причина блокировки</span><input value={reason} onChange={(event) => setReason(event.target.value)} minLength={3} maxLength={500} placeholder="Опиши причину" /></label>}
+            {!detail.user.isBanned && <label><span>Причина блокировки</span><input value={banReason} onChange={(event) => setBanReason(event.target.value)} minLength={3} maxLength={500} placeholder="Опиши причину" /></label>}
             <button className={detail.user.isBanned ? 'admin-unban-action' : 'admin-ban-action'} type="button" onClick={() => { void toggleBan() }} disabled={actionLoading}>{detail.user.isBanned ? 'Разблокировать' : 'Заблокировать'}</button>
           </section>
 
