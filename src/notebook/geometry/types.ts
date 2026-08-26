@@ -1,4 +1,4 @@
-import type { HomeworkDiagramKind } from '../../lib/homeworkContract'
+import type { HomeworkDiagramKind, HomeworkDiagramScene } from '../../lib/homeworkContract'
 
 export type GeometryDiagramSpec = {
   kind: HomeworkDiagramKind
@@ -11,6 +11,7 @@ export type GeometryDiagramSpec = {
   rightAngleAt?: string
   parallelTo?: string
   exteriorAngle?: string
+  scene?: HomeworkDiagramScene
 }
 
 export type GeometryNotebookPageSpec = {
@@ -19,7 +20,7 @@ export type GeometryNotebookPageSpec = {
   condition: string
   given: readonly string[]
   goal: {
-    title: 'Найти' | 'Доказать'
+    title: 'Найти' | 'Доказать' | 'Построить'
     text: string
   }
   diagram: GeometryDiagramSpec

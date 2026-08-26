@@ -59,6 +59,27 @@ export const geometryNotebookLayoutV1 = {
       },
     },
     diagram: {
+      scene: {
+        x: 455,
+        y: 96,
+        width: 575,
+        height: 455,
+        padding: 28,
+        localMin: 0,
+        localMax: 100,
+        pointRadius: 5,
+        labelOffsetX: 12,
+        labelOffsetY: -12,
+        objectLabelOffsetY: -14,
+        lineLabelOffsetX: 0,
+        lineLabelOffsetY: 34,
+        lineExtensionFactor: 5,
+        angleRadius: 31,
+        rightAngleSize: 24,
+        equalSegmentTickHalf: 10,
+        parallelMarkHalf: 12,
+        parallelMarkGap: 12,
+      },
       threePointLines: {
         paths: [
           'M 476 550 L 798 100',

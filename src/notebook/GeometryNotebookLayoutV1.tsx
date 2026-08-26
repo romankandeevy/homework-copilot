@@ -1,4 +1,5 @@
 import { assertGeometryNotebookLayoutV1, geometryNotebookLayoutV1 as layout } from './layouts/geometryNotebookLayoutV1'
+import { GeometryScene } from './geometry/GeometryScene'
 import type { GeometryDiagramSpec, GeometryNotebookPageSpec } from './geometry/types'
 
 assertGeometryNotebookLayoutV1()
@@ -82,6 +83,9 @@ function paginateSolution(spec: GeometryNotebookPageSpec): readonly PageSegment[
 function TriangleDiagram({ diagram }: { diagram: GeometryDiagramSpec }) {
   const { threePointLines, threeLinesCases, threeCollinearOneOffLines, triangle, labels, apexAngle, angleArc, leftTick, rightTick, rightAngle, exteriorAngle, auxiliaryLabel, parallelLine, parallelLabel, intersectingSegments, quadrilateral, circle } = layout.zones.diagram
   if (diagram.kind === 'none') return null
+  if (diagram.kind === 'construction') {
+    return diagram.scene ? <GeometryScene scene={diagram.scene} description={diagram.description} /> : null
+  }
 
   if (diagram.kind === 'three-point-extended-lines') {
     return (

@@ -16,6 +16,7 @@ vi.mock('./textbooks/textbookTaskSource', async (importOriginal) => {
 function mockGeneratedSolution(request: SolveHomeworkRequest): HomeworkSolution {
   const condition = request.condition ?? 'По фотографии найдите угол треугольника.'
   return {
+    engineVersion: 2,
     textbookId: request.textbookId,
     task: request.task,
     source: request.source,
@@ -32,6 +33,8 @@ function mockGeneratedSolution(request: SolveHomeworkRequest): HomeworkSolution 
     answer: 'Готово.',
     diagram: { kind: 'three-point-lines', description: 'Точки A, B и C соединены прямыми.', vertices: ['A', 'B', 'C'] },
     sourceVerified: true,
+    taskType: 'mixed',
+    quality: { diagramRequired: true, reviewPassed: true, symbolicShare: 0.8 },
     createdAt: '2026-08-25T12:00:00.000Z',
   }
 }
@@ -69,7 +72,7 @@ describe('Homework Copilot task flow', () => {
     expect(screen.getByRole('button', { name: 'Проверить условие' })).toBeEnabled()
     fireEvent.click(screen.getByRole('button', { name: 'Проверить условие' }))
     expect(await screen.findByText('Условие задачи № 2')).toBeInTheDocument()
-    expect(screen.getByText('Отметьте три точки А, В и С, не лежащие на одной прямой, и через каждую пару точек проведите прямую. Сколько прямых получилось?')).toBeInTheDocument()
+    expect(screen.getByText('Отметьте три точки A, B и C, не лежащие на одной прямой, и через каждую пару точек проведите прямую. Сколько прямых получилось?')).toBeInTheDocument()
     expect(screen.getByText(/Источник: PDF учебника.*стр. 9\. Издание учебника: 14-е издание, Просвещение, 2023/)).toBeInTheDocument()
     expect(screen.queryByRole('img', { name: /Три точки A, B и C/ })).not.toBeInTheDocument()
 
@@ -77,7 +80,7 @@ describe('Homework Copilot task flow', () => {
     expect(screen.getByRole('button', { name: 'Выбрать другой номер' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Проверить условие' })).not.toBeInTheDocument()
     expect(screen.queryByText('Нашли задачу № 2')).not.toBeInTheDocument()
-    expect(screen.getAllByText('Отметьте три точки А, В и С, не лежащие на одной прямой, и через каждую пару точек проведите прямую. Сколько прямых получилось?')).toHaveLength(1)
+    expect(screen.getAllByText('Отметьте три точки A, B и C, не лежащие на одной прямой, и через каждую пару точек проведите прямую. Сколько прямых получилось?')).toHaveLength(1)
     expect(fetchMock).not.toHaveBeenCalled()
 
     fireEvent.click(screen.getByRole('button', { name: 'Условие верное' }))
@@ -85,7 +88,7 @@ describe('Homework Copilot task flow', () => {
     const request = JSON.parse(String(fetchMock.mock.calls[0][1]?.body)) as SolveHomeworkRequest
     expect(request).toMatchObject({
       task: '2',
-      condition: 'Отметьте три точки А, В и С, не лежащие на одной прямой, и через каждую пару точек проведите прямую. Сколько прямых получилось?',
+      condition: 'Отметьте три точки A, B и C, не лежащие на одной прямой, и через каждую пару точек проведите прямую. Сколько прямых получилось?',
       sourceUrl: '/textbooks/geometry-7-9-atanasyan.pdf',
       sourcePage: 9,
       imageDataUrl: 'data:image/jpeg;base64,c291cmNl',

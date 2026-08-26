@@ -19,6 +19,14 @@ const verifiedTasks = {
     ocr_confidence: 95,
     has_diagram: false,
   },
+  '5': {
+    condition: 'Проведите прямую а и отметьте на ней точки A и В. Отметьте: а) точки М и №, лежащие на отрезке AB; 6) точки Р и @, лежащие на прямой а, но не лежащие на отрезке АВ; в) точки Ви S, не лежащие на прямой a.',
+    source_page: 9,
+    source_region: { page: 9, x: 94, y: 851, width: 696, height: 93, sourceWidth: 827, sourceHeight: 1100 },
+    diagram_regions: [],
+    ocr_confidence: 91,
+    has_diagram: false,
+  },
   '50': {
     condition: 'На рисунке 43 изображены лучи с общим началом O. а) Найдите градусные меры углов AOX, BOX, AOB, COB, DOX; б) назовите углы, равные 20°; в) назовите равные углы; г) назовите все углы со стороной OA и найдите их градусные меры.',
     source_page: 23,
@@ -142,11 +150,28 @@ test.describe('выбор задач', () => {
     await page.getByRole('button', { name: 'Проверить условие' }).click()
 
     await expect(page.getByText('Условие задачи № 50')).toBeVisible({ timeout: 15_000 })
-    await expect(page.getByText(/На рисунке 43 изображены лучи с общим началом O/)).toBeVisible()
+    await expect(page.getByText('Точное условие из учебника')).toBeVisible()
+    await expect(page.getByRole('img', { name: 'Фрагмент страницы 23 с условием задачи № 50' })).toBeVisible({ timeout: 30_000 })
     await expect(page.getByText('Рисунок 43 из учебника')).toBeVisible()
     const sourceDiagram = page.getByRole('img', { name: 'Рисунок 43 из учебника для задачи № 50' })
     await expect(sourceDiagram).toBeVisible({ timeout: 30_000 })
     await expect.poll(() => sourceDiagram.evaluate((image: HTMLImageElement) => image.naturalWidth), { timeout: 30_000 }).toBeGreaterThan(0)
+    await expect(page.getByRole('button', { name: 'Условие верное' })).toBeEnabled()
+  })
+
+  test('скрывает повреждённый OCR и показывает точный фрагмент PDF', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/main')
+
+    await page.getByRole('textbox', { name: 'Номер задачи' }).fill('5')
+    await page.getByRole('button', { name: 'Проверить условие' }).click()
+
+    await expect(page.getByText('Условие задачи № 5')).toBeVisible()
+    await expect(page.getByText(/точки М и №/)).toHaveCount(0)
+    await expect(page.getByText('Точное условие из учебника')).toBeVisible()
+    const sourceCondition = page.getByRole('img', { name: 'Фрагмент страницы 9 с условием задачи № 5' })
+    await expect(sourceCondition).toBeVisible({ timeout: 30_000 })
+    await expect.poll(() => sourceCondition.evaluate((image: HTMLImageElement) => image.naturalWidth), { timeout: 30_000 }).toBeGreaterThan(0)
     await expect(page.getByRole('button', { name: 'Условие верное' })).toBeEnabled()
   })
 

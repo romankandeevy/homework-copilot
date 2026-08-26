@@ -96,4 +96,48 @@ describe('GeometryNotebookLayoutV1', () => {
     expect(screen.getByText('BD, CD.')).toBeInTheDocument()
     expect(screen.getByText('Ответ: 4 прямые')).toBeInTheDocument()
   })
+
+  it('renders a construction task from its checked semantic scene', () => {
+    const { container } = render(<GeometryNotebookLayoutV1 spec={{
+      ...geometryFixtures[0],
+      number: '5',
+      given: ['A, B ∈ a', 'M, N ∈ [AB]', 'P, Q ∈ a; R, S ∉ a'],
+      goal: { title: 'Построить', text: 'P, A, M, N, B, Q; R, S' },
+      diagram: {
+        kind: 'construction',
+        description: 'Точки на прямой a и вне её.',
+        vertices: ['P', 'A', 'M', 'N', 'B', 'Q', 'R', 'S'],
+        scene: {
+          points: [
+            { id: 'P', label: 'P', x: 5, y: 55, visible: true },
+            { id: 'A', label: 'A', x: 20, y: 55, visible: true },
+            { id: 'M', label: 'M', x: 40, y: 55, visible: true },
+            { id: 'N', label: 'N', x: 55, y: 55, visible: true },
+            { id: 'B', label: 'B', x: 72, y: 55, visible: true },
+            { id: 'Q', label: 'Q', x: 95, y: 55, visible: true },
+            { id: 'R', label: 'R', x: 30, y: 18, visible: true },
+            { id: 'S', label: 'S', x: 78, y: 18, visible: true },
+          ],
+          objects: [{ kind: 'line', points: ['P', 'Q'], label: 'a', auxiliary: false }],
+          marks: [],
+          constraints: [
+            { kind: 'collinear', points: ['P', 'A', 'M', 'N', 'B', 'Q'] },
+            { kind: 'between', points: ['M', 'A', 'B'] },
+            { kind: 'between', points: ['N', 'A', 'B'] },
+            { kind: 'not-on-line', points: ['R', 'A', 'B'] },
+            { kind: 'not-on-line', points: ['S', 'A', 'B'] },
+          ],
+        },
+      },
+      solution: ['M, N ∈ [AB]; P, Q ∈ a ∖ [AB]; R, S ∉ a.'],
+      answer: undefined,
+    }} />)
+
+    expect(screen.getByTestId('geometry-scene')).toHaveAccessibleName('Точки на прямой a и вне её.')
+    expect(screen.getByText('Построить: P, A, M,')).toBeInTheDocument()
+    expect(screen.getByText('R', { selector: '.diagram-vertex' })).toBeInTheDocument()
+    expect(screen.getByText('S', { selector: '.diagram-vertex' })).toBeInTheDocument()
+    expect(container.querySelectorAll('.diagram-point')).toHaveLength(8)
+    expect(screen.getAllByTestId('geometry-notebook-page')).toHaveLength(1)
+  })
 })

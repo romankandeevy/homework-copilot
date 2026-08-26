@@ -35,7 +35,7 @@ export type VerifiedTextbookTaskSource = {
 export type VerifiedTextbookTask = VerifiedTextbookTaskSource & {
   given: readonly string[]
   goal: {
-    title: 'Найти' | 'Доказать'
+    title: 'Найти' | 'Доказать' | 'Построить'
     text: string
   }
   solution: readonly string[]
@@ -77,21 +77,20 @@ export const verifiedTextbookTasks: readonly VerifiedTextbookTask[] = [
     edition: geometryEdition,
     sourceUrl: geometrySourceUrl,
     sourcePage: 9,
-    condition: 'Отметьте три точки А, В и С, не лежащие на одной прямой, и через каждую пару точек проведите прямую. Сколько прямых получилось?',
-    conditionNormalized: 'отметьте три точки а,в и с,не лежащие на одной прямой,и через каждую пару точек проведите прямую.сколько прямых получилось?',
+    condition: 'Отметьте три точки A, B и C, не лежащие на одной прямой, и через каждую пару точек проведите прямую. Сколько прямых получилось?',
+    conditionNormalized: 'отметьте три точки a,b и c,не лежащие на одной прямой,и через каждую пару точек проведите прямую.сколько прямых получилось?',
     sourceRegion: { page: 9, x: 94, y: 659, width: 696, height: 78, sourceWidth: 827, sourceHeight: 1100 },
     diagramRegions: [],
     ocrConfidence: 95,
     hasDiagram: false,
-    given: ['A, B, C — точки.', 'Не лежат на', 'одной прямой.'],
-    goal: { title: 'Найти', text: 'число прямых.' },
+    given: ['A, B, C — неколлинеарны'],
+    goal: { title: 'Найти', text: 'n(прямых)' },
     solution: [
-      'Проведём AB, BC и CA.',
-      'Всего 3 прямые.',
+      'AB, BC, CA; n = C₃² = 3.',
     ],
-    answer: '3 прямые.',
+    answer: '3 прямые',
     diagram: {
-      kind: 'three-point-lines',
+      kind: 'three-point-extended-lines',
       description: 'Три точки A, B и C, не лежащие на одной прямой, соединены прямыми AB, BC и CA.',
       vertices: ['A', 'B', 'C'],
     },

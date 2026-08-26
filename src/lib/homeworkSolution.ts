@@ -1,7 +1,13 @@
+import { homeworkSolutionEngineVersion } from './homeworkContract'
 import type { HomeworkSolution, SolveHomeworkRequest } from './homeworkContract'
 import type { Json } from './database.types'
 
 export const generatedSolutionsStorageKey = 'homework-copilot:generated-solutions-v1'
+
+export function isReviewedHomeworkSolution(solution: HomeworkSolution) {
+  return solution.engineVersion === homeworkSolutionEngineVersion
+    && solution.quality?.reviewPassed === true
+}
 
 export function parseStoredHomeworkSolution(value: Json | unknown, ownerId?: string): HomeworkSolution | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null

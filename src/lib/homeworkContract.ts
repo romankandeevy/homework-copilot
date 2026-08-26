@@ -1,4 +1,5 @@
 export const homeworkDiagramKinds = [
+  'construction',
   'triangle',
   'three-point-lines',
   'three-point-extended-lines',
@@ -21,6 +22,55 @@ export const homeworkDiagramKinds = [
 export type HomeworkDiagramKind = typeof homeworkDiagramKinds[number]
 export type HomeworkSource = 'number' | 'photo'
 
+export const homeworkSolutionEngineVersion = 2
+
+export const homeworkTaskTypes = ['construction', 'calculation', 'proof', 'mixed'] as const
+export type HomeworkTaskType = typeof homeworkTaskTypes[number]
+
+export const homeworkSceneObjectKinds = ['line', 'segment', 'ray', 'circle', 'polyline', 'polygon'] as const
+export type HomeworkSceneObjectKind = typeof homeworkSceneObjectKinds[number]
+
+export const homeworkSceneMarkKinds = ['angle', 'right-angle', 'equal-segment', 'parallel'] as const
+export type HomeworkSceneMarkKind = typeof homeworkSceneMarkKinds[number]
+
+export const homeworkSceneConstraintKinds = [
+  'collinear',
+  'not-collinear',
+  'between',
+  'not-on-line',
+  'parallel',
+  'perpendicular',
+  'equal-length',
+  'midpoint',
+  'on-circle',
+] as const
+export type HomeworkSceneConstraintKind = typeof homeworkSceneConstraintKinds[number]
+
+export type HomeworkDiagramScene = {
+  points: Array<{
+    id: string
+    label: string
+    x: number
+    y: number
+    visible: boolean
+  }>
+  objects: Array<{
+    kind: HomeworkSceneObjectKind
+    points: string[]
+    label: string
+    auxiliary: boolean
+  }>
+  marks: Array<{
+    kind: HomeworkSceneMarkKind
+    points: string[]
+    label: string
+  }>
+  constraints: Array<{
+    kind: HomeworkSceneConstraintKind
+    points: string[]
+  }>
+}
+
 export type HomeworkDiagram = {
   kind: HomeworkDiagramKind
   description: string
@@ -31,9 +81,11 @@ export type HomeworkDiagram = {
   rightAngleAt?: string
   parallelTo?: string
   exteriorAngle?: string
+  scene?: HomeworkDiagramScene
 }
 
 export type HomeworkSolution = {
+  engineVersion?: number
   textbookId: string
   task: string
   source: HomeworkSource
@@ -46,13 +98,19 @@ export type HomeworkSolution = {
   condition: string
   given: string[]
   goal: {
-    title: 'Найти' | 'Доказать'
+    title: 'Найти' | 'Доказать' | 'Построить'
     text: string
   }
   steps: string[]
   answer: string
   diagram: HomeworkDiagram
   sourceVerified: boolean
+  taskType?: HomeworkTaskType
+  quality?: {
+    diagramRequired: boolean
+    reviewPassed: boolean
+    symbolicShare: number
+  }
   createdAt: string
   ownerId?: string
 }

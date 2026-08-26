@@ -38,8 +38,8 @@ import type { HomeworkSolution, HomeworkSource } from './lib/homeworkContract'
 import { formatRubles } from './lib/currency'
 import { useModalIsolation } from './lib/useModalIsolation'
 import { getSolutionPrice } from './lib/solutionPricing'
-import { getVerifiedNumberedGeometrySolution } from './lib/verifiedNumberedSolutions'
 import {
+  isReviewedHomeworkSolution,
   loadGeneratedSolutions,
   parseStoredHomeworkSolution,
   prepareTaskPhoto,
@@ -533,14 +533,15 @@ function TextbookPicker({
 }
 
 function TaskConditionPreview({ task, actions }: { task: VerifiedTextbookTaskSource; actions?: ReactNode }) {
-  const showSourceScan = task.hasDiagram || task.ocrConfidence < 80
+  const conditionNeedsScan = task.ocrConfidence < 95
+    || /[@{}&]|\b(?:HATE|Ha|HA|Puc|3[aа][mм]кнут\p{L}*|рисунKe|приият|ссли|Hair)\b|(?:^|[;:]\s*)[06]\)|\bВи\b|точк\p{L}*[^.;]{0,25}№/iu.test(task.condition)
   return (
     <section className="task-condition-preview task-condition-preview--copy-only" aria-labelledby="task-condition-title">
       <div className="task-condition-copy">
         <span id="task-condition-title">Условие задачи № {task.task}</span>
-        <p>{task.condition}</p>
+        {!conditionNeedsScan && <p>{task.condition}</p>}
         <small>Источник: PDF учебника «{task.textbookTitle}»{task.sourcePage ? `, стр. ${task.sourcePage}` : ''}. Издание учебника: {task.edition}.</small>
-        {showSourceScan && <TextbookTaskSourcePreview task={task} />}
+        {(conditionNeedsScan || task.hasDiagram) && <TextbookTaskSourcePreview task={task} includeCondition={conditionNeedsScan} />}
         {actions && <div className="task-condition-actions">{actions}</div>}
       </div>
     </section>
@@ -1068,19 +1069,16 @@ function asGeometryNotebookSpec(
   solution: HomeworkSolution,
   sourceDiagram?: GeometryNotebookPageSpec['sourceDiagram'],
 ): GeometryNotebookPageSpec {
-  const verifiedSolution = getVerifiedNumberedGeometrySolution(solution) ?? solution
   return {
-    id: 'generated-' + verifiedSolution.textbookId + '-' + verifiedSolution.task,
-    number: verifiedSolution.source === 'photo' ? 'фото' : verifiedSolution.task,
-    condition: verifiedSolution.condition,
-    given: verifiedSolution.given.slice(0, 3),
-    goal: verifiedSolution.goal,
-    diagram: verifiedSolution.source === 'number' && verifiedSolution === solution
-      ? { kind: 'none', description: '', vertices: [] }
-      : verifiedSolution.diagram,
+    id: 'generated-' + solution.textbookId + '-' + solution.task,
+    number: solution.source === 'photo' ? 'фото' : solution.task,
+    condition: solution.condition,
+    given: solution.given.slice(0, 3),
+    goal: solution.goal,
+    diagram: solution.diagram,
     ...(sourceDiagram ? { sourceDiagram } : {}),
-    solution: verifiedSolution.steps,
-    ...(verifiedSolution.answer ? { answer: verifiedSolution.answer } : {}),
+    solution: solution.steps,
+    ...(solution.answer ? { answer: solution.answer } : {}),
   }
 }
 
@@ -1326,7 +1324,10 @@ function HomePage() {
   const accountTriggerRef = useRef<HTMLElement | null>(null)
   const textbookObjectUrlsRef = useRef<string[]>([])
   const visibleGeneratedSolutions = useMemo(
-    () => generatedSolutions.filter((solution) => !solution.ownerId || solution.ownerId === user?.id),
+    () => generatedSolutions.filter((solution) => (
+      (!solution.ownerId || solution.ownerId === user?.id)
+      && isReviewedHomeworkSolution(solution)
+    )),
     [generatedSolutions, user?.id],
   )
   const availableTextbooks = useMemo(
@@ -1765,6 +1766,8 @@ function HomePage() {
     }
 
     const previouslyGenerated = visibleGeneratedSolutions.find((solution) => (
+      isReviewedHomeworkSolution(solution)
+      &&
       solution.textbookId === textbookId
       && solution.task === resolvedTask
       && solution.source === source

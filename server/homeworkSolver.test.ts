@@ -4,13 +4,12 @@ import { createClient } from '@supabase/supabase-js'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SolveHomeworkRequest } from '../src/lib/homeworkContract.ts'
 import { findVerifiedTextbookTask, normalizeTaskCondition } from '../src/textbooks/taskCatalog.ts'
-import { handleHomeworkSolverRequest, normalizeKieSolution, solveWithKie } from './homeworkSolver.ts'
+import { handleHomeworkSolverRequest, solveWithKie } from './homeworkSolver.ts'
 
 vi.mock('@supabase/supabase-js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@supabase/supabase-js')>()
   return { ...actual, createClient: vi.fn(actual.createClient) }
 })
-
 const verifiedTask = findVerifiedTextbookTask('geometry', '14-е издание, Просвещение, 2023', '2')
 if (!verifiedTask) throw new Error('Verified geometry task #2 is required for solver tests')
 
@@ -26,6 +25,7 @@ const task: SolveHomeworkRequest = {
   sourceUrl: verifiedTask.sourceUrl,
   sourcePage: verifiedTask.sourcePage,
   condition: verifiedTask.condition,
+  imageDataUrl: 'data:image/jpeg;base64,c291cmNl',
   idempotencyKey: 'solution-test-geometry-2',
 }
 
@@ -36,15 +36,6 @@ const taskThree: SolveHomeworkRequest = {
   condition: taskThreeCondition,
   sourcePage: 9,
   idempotencyKey: 'solution-test-geometry-3',
-}
-
-const taskFourCondition = 'Отметьте точки A, B, C, D так, чтобы точки A, B, C лежали на одной прямой, а точка D не лежала на ней. Через каждые две точки проведите прямую. Сколько получилось прямых?'
-const taskFour: SolveHomeworkRequest = {
-  ...task,
-  task: '4',
-  condition: taskFourCondition,
-  sourcePage: 9,
-  idempotencyKey: 'solution-test-geometry-4',
 }
 
 const photoTask: SolveHomeworkRequest = {
@@ -72,12 +63,88 @@ const providerSolution = {
   sourceVerified: true,
 }
 
-function providerResponse(content = providerSolution) {
+function providerResponse(content: unknown = providerSolution) {
   return {
     ok: true,
     status: 200,
     json: async () => ({ choices: [{ message: { content: JSON.stringify(content) } }] }),
   } as Response
+}
+
+const emptyDiagramFields = {
+  apexAngle: '',
+  auxiliaryKind: '',
+  auxiliaryLabel: '',
+  rightAngleAt: '',
+  parallelTo: '',
+  exteriorAngle: '',
+}
+
+const taskThreeDraft = {
+  condition: taskThreeCondition,
+  taskType: 'mixed',
+  diagramRequired: true,
+  sourceVerified: true,
+  given: ['a, b, c — прямые'],
+  goal: { title: 'Найти', text: 'n(точек пересечения)' },
+  steps: [
+    'a ∩ b = A; b ∩ c = B; a ∩ c = C ⇒ n = 3.',
+    'a ∩ b ∩ c = O ⇒ n = 1.',
+  ],
+  answer: '1 или 3 точки',
+  diagram: {
+    kind: 'construction',
+    description: 'Три попарно пересекающиеся прямые.',
+    vertices: ['A', 'B', 'C'],
+    ...emptyDiagramFields,
+    scene: {
+      points: [
+        { id: 'A', label: 'A', x: 20, y: 80, visible: true },
+        { id: 'B', label: 'B', x: 50, y: 20, visible: true },
+        { id: 'C', label: 'C', x: 80, y: 80, visible: true },
+      ],
+      objects: [
+        { kind: 'line', points: ['A', 'B'], label: 'a', auxiliary: false },
+        { kind: 'line', points: ['B', 'C'], label: 'b', auxiliary: false },
+        { kind: 'line', points: ['C', 'A'], label: 'c', auxiliary: false },
+      ],
+      marks: [],
+      constraints: [{ kind: 'not-collinear', points: ['A', 'B', 'C'] }],
+    },
+  },
+}
+
+const photoDraft = {
+  condition: providerSolution.condition,
+  taskType: 'calculation',
+  diagramRequired: true,
+  sourceVerified: true,
+  given: providerSolution.given,
+  goal: { title: 'Найти', text: '∠C' },
+  steps: providerSolution.steps,
+  answer: providerSolution.answer,
+  diagram: {
+    kind: 'construction',
+    description: 'Прямоугольный треугольник ABC.',
+    vertices: ['A', 'B', 'C'],
+    ...emptyDiagramFields,
+    scene: {
+      points: [
+        { id: 'A', label: 'A', x: 15, y: 85, visible: true },
+        { id: 'B', label: 'B', x: 85, y: 15, visible: true },
+        { id: 'C', label: 'C', x: 85, y: 85, visible: true },
+      ],
+      objects: [{ kind: 'polygon', points: ['A', 'B', 'C'], label: '', auxiliary: false }],
+      marks: [{ kind: 'right-angle', points: ['A', 'C', 'B'], label: '' }],
+      constraints: [{ kind: 'perpendicular', points: ['A', 'C', 'B', 'C'] }],
+    },
+  },
+}
+
+function reviewedResponses(draft: unknown) {
+  return vi.fn<typeof fetch>()
+    .mockResolvedValueOnce(providerResponse(draft))
+    .mockResolvedValueOnce(providerResponse({ approved: true, issues: [], solution: draft }))
 }
 
 function createHttp(method: string, body?: unknown) {
@@ -109,46 +176,13 @@ function createHttp(method: string, body?: unknown) {
 describe('homework solver', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('keeps a verified photo answer grounded and adds its source identity', () => {
-    expect(normalizeKieSolution(providerSolution, photoTask, 'student-1')).toMatchObject({
-      textbookId: 'geometry',
-      task: 'photo-example',
-      sourceUrl: verifiedTask.sourceUrl,
-      ownerId: 'student-1',
-      answer: '90°.',
-      diagram: { kind: 'right-triangle', vertices: ['A', 'B', 'C'] },
-    })
-    expect(() => normalizeKieSolution({ ...providerSolution, sourceVerified: false }, photoTask))
-      .toThrow('Добавь фотографию задания')
-    expect(() => normalizeKieSolution(providerSolution, { ...photoTask, condition: 'Другое условие.' }))
-      .toThrow('Решение вернуло другое условие')
-  })
-
-  it('restores a semantic figure when a grounded photo response omits it', () => {
-    const solution = normalizeKieSolution({
-      ...providerSolution,
-      condition: 'В равнобедренном треугольнике ABC найдите основание.',
-      goal: { title: 'Найти', text: 'Найти AC.' },
-      diagram: { kind: 'none', description: '', vertices: [] },
-    }, photoTask)
-    expect(solution.goal.text).toBe('AC.')
-    expect(solution.diagram).toMatchObject({ kind: 'isosceles-triangle', vertices: ['A', 'B', 'C'] })
-
-    const intersecting = normalizeKieSolution({
-      ...providerSolution,
-      condition: 'Отрезки AB и CD пересекаются в точке O.',
-      diagram: { kind: 'none', description: '', vertices: [] },
-    }, photoTask)
-    expect(intersecting.diagram).toMatchObject({ kind: 'intersecting-segments', vertices: ['A', 'B', 'C', 'D', 'O'] })
-  })
-
   it('returns the confirmed textbook task without asking a provider to invent it', async () => {
     const fetchMock = vi.fn<typeof fetch>()
     const result = await solveWithKie(task, { fetchImpl: fetchMock })
     expect(result).toMatchObject({
       task: '2',
       condition: verifiedTask.condition,
-      conditionNormalized: 'отметьте три точки а,в и с,не лежащие на одной прямой,и через каждую пару точек проведите прямую.сколько прямых получилось?',
+      conditionNormalized: 'отметьте три точки a,b и c,не лежащие на одной прямой,и через каждую пару точек проведите прямую.сколько прямых получилось?',
       answer: '3 прямые',
       diagram: { kind: 'three-point-extended-lines', vertices: ['A', 'B', 'C'] },
       sourceVerified: true,
@@ -157,10 +191,7 @@ describe('homework solver', () => {
   })
 
   it('solves a database-indexed number from its confirmed condition without web search', async () => {
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(providerResponse({
-      ...providerSolution,
-      condition: 'Другое условие от модели.',
-    }))
+    const fetchMock = reviewedResponses(taskThreeDraft)
     const http = createHttp('POST', taskThree)
     await handleHomeworkSolverRequest(http.request, http.response, {
       apiKey: 'test-key',
@@ -179,35 +210,16 @@ describe('homework solver', () => {
       task: '3',
       condition: taskThreeCondition,
       answer: '1 или 3 точки',
-      diagram: { kind: 'three-lines-cases', vertices: ['A', 'B', 'C', 'O'] },
+      diagram: { kind: 'construction', vertices: ['A', 'B', 'C'] },
     })
     const requestPayload = JSON.parse(String(fetchMock.mock.calls[0][1]?.body)) as { tools?: unknown; response_format?: { type: string } }
     expect(requestPayload.tools).toBeUndefined()
     expect(requestPayload.response_format?.type).toBe('json_schema')
   })
 
-  it('replaces a verbose task 4 response with the verified symbolic solution and drawing', () => {
-    const result = normalizeKieSolution({
-      ...providerSolution,
-      given: ['Точки A, B, C лежат на одной прямой', 'Точка D не лежит на прямой'],
-      steps: ['Длинное словесное решение без обозначений.'],
-      answer: '4.',
-      diagram: { kind: 'triangle', description: 'Неверный треугольник', vertices: ['A', 'B', 'C'] },
-    }, taskFour)
-
-    expect(result).toMatchObject({
-      condition: taskFourCondition,
-      given: ['A, B, C ∈ a', 'D ∉ a'],
-      goal: { title: 'Найти', text: 'n(прямых)' },
-      steps: ['AB ≡ AC ≡ BC ≡ a ⇒ n₁ = 1.', 'AD, BD, CD ⇒ n₂ = 3.', 'n = n₁ + n₂ = 1 + 3 = 4.'],
-      answer: '4 прямые',
-      diagram: { kind: 'three-collinear-one-off-lines', vertices: ['A', 'B', 'C', 'D'] },
-    })
-  })
-
   it('requires the indexed source drawing when the task references a figure', async () => {
     const condition = 'На рисунке 43 изображены лучи с общим началом O.'
-    const http = createHttp('POST', { ...task, task: '50', condition, sourcePage: 23 })
+    const http = createHttp('POST', { ...task, task: '50', condition, sourcePage: 23, imageDataUrl: undefined })
     const fetchMock = vi.fn<typeof fetch>()
     await handleHomeworkSolverRequest(http.request, http.response, {
       apiKey: 'test-key',
@@ -222,33 +234,12 @@ describe('homework solver', () => {
     })
 
     expect(http.response.statusCode).toBe(400)
-    expect(http.body().error).toContain('чертёж')
+    expect(http.body().error).toContain('фрагмент задачи')
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('keeps isosceles, right-triangle and parallel-line diagram cases tied to their confirmed conditions', () => {
-    const cases = [
-      ['isosceles', 'В равнобедренном треугольнике ABC проведена биссектриса.', { kind: 'median-triangle', description: 'Равнобедренный треугольник ABC с биссектрисой.', vertices: ['A', 'B', 'C'], auxiliaryKind: 'bisector', auxiliaryLabel: 'M' }],
-      ['right', 'В прямоугольном треугольнике ABC угол C прямой.', { kind: 'right-triangle', description: 'Прямоугольный треугольник ABC.', vertices: ['A', 'B', 'C'], rightAngleAt: 'C' }],
-      ['parallel', 'В треугольнике ABC прямая p параллельна AB.', { kind: 'parallel-line-triangle', description: 'Треугольник ABC и параллельная прямая p.', vertices: ['A', 'B', 'C'], parallelTo: 'AB' }],
-    ] as const
-
-    for (const [name, condition, diagram] of cases) {
-      const solution = normalizeKieSolution({
-        ...providerSolution,
-        condition,
-        diagram,
-      }, {
-        ...photoTask,
-        task: `diagram-fixture-${name}`,
-        condition,
-      })
-      expect(solution).toMatchObject({ condition, diagram: { kind: diagram.kind } })
-    }
-  })
-
   it('sends photo bytes to the multimodal provider with a strict answer schema', async () => {
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(providerResponse())
+    const fetchMock = reviewedResponses(photoDraft)
     await solveWithKie(photoTask, { apiKey: 'secret-test-key', fetchImpl: fetchMock })
     const [, options] = fetchMock.mock.calls[0]
     const payload = JSON.parse(String(options?.body)) as {
@@ -261,20 +252,58 @@ describe('homework solver', () => {
     ]))
     expect(payload.response_format?.type).toBe('json_schema')
     expect(payload.tools).toBeUndefined()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('rejects a reviewed answer for a different condition', async () => {
+    const unrelated = {
+      ...photoDraft,
+      condition: 'Вычислите площадь круга радиуса 10 см.',
+    }
+    await expect(solveWithKie({ ...photoTask, condition: providerSolution.condition }, {
+      apiKey: 'secret-test-key',
+      fetchImpl: reviewedResponses(unrelated),
+    })).rejects.toMatchObject({
+      status: 502,
+      message: expect.stringContaining('не совпадает с приложенным заданием'),
+    })
+  })
+
+  it('normalizes provider point identifiers together with every reference', async () => {
+    const scene = photoDraft.diagram.scene
+    const lowercase = {
+      ...photoDraft,
+      diagram: {
+        ...photoDraft.diagram,
+        scene: {
+          ...scene,
+          points: scene.points.map((point) => ({ ...point, id: point.id.toLocaleLowerCase('ru-RU') })),
+          objects: scene.objects.map((object) => ({ ...object, points: object.points.map((id) => id.toLocaleLowerCase('ru-RU')) })),
+          marks: scene.marks.map((mark) => ({ ...mark, points: mark.points.map((id) => id.toLocaleLowerCase('ru-RU')) })),
+          constraints: scene.constraints.map((constraint) => ({ ...constraint, points: constraint.points.map((id) => id.toLocaleLowerCase('ru-RU')) })),
+        },
+      },
+    }
+    const result = await solveWithKie(photoTask, {
+      apiKey: 'secret-test-key',
+      fetchImpl: reviewedResponses(lowercase),
+    })
+    expect(result.diagram.scene?.points.map((point) => point.id)).toEqual(['A', 'B', 'C'])
+    expect(result.diagram.scene?.constraints).toContainEqual({ kind: 'perpendicular', points: ['A', 'C', 'B', 'C'] })
   })
 
   it('reports unavailable and rejected provider keys without exposing a key', async () => {
     await expect(solveWithKie(photoTask, {})).rejects.toMatchObject({ status: 503, message: expect.stringContaining('KIE_API_KEY') })
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue({ ok: false, status: 401 } as Response)
     await expect(solveWithKie(photoTask, { apiKey: 'private-value', fetchImpl: fetchMock }))
-      .rejects.toMatchObject({ status: 502, message: 'Kie.ai отклонил ключ API. Проверь KIE_API_KEY' })
+      .rejects.toMatchObject({ status: 502, message: 'Провайдер отклонил ключ API' })
   })
 
   it('publishes safe configuration status and CORS only for approved origins', async () => {
     const http = createHttp('GET')
     await handleHomeworkSolverRequest(http.request, http.response, { apiKey: 'private-value' })
     expect(http.response.statusCode).toBe(200)
-    expect(http.body()).toEqual({ provider: 'kie.ai', model: 'gemini-2.5-flash', configured: true })
+    expect(http.body()).toEqual({ provider: 'kie.ai', model: 'gemini-3.1-pro', configured: true, engineVersion: 2 })
     expect(JSON.stringify(http.body())).not.toContain('private-value')
 
     const preflight = createHttp('OPTIONS')
@@ -355,7 +384,7 @@ describe('homework solver', () => {
 
   it('returns an existing paid answer without calling the provider again', async () => {
     const saved = await solveWithKie(task, {}, 'student-1')
-    const rpc = vi.fn().mockResolvedValue({ data: { ...saved, diagram: providerSolution.diagram }, error: null })
+    const rpc = vi.fn().mockResolvedValue({ data: saved, error: null })
     const from = vi.fn()
     vi.mocked(createClient).mockReturnValueOnce({
       auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'student-1' } }, error: null }) },

@@ -1,7 +1,8 @@
 {
   "functions": {
     "api/solve.ts": {
-      "includeFiles": "{server/**,src/lib/**,src/textbooks/**}"
+      "includeFiles": "{server/**,src/lib/**,src/textbooks/**}",
+      "maxDuration": 120
     }
   },
   "redirects": [
