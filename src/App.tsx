@@ -53,6 +53,7 @@ import { lookupVerifiedTextbookTask } from './textbooks/taskLookup'
 import { renderTextbookTaskEvidenceImage } from './textbooks/textbookTaskSource'
 import TextbookTaskSourcePreview from './textbooks/TextbookTaskSourcePreview'
 import TextbookLibraryPage from './textbooks/TextbookLibraryPage'
+import { SolutionVerificationPanel } from './solution/SolutionVerificationPanel'
 import './App.css'
 
 const DesignSystemPlayground = lazy(() => import('./DesignSystemPlayground'))
@@ -1193,6 +1194,7 @@ function UnderstandingPage({
           </div>
         )}
         <div className="solution-notebook-preview"><GeometryNotebookLayoutV1 spec={notebookFixture} /></div>
+        {generatedSolution?.verification && <SolutionVerificationPanel verification={generatedSolution.verification} />}
         {actions}
       </section>
     )
@@ -1231,6 +1233,7 @@ function UnderstandingPage({
             </section>
           )}
         </article>
+        {generatedSolution.verification && <SolutionVerificationPanel verification={generatedSolution.verification} />}
         {actions}
       </section>
     )

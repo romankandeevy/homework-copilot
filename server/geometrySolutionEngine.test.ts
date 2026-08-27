@@ -13,7 +13,7 @@ const taskFiveSolution: HomeworkSolution = {
   conditionNormalized: 'task-5-identity',
   subject: 'Геометрия',
   textbookTitle: 'Геометрия. 7-9 классы',
-  condition: 'Проведите прямую a и отметьте на ней точки A и B. Отметьте точки M, N, P, Q, R и S согласно условию.',
+  condition: 'Проведите прямую a и отметьте на ней точки A и B. Отметьте: а) точки M и N, лежащие на отрезке AB; б) точки P и Q, лежащие на прямой a, но не лежащие на отрезке AB; в) точки R и S, не лежащие на прямой a.',
   given: ['A, B ∈ a', 'M, N ∈ [AB]', 'P, Q ∈ a; R, S ∉ a'],
   goal: { title: 'Построить', text: 'P, A, M, N, B, Q; R, S' },
   steps: ['M, N ∈ [AB]; P, Q ∈ a ∖ [AB]; R, S ∉ a.'],
@@ -78,6 +78,21 @@ describe('geometry solution quality gate', () => {
       },
     })
     expect(issues).toContain('not-on-line: точка изображена на указанной прямой')
+  })
+
+  it('checks point placement against the textbook wording, not only model constraints', () => {
+    const scene = taskFiveSolution.diagram.scene!
+    const issues = validateSolutionQuality({
+      ...taskFiveSolution,
+      diagram: {
+        ...taskFiveSolution.diagram,
+        scene: {
+          ...scene,
+          points: scene.points.map((point) => point.id === 'P' ? { ...point, x: 50 } : point),
+        },
+      },
+    })
+    expect(issues).toContain('P: точка не должна лежать на отрезке AB')
   })
 
   it('does not let a construction omit its drawing or add a fake word answer', () => {

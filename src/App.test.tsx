@@ -35,6 +35,32 @@ function mockGeneratedSolution(request: SolveHomeworkRequest): HomeworkSolution 
     sourceVerified: true,
     taskType: 'mixed',
     quality: { diagramRequired: true, reviewPassed: true, symbolicShare: 0.8 },
+    verification: {
+      version: 1,
+      author: {
+        taskGoal: 'Получить ответ по условию.',
+        diagramRequired: true,
+        diagramReason: 'Условие содержит геометрическое построение.',
+        requiredElements: ['точки A, B, C', 'прямые между точками'],
+        notebookFormat: 'Чертёж и короткая символическая строка.',
+        selfChecks: ['Условие совпадает.', 'Чертёж построен.', 'Ответ проверен.'],
+      },
+      authorIssues: [],
+      reviewer: {
+        taskGoal: 'Получить ответ по условию.',
+        diagramRequired: true,
+        diagramReason: 'Условие содержит геометрическое построение.',
+        requiredElements: ['точки A, B, C', 'прямые между точками'],
+        notebookFormat: 'Чертёж и короткая символическая строка.',
+        selfChecks: ['Условие совпадает.', 'Чертёж построен.', 'Ответ проверен.'],
+      },
+      reviewerApproved: true,
+      reviewerIssues: [],
+      checks: [
+        { label: 'Источник', passed: true, note: 'Условие совпадает' },
+        { label: 'Независимый редактор', passed: true, note: 'Одобрено без замечаний' },
+      ],
+    },
     createdAt: '2026-08-25T12:00:00.000Z',
   }
 }
@@ -139,6 +165,8 @@ describe('Homework Copilot task flow', () => {
 
     expect(await screen.findByRole('heading', { name: 'Решение № 2' })).toBeInTheDocument()
     expect(screen.getByText('№ 2', { selector: '.notebook-number' })).toBeInTheDocument()
+    expect(screen.getByText('Итоговые ответы движка')).toBeInTheDocument()
+    expect(screen.getByText('2/2')).toBeInTheDocument()
     fireEvent.click(document.querySelector<HTMLButtonElement>('.route-secondary-action')!)
     expect(screen.getByRole('heading', { name: 'Списать задачу' })).toBeInTheDocument()
   })

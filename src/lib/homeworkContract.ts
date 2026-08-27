@@ -84,6 +84,31 @@ export type HomeworkDiagram = {
   scene?: HomeworkDiagramScene
 }
 
+export type HomeworkDecisionSummary = {
+  taskGoal: string
+  diagramRequired: boolean
+  diagramReason: string
+  requiredElements: string[]
+  notebookFormat: string
+  selfChecks: string[]
+}
+
+export type HomeworkVerificationCheck = {
+  label: string
+  passed: boolean
+  note: string
+}
+
+export type HomeworkSolutionVerification = {
+  version: 1
+  author: HomeworkDecisionSummary
+  authorIssues: string[]
+  reviewer: HomeworkDecisionSummary
+  reviewerApproved: boolean
+  reviewerIssues: string[]
+  checks: HomeworkVerificationCheck[]
+}
+
 export type HomeworkSolution = {
   engineVersion?: number
   textbookId: string
@@ -111,6 +136,7 @@ export type HomeworkSolution = {
     reviewPassed: boolean
     symbolicShare: number
   }
+  verification?: HomeworkSolutionVerification
   createdAt: string
   ownerId?: string
 }

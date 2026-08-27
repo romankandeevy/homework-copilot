@@ -110,12 +110,41 @@ function solution(task: string, condition: string) {
 function taskFiveSolution(condition: string) {
   return {
     ...solution('5', condition),
-    given: ['A, B ∈ a', 'M, N ∈ [AB]', 'P, Q ∈ a; R, S ∉ a'],
+    given: ['A, B ∈ a', 'M, N ∈ AB', 'P, Q ∈ a; R, S ∉ a'],
     goal: { title: 'Построить' as const, text: 'P, A, M, N, B, Q; R, S' },
-    steps: ['M, N ∈ [AB]; P, Q ∈ a ∖ [AB]; R, S ∉ a.'],
+    steps: ['M, N ∈ AB; P, Q ∈ a; P, Q ∉ AB; R, S ∉ a.'],
     answer: '',
     taskType: 'construction' as const,
     quality: { diagramRequired: true, reviewPassed: true, symbolicShare: 1 },
+    verification: {
+      version: 1 as const,
+      author: {
+        taskGoal: 'Построить восемь точек с заданным расположением.',
+        diagramRequired: true,
+        diagramReason: 'Это задача на построение точек относительно прямой и отрезка.',
+        requiredElements: ['прямая a', 'точки A, B, M, N, P, Q на прямой', 'точки R, S вне прямой'],
+        notebookFormat: 'Чертёж и одна строка символических обозначений.',
+        selfChecks: ['Все восемь точек обозначены.', 'M и N лежат между A и B.', 'R и S не лежат на прямой a.'],
+      },
+      authorIssues: [],
+      reviewer: {
+        taskGoal: 'Построить восемь точек с заданным расположением.',
+        diagramRequired: true,
+        diagramReason: 'Это задача на построение точек относительно прямой и отрезка.',
+        requiredElements: ['прямая a', 'точки A, B, M, N, P, Q на прямой', 'точки R, S вне прямой'],
+        notebookFormat: 'Чертёж и одна строка символических обозначений.',
+        selfChecks: ['Все восемь точек обозначены.', 'M и N лежат между A и B.', 'P и Q лежат вне AB.', 'R и S не лежат на прямой a.'],
+      },
+      reviewerApproved: true,
+      reviewerIssues: [],
+      checks: [
+        { label: 'Источник', passed: true, note: 'Условие совпадает с задачей № 5' },
+        { label: 'Состав решения', passed: true, note: 'Чертёж и обозначения на месте' },
+        { label: 'Чертёж', passed: true, note: 'Расположение точек соответствует условию' },
+        { label: 'Краткость', passed: true, note: 'Одна символическая строка' },
+        { label: 'Независимый редактор', passed: true, note: 'Одобрено без замечаний' },
+      ],
+    },
     diagram: {
       kind: 'construction' as const,
       description: 'Точки P, A, M, N, B, Q на прямой a; точки R и S вне прямой.',
@@ -279,11 +308,21 @@ test('task 5 is a compact checked drawing on mobile, not a text wall', async ({ 
   await expect(page.getByTestId('geometry-scene')).toBeVisible()
   await expect(page.locator('.diagram-vertex', { hasText: 'R' })).toBeVisible()
   await expect(page.locator('.diagram-vertex', { hasText: 'S' })).toBeVisible()
-  await expect(page.getByText('M, N ∈ [AB]; P, Q ∈ a ∖ [AB]; R, S ∉ a.')).toBeVisible()
+  const notebookText = await page.getByTestId('geometry-notebook-page').locator('svg').textContent()
+  expect(notebookText?.replace(/\s/g, '')).toContain('M,N∈AB;P,Q∈a;P,Q∉AB;R,S∉a.')
+  await expect(page.getByText('Проверка решения')).toBeVisible()
+  await expect(page.getByText('5/5')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Итоговые ответы движка' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Самопроверка модели' })).toBeVisible()
   await expect(page.locator('.source-diagram-image')).toHaveCount(0)
   await expect(page.getByTestId('geometry-notebook-page')).toHaveCount(1)
   await expect(page.getByText('Решение. (продолжение)')).toHaveCount(0)
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
+  const verificationPanel = page.locator('.solution-verification')
+  await verificationPanel.scrollIntoViewIfNeeded()
+  const verificationBox = await verificationPanel.boundingBox()
+  expect(verificationBox?.width).toBeLessThanOrEqual(358)
+  await verificationPanel.screenshot({ path: testInfo.outputPath('task-5-verification-mobile.png') })
   await page.screenshot({ path: testInfo.outputPath('task-5-mobile.png'), fullPage: true })
   expect(failures).toEqual({ consoleErrors: [], pageErrors: [], failedResponses: [], failedRequests: [] })
 })

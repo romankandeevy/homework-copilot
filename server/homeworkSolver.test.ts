@@ -80,10 +80,29 @@ const emptyDiagramFields = {
   exteriorAngle: '',
 }
 
+const taskThreeDecisions = {
+  taskGoal: 'Показать все варианты числа точек пересечения трёх прямых.',
+  diagramRequired: true,
+  diagramReason: 'Нужно изобразить два возможных расположения прямых.',
+  requiredElements: ['три попарно пересекающиеся прямые', 'три разные точки пересечения', 'одна общая точка'],
+  notebookFormat: 'Два чертежа и две короткие символические строки.',
+  selfChecks: ['Показаны оба случая.', 'Все прямые попарно пересекаются.', 'Ответ содержит 1 и 3 точки.'],
+}
+
+const photoDecisions = {
+  taskGoal: 'Найти угол C.',
+  diagramRequired: true,
+  diagramReason: 'Условие относится к треугольнику ABC.',
+  requiredElements: ['△ABC', '∠C = 90°'],
+  notebookFormat: 'Краткая формула суммы углов и ответ.',
+  selfChecks: ['Условие распознано.', 'Сумма углов равна 180°.', 'Ответ содержит единицу измерения угла.'],
+}
+
 const taskThreeDraft = {
   condition: taskThreeCondition,
   taskType: 'mixed',
   diagramRequired: true,
+  decisions: taskThreeDecisions,
   sourceVerified: true,
   given: ['a, b, c — прямые'],
   goal: { title: 'Найти', text: 'n(точек пересечения)' },
@@ -118,6 +137,7 @@ const photoDraft = {
   condition: providerSolution.condition,
   taskType: 'calculation',
   diagramRequired: true,
+  decisions: photoDecisions,
   sourceVerified: true,
   given: providerSolution.given,
   goal: { title: 'Найти', text: '∠C' },
@@ -211,6 +231,15 @@ describe('homework solver', () => {
       condition: taskThreeCondition,
       answer: '1 или 3 точки',
       diagram: { kind: 'construction', vertices: ['A', 'B', 'C'] },
+      verification: {
+        author: taskThreeDecisions,
+        reviewer: taskThreeDecisions,
+        reviewerApproved: true,
+        checks: expect.arrayContaining([
+          expect.objectContaining({ label: 'Источник', passed: true }),
+          expect.objectContaining({ label: 'Независимый редактор', passed: true }),
+        ]),
+      },
     })
     const requestPayload = JSON.parse(String(fetchMock.mock.calls[0][1]?.body)) as { tools?: unknown; response_format?: { type: string } }
     expect(requestPayload.tools).toBeUndefined()
