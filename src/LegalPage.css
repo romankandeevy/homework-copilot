@@ -5,6 +5,11 @@
     var(--color-canvas);
 }
 
+.legal-page > .site-footer {
+  width: min(calc(100% - 3rem), 76rem);
+  margin-top: 0;
+}
+
 .legal-header {
   display: flex;
   min-height: 6rem;
@@ -181,6 +186,7 @@
 
 @media (max-width: 760px) {
   .legal-page { background: var(--color-canvas); }
+  .legal-page > .site-footer { width: min(calc(100% - 2rem), 76rem); }
   .legal-header,
   .legal-layout,
   .legal-footer { width: min(calc(100% - 2rem), 76rem); }

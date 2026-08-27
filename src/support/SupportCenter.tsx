@@ -4,6 +4,7 @@ import type { SupabaseClient, User } from '@supabase/supabase-js'
 import {
   ArrowLeft,
   ArrowRight,
+  ArrowSquareOut,
   ChatCircleText,
   CheckCircle,
   CircleNotch,
@@ -96,16 +97,41 @@ function SupportLauncher({ onClick }: { onClick: () => void }) {
 function SiteFooter({ onOpenSupport }: { onOpenSupport?: () => void }) {
   return (
     <footer className="site-footer">
-      <div className="site-footer-brand"><span className="site-footer-mark" aria-hidden="true">HC</span><span><strong>Homework Copilot</strong><small>Помощь с задачами — с проверкой и контекстом.</small></span></div>
-      <nav className="site-footer-links" aria-label="Ссылки сайта">
-        <a href="/main">Главная</a>
-        <a href="/solutions">Решения</a>
-        <a href="/cdz">ЦДЗ</a>
-        {onOpenSupport ? <button type="button" onClick={onOpenSupport}>Поддержка</button> : <a href="/support">Поддержка</a>}
-        <a href="/privacy">Политика</a>
-        <a href="/terms">Условия</a>
-      </nav>
-      <span className="site-footer-copy">© 2026</span>
+      <div className="site-footer-grid">
+        <section className="site-footer-intro" aria-label="О Homework Copilot">
+          <a className="site-footer-brand" href="/main" aria-label="Homework Copilot, на главную">
+            <span className="site-footer-mark" aria-hidden="true">H<span>C</span></span>
+            <strong>Homework Copilot</strong>
+          </a>
+          <p>Находи условия по учебнику, сохраняй решения и собирай расписание в одном аккаунте.</p>
+          <span className="site-footer-note"><i aria-hidden="true" />Решения помогают учиться. Проверяй ответ перед сдачей.</span>
+        </section>
+
+        <nav className="site-footer-column" aria-label="Сервис">
+          <h2>Сервис</h2>
+          <a href="/main">Главная</a>
+          <a href="/cdz">Учебники и ЦДЗ</a>
+          <a href="/solutions">Решения</a>
+          <a href="/schedule">Расписание</a>
+        </nav>
+
+        <nav className="site-footer-column" aria-label="Помощь">
+          <h2>Помощь</h2>
+          {onOpenSupport ? <button type="button" onClick={onOpenSupport}>Написать в поддержку</button> : <a href="/support">Написать в поддержку</a>}
+          <a href="/support#faq">FAQ</a>
+          <a className="site-footer-external" href="https://t.me/homeworkcopilot_roma_support_bot" target="_blank" rel="noopener noreferrer">Telegram-бот <ArrowSquareOut size={15} weight="bold" aria-hidden="true" /></a>
+        </nav>
+
+        <nav className="site-footer-column" aria-label="Документы">
+          <h2>Документы</h2>
+          <a href="/privacy">Конфиденциальность</a>
+          <a href="/terms">Условия сервиса</a>
+        </nav>
+      </div>
+      <div className="site-footer-meta">
+        <span>© 2026 Homework Copilot</span>
+        <span>Поддержка отвечает в личном кабинете</span>
+      </div>
     </footer>
   )
 }
@@ -125,6 +151,12 @@ export function SupportCenter({ user, supabaseClient, initialCategory, initialCo
   const [showNew, setShowNew] = useState(true)
   const initialFocusRef = useRef<HTMLButtonElement>(null)
   const dialogRef = useModalIsolation<HTMLElement>(true, onClose, initialFocusRef)
+
+  useEffect(() => {
+    if (window.location.hash !== '#faq') return
+    const frame = window.requestAnimationFrame(() => document.getElementById('faq')?.scrollIntoView({ block: 'start' }))
+    return () => window.cancelAnimationFrame(frame)
+  }, [])
 
   const selectedConversation = useMemo(
     () => conversations.find((conversation) => conversation.id === selectedId) ?? null,
@@ -254,7 +286,7 @@ export function SupportCenter({ user, supabaseClient, initialCategory, initialCo
 
           {(error || notice) && <p className={`support-feedback${error ? ' is-error' : ''}`} role={error ? 'alert' : 'status'}>{error || notice}</p>}
 
-          <section className="support-faq" aria-labelledby="support-faq-title"><header><div><span className="support-kicker">Быстрые ответы</span><h2 id="support-faq-title">FAQ</h2></div><Question size={23} weight="duotone" aria-hidden="true" /></header><div className="support-faq-list">{faqs.map((faq, index) => <div className={`support-faq-item${faqOpen === index ? ' is-open' : ''}`} key={faq.question}><button type="button" onClick={() => setFaqOpen(faqOpen === index ? null : index)} aria-expanded={faqOpen === index}><span>{faq.question}</span><ArrowRight size={17} weight="bold" aria-hidden="true" /></button>{faqOpen === index && <p>{faq.answer}</p>}</div>)}</div></section>
+          <section id="faq" className="support-faq" aria-labelledby="support-faq-title"><header><div><span className="support-kicker">Быстрые ответы</span><h2 id="support-faq-title">FAQ</h2></div><Question size={23} weight="duotone" aria-hidden="true" /></header><div className="support-faq-list">{faqs.map((faq, index) => <div className={`support-faq-item${faqOpen === index ? ' is-open' : ''}`} key={faq.question}><button type="button" onClick={() => setFaqOpen(faqOpen === index ? null : index)} aria-expanded={faqOpen === index}><span>{faq.question}</span><ArrowRight size={17} weight="bold" aria-hidden="true" /></button>{faqOpen === index && <p>{faq.answer}</p>}</div>)}</div></section>
         </div>
       </section>
     </div>
