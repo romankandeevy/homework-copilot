@@ -419,6 +419,11 @@ type TelegramUpdate = {
   }
 }
 
+function ignoreTelegramUpdate(response: ServerResponse, reason: string) {
+  console.info(`support telegram update ignored: ${reason}`)
+  responseJson(response, 200, { ok: true, ignored: true })
+}
+
 export async function handleTelegramWebhook(request: IncomingMessage, response: ServerResponse, fetchImpl: typeof fetch = fetch) {
   try {
     if (request.method !== 'POST') {
@@ -443,8 +448,24 @@ export async function handleTelegramWebhook(request: IncomingMessage, response: 
     const replyToMessageId = Number(jsonObject(message?.reply_to_message).message_id)
     const messageId = Number(message?.message_id)
     const replyText = boundedText(message?.text ?? message?.caption, 4000)
-    if (!message || chatId !== config.telegramOwnerChatId || !Number.isSafeInteger(replyToMessageId) || replyToMessageId < 1 || !Number.isSafeInteger(messageId) || messageId < 1 || !replyText) {
-      responseJson(response, 200, { ok: true, ignored: true })
+    if (!message) {
+      ignoreTelegramUpdate(response, 'message_missing')
+      return
+    }
+    if (chatId !== config.telegramOwnerChatId) {
+      ignoreTelegramUpdate(response, 'owner_chat_mismatch')
+      return
+    }
+    if (!Number.isSafeInteger(replyToMessageId) || replyToMessageId < 1) {
+      ignoreTelegramUpdate(response, 'reply_target_missing')
+      return
+    }
+    if (!Number.isSafeInteger(messageId) || messageId < 1) {
+      ignoreTelegramUpdate(response, 'message_id_invalid')
+      return
+    }
+    if (!replyText) {
+      ignoreTelegramUpdate(response, 'reply_text_missing')
       return
     }
 
@@ -457,7 +478,7 @@ export async function handleTelegramWebhook(request: IncomingMessage, response: 
       .eq('direction', 'outbound')
       .maybeSingle()
     if (mappingError || !mapping) {
-      responseJson(response, 200, { ok: true, ignored: true })
+      ignoreTelegramUpdate(response, mappingError ? 'mapping_lookup_failed' : 'mapping_not_found')
       return
     }
 
