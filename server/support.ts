@@ -39,6 +39,7 @@ const maxBodyBytes = 600_000
 const telegramChunkSize = 3800
 const ideaApprovalPhrase = 'да это хорошая идея'
 const ideaCallbackPattern = /^idea:(approve|reject):([A-Za-z0-9_-]{20,32})$/
+const telegramWebhookUrl = 'https://www.homeworkcopilot.ru/api/telegram-webhook'
 
 export class SupportApiError extends Error {
   readonly status: number
@@ -303,6 +304,22 @@ async function telegramMessage(config: ServerConfig, textValue: string, replyMar
   return { messageId, chatId: safeTelegramId(result?.chat?.id) || config.telegramOwnerChatId }
 }
 
+async function ensureTelegramIdeaCallbacks(config: ServerConfig) {
+  if (!config.telegramWebhookSecret) throw new Error('telegram webhook secret missing')
+  await telegramRequest(config, 'setWebhook', {
+    url: telegramWebhookUrl,
+    secret_token: config.telegramWebhookSecret,
+    allowed_updates: ['message', 'callback_query'],
+    drop_pending_updates: false,
+  })
+  const info = await telegramRequest<{ url?: unknown; allowed_updates?: unknown }>(config, 'getWebhookInfo', {})
+  const allowedUpdates = Array.isArray(info?.allowed_updates) ? info.allowed_updates : []
+  if (info?.url !== telegramWebhookUrl || !allowedUpdates.includes('message') || !allowedUpdates.includes('callback_query')) {
+    throw new Error('telegram webhook verification failed')
+  }
+  console.info('support telegram webhook verified: message,callback_query')
+}
+
 function contextForTelegram(context: Json) {
   try {
     return JSON.stringify(context, null, 2).slice(0, 45_000)
@@ -338,6 +355,7 @@ async function notifyOwner(
   ].join('\n')
 
   try {
+    if (includeIdeaDecision) await ensureTelegramIdeaCallbacks(config)
     const chunks = splitTelegramText(notification)
     const ideaActions = includeIdeaDecision
       ? [
