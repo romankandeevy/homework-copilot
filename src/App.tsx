@@ -26,6 +26,7 @@ import {
   Sun,
   UploadSimple,
   UserCircle,
+  WarningCircle,
   X,
 } from '@phosphor-icons/react'
 import LegalPage from './LegalPage'
@@ -54,6 +55,8 @@ import { renderTextbookTaskEvidenceImage } from './textbooks/textbookTaskSource'
 import TextbookTaskSourcePreview from './textbooks/TextbookTaskSourcePreview'
 import TextbookLibraryPage from './textbooks/TextbookLibraryPage'
 import { SolutionVerificationPanel } from './solution/SolutionVerificationPanel'
+import { SiteFooter, SupportCenter, SupportLauncher } from './support/SupportCenter'
+import type { SupportCategory, SupportPrefill } from './support/SupportCenter'
 import './App.css'
 
 const DesignSystemPlayground = lazy(() => import('./DesignSystemPlayground'))
@@ -1087,10 +1090,12 @@ function UnderstandingPage({
   solution,
   generatedSolution,
   onGoHome,
+  onOpenSupport,
 }: {
   solution: SolutionState | null
   generatedSolution?: HomeworkSolution
   onGoHome: () => void
+  onOpenSupport: (context: SupportPrefill) => void
 }) {
   const [copied, setCopied] = useState(false)
   const [sourceDiagram, setSourceDiagram] = useState<GeometryNotebookPageSpec['sourceDiagram']>()
@@ -1175,6 +1180,9 @@ function UnderstandingPage({
       )}
       <button className="route-secondary-action" type="button" onClick={onGoHome}>
         ← На главную <House size={18} weight="bold" aria-hidden="true" />
+      </button>
+      <button className="route-secondary-action" type="button" onClick={() => { if (generatedSolution) { const textbook = getTextbook(generatedSolution.textbookId); onOpenSupport({ wrongSolution: { textbookId: generatedSolution.textbookId, textbookTitle: generatedSolution.textbookTitle, subject: generatedSolution.subject, grade: textbook.grade, edition: generatedSolution.textbookEdition, source: generatedSolution.source, task: generatedSolution.task, condition: generatedSolution.condition, given: generatedSolution.given, goal: generatedSolution.goal, steps: generatedSolution.steps, ...(generatedSolution.answer ? { answer: generatedSolution.answer } : {}), sourceUrl: generatedSolution.sourceUrl, ...(generatedSolution.sourcePage ? { sourcePage: generatedSolution.sourcePage } : {}) } }) } }}>
+        Сообщить об ошибке <WarningCircle size={18} weight="duotone" aria-hidden="true" />
       </button>
     </div>
   )
@@ -1322,9 +1330,13 @@ function HomePage() {
   const [passwordRecovery, setPasswordRecovery] = useState(() => new URLSearchParams(window.location.search).get('auth') === 'reset')
   const [pendingVerificationEmail, setPendingVerificationEmail] = useState(() => sessionStorage.getItem('homework-copilot:google-verification-email') ?? '')
   const [accountNotice, setAccountNotice] = useState('')
+  const [supportOpen, setSupportOpen] = useState(() => currentApplicationPath() === '/support')
+  const [supportCategory, setSupportCategory] = useState<SupportCategory>('general')
+  const [supportContext, setSupportContext] = useState<SupportPrefill | undefined>(undefined)
   const googleVerificationStarted = useRef(false)
   const emailConfirmationStarted = useRef(false)
   const accountTriggerRef = useRef<HTMLElement | null>(null)
+  const supportReturnPathRef = useRef(currentApplicationPath() === '/support' ? '/main' : currentApplicationPath())
   const textbookObjectUrlsRef = useRef<string[]>([])
   const visibleGeneratedSolutions = useMemo(
     () => generatedSolutions.filter((solution) => (
@@ -1385,6 +1397,7 @@ function HomePage() {
       }
       setActiveNavigation(route.label)
       setSelectedSolution(route.solution)
+      setSupportOpen(currentPath === '/support')
     }
 
     window.addEventListener('popstate', restoreNavigation)
@@ -1719,6 +1732,26 @@ function HomePage() {
     cleanUrl.searchParams.delete('auth')
     window.history.replaceState({}, '', `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`)
   }, [])
+  const openSupport = useCallback((nextCategory: SupportCategory = 'general', context?: SupportPrefill) => {
+    const currentPath = currentApplicationPath()
+    supportReturnPathRef.current = currentPath === '/support' ? '/main' : currentPath
+    setSupportCategory(nextCategory)
+    setSupportContext(context)
+    setSupportOpen(true)
+    if (currentPath !== '/support') window.history.pushState({ support: true }, '', applicationPath('/support'))
+  }, [])
+  const closeSupport = useCallback(() => {
+    const returnPath = supportReturnPathRef.current || '/main'
+    setSupportOpen(false)
+    setSupportContext(undefined)
+    if (currentApplicationPath() === '/support') {
+      const nextPath = normalizeNavigationPath(returnPath)
+      window.history.replaceState({}, '', applicationPath(nextPath))
+      const route = currentNavigationRoute(nextPath)
+      setActiveNavigation(route.label)
+      setSelectedSolution(route.solution)
+    }
+  }, [])
   const signOutBlockedAccount = useCallback(async () => {
     if (!supabaseClient) return
     const { error } = await supabaseClient.auth.signOut({ scope: 'local' })
@@ -1919,6 +1952,7 @@ function HomePage() {
               (solution) => solution.textbookId === selectedSolution.textbookId && solution.task === selectedSolution.task,
             )}
             onGoHome={() => navigate('Главная')}
+            onOpenSupport={(context) => openSupport('wrong_solution', context)}
           />
         ) : activeNavigation === 'Расписание' ? (
           <Suspense fallback={<div className="route-loading" role="status">Загружаем расписание…</div>}><SchedulePage userId={user?.id ?? null} grade={account?.profile.grade ?? 8} /></Suspense>
@@ -1932,7 +1966,13 @@ function HomePage() {
             onCheckTask={checkTextbookTask}
           />
         )}
+        <SiteFooter onOpenSupport={() => openSupport()} />
       </div>
+      <SupportLauncher onClick={() => openSupport()} />
+      {supportOpen && createPortal(
+        <SupportCenter user={user} supabaseClient={supabaseClient} initialCategory={supportCategory} initialContext={supportContext} onRequireAuth={openAccount} onClose={closeSupport} />,
+        document.body,
+      )}
       {accountOpen && (
         <Suspense fallback={null}>
           <AccountDialog

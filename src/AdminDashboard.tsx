@@ -10,6 +10,7 @@ import {
   CurrencyRub,
   EyeSlash,
   LockKey,
+  Lifebuoy,
   MagnifyingGlass,
   Pulse,
   SignOut,
@@ -21,6 +22,7 @@ import {
 import { formatRubles } from './lib/currency'
 import type { Json } from './lib/database.types'
 import { supabase } from './lib/supabase'
+import SupportAdminPanel from './SupportAdminPanel'
 import './AdminDashboard.css'
 
 type AdminAccess = 'loading' | 'admin' | 'signed-out' | 'forbidden' | 'unavailable'
@@ -435,6 +437,8 @@ function eventLabel(event: string) {
   if (event === 'balance_adjusted') return 'изменён баланс'
   if (event === 'user_banned') return 'пользователь заблокирован'
   if (event === 'user_unbanned') return 'пользователь разблокирован'
+  if (event === 'support_feature_credited') return 'начислено за идею'
+  if (event === 'support_status_changed') return 'изменён статус обращения'
   return event || 'событие'
 }
 
@@ -735,6 +739,7 @@ export default function AdminDashboard() {
           <a href="#users"><UsersThree size={18} weight="duotone" aria-hidden="true" /> Пользователи</a>
           <a href="#analytics"><Pulse size={18} weight="duotone" aria-hidden="true" /> Аналитика</a>
           <a href="#events"><CheckCircle size={18} weight="duotone" aria-hidden="true" /> Журналы</a>
+          <a href="#support"><Lifebuoy size={18} weight="duotone" aria-hidden="true" /> Поддержка</a>
           <div className="admin-rail-status"><span /><div><strong>{numberFormatter.format(summary.onlineUsers)}</strong><small>онлайн сейчас</small></div></div>
         </aside>
 
@@ -782,6 +787,8 @@ export default function AdminDashboard() {
               </article>
             </div>
           </section>
+
+          <SupportAdminPanel preview={isAdminPreview} />
 
           <section className="admin-users-workspace" id="users" aria-labelledby="admin-users-title">
             <header className="admin-users-heading">

@@ -1,6 +1,7 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { handleHomeworkSolverRequest } from './server/homeworkSolver.ts'
+import { handleSupportRequest, handleTelegramWebhook } from './server/support.ts'
 
 export default defineConfig(({ mode }) => {
   const environment = loadEnv(mode, process.cwd(), '')
@@ -21,6 +22,12 @@ export default defineConfig(({ mode }) => {
             supabaseUrl: mode === 'test' ? undefined : environment.VITE_SUPABASE_URL,
             supabasePublishableKey: mode === 'test' ? undefined : environment.VITE_SUPABASE_PUBLISHABLE_KEY,
           })
+        })
+        server.middlewares.use('/api/support', (request, response) => {
+          void handleSupportRequest(request, response)
+        })
+        server.middlewares.use('/api/telegram-webhook', (request, response) => {
+          void handleTelegramWebhook(request, response)
         })
       },
     },

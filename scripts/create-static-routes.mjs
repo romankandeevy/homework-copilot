@@ -7,7 +7,7 @@ const numberedSolutionRoutes = {
   physics: 180,
   chemistry: 180,
 }
-const routes = ['main', 'solutions', 'cdz', 'base', 'tasks', 'textbooks', 'schedule', 'privacy', 'terms', 'admin']
+const routes = ['main', 'solutions', 'cdz', 'base', 'tasks', 'textbooks', 'schedule', 'support', 'privacy', 'terms', 'admin']
 
 for (const [textbookId, taskCount] of Object.entries(numberedSolutionRoutes)) {
   for (let task = 1; task <= taskCount; task += 1) routes.push(`solutions/${textbookId}/${task}`)

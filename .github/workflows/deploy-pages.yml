@@ -29,6 +29,7 @@ jobs:
         env:
           GITHUB_PAGES_CUSTOM_DOMAIN: homeworkcopilot.ru
           VITE_HOMEWORK_API_URL: https://homework-copilot-taupe.vercel.app/api/solve
+          VITE_SUPPORT_API_URL: https://homework-copilot-taupe.vercel.app/api/support
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
       - uses: actions/configure-pages@v5

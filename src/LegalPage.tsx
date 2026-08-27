@@ -1,5 +1,6 @@
 import { ArrowLeft, ArrowUpRight } from '@phosphor-icons/react'
 import './LegalPage.css'
+import { SiteFooter } from './support/SupportCenter'
 
 type LegalPageKind = 'privacy' | 'terms'
 
@@ -125,10 +126,7 @@ export default function LegalPage({ kind }: { kind: LegalPageKind }) {
           </div>
         </article>
       </div>
-      <footer className="legal-footer">
-        <span>© 2026 Homework Copilot</span>
-        <a href={`mailto:${contactEmail}`}>{contactEmail}</a>
-      </footer>
+      <SiteFooter />
     </main>
   )
 }

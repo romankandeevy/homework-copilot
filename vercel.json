@@ -3,6 +3,14 @@
     "api/solve.ts": {
       "includeFiles": "{server/**,src/lib/**,src/textbooks/**}",
       "maxDuration": 120
+    },
+    "api/support.ts": {
+      "includeFiles": "{server/**,src/lib/**}",
+      "maxDuration": 30
+    },
+    "api/telegram-webhook.ts": {
+      "includeFiles": "{server/**,src/lib/**}",
+      "maxDuration": 30
     }
   },
   "redirects": [
@@ -26,6 +34,7 @@
     { "source": "/tasks", "destination": "/index.html" },
     { "source": "/textbooks", "destination": "/index.html" },
     { "source": "/schedule", "destination": "/index.html" },
+    { "source": "/support", "destination": "/index.html" },
     { "source": "/privacy", "destination": "/index.html" },
     { "source": "/terms", "destination": "/index.html" }
   ]

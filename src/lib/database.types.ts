@@ -165,6 +165,102 @@ export type Database = {
         }
         Relationships: []
       }
+      support_conversations: {
+        Row: {
+          category: string
+          context: Json
+          created_at: string
+          id: string
+          last_message_at: string
+          owner_notification_status: string
+          resolved_at: string | null
+          status: string
+          subject: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category: string
+          context?: Json
+          created_at?: string
+          id?: string
+          last_message_at?: string
+          owner_notification_status?: string
+          resolved_at?: string | null
+          status?: string
+          subject: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          category?: string
+          context?: Json
+          created_at?: string
+          id?: string
+          last_message_at?: string
+          owner_notification_status?: string
+          resolved_at?: string | null
+          status?: string
+          subject?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      support_messages: {
+        Row: {
+          author_type: string
+          author_user_id: string | null
+          body: string
+          conversation_id: string
+          created_at: string
+          id: string
+          source_key: string | null
+        }
+        Insert: {
+          author_type: string
+          author_user_id?: string | null
+          body: string
+          conversation_id: string
+          created_at?: string
+          id?: string
+          source_key?: string | null
+        }
+        Update: {
+          author_type?: string
+          author_user_id?: string | null
+          body?: string
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          source_key?: string | null
+        }
+        Relationships: []
+      }
+      support_telegram_message_map: {
+        Row: {
+          conversation_id: string
+          created_at: string
+          direction: string
+          telegram_chat_id: number
+          telegram_message_id: number
+        }
+        Insert: {
+          conversation_id: string
+          created_at?: string
+          direction: string
+          telegram_chat_id: number
+          telegram_message_id: number
+        }
+        Update: {
+          conversation_id?: string
+          created_at?: string
+          direction?: string
+          telegram_chat_id?: number
+          telegram_message_id?: number
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_path: string | null
@@ -331,6 +427,10 @@ export type Database = {
         Returns: Json
       }
       admin_user_detail: { Args: { p_user_id: string }; Returns: Json }
+      admin_support_list: { Args: { p_limit?: number; p_status?: string | null }; Returns: Json }
+      admin_support_detail: { Args: { p_conversation_id: string }; Returns: Json }
+      admin_support_update_status: { Args: { p_conversation_id: string; p_status: string }; Returns: Json }
+      admin_credit_feature_balance: { Args: { p_amount: number; p_conversation_id: string; p_reason: string }; Returns: Json }
       complete_homework_solution: {
         Args: {
           p_condition: string
