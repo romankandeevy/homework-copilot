@@ -261,6 +261,39 @@ export type Database = {
         }
         Relationships: []
       }
+      support_telegram_callback_actions: {
+        Row: {
+          action: string
+          conversation_id: string
+          created_at: string
+          processed_at: string | null
+          status: string
+          telegram_chat_id: number
+          telegram_message_id: number
+          token_hash: string
+        }
+        Insert: {
+          action: string
+          conversation_id: string
+          created_at?: string
+          processed_at?: string | null
+          status?: string
+          telegram_chat_id: number
+          telegram_message_id: number
+          token_hash: string
+        }
+        Update: {
+          action?: string
+          conversation_id?: string
+          created_at?: string
+          processed_at?: string | null
+          status?: string
+          telegram_chat_id?: number
+          telegram_message_id?: number
+          token_hash?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_path: string | null
@@ -431,6 +464,16 @@ export type Database = {
       admin_support_detail: { Args: { p_conversation_id: string }; Returns: Json }
       admin_support_update_status: { Args: { p_conversation_id: string; p_status: string }; Returns: Json }
       admin_credit_feature_balance: { Args: { p_amount: number; p_conversation_id: string; p_reason: string }; Returns: Json }
+      record_support_idea_telegram_decision: {
+        Args: {
+          p_action: string
+          p_telegram_chat_id: number
+          p_telegram_message_id: number
+          p_telegram_user_id: number
+          p_token_hash: string
+        }
+        Returns: Json
+      }
       complete_homework_solution: {
         Args: {
           p_condition: string

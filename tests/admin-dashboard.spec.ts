@@ -44,6 +44,10 @@ test.describe('пульт владельца', () => {
     await page.keyboard.press('Escape')
     await expect(page.getByRole('heading', { name: 'Алина Смирнова' })).toHaveCount(0)
 
+    await page.locator('.support-admin-inbox-item').first().click()
+    await expect(page.getByText('«да это хорошая идея»')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Нужно решение владельца' })).toBeDisabled()
+
     await expectNoPageOverflow(page)
     expect(errors).toEqual([])
     expect(failedRequests).toEqual([])
@@ -57,6 +61,9 @@ test.describe('пульт владельца', () => {
     await expect(page.getByRole('button', { name: '90 дней' })).toBeVisible()
     await page.getByRole('button', { name: /Открыть Алина Смирнова/ }).click()
     await expect(page.getByRole('heading', { name: 'Алина Смирнова' })).toBeVisible()
+    await page.keyboard.press('Escape')
+    await page.locator('.support-admin-inbox-item').first().click()
+    await expect(page.getByRole('button', { name: 'Нужно решение владельца' })).toBeDisabled()
     await expectNoPageOverflow(page)
   })
 })

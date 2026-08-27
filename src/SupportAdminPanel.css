@@ -64,10 +64,15 @@
 .support-admin-credit header > svg { color: var(--color-accent); }
 .support-admin-credit h4 { margin: 0; font-size: var(--text-small); }
 .support-admin-credit p { margin: var(--space-1) 0 0; color: var(--color-text-muted); font-size: var(--text-caption); }
+.support-admin-credit-gate strong { color: var(--color-text); font-weight: var(--weight-semibold); }
+.support-admin-credit.is-approved .support-admin-credit-gate { color: var(--color-success-strong); }
+.support-admin-credit.is-rejected .support-admin-credit-gate { color: var(--color-danger); }
 .support-admin-credit > div { display: grid; grid-template-columns: 7rem minmax(0, 1fr); gap: var(--space-2); }
 .support-admin-credit label { display: grid; gap: var(--space-1); }
 .support-admin-credit label span { color: var(--color-text-subtle); font-size: var(--text-micro); }
 .support-admin-credit input { width: 100%; min-height: 2.5rem; padding: 0 var(--space-2); border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-surface); color: var(--color-text); }
+.support-admin-credit input:disabled,
+.support-admin-credit > button:disabled { cursor: not-allowed; opacity: .58; }
 .support-admin-empty { display: grid; min-height: 12rem; place-items: center; align-content: center; gap: var(--space-2); color: var(--color-text-muted); font-size: var(--text-small); text-align: center; }
 .support-admin-spinner { animation: support-admin-spin .8s linear infinite; }
 @keyframes support-admin-spin { to { transform: rotate(360deg); } }

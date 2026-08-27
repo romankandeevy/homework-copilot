@@ -1,4 +1,4 @@
-import { createHash, timingSafeEqual } from 'node:crypto'
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createClient } from '@supabase/supabase-js'
 import type { SupabaseClient, User } from '@supabase/supabase-js'
@@ -37,6 +37,8 @@ const categoryLabels: Record<SupportCategory, string> = {
 
 const maxBodyBytes = 600_000
 const telegramChunkSize = 3800
+const ideaApprovalPhrase = 'да это хорошая идея'
+const ideaCallbackPattern = /^idea:(approve|reject):([A-Za-z0-9_-]{20,32})$/
 
 export class SupportApiError extends Error {
   readonly status: number
@@ -250,19 +252,55 @@ function secureEqual(left: string, right: string) {
   return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer)
 }
 
-async function telegramMessage(config: ServerConfig, textValue: string) {
-  if (!config.telegramBotToken || !config.telegramOwnerChatId) throw new Error('telegram configuration missing')
-  const telegramResponse = await config.fetchImpl(`https://api.telegram.org/bot${config.telegramBotToken}/sendMessage`, {
+function normalizeIdeaApprovalPhrase(value: unknown) {
+  return typeof value === 'string'
+    ? value
+      .toLocaleLowerCase('ru-RU')
+      .replace(/ё/g, 'е')
+      .replace(/[\p{P}\p{S}]+/gu, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+    : ''
+}
+
+function isIdeaApprovalPhrase(value: unknown) {
+  return normalizeIdeaApprovalPhrase(value) === ideaApprovalPhrase
+}
+
+function parseIdeaCallbackData(value: unknown) {
+  const match = typeof value === 'string' ? value.match(ideaCallbackPattern) : null
+  return match ? { action: match[1] as 'approve' | 'reject', token: match[2] } : null
+}
+
+function callbackTokenHash(token: string) {
+  return createHash('sha256').update(token).digest('hex')
+}
+
+async function telegramRequest<T>(config: ServerConfig, method: string, body: Record<string, unknown>) {
+  if (!config.telegramBotToken) throw new Error('telegram configuration missing')
+  const telegramResponse = await config.fetchImpl(`https://api.telegram.org/bot${config.telegramBotToken}/${method}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: config.telegramOwnerChatId, text: textValue, disable_web_page_preview: true }),
+    body: JSON.stringify(body),
     signal: AbortSignal.timeout(10_000),
   })
   if (!telegramResponse.ok) throw new Error(`telegram returned ${telegramResponse.status}`)
-  const payload = await telegramResponse.json() as { ok?: boolean; result?: { message_id?: number; chat?: { id?: number } } }
-  const messageId = payload.result?.message_id
-  if (!payload.ok || typeof messageId !== 'number' || !Number.isSafeInteger(messageId)) throw new Error('telegram response missing message id')
-  return { messageId, chatId: safeTelegramId(payload.result?.chat?.id) || config.telegramOwnerChatId }
+  const payload = await telegramResponse.json() as { ok?: boolean; result?: T; description?: string }
+  if (!payload.ok) throw new Error('telegram request failed')
+  return payload.result
+}
+
+async function telegramMessage(config: ServerConfig, textValue: string, replyMarkup?: Record<string, unknown>) {
+  if (!config.telegramBotToken || !config.telegramOwnerChatId) throw new Error('telegram configuration missing')
+  const result = await telegramRequest<{ message_id?: number; chat?: { id?: number } }>(config, 'sendMessage', {
+    chat_id: config.telegramOwnerChatId,
+    text: textValue,
+    disable_web_page_preview: true,
+    ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+  })
+  const messageId = result?.message_id
+  if (typeof messageId !== 'number' || !Number.isSafeInteger(messageId)) throw new Error('telegram response missing message id')
+  return { messageId, chatId: safeTelegramId(result?.chat?.id) || config.telegramOwnerChatId }
 }
 
 function contextForTelegram(context: Json) {
@@ -280,27 +318,44 @@ async function notifyOwner(
   message: SupportMessage,
   user: User,
   account: Awaited<ReturnType<typeof loadAccountContext>>,
+  includeIdeaDecision: boolean,
 ) {
   if (!config.telegramBotToken || !config.telegramOwnerChatId) return 'pending' as const
 
   const notification = [
     `Homework Copilot · ${categoryLabels[conversation.category as SupportCategory]}`,
-    `Обращение ${conversation.id}`,
     `Пользователь: ${account.fullName || 'Ученик'} · ${user.email ?? 'без почты'}`,
-    `Аккаунт: ${user.id} · класс ${account.grade ?? '—'} · баланс ${account.balance ?? '—'} ₽`,
+    `Класс: ${account.grade ?? '—'} · баланс ${account.balance ?? '—'} ₽`,
     `Статус: ${conversation.status}`,
     '',
     `Сообщение пользователя:\n${message.body}`,
     '',
     'Контекст:\n' + contextForTelegram(conversation.context),
     '',
-    'Ответь на это сообщение в Telegram — ответ попадёт в этот диалог.',
+    includeIdeaDecision
+      ? 'Выбери решение кнопкой или ответь фразой «да это хорошая идея». Сумма начисляется отдельно в админке.'
+      : 'Ответь на это сообщение в Telegram — ответ попадёт в этот диалог.',
   ].join('\n')
 
   try {
     const chunks = splitTelegramText(notification)
-    for (const chunk of chunks) {
-      const sent = await telegramMessage(config, chunk)
+    const ideaActions = includeIdeaDecision
+      ? [
+        { action: 'approve' as const, token: randomBytes(18).toString('base64url') },
+        { action: 'reject' as const, token: randomBytes(18).toString('base64url') },
+      ]
+      : []
+    for (const [index, chunk] of chunks.entries()) {
+      const isDecisionMessage = includeIdeaDecision && index === chunks.length - 1
+      const replyMarkup = isDecisionMessage
+        ? {
+          inline_keyboard: [[
+            { text: 'Да, хорошая идея', callback_data: `idea:approve:${ideaActions[0].token}` },
+            { text: 'Нет', callback_data: `idea:reject:${ideaActions[1].token}` },
+          ]],
+        }
+        : undefined
+      const sent = await telegramMessage(config, chunk, replyMarkup)
       const { error } = await adminClient.from('support_telegram_message_map').insert({
         telegram_chat_id: Number(sent.chatId),
         telegram_message_id: sent.messageId,
@@ -308,6 +363,16 @@ async function notifyOwner(
         direction: 'outbound',
       })
       if (error) throw error
+      if (isDecisionMessage) {
+        const { error: actionError } = await adminClient.from('support_telegram_callback_actions').insert(ideaActions.map((ideaAction) => ({
+          token_hash: callbackTokenHash(ideaAction.token),
+          conversation_id: conversation.id,
+          telegram_chat_id: Number(sent.chatId),
+          telegram_message_id: sent.messageId,
+          action: ideaAction.action,
+        })))
+        if (actionError) throw actionError
+      }
     }
     return 'sent' as const
   } catch (error) {
@@ -328,6 +393,7 @@ async function saveUserMessage(
   const requestedCategory = category(payload.category)
   const requestedConversationId = boundedText(payload.conversationId, 80)
   let conversation: SupportConversation
+  let isNewConversation = false
   let account = await loadAccountContext(adminClient, user)
 
   if (requestedConversationId) {
@@ -356,6 +422,7 @@ async function saveUserMessage(
       .single()
     if (error || !data) throw new SupportApiError(500, 'Не получилось создать обращение')
     conversation = data
+    isNewConversation = true
   }
 
   const { data: message, error: messageError } = await adminClient
@@ -373,7 +440,7 @@ async function saveUserMessage(
     .single()
   if (updateError || !updatedConversation) throw new SupportApiError(500, 'Не получилось обновить обращение')
 
-  const deliveryStatus = await notifyOwner(adminClient, config, updatedConversation, message, user, account)
+  const deliveryStatus = await notifyOwner(adminClient, config, updatedConversation, message, user, account, isNewConversation && updatedConversation.category === 'feature')
   if (deliveryStatus !== updatedConversation.owner_notification_status) {
     await adminClient
       .from('support_conversations')
@@ -416,12 +483,97 @@ type TelegramUpdate = {
     caption?: unknown
     chat?: { id?: unknown }
     reply_to_message?: { message_id?: unknown }
+    from?: { id?: unknown }
+  }
+  callback_query?: {
+    id?: unknown
+    data?: unknown
+    from?: { id?: unknown }
+    message?: {
+      message_id?: unknown
+      text?: unknown
+      chat?: { id?: unknown }
+    }
   }
 }
 
 function ignoreTelegramUpdate(response: ServerResponse, reason: string) {
   console.info(`support telegram update ignored: ${reason}`)
   responseJson(response, 200, { ok: true, ignored: true })
+}
+
+async function answerTelegramCallback(config: ServerConfig, callbackQueryId: string, textValue: string, showAlert = false) {
+  await telegramRequest(config, 'answerCallbackQuery', {
+    callback_query_id: callbackQueryId,
+    text: textValue,
+    show_alert: showAlert,
+  })
+}
+
+function callbackDecisionLabel(decision: string) {
+  return decision === 'approved' ? '✅ Идея одобрена' : '❌ Идея отклонена'
+}
+
+async function handleIdeaCallback(
+  response: ServerResponse,
+  config: ServerConfig,
+  adminClient: SupabaseClient<Database>,
+  callback: NonNullable<TelegramUpdate['callback_query']>,
+) {
+  const callbackQueryId = boundedText(callback.id, 200)
+  const parsed = parseIdeaCallbackData(callback.data)
+  const message = jsonObject(callback.message)
+  const chatId = safeTelegramId(jsonObject(message.chat).id)
+  const ownerUserId = safeTelegramId(jsonObject(callback.from).id)
+  const messageId = Number(message.message_id)
+
+  if (!callbackQueryId) {
+    ignoreTelegramUpdate(response, 'callback_id_invalid')
+    return
+  }
+  if (!parsed || chatId !== config.telegramOwnerChatId || ownerUserId !== config.telegramOwnerChatId || !Number.isSafeInteger(messageId) || messageId < 1) {
+    await answerTelegramCallback(config, callbackQueryId, 'Это действие недоступно.', true)
+    ignoreTelegramUpdate(response, !parsed ? 'callback_data_invalid' : 'callback_owner_mismatch')
+    return
+  }
+
+  const { data, error } = await adminClient.rpc('record_support_idea_telegram_decision', {
+    p_token_hash: callbackTokenHash(parsed.token),
+    p_action: parsed.action,
+    p_telegram_chat_id: Number(chatId),
+    p_telegram_message_id: messageId,
+    p_telegram_user_id: Number(ownerUserId),
+  })
+  if (error || !isRecord(data)) {
+    await answerTelegramCallback(config, callbackQueryId, 'Кнопка недействительна или уже закрыта.', true)
+    ignoreTelegramUpdate(response, error ? 'callback_decision_rejected' : 'callback_result_invalid')
+    return
+  }
+
+  const decision = data.decision === 'approved' ? 'approved' : 'rejected'
+  const applied = data.applied === true
+  const label = callbackDecisionLabel(decision)
+  await answerTelegramCallback(config, callbackQueryId, applied ? label : `${label}. Решение уже сохранено.`)
+
+  const originalText = boundedText(message.text, 4000)
+  const statusText = originalText.includes(label) ? originalText : `${originalText}\n\n${label}`.trim()
+  try {
+    await telegramRequest(config, 'editMessageText', {
+      chat_id: Number(chatId),
+      message_id: messageId,
+      text: statusText,
+      disable_web_page_preview: true,
+      reply_markup: { inline_keyboard: [] },
+    })
+  } catch {
+    await telegramRequest(config, 'editMessageReplyMarkup', {
+      chat_id: Number(chatId),
+      message_id: messageId,
+      reply_markup: { inline_keyboard: [] },
+    })
+  }
+
+  responseJson(response, 200, { ok: true, decision, applied })
 }
 
 export async function handleTelegramWebhook(request: IncomingMessage, response: ServerResponse, fetchImpl: typeof fetch = fetch) {
@@ -443,6 +595,12 @@ export async function handleTelegramWebhook(request: IncomingMessage, response: 
     }
 
     const update = jsonObject(await readJson(request)) as TelegramUpdate
+    const adminClient = createAdminClient(config)
+    const callback = isRecord(update.callback_query) ? update.callback_query : null
+    if (callback) {
+      await handleIdeaCallback(response, config, adminClient, callback)
+      return
+    }
     const message = isRecord(update.message) ? update.message : null
     const chatId = safeTelegramId(jsonObject(message?.chat).id)
     const replyToMessageId = Number(jsonObject(message?.reply_to_message).message_id)
@@ -469,7 +627,6 @@ export async function handleTelegramWebhook(request: IncomingMessage, response: 
       return
     }
 
-    const adminClient = createAdminClient(config)
     const { data: mapping, error: mappingError } = await adminClient
       .from('support_telegram_message_map')
       .select('conversation_id')
@@ -518,4 +675,4 @@ export async function handleTelegramWebhook(request: IncomingMessage, response: 
   }
 }
 
-export { categoryLabels, secureEqual, splitTelegramText }
+export { categoryLabels, isIdeaApprovalPhrase, normalizeIdeaApprovalPhrase, parseIdeaCallbackData, secureEqual, splitTelegramText }
