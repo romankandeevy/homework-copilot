@@ -495,7 +495,7 @@ function compactConstructionSteps(steps: string[]) {
 
   const compacted: string[] = []
   for (const unit of units) {
-    const candidate = compacted.length === 0 ? unit : `${compacted.at(-1)}; ${unit}`
+    const candidate = compacted.length === 0 ? unit : `${compacted[compacted.length - 1]}; ${unit}`
     if (candidate.length <= 90) {
       if (compacted.length === 0) compacted.push(unit)
       else compacted[compacted.length - 1] = candidate
