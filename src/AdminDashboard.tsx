@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
   ArrowLeft,
   ArrowClockwise,
+  BookOpenText,
   CaretRight,
   ChartLineUp,
   CheckCircle,
@@ -14,6 +15,7 @@ import {
   MagnifyingGlass,
   Pulse,
   SignOut,
+  UserGear,
   UserCircle,
   UsersThree,
   Wallet,
@@ -22,12 +24,14 @@ import {
 import { formatRubles } from './lib/currency'
 import type { Json } from './lib/database.types'
 import { supabase } from './lib/supabase'
+import AdminSolutionLibrary from './AdminSolutionLibrary'
 import SupportAdminPanel from './SupportAdminPanel'
 import './AdminDashboard.css'
 
 type AdminAccess = 'loading' | 'admin' | 'signed-out' | 'forbidden' | 'unavailable'
 type PeriodDays = 7 | 30 | 90
 type ChartMetric = 'sessionStarts' | 'openedSolutions' | 'charges'
+type AdminMutation = 'profile' | 'top-up' | 'balance' | 'ban' | null
 
 type AdminUser = {
   id: string
@@ -439,6 +443,8 @@ function eventLabel(event: string) {
   if (event === 'user_unbanned') return 'пользователь разблокирован'
   if (event === 'support_feature_credited') return 'начислено за идею'
   if (event === 'support_status_changed') return 'изменён статус обращения'
+  if (event === 'user_profile_updated') return 'изменён профиль пользователя'
+  if (event === 'solution_deleted') return 'решение удалено из базы'
   return event || 'событие'
 }
 
@@ -479,10 +485,15 @@ export default function AdminDashboard() {
   const [balanceReason, setBalanceReason] = useState('')
   const [topUpAmount, setTopUpAmount] = useState('')
   const [topUpReference, setTopUpReference] = useState('')
+  const [profileName, setProfileName] = useState('')
+  const [profileGrade, setProfileGrade] = useState('8')
   const [banReason, setBanReason] = useState('')
-  const [actionLoading, setActionLoading] = useState(false)
+  const [actionLoading, setActionLoading] = useState<AdminMutation>(null)
+  const [activeSection, setActiveSection] = useState('overview')
   const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
+  const drawerRef = useRef<HTMLElement | null>(null)
+  const drawerTriggerRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
     const previousTheme = document.documentElement.dataset.theme
@@ -588,12 +599,65 @@ export default function AdminDashboard() {
   }, [access, loadUsers, search])
 
   useEffect(() => {
-    if (!detail) return
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setDetail(null)
+    if (!detail?.user.id) return
+    const drawer = drawerRef.current
+    const background = Array.from(document.querySelectorAll<HTMLElement>('.admin-topbar, .admin-layout'))
+    const previousOverflow = document.body.style.overflow
+    background.forEach((element) => {
+      element.inert = true
+      element.setAttribute('aria-hidden', 'true')
+    })
+    document.body.style.overflow = 'hidden'
+
+    const focusableSelector = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
+    const focusable = () => Array.from(drawer?.querySelectorAll<HTMLElement>(focusableSelector) ?? [])
+    window.requestAnimationFrame(() => focusable()[0]?.focus())
+
+    const handleDrawerKeys = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setDetail(null)
+        return
+      }
+      if (event.key !== 'Tab') return
+      const elements = focusable()
+      if (!elements.length) return
+      const first = elements[0]
+      const last = elements[elements.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
     }
-    window.addEventListener('keydown', closeOnEscape)
-    return () => window.removeEventListener('keydown', closeOnEscape)
+    window.addEventListener('keydown', handleDrawerKeys)
+    return () => {
+      window.removeEventListener('keydown', handleDrawerKeys)
+      background.forEach((element) => {
+        element.inert = false
+        element.removeAttribute('aria-hidden')
+      })
+      document.body.style.overflow = previousOverflow
+      drawerTriggerRef.current?.focus()
+    }
+  }, [detail?.user.id])
+
+  useEffect(() => {
+    const updateFromHash = () => {
+      const section = window.location.hash.slice(1)
+      setActiveSection(section || 'overview')
+    }
+    updateFromHash()
+    window.addEventListener('hashchange', updateFromHash)
+    return () => window.removeEventListener('hashchange', updateFromHash)
+  }, [])
+
+  useEffect(() => {
+    if (!detail) return
+    setProfileName(detail.user.fullName)
+    setProfileGrade(String(detail.user.grade ?? 8))
   }, [detail])
 
   const reloadAll = async () => {
@@ -611,7 +675,8 @@ export default function AdminDashboard() {
     void loadDashboard(nextPeriod)
   }
 
-  const openUser = async (userId: string) => {
+  const openUser = async (userId: string, trigger?: HTMLElement) => {
+    drawerTriggerRef.current = trigger ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null)
     setNotice('')
     setError('')
     setAmount('')
@@ -624,7 +689,7 @@ export default function AdminDashboard() {
 
   const adjustBalance = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!detail || actionLoading) return
+    if (!detail || actionLoading !== null) return
     if (isAdminPreview) {
       setNotice('Предпросмотр: изменения не записываются.')
       return
@@ -640,7 +705,7 @@ export default function AdminDashboard() {
       return
     }
 
-    setActionLoading(true)
+    setActionLoading('balance')
     setError('')
     const { error: adjustmentError } = await supabase.rpc('admin_adjust_balance', {
       p_user_id: detail.user.id,
@@ -654,12 +719,50 @@ export default function AdminDashboard() {
       setNotice(`Баланс ${userName(detail.user)} обновлён.`)
       await Promise.all([loadDashboard(periodDays), loadUsers(search), loadUserDetail(detail.user.id)])
     }
-    setActionLoading(false)
+    setActionLoading(null)
+  }
+
+  const saveProfile = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!detail || actionLoading !== null) return
+    const fullName = profileName.trim()
+    const grade = Number(profileGrade)
+    if (fullName.length < 1 || fullName.length > 80) {
+      setError('Имя должно содержать от 1 до 80 символов.')
+      return
+    }
+    if (!Number.isInteger(grade) || grade < 1 || grade > 11) {
+      setError('Укажи класс от 1 до 11.')
+      return
+    }
+
+    if (isAdminPreview) {
+      setDetail((current) => current ? { ...current, user: { ...current.user, fullName, grade } } : current)
+      setUsers((current) => current.map((user) => user.id === detail.user.id ? { ...user, fullName, grade } : user))
+      setNotice('Предпросмотр: профиль пользователя обновлён.')
+      setError('')
+      return
+    }
+    if (!supabase) return
+
+    setActionLoading('profile')
+    setError('')
+    const { error: profileError } = await supabase.rpc('admin_update_user_profile', {
+      p_user_id: detail.user.id,
+      p_full_name: fullName,
+      p_grade: grade,
+    })
+    if (profileError) setError(databaseErrorMessage(profileError))
+    else {
+      setNotice(`Профиль ${userName(detail.user)} обновлён.`)
+      await Promise.all([loadUsers(search), loadUserDetail(detail.user.id), loadDashboard(periodDays)])
+    }
+    setActionLoading(null)
   }
 
   const recordVerifiedTopUp = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!detail || actionLoading) return
+    if (!detail || actionLoading !== null) return
     if (isAdminPreview) {
       setNotice('Предпросмотр: изменения не записываются.')
       return
@@ -677,7 +780,7 @@ export default function AdminDashboard() {
       return
     }
 
-    setActionLoading(true)
+    setActionLoading('top-up')
     setError('')
     const { data, error: topUpError } = await supabase.rpc('admin_record_verified_top_up', {
       p_user_id: detail.user.id,
@@ -697,11 +800,11 @@ export default function AdminDashboard() {
         : 'Это пополнение уже было подтверждено; повторных начислений нет.')
       await Promise.all([loadDashboard(periodDays), loadUsers(search), loadUserDetail(detail.user.id)])
     }
-    setActionLoading(false)
+    setActionLoading(null)
   }
 
   const toggleBan = async () => {
-    if (!detail || actionLoading) return
+    if (!detail || actionLoading !== null) return
     if (isAdminPreview) {
       setNotice('Предпросмотр: изменения не записываются.')
       return
@@ -713,7 +816,7 @@ export default function AdminDashboard() {
       return
     }
 
-    setActionLoading(true)
+    setActionLoading('ban')
     setError('')
     const { error: banError } = await supabase.rpc('admin_set_user_ban', {
       p_user_id: detail.user.id,
@@ -726,7 +829,7 @@ export default function AdminDashboard() {
       setNotice(nextIsBanned ? 'Аккаунт заблокирован.' : 'Аккаунт разблокирован.')
       await Promise.all([loadDashboard(periodDays), loadUsers(search), loadUserDetail(detail.user.id)])
     }
-    setActionLoading(false)
+    setActionLoading(null)
   }
 
   const signOut = async () => {
@@ -785,11 +888,12 @@ export default function AdminDashboard() {
 
       <div className="admin-layout">
         <aside className="admin-rail" aria-label="Разделы админки">
-          <a href="#overview" className="is-active"><ChartLineUp size={18} weight="duotone" aria-hidden="true" /> Обзор</a>
-          <a href="#users"><UsersThree size={18} weight="duotone" aria-hidden="true" /> Пользователи</a>
-          <a href="#analytics"><Pulse size={18} weight="duotone" aria-hidden="true" /> Аналитика</a>
-          <a href="#events"><CheckCircle size={18} weight="duotone" aria-hidden="true" /> Журналы</a>
-          <a href="#support"><Lifebuoy size={18} weight="duotone" aria-hidden="true" /> Поддержка</a>
+          <a href="#overview" className={activeSection === 'overview' ? 'is-active' : ''} aria-current={activeSection === 'overview' ? 'page' : undefined}><ChartLineUp size={18} weight="duotone" aria-hidden="true" /> Обзор</a>
+          <a href="#users" className={activeSection === 'users' ? 'is-active' : ''} aria-current={activeSection === 'users' ? 'page' : undefined}><UsersThree size={18} weight="duotone" aria-hidden="true" /> Пользователи</a>
+          <a href="#solution-library" className={activeSection === 'solution-library' ? 'is-active' : ''} aria-current={activeSection === 'solution-library' ? 'page' : undefined}><BookOpenText size={18} weight="duotone" aria-hidden="true" /> База решений</a>
+          <a href="#support" className={activeSection === 'support' ? 'is-active' : ''} aria-current={activeSection === 'support' ? 'page' : undefined}><Lifebuoy size={18} weight="duotone" aria-hidden="true" /> Поддержка</a>
+          <a href="#analytics" className={activeSection === 'analytics' ? 'is-active' : ''} aria-current={activeSection === 'analytics' ? 'page' : undefined}><Pulse size={18} weight="duotone" aria-hidden="true" /> Аналитика</a>
+          <a href="#events" className={activeSection === 'events' ? 'is-active' : ''} aria-current={activeSection === 'events' ? 'page' : undefined}><CheckCircle size={18} weight="duotone" aria-hidden="true" /> Журналы</a>
           <div className="admin-rail-status"><span /><div><strong>{numberFormatter.format(summary.onlineUsers)}</strong><small>онлайн сейчас</small></div></div>
         </aside>
 
@@ -838,8 +942,6 @@ export default function AdminDashboard() {
             </div>
           </section>
 
-          <SupportAdminPanel preview={isAdminPreview} />
-
           <section className="admin-users-workspace" id="users" aria-labelledby="admin-users-title">
             <header className="admin-users-heading">
               <div><h2 id="admin-users-title">Пользователи</h2><p>Открой карточку, чтобы посмотреть историю, изменить баланс или доступ.</p></div>
@@ -853,12 +955,12 @@ export default function AdminDashboard() {
                   {usersLoading && <tr><td colSpan={6} className="admin-table-loading"><CircleNotch size={20} weight="bold" aria-hidden="true" /> Загружаем пользователей…</td></tr>}
                   {!usersLoading && users.map((item) => (
                     <tr key={item.id}>
-                      <td><button className="admin-user-cell" type="button" onClick={() => { void openUser(item.id) }}><span>{userName(item)}</span><small>{item.email}{item.grade ? ` · ${item.grade} класс` : ''}</small></button></td>
+                      <td><button className="admin-user-cell" type="button" onClick={(event) => { void openUser(item.id, event.currentTarget) }}><span>{userName(item)}</span><small>{item.email}{item.grade ? ` · ${item.grade} класс` : ''}</small></button></td>
                       <td className="admin-balance-cell">{formatRubles(item.balance)}</td>
                       <td>{formatDate(item.lastActivityAt || item.lastSeenAt)}</td>
                       <td className="admin-registered-column">{formatDate(item.createdAt, false)}</td>
                       <td><span className={`admin-status ${item.isBanned ? 'is-banned' : 'is-active'}`}>{item.isBanned ? 'Заблокирован' : 'Активен'}</span></td>
-                      <td><button className="admin-row-open" type="button" onClick={() => { void openUser(item.id) }} aria-label={`Открыть ${userName(item)}`}>Открыть <CaretRight size={17} weight="bold" aria-hidden="true" /></button></td>
+                      <td><button className="admin-row-open" type="button" onClick={(event) => { void openUser(item.id, event.currentTarget) }} aria-label={`Открыть ${userName(item)}`}>Открыть <CaretRight size={17} weight="bold" aria-hidden="true" /></button></td>
                     </tr>
                   ))}
                   {!usersLoading && !users.length && <tr><td colSpan={6} className="admin-table-empty">Пользователи не найдены.</td></tr>}
@@ -866,6 +968,10 @@ export default function AdminDashboard() {
               </table>
             </div>
           </section>
+
+          <AdminSolutionLibrary preview={isAdminPreview} />
+
+          <SupportAdminPanel preview={isAdminPreview} />
 
           <section className="admin-analytics-layout" id="analytics" aria-label="Аналитика">
             <article className="admin-chart-panel">
@@ -919,12 +1025,21 @@ export default function AdminDashboard() {
 
       {detailLoading && <div className="admin-drawer-loading" role="status"><CircleNotch size={24} weight="bold" aria-hidden="true" /></div>}
       {detail && (
-        <aside className="admin-user-drawer" aria-labelledby="admin-user-drawer-title">
+        <aside ref={drawerRef} className="admin-user-drawer" role="dialog" aria-modal="true" aria-labelledby="admin-user-drawer-title" tabIndex={-1}>
           <header className="admin-drawer-topbar"><span>Карточка пользователя</span><button className="admin-icon-button" type="button" onClick={() => setDetail(null)} aria-label="Закрыть карточку пользователя"><X size={19} weight="bold" aria-hidden="true" /></button></header>
           <section className="admin-drawer-user">
             <div className="admin-avatar"><UserCircle size={38} weight="duotone" aria-hidden="true" /></div>
             <div><h2 id="admin-user-drawer-title">{userName(detail.user)}</h2><p>{detail.user.email}</p><span>{detail.user.grade ? `${detail.user.grade} класс` : 'Класс не указан'} · зарегистрирован {formatDate(detail.user.createdAt, false)}</span></div>
           </section>
+
+          <form className="admin-profile-form" onSubmit={saveProfile}>
+            <header><UserGear size={19} weight="duotone" aria-hidden="true" /><div><h3>Профиль</h3><p>Имя и класс сразу обновятся в личном кабинете.</p></div></header>
+            <div className="admin-profile-fields">
+              <label><span>Имя</span><input value={profileName} onChange={(event) => setProfileName(event.target.value)} minLength={1} maxLength={80} autoComplete="off" /></label>
+              <label><span>Класс</span><select value={profileGrade} onChange={(event) => setProfileGrade(event.target.value)}>{Array.from({ length: 11 }, (_, index) => index + 1).map((grade) => <option key={grade} value={grade}>{grade}</option>)}</select></label>
+            </div>
+            <button className="admin-primary-action" type="submit" disabled={actionLoading !== null}>{actionLoading === 'profile' ? 'Сохраняем…' : 'Сохранить профиль'}</button>
+          </form>
 
           <section className="admin-drawer-balance"><div><span>Текущий баланс</span><strong>{formatRubles(detail.user.balance)}</strong></div><dl><div><dt>Последний визит</dt><dd>{formatDate(detail.user.lastSeenAt)}</dd></div><div><dt>Статус</dt><dd>{detail.user.isBanned ? 'Заблокирован' : 'Активен'}</dd></div></dl></section>
 
@@ -932,20 +1047,20 @@ export default function AdminDashboard() {
             <header><CurrencyRub size={19} weight="duotone" aria-hidden="true" /><div><h3>Подтвердить пополнение</h3><p>Первое подтверждённое пополнение запускает реферальные +10 ₽ и +5 ₽.</p></div></header>
             <label><span>Сумма, ₽</span><input type="number" value={topUpAmount} onChange={(event) => setTopUpAmount(event.target.value)} min={1} max={1000000} step="1" inputMode="numeric" placeholder="Например, 100" /></label>
             <label><span>Идентификатор транзакции</span><input value={topUpReference} onChange={(event) => setTopUpReference(event.target.value)} minLength={6} maxLength={160} autoComplete="off" placeholder="Например, bank-20260828-001" /></label>
-            <button className="admin-primary-action" type="submit" disabled={actionLoading}>{actionLoading ? 'Подтверждаем…' : 'Подтвердить пополнение'}</button>
+            <button className="admin-primary-action" type="submit" disabled={actionLoading !== null}>{actionLoading === 'top-up' ? 'Подтверждаем…' : 'Подтвердить пополнение'}</button>
           </form>
 
           <form className="admin-action-form" onSubmit={adjustBalance}>
             <header><Wallet size={19} weight="duotone" aria-hidden="true" /><div><h3>Изменить баланс</h3><p>Положительное — начислить, отрицательное — списать.</p></div></header>
             <label><span>Сумма, ₽</span><input type="number" value={amount} onChange={(event) => setAmount(event.target.value)} min={-100000} max={100000} step="1" inputMode="numeric" placeholder="Например, 50" /></label>
             <label><span>Причина</span><input value={balanceReason} onChange={(event) => setBalanceReason(event.target.value)} minLength={3} maxLength={160} placeholder="За что меняем баланс" /></label>
-            <button className="admin-primary-action" type="submit" disabled={actionLoading}>{actionLoading ? 'Сохраняем…' : 'Изменить баланс'}</button>
+            <button className="admin-primary-action" type="submit" disabled={actionLoading !== null}>{actionLoading === 'balance' ? 'Сохраняем…' : 'Изменить баланс'}</button>
           </form>
 
           <section className={`admin-ban-control${detail.user.isBanned ? ' is-banned' : ''}`}>
             <header><EyeSlash size={19} weight="duotone" aria-hidden="true" /><div><h3>{detail.user.isBanned ? 'Аккаунт заблокирован' : 'Блокировка доступа'}</h3><p>{detail.user.isBanned ? detail.user.banReason || 'Причина не указана' : 'Сразу остановит доступ к сервису и списания.'}</p></div></header>
             {!detail.user.isBanned && <label><span>Причина блокировки</span><input value={banReason} onChange={(event) => setBanReason(event.target.value)} minLength={3} maxLength={500} placeholder="Опиши причину" /></label>}
-            <button className={detail.user.isBanned ? 'admin-unban-action' : 'admin-ban-action'} type="button" onClick={() => { void toggleBan() }} disabled={actionLoading}>{detail.user.isBanned ? 'Разблокировать' : 'Заблокировать'}</button>
+            <button className={detail.user.isBanned ? 'admin-unban-action' : 'admin-ban-action'} type="button" onClick={() => { void toggleBan() }} disabled={actionLoading !== null}>{actionLoading === 'ban' ? 'Сохраняем…' : detail.user.isBanned ? 'Разблокировать' : 'Заблокировать'}</button>
           </section>
 
           <section className="admin-drawer-history"><header><h3>Операции баланса</h3><span>{detail.walletEntries.length}</span></header><ol>{detail.walletEntries.map((entry) => <li key={entry.id}><strong className={entry.amount >= 0 ? 'is-credit' : 'is-debit'}>{entry.amount > 0 ? '+' : ''}{formatRubles(entry.amount)}</strong><div><span>{entry.description}</span><small>{formatDate(entry.createdAt)}</small></div></li>)}{!detail.walletEntries.length && <li className="admin-drawer-empty">Операций пока нет.</li>}</ol></section>

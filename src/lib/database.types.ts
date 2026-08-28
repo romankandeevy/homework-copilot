@@ -546,6 +546,18 @@ export type Database = {
         Args: { p_amount: number; p_reason: string; p_user_id: string }
         Returns: Json
       }
+      admin_update_user_profile: {
+        Args: { p_full_name: string; p_grade: number; p_user_id: string }
+        Returns: Json
+      }
+      admin_list_solution_library: {
+        Args: { p_limit?: number; p_search?: string }
+        Returns: Json
+      }
+      admin_delete_solution: {
+        Args: { p_reason: string; p_solution_id: string }
+        Returns: Json
+      }
       admin_record_verified_top_up: {
         Args: { p_amount: number; p_provider_reference: string; p_user_id: string }
         Returns: Json

@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:legal-browser": "node scripts/verify-legal-browser.mjs",
     "test:referral-browser": "node scripts/verify-referral-browser.mjs",
+    "test:admin-browser": "node scripts/verify-admin-browser.mjs",
     "test:visual": "playwright test",
     "preview": "vite preview"
   },

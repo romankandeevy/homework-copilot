@@ -659,7 +659,7 @@
   overflow-y: auto;
   border-left: 1px solid var(--color-border);
   background: var(--color-surface);
-  box-shadow: -1.5rem 0 3rem oklch(0% 0 0 / 0.32);
+  box-shadow: var(--shadow-overlay);
   animation: admin-drawer-in var(--motion-panel) var(--ease-out);
 }
 
@@ -682,6 +682,39 @@
 .admin-drawer-user h2 { margin: 0; color: var(--color-strong); font-size: var(--text-lead); font-weight: var(--weight-semibold); line-height: var(--leading-compact); letter-spacing: -0.03em; }
 .admin-drawer-user p { margin: var(--space-1) 0 0; overflow: hidden; color: var(--color-text-subtle); font-size: var(--text-caption); text-overflow: ellipsis; white-space: nowrap; }
 .admin-drawer-user > div:last-child > span { display: block; margin-top: var(--space-2); color: var(--color-text-subtle); font-size: var(--text-micro); line-height: var(--leading-ui); }
+
+.admin-profile-form {
+  display: grid;
+  gap: var(--space-3);
+  padding: 0 var(--space-5) var(--space-5);
+}
+
+.admin-profile-form header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-3);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-brand-accent);
+}
+
+.admin-profile-form h3 { margin: 0; color: var(--color-text); font-size: var(--text-ui); font-weight: var(--weight-semibold); }
+.admin-profile-form p { margin: var(--space-1) 0 0; color: var(--color-text-subtle); font-size: var(--text-caption); line-height: var(--leading-ui); }
+.admin-profile-fields { display: grid; grid-template-columns: minmax(0, 1fr) 5.25rem; gap: var(--space-3); }
+.admin-profile-form label { display: grid; gap: var(--space-2); }
+.admin-profile-form label > span { color: var(--color-text-subtle); font-size: var(--text-caption); }
+.admin-profile-form input,
+.admin-profile-form select {
+  width: 100%;
+  min-height: var(--size-control);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-sunken);
+  color: var(--color-text);
+}
+
+.admin-profile-form select { cursor: pointer; }
 
 .admin-drawer-balance {
   display: grid;
@@ -829,6 +862,7 @@
   .admin-feed time { display: none; }
   .admin-drawer-balance { grid-template-columns: 1fr; }
   .admin-drawer-balance dl { grid-template-columns: repeat(2, minmax(0, 1fr)); text-align: left; }
+  .admin-profile-fields { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {
