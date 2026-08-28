@@ -79,10 +79,12 @@
 .support-category-card small { color: var(--color-text-muted); font-size: var(--text-caption); line-height: var(--leading-copy); }
 .support-category-check { position: absolute; top: var(--space-3); right: var(--space-3); color: var(--color-accent); }
 
-.support-context-note { display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-4); border: 1px solid color-mix(in oklch, var(--color-warning) 46%, var(--color-border)); border-radius: var(--radius-surface); background: var(--color-warning-soft); color: var(--color-text); }
-.support-context-note.is-payment { border-color: color-mix(in oklch, var(--color-info) 42%, var(--color-border)); background: var(--color-info-soft); }
+.support-context-note { display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-surface); background: var(--color-warning-soft); color: var(--color-text); }
+.support-context-note.is-payment { background: var(--color-info-soft); }
+.support-context-note.is-feature { background: var(--color-accent-soft); }
 .support-context-note > svg { flex: 0 0 auto; color: var(--color-warning); }
 .support-context-note.is-payment > svg { color: var(--color-info); }
+.support-context-note.is-feature > svg { color: var(--color-accent); }
 .support-context-note p { display: grid; gap: var(--space-1); margin: 0; font-size: var(--text-small); line-height: var(--leading-copy); }
 .support-context-note span { color: var(--color-text-muted); }
 
@@ -118,7 +120,7 @@
 
 .support-message-list { display: grid; gap: var(--space-3); max-height: 24rem; overflow: auto; padding: var(--space-2); border: 1px solid var(--color-border); border-radius: var(--radius-surface); background: var(--color-surface-sunken); }
 .support-message { max-width: min(88%, 42rem); padding: var(--space-3) var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-surface); background: var(--color-surface); }
-.support-message.is-user { justify-self: end; border-color: color-mix(in oklch, var(--color-accent) 45%, var(--color-border)); background: var(--color-accent-soft); }
+.support-message.is-user { justify-self: end; border-color: var(--color-border); background: var(--color-accent-soft); }
 .support-message-meta { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); color: var(--color-text-subtle); font-size: var(--text-caption); }
 .support-message-meta time { font-family: var(--font-mono); font-size: var(--text-micro); }
 .support-message p { margin: var(--space-2) 0 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: var(--leading-copy); }
@@ -160,16 +162,6 @@
 
 :root[data-theme='dark'] .site-footer {
   --footer-canvas: color-mix(in oklch, var(--color-surface-sunken) 55%, var(--color-surface));
-}
-
-.site-footer::after {
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: 0;
-  height: 3px;
-  content: '';
-  background: var(--footer-accent);
 }
 
 .site-footer-hero {

@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import App from './App'
 import type { HomeworkSolution, SolveHomeworkRequest } from './lib/homeworkContract'
 import { normalizeTaskCondition } from './textbooks/taskCatalog'
+import { renderTextbookTaskEvidenceImage } from './textbooks/textbookTaskSource'
 
 vi.mock('./textbooks/textbookTaskSource', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./textbooks/textbookTaskSource')>()
@@ -79,6 +80,7 @@ function installSuccessfulSolver() {
 
 describe('Homework Copilot task flow', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     window.localStorage.clear()
     window.sessionStorage.clear()
     window.history.replaceState({}, '', '/main')
@@ -192,11 +194,26 @@ describe('Homework Copilot task flow', () => {
     window.history.replaceState({}, '', '/cdz')
     render(<App />)
 
-    expect(screen.getByRole('heading', { name: 'ЦДЗ скоро появится' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Раздел пока закрыт' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Задача № 2 · 5 ₽' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Вернуться на главную' }))
     expect(window.location.pathname).toBe('/main')
     expect(screen.getByRole('heading', { name: 'Списать задачу' })).toBeInTheDocument()
+  })
+
+  it('hides stale asset filenames behind a recovery message', async () => {
+    vi.mocked(renderTextbookTaskEvidenceImage).mockRejectedValueOnce(
+      new TypeError('Failed to fetch dynamically imported module: /assets/pdf-old.js'),
+    )
+    render(<App />)
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Номер задачи' }), { target: { value: '2' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Проверить условие' }))
+    await screen.findByText('Условие задачи № 2')
+    fireEvent.click(screen.getByRole('button', { name: 'Условие верное' }))
+
+    expect(await screen.findByText('Сайт обновился. Перезагрузи страницу и попробуй ещё раз.')).toBeInTheDocument()
+    expect(screen.queryByText(/pdf-old\.js/)).not.toBeInTheDocument()
   })
 
   it('keeps the task field numeric and limited to four digits', () => {

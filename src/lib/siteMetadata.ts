@@ -21,8 +21,8 @@ const metadataByPath: Record<string, SeoMetadata> = {
     robots: 'index, follow',
   },
   '/cdz': {
-    title: 'ЦДЗ скоро — Homework Copilot',
-    description: 'Раздел ЦДЗ пока готовится и откроется после полной проверки.',
+    title: 'ЦДЗ пока закрыт — Homework Copilot',
+    description: 'Раздел ЦДЗ ещё не запущен и откроется после полной проверки.',
     path: '/cdz',
     robots: 'noindex, follow',
   },

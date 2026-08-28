@@ -213,6 +213,28 @@ try {
     })
     if (overflow.document > 0 || overflow.dialog > 0) failures.push(`wallet-${viewport.width}: horizontal overflow ${JSON.stringify(overflow)}`)
     await page.screenshot({ path: resolve(outputDirectory, `wallet-${viewport.width}.png`) })
+
+    await page.goto(`${origin}/support`, { waitUntil: 'domcontentloaded' })
+    await page.getByRole('heading', { name: 'Чем помочь?' }).waitFor()
+    const ideaButton = page.getByRole('button', { name: /Идея для сервиса/ })
+    await ideaButton.click()
+    await page.getByText('За полезную идею начислим 10 ₽.').waitFor()
+    await page.waitForTimeout(300)
+    const supportState = await page.evaluate(() => {
+      const note = document.querySelector('.support-context-note.is-feature')
+      const regularCard = document.querySelector('.support-category-card:not(.is-selected)')
+      const compose = document.querySelector('.support-compose')
+      return {
+        overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+        referenceBorder: compose ? getComputedStyle(compose).borderColor : '',
+        noteBorder: note ? getComputedStyle(note).borderColor : '',
+        regularCardBorder: regularCard ? getComputedStyle(regularCard).borderColor : '',
+      }
+    })
+    if (supportState.overflow) failures.push(`support-${viewport.width}: horizontal overflow`)
+    if (supportState.noteBorder !== supportState.referenceBorder) failures.push(`support-${viewport.width}: reward note uses a tinted border`)
+    if (supportState.regularCardBorder !== supportState.referenceBorder) failures.push(`support-${viewport.width}: category card uses a tinted border`)
+    await page.screenshot({ path: resolve(outputDirectory, `support-${viewport.width}.png`), fullPage: true })
     await context.close()
   }
 

@@ -106,6 +106,13 @@ type SharedHomeworkSolution = Database['public']['Tables']['homework_solution_ca
 const themeStorageKey = 'homework-copilot:theme'
 const selectedTextbookStorageKey = 'homework-copilot:selected-textbook'
 
+function getTaskSubmissionError(error: unknown) {
+  const message = error instanceof Error ? error.message : ''
+  return /dynamically imported module|importing a module script failed|failed to fetch module/i.test(message)
+    ? 'Сайт обновился. Перезагрузи страницу и попробуй ещё раз.'
+    : message || 'Не получилось отправить задачу'
+}
+
 const applicationRoutes = [
   { label: 'Главная', path: '/main', icon: House },
   { label: 'Решения', path: '/solutions', icon: Notebook },
@@ -237,10 +244,7 @@ function createFileTextbook(file: File): Textbook {
 function BrandMark() {
   return (
     <span className="brand-mark" aria-hidden="true">
-      <svg viewBox="0 0 32 32" focusable="false">
-        <path className="brand-mark-h" d="M3 4H7V14H13V4H17V28H13V18H7V28H3Z" />
-        <path className="brand-mark-c" d="M29 4H25.25C20.6 4 18 7.85 18 16S20.6 28 25.25 28H29V24H25.65C23.15 24 22 21.35 22 16S23.15 8 25.65 8H29Z" />
-      </svg>
+      <span>H</span><span>C</span>
     </span>
   )
 }
@@ -360,18 +364,17 @@ function PageHeader({ account }: { account: AccountData | null }) {
 function CdzComingSoon({ onGoHome }: { onGoHome: () => void }) {
   return (
     <section className="cdz-coming-soon" aria-labelledby="cdz-coming-soon-title">
+      <div className="cdz-coming-soon-symbol" aria-hidden="true">
+        <Stack size={72} weight="duotone" />
+        <strong>ЦДЗ</strong>
+      </div>
       <div className="cdz-coming-soon-copy">
-        <span className="cdz-coming-soon-eyebrow">Раздел временно закрыт</span>
-        <h1 id="cdz-coming-soon-title">ЦДЗ скоро появится</h1>
-        <p>Раздел ещё не запущен. Откроем его только после полной подготовки и проверки.</p>
+        <h1 id="cdz-coming-soon-title">Раздел пока закрыт</h1>
+        <p>ЦДЗ ещё не запущено. Откроем раздел только после полной подготовки и проверки.</p>
         <button className="route-primary-action" type="button" onClick={onGoHome}>
           <House size={18} weight="duotone" aria-hidden="true" />
           Вернуться на главную
         </button>
-      </div>
-      <div className="cdz-coming-soon-symbol" aria-hidden="true">
-        <Stack size={96} weight="duotone" />
-        <span>Скоро</span>
       </div>
     </section>
   )
@@ -688,7 +691,7 @@ function CopyTask({
         : undefined
       await onSubmit(verifiedTask.task, true, 'number', createSubmissionKey(), undefined, verifiedTask, undefined, sourceImageDataUrl)
     } catch (submissionError) {
-      setError(submissionError instanceof Error ? submissionError.message : 'Не получилось отправить задачу')
+      setError(getTaskSubmissionError(submissionError))
     } finally {
       submissionRef.current = false
       setIsSubmitting(false)
