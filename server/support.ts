@@ -39,7 +39,11 @@ const maxBodyBytes = 600_000
 const telegramChunkSize = 3800
 const ideaApprovalPhrase = 'да это хорошая идея'
 const ideaCallbackPattern = /^idea:(approve|reject):([A-Za-z0-9_-]{20,32})$/
-const telegramWebhookUrl = 'https://www.homeworkcopilot.ru/api/telegram-webhook'
+const telegramWebhookUrl = 'https://homework-copilot-taupe.vercel.app/api/telegram-webhook'
+const allowedBrowserOrigins = new Set([
+  'https://www.homeworkcopilot.ru',
+  'https://homeworkcopilot.ru',
+])
 
 export class SupportApiError extends Error {
   readonly status: number
@@ -114,6 +118,18 @@ function responseJson(response: ServerResponse, status: number, payload: Record<
   response.setHeader('Content-Type', 'application/json; charset=utf-8')
   response.setHeader('Cache-Control', 'no-store')
   response.end(JSON.stringify(payload))
+}
+
+function allowProductionBrowser(request: IncomingMessage, response: ServerResponse) {
+  const origin = request.headers.origin
+  if (!origin || !allowedBrowserOrigins.has(origin)) return false
+
+  response.setHeader('Access-Control-Allow-Origin', origin)
+  response.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+  response.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+  response.setHeader('Access-Control-Max-Age', '86400')
+  response.setHeader('Vary', 'Origin')
+  return true
 }
 
 async function readJson(request: IncomingMessage): Promise<unknown> {
@@ -471,8 +487,22 @@ async function saveUserMessage(
 
 export async function handleSupportRequest(request: IncomingMessage, response: ServerResponse, fetchImpl: typeof fetch = fetch) {
   try {
+    const browserAllowed = allowProductionBrowser(request, response)
+    if (request.method === 'OPTIONS') {
+      if (!browserAllowed) {
+        responseJson(response, 403, { error: 'origin_not_allowed' })
+        return
+      }
+      response.statusCode = 204
+      response.end()
+      return
+    }
+    if (request.headers.origin && !browserAllowed) {
+      responseJson(response, 403, { error: 'origin_not_allowed' })
+      return
+    }
     if (request.method !== 'POST') {
-      response.setHeader('Allow', 'POST')
+      response.setHeader('Allow', 'POST, OPTIONS')
       responseJson(response, 405, { error: 'method_not_allowed' })
       return
     }

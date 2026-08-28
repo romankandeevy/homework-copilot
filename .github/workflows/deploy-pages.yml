@@ -27,7 +27,7 @@ jobs:
       - run: npm run test
       - run: npm run build
         env:
-          GITHUB_PAGES_CUSTOM_DOMAIN: homeworkcopilot.ru
+          GITHUB_PAGES_CUSTOM_DOMAIN: www.homeworkcopilot.ru
           VITE_HOMEWORK_API_URL: https://homework-copilot-taupe.vercel.app/api/solve
           VITE_SUPPORT_API_URL: https://homework-copilot-taupe.vercel.app/api/support
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}

@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import type { IncomingMessage, ServerResponse } from 'node:http'
+import { describe, expect, it, vi } from 'vitest'
 import {
+  handleSupportRequest,
   isIdeaApprovalPhrase,
   normalizeIdeaApprovalPhrase,
   parseIdeaCallbackData,
@@ -7,7 +9,49 @@ import {
   splitTelegramText,
 } from './support.ts'
 
+function mockResponse() {
+  const headers = new Map<string, string>()
+  const end = vi.fn()
+  const response = {
+    statusCode: 0,
+    setHeader(name: string, value: string) {
+      headers.set(name.toLowerCase(), value)
+    },
+    end,
+  } as unknown as ServerResponse
+  return { response, headers, end }
+}
+
 describe('support telegram helpers', () => {
+  it('allows the GitHub Pages production origin to call support', async () => {
+    const request = {
+      method: 'OPTIONS',
+      headers: { origin: 'https://www.homeworkcopilot.ru' },
+    } as IncomingMessage
+    const { response, headers, end } = mockResponse()
+
+    await handleSupportRequest(request, response)
+
+    expect(response.statusCode).toBe(204)
+    expect(headers.get('access-control-allow-origin')).toBe('https://www.homeworkcopilot.ru')
+    expect(headers.get('access-control-allow-methods')).toBe('POST, OPTIONS')
+    expect(headers.get('access-control-allow-headers')).toBe('Authorization, Content-Type')
+    expect(end).toHaveBeenCalledOnce()
+  })
+
+  it('rejects support preflight requests from other origins', async () => {
+    const request = {
+      method: 'OPTIONS',
+      headers: { origin: 'https://example.com' },
+    } as IncomingMessage
+    const { response, headers } = mockResponse()
+
+    await handleSupportRequest(request, response)
+
+    expect(response.statusCode).toBe(403)
+    expect(headers.has('access-control-allow-origin')).toBe(false)
+  })
+
   it('compares webhook secrets without accepting different values', () => {
     expect(secureEqual('support-secret', 'support-secret')).toBe(true)
     expect(secureEqual('support-secret', 'support-secret-2')).toBe(false)
