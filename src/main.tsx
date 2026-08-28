@@ -12,3 +12,20 @@ createRoot(rootElement).render(
     <App />
   </StrictMode>,
 )
+
+try {
+  if (window.sessionStorage.getItem('homework-copilot:startup-submit') === '1') {
+    let attempts = 0
+    const submitWhenReady = () => {
+      const button = rootElement.querySelector<HTMLButtonElement>('.copy-task-submit')
+      if (button && !button.disabled) {
+        window.sessionStorage.removeItem('homework-copilot:startup-submit')
+        button.click()
+        return
+      }
+      attempts += 1
+      if (attempts < 20) window.setTimeout(submitWhenReady, 50)
+    }
+    window.setTimeout(submitWhenReady, 0)
+  }
+} catch {}

@@ -106,7 +106,6 @@
         background: #2755d5;
         box-shadow: 0 0 0 5px rgba(39, 85, 213, 0.12);
         content: '';
-        animation: startup-pulse 1.5s ease-in-out infinite;
       }
 
       .startup-shell__main {
@@ -156,34 +155,63 @@
         font-weight: 750;
       }
 
+      .startup-shell__textbook {
+        display: grid;
+        gap: 3px;
+        margin-bottom: 18px;
+        padding-bottom: 18px;
+        border-bottom: 1px solid rgba(23, 23, 23, 0.1);
+      }
+
+      .startup-shell__textbook small,
+      .startup-shell__note {
+        color: #777;
+        font-size: 12px;
+      }
+
+      .startup-shell__form-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 10px;
+      }
+
       .startup-shell__control {
         min-height: 54px;
-        display: flex;
-        align-items: center;
         padding: 0 16px;
         overflow: hidden;
         border: 1px solid rgba(23, 23, 23, 0.12);
         border-radius: 12px;
-        color: #777;
-        background: #f3f3f3;
+        color: #171717;
+        background: #fff;
+        font: inherit;
+        font-size: 18px;
+        outline: none;
       }
 
-      .startup-shell__progress {
-        height: 3px;
-        margin-top: 16px;
-        overflow: hidden;
-        border-radius: 999px;
-        background: rgba(39, 85, 213, 0.12);
+      .startup-shell__control:focus {
+        border-color: #2755d5;
+        box-shadow: 0 0 0 3px rgba(39, 85, 213, 0.14);
       }
 
-      .startup-shell__progress::after {
-        display: block;
-        width: 42%;
-        height: 100%;
-        border-radius: inherit;
+      .startup-shell__button {
+        min-height: 54px;
+        padding: 0 20px;
+        border: 0;
+        border-radius: 12px;
+        color: #fff;
         background: #2755d5;
-        content: '';
-        animation: startup-progress 1.3s ease-in-out infinite;
+        font: inherit;
+        font-weight: 800;
+        cursor: pointer;
+      }
+
+      .startup-shell__button:hover {
+        background: #1f46b7;
+      }
+
+      .startup-shell__note {
+        min-height: 18px;
+        margin: 10px 0 0;
       }
 
       .startup-shell__footer {
@@ -217,17 +245,17 @@
 
       html[data-theme='dark'] .startup-shell__control {
         border-color: rgba(255, 255, 255, 0.12);
-        color: #aaa;
+        color: #f1f1f1;
         background: #202020;
       }
 
-      @keyframes startup-pulse {
-        50% { opacity: 0.45; transform: scale(0.78); }
+      html[data-theme='dark'] .startup-shell__textbook {
+        border-color: rgba(255, 255, 255, 0.12);
       }
 
-      @keyframes startup-progress {
-        from { transform: translateX(-120%); }
-        to { transform: translateX(340%); }
+      html[data-theme='dark'] .startup-shell__textbook small,
+      html[data-theme='dark'] .startup-shell__note {
+        color: #aaa;
       }
 
       @media (max-width: 640px) {
@@ -249,12 +277,9 @@
           margin-top: 28px;
           padding: 16px;
         }
-      }
 
-      @media (prefers-reduced-motion: reduce) {
-        .startup-shell__status::before,
-        .startup-shell__progress::after {
-          animation: none;
+        .startup-shell__form-row {
+          grid-template-columns: 1fr;
         }
       }
     </style>
@@ -269,24 +294,56 @@
       FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
     -->
     <div id="root">
-      <div class="startup-shell" role="status" aria-live="polite" aria-label="Homework Copilot загружается">
+      <div class="startup-shell">
         <header class="startup-shell__header">
           <p class="startup-shell__brand">Homework Copilot</p>
-          <p class="startup-shell__status">Открываем сервис</p>
+          <p class="startup-shell__status">Можно вводить номер</p>
         </header>
         <main class="startup-shell__main">
           <p class="startup-shell__eyebrow">Решение по номеру задачи</p>
-          <h1>Тетрадь уже открывается</h1>
-          <p class="startup-shell__lead">Подготавливаем учебник, номер задачи и сохранённые решения. Экран больше не будет оставаться пустым.</p>
-          <div class="startup-shell__card" aria-hidden="true">
-            <span class="startup-shell__label">Номер задачи</span>
-            <div class="startup-shell__control">Введите номер после загрузки</div>
-            <div class="startup-shell__progress"></div>
-          </div>
+          <h1>Списать задачу</h1>
+          <p class="startup-shell__lead">Учебник уже выбран. Введи номер — мы сохраним его, даже если аккаунт и остальные разделы ещё подключаются.</p>
+          <form class="startup-shell__card" id="startup-task-form">
+            <span class="startup-shell__textbook"><small>Учебник</small><strong>Геометрия, 8 класс · Атанасян</strong></span>
+            <label class="startup-shell__label" for="startup-task-number">Номер задачи</label>
+            <div class="startup-shell__form-row">
+              <input class="startup-shell__control" id="startup-task-number" name="task" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="№" aria-label="Номер задачи" />
+              <button class="startup-shell__button" type="submit">Проверить условие</button>
+            </div>
+            <p class="startup-shell__note" id="startup-task-status" aria-live="polite">Основной интерфейс подключается в фоне.</p>
+          </form>
         </main>
         <footer class="startup-shell__footer">Homework Copilot · понятные решения для тетради</footer>
       </div>
     </div>
+    <script>
+      (() => {
+        const input = document.getElementById('startup-task-number')
+        const form = document.getElementById('startup-task-form')
+        const status = document.getElementById('startup-task-status')
+        const taskKey = 'homework-copilot:startup-task'
+        const submitKey = 'homework-copilot:startup-submit'
+        if (!(input instanceof HTMLInputElement) || !(form instanceof HTMLFormElement)) return
+        try { input.value = sessionStorage.getItem(taskKey) || '' } catch {}
+        input.addEventListener('input', () => {
+          input.value = input.value.replace(/\D/g, '').slice(0, 4)
+          try { sessionStorage.setItem(taskKey, input.value) } catch {}
+        })
+        form.addEventListener('submit', (event) => {
+          event.preventDefault()
+          if (!/^\d{1,4}$/.test(input.value)) {
+            if (status) status.textContent = 'Введи номер задачи: от 1 до 4 цифр.'
+            input.focus()
+            return
+          }
+          try {
+            sessionStorage.setItem(taskKey, input.value)
+            sessionStorage.setItem(submitKey, '1')
+          } catch {}
+          if (status) status.textContent = 'Номер сохранён. Проверим условие сразу после подключения.'
+        })
+      })()
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

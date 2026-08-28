@@ -1337,7 +1337,14 @@ function HomePage() {
     return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'
   })
   const [activeNavigation, setActiveNavigation] = useState<NavigationLabel>(() => currentNavigationRoute().label)
-  const [taskNumber, setTaskNumber] = useState('')
+  const [taskNumber, setTaskNumber] = useState(() => {
+    try {
+      const startupTask = window.sessionStorage.getItem('homework-copilot:startup-task') ?? ''
+      return /^\d{1,4}$/.test(startupTask) ? startupTask : ''
+    } catch {
+      return ''
+    }
+  })
   const [selectedTextbookId, setSelectedTextbookId] = useState<TextbookId>(() => {
     try {
       return window.localStorage.getItem(selectedTextbookStorageKey) || 'geometry'

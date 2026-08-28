@@ -15,6 +15,10 @@ test('desktop shows an immediate shell while JavaScript is still downloading', a
   try {
     await expect(page.locator('.startup-shell')).toBeVisible({ timeout: 2_500 })
     expect(Date.now() - startedAt).toBeLessThan(2_500)
+    const taskNumber = page.getByRole('textbox', { name: 'Номер задачи' })
+    await taskNumber.fill('123')
+    await page.getByRole('button', { name: 'Проверить условие' }).click()
+    await expect(page.getByText('Номер сохранён. Проверим условие сразу после подключения.')).toBeVisible()
   } finally {
     releaseApplication()
   }
