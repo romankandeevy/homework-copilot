@@ -188,18 +188,15 @@ describe('Homework Copilot task flow', () => {
     expect(screen.getByText('Деньги за неготовое решение не списаны.')).toBeInTheDocument()
   })
 
-  it('sends selected textbook tasks to confirmation instead of charging a cart', async () => {
+  it('keeps unreleased CDZ content behind a coming-soon route', () => {
     window.history.replaceState({}, '', '/cdz')
     render(<App />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Задача № 2 · 5 ₽' }))
-    expect(screen.getByRole('button', { name: 'Проверить условие' })).toBeEnabled()
-    fireEvent.click(screen.getByRole('button', { name: 'Проверить условие' }))
-
+    expect(screen.getByRole('heading', { name: 'ЦДЗ скоро появится' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Задача № 2 · 5 ₽' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Вернуться на главную' }))
     expect(window.location.pathname).toBe('/main')
-    fireEvent.click(screen.getByRole('button', { name: 'Проверить условие' }))
-    expect(await screen.findByText('Условие задачи № 2')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Оплатить/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Списать задачу' })).toBeInTheDocument()
   })
 
   it('keeps the task field numeric and limited to four digits', () => {

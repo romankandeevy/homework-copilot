@@ -57,7 +57,6 @@ import type { VerifiedTextbookTaskSource } from './textbooks/taskCatalog'
 import { lookupVerifiedTextbookTask } from './textbooks/taskLookup'
 import { renderTextbookTaskEvidenceImage } from './textbooks/textbookTaskSource'
 import TextbookTaskSourcePreview from './textbooks/TextbookTaskSourcePreview'
-import TextbookLibraryPage from './textbooks/TextbookLibraryPage'
 import { SolutionVerificationPanel } from './solution/SolutionVerificationPanel'
 import { SiteFooter, SupportCenter, SupportLauncher } from './support/SupportCenter'
 import type { SupportCategory, SupportPrefill } from './support/SupportCenter'
@@ -355,6 +354,26 @@ function PageHeader({ account }: { account: AccountData | null }) {
         <span>{dateLabel}</span>
       </div>
     </header>
+  )
+}
+
+function CdzComingSoon({ onGoHome }: { onGoHome: () => void }) {
+  return (
+    <section className="cdz-coming-soon" aria-labelledby="cdz-coming-soon-title">
+      <div className="cdz-coming-soon-copy">
+        <span className="cdz-coming-soon-eyebrow">Раздел временно закрыт</span>
+        <h1 id="cdz-coming-soon-title">ЦДЗ скоро появится</h1>
+        <p>Раздел ещё не запущен. Откроем его только после полной подготовки и проверки.</p>
+        <button className="route-primary-action" type="button" onClick={onGoHome}>
+          <House size={18} weight="duotone" aria-hidden="true" />
+          Вернуться на главную
+        </button>
+      </div>
+      <div className="cdz-coming-soon-symbol" aria-hidden="true">
+        <Stack size={96} weight="duotone" />
+        <span>Скоро</span>
+      </div>
+    </section>
   )
 }
 
@@ -1989,12 +2008,7 @@ function HomePage() {
         ) : activeNavigation === 'Решения' ? (
           <SolutionsPage user={user} personalSolutions={personalSolutions} textbooks={availableTextbooks} onOpenAccount={openAccount} onOpenSolution={openSolution} onOpenSharedSolution={openSharedSolution} />
         ) : (
-          <TextbookLibraryPage
-            items={availableTextbooks}
-            selectedTextbookId={selectedTextbookId}
-            onSelectTextbook={setSelectedTextbookId}
-            onCheckTask={checkTextbookTask}
-          />
+          <CdzComingSoon onGoHome={() => navigate('Главная')} />
         )}
         <SiteFooter onOpenSupport={() => openSupport()} />
       </div>

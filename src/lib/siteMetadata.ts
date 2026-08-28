@@ -21,10 +21,10 @@ const metadataByPath: Record<string, SeoMetadata> = {
     robots: 'index, follow',
   },
   '/cdz': {
-    title: 'Учебники и ЦДЗ — Homework Copilot',
-    description: 'Выбери учебник и найди точное условие задачи по номеру перед получением решения.',
+    title: 'ЦДЗ скоро — Homework Copilot',
+    description: 'Раздел ЦДЗ пока готовится и откроется после полной проверки.',
     path: '/cdz',
-    robots: 'index, follow',
+    robots: 'noindex, follow',
   },
   '/schedule': {
     title: 'Расписание — Homework Copilot',
