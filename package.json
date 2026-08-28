@@ -5,12 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "npm run check:unicode && tsc -b && vite build && node scripts/create-static-routes.mjs",
+    "build": "npm run check:unicode && tsc -b && vite build && node scripts/create-static-routes.mjs && node scripts/check-performance-budget.mjs",
+    "check:performance-budget": "node scripts/check-performance-budget.mjs",
     "check:unicode": "node scripts/check-mixed-alphabets.mjs",
     "assets:og": "node scripts/render-og-card.mjs",
     "lint": "oxlint",
     "test": "vitest run",
     "test:legal-browser": "node scripts/verify-legal-browser.mjs",
+    "test:performance": "tsc -b && vite build --config vite.performance.config.ts && node scripts/check-performance-budget.mjs dist-performance && playwright test --config playwright.performance.config.ts",
     "test:referral-browser": "node scripts/verify-referral-browser.mjs",
     "test:visual": "playwright test",
     "preview": "vite preview"

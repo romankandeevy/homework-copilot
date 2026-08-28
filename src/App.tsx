@@ -29,8 +29,6 @@ import {
   WarningCircle,
   X,
 } from '@phosphor-icons/react'
-import LegalPage from './LegalPage'
-import PrivacyNotice from './PrivacyNotice'
 import NotebookCanvas from './NotebookCanvas'
 import { GeometryNotebookLayoutV1 } from './notebook/GeometryNotebookLayoutV1'
 import type { GeometryNotebookPageSpec } from './notebook/geometry/types'
@@ -54,16 +52,20 @@ import {
 } from './lib/homeworkSolution'
 import { normalizeTaskCondition } from './textbooks/taskCatalog'
 import type { VerifiedTextbookTaskSource } from './textbooks/taskCatalog'
-import { lookupVerifiedTextbookTask } from './textbooks/taskLookup'
 import { renderTextbookTaskEvidenceImage } from './textbooks/textbookTaskSource'
-import TextbookTaskSourcePreview from './textbooks/TextbookTaskSourcePreview'
-import TextbookLibraryPage from './textbooks/TextbookLibraryPage'
-import { SolutionVerificationPanel } from './solution/SolutionVerificationPanel'
 import { SiteFooter, SupportCenter, SupportLauncher } from './support/SupportCenter'
 import type { SupportCategory, SupportPrefill } from './support/SupportCenter'
 import './App.css'
 
 const DesignSystemPlayground = lazy(() => import('./DesignSystemPlayground'))
+const LegalPage = lazy(() => import('./LegalPage'))
+const PrivacyNotice = lazy(() => import('./PrivacyNotice'))
+const SolutionVerificationPanel = lazy(async () => {
+  const module = await import('./solution/SolutionVerificationPanel')
+  return { default: module.SolutionVerificationPanel }
+})
+const TextbookTaskSourcePreview = lazy(() => import('./textbooks/TextbookTaskSourcePreview'))
+const TextbookLibraryPage = lazy(() => import('./textbooks/TextbookLibraryPage'))
 const AccountDialog = lazy(() => import('./account/AccountDialog'))
 const SchedulePage = lazy(() => import('./SchedulePage'))
 const AdminDashboard = lazy(() => import('./AdminDashboard'))
@@ -72,9 +74,6 @@ type Theme = 'light' | 'dark'
 type AccountView = 'profile' | 'wallet'
 type TextbookId = string
 type TextbookSourceType = 'pdf' | 'epub' | 'image' | 'link' | 'official'
-
-const authIsConfigured = import.meta.env.MODE !== 'test'
-  && Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY)
 
 type Textbook = {
   id: TextbookId
@@ -549,7 +548,11 @@ function TaskConditionPreview({ task, actions }: { task: VerifiedTextbookTaskSou
         <span id="task-condition-title">Условие задачи № {task.task}</span>
         {!conditionNeedsScan && <p>{task.condition}</p>}
         <small>Источник: PDF учебника «{task.textbookTitle}»{task.sourcePage ? `, стр. ${task.sourcePage}` : ''}. Издание учебника: {task.edition}.</small>
-        {(conditionNeedsScan || task.hasDiagram) && <TextbookTaskSourcePreview task={task} includeCondition={conditionNeedsScan} />}
+        {(conditionNeedsScan || task.hasDiagram) && (
+          <Suspense fallback={null}>
+            <TextbookTaskSourcePreview task={task} includeCondition={conditionNeedsScan} />
+          </Suspense>
+        )}
         {actions && <div className="task-condition-actions">{actions}</div>}
       </div>
     </section>
@@ -633,6 +636,7 @@ function CopyTask({
     setIsSubmitting(true)
     setError('')
     try {
+      const { lookupVerifiedTextbookTask } = await import('./textbooks/taskLookup')
       const foundTask = await lookupVerifiedTextbookTask({
         textbookId: textbook.id,
         subject: textbook.subject,
@@ -1115,22 +1119,25 @@ function UnderstandingPage({
     }
 
     const textbook = getTextbook(generatedSolution.textbookId)
-    if (!textbook.sourceUrl
+    const sourceUrl = textbook.sourceUrl
+    if (!sourceUrl
       || textbook.edition !== generatedSolution.textbookEdition
-      || textbook.sourceUrl !== generatedSolution.sourceUrl) {
+      || sourceUrl !== generatedSolution.sourceUrl) {
       setSourceDiagramError('Не получилось сверить чертёж с выбранным изданием')
       return () => { active = false }
     }
 
-    void lookupVerifiedTextbookTask({
-      textbookId: textbook.id,
-      subject: textbook.subject,
-      grade: textbook.grade,
-      textbookTitle: textbook.title,
-      authors: textbook.authors,
-      edition: textbook.edition,
-      sourceUrl: textbook.sourceUrl,
-    }, generatedSolution.task).then(async (verifiedTask) => {
+    void import('./textbooks/taskLookup').then(({ lookupVerifiedTextbookTask }) => (
+      lookupVerifiedTextbookTask({
+        textbookId: textbook.id,
+        subject: textbook.subject,
+        grade: textbook.grade,
+        textbookTitle: textbook.title,
+        authors: textbook.authors,
+        edition: textbook.edition,
+        sourceUrl,
+      }, generatedSolution.task)
+    )).then(async (verifiedTask) => {
       if (!active || !verifiedTask?.hasDiagram) return
       const imageUrl = await renderTextbookTaskEvidenceImage(verifiedTask.sourceUrl, verifiedTask.diagramRegions)
       if (!active) return
@@ -1206,7 +1213,11 @@ function UnderstandingPage({
           </div>
         )}
         <div className="solution-notebook-preview"><GeometryNotebookLayoutV1 spec={notebookFixture} /></div>
-        {generatedSolution?.verification && <SolutionVerificationPanel verification={generatedSolution.verification} />}
+        {generatedSolution?.verification && (
+          <Suspense fallback={null}>
+            <SolutionVerificationPanel verification={generatedSolution.verification} />
+          </Suspense>
+        )}
         {actions}
       </section>
     )
@@ -1245,7 +1256,11 @@ function UnderstandingPage({
             </section>
           )}
         </article>
-        {generatedSolution.verification && <SolutionVerificationPanel verification={generatedSolution.verification} />}
+        {generatedSolution.verification && (
+          <Suspense fallback={null}>
+            <SolutionVerificationPanel verification={generatedSolution.verification} />
+          </Suspense>
+        )}
         {actions}
       </section>
     )
@@ -1327,8 +1342,6 @@ function HomePage() {
   const [supabaseClient, setSupabaseClient] = useState<SupabaseClient<Database> | null>(null)
   const [user, setUser] = useState<User | null>(null)
   const [account, setAccount] = useState<AccountData | null>(null)
-  const [authReady, setAuthReady] = useState(!authIsConfigured)
-  const [accountReady, setAccountReady] = useState(!authIsConfigured)
   const [accountOpen, setAccountOpen] = useState(() => ['reset', 'verified', 'confirm'].includes(new URLSearchParams(window.location.search).get('auth') ?? ''))
   const [accountView, setAccountView] = useState<AccountView>('profile')
   const [passwordRecovery, setPasswordRecovery] = useState(() => new URLSearchParams(window.location.search).get('auth') === 'reset')
@@ -1529,11 +1542,10 @@ function HomePage() {
     void import('./lib/supabase').then(({ supabase }) => {
       if (!active) return
       setSupabaseClient(supabase)
-      if (!supabase) {
-        setAuthReady(true)
-        setAccountReady(true)
-      }
+    }).catch(() => {
+      if (active) setSupabaseClient(null)
     })
+    void import('./textbooks/taskLookup').catch(() => {})
     return () => { active = false }
   }, [])
 
@@ -1541,24 +1553,26 @@ function HomePage() {
     if (!supabaseClient) return
     let active = true
 
-    void supabaseClient.auth.getSession().then(({ data }) => {
+    void supabaseClient.auth.getSession().then(({ data, error }) => {
       if (!active) return
+      if (error) {
+        setUser(null)
+        setAccount(null)
+        return
+      }
       const nextUser = data.session?.user ?? null
       setUser(nextUser)
-      setAuthReady(true)
-      if (!nextUser) setAccountReady(true)
+    }).catch(() => {
+      if (!active) return
+      setUser(null)
+      setAccount(null)
     })
 
     const { data: { subscription } } = supabaseClient.auth.onAuthStateChange((event, session) => {
       const nextUser = session?.user ?? null
-      setUser((current) => {
-        if (current?.id !== nextUser?.id) setAccountReady(!nextUser)
-        return nextUser
-      })
-      setAuthReady(true)
+      setUser(nextUser)
       if (!nextUser) {
         setAccount(null)
-        setAccountReady(true)
       }
       if (event === 'PASSWORD_RECOVERY') {
         setPasswordRecovery(true)
@@ -1669,7 +1683,6 @@ function HomePage() {
   const refreshAccount = useCallback(async () => {
     if (!user) {
       setAccount(null)
-      setAccountReady(true)
       return
     }
     try {
@@ -1677,8 +1690,6 @@ function HomePage() {
       setAccount(await loadAccountData(user))
     } catch {
       setAccountNotice('Не получилось загрузить профиль. Попробуй открыть его ещё раз')
-    } finally {
-      setAccountReady(true)
     }
   }, [user])
 
@@ -1934,15 +1945,6 @@ function HomePage() {
     checkTextbookTask(textbookId, task)
   }
 
-  if (!authReady || (user && !accountReady)) {
-    return (
-      <main className="session-loading-screen" aria-label="Загружаем аккаунт" aria-busy="true">
-        <BrandLockup />
-        <SpinnerGap size={24} weight="bold" aria-hidden="true" />
-      </main>
-    )
-  }
-
   if (user && account?.control?.is_banned) {
     return <AccountBlockedScreen reason={account.control.ban_reason} onSignOut={signOutBlockedAccount} />
   }
@@ -1989,12 +1991,14 @@ function HomePage() {
         ) : activeNavigation === 'Решения' ? (
           <SolutionsPage user={user} personalSolutions={personalSolutions} textbooks={availableTextbooks} onOpenAccount={openAccount} onOpenSolution={openSolution} onOpenSharedSolution={openSharedSolution} />
         ) : (
-          <TextbookLibraryPage
-            items={availableTextbooks}
-            selectedTextbookId={selectedTextbookId}
-            onSelectTextbook={setSelectedTextbookId}
-            onCheckTask={checkTextbookTask}
-          />
+          <Suspense fallback={<div className="route-loading" role="status">Загружаем учебники…</div>}>
+            <TextbookLibraryPage
+              items={availableTextbooks}
+              selectedTextbookId={selectedTextbookId}
+              onSelectTextbook={setSelectedTextbookId}
+              onCheckTask={checkTextbookTask}
+            />
+          </Suspense>
         )}
         <SiteFooter onOpenSupport={() => openSupport()} />
       </div>
@@ -2024,15 +2028,24 @@ function HomePage() {
   )
 }
 
+function RouteLoadingScreen() {
+  return (
+    <main className="session-loading-screen" aria-label="Загружаем страницу" aria-busy="true">
+      <BrandLockup />
+      <SpinnerGap size={24} weight="bold" aria-hidden="true" />
+    </main>
+  )
+}
+
 function App() {
   const params = new URLSearchParams(window.location.search)
   const pathname = currentApplicationPath()
 
-  if (pathname === '/privacy') return <><LegalPage kind="privacy" /><PrivacyNotice /></>
-  if (pathname === '/terms' || pathname === '/agreement') return <><LegalPage kind="terms" /><PrivacyNotice /></>
-  if (pathname === '/consent') return <><LegalPage kind="consent" /><PrivacyNotice /></>
-  if (pathname === '/cookies') return <><LegalPage kind="cookies" /><PrivacyNotice /></>
-  if (pathname === '/offer') return <><LegalPage kind="offer" /><PrivacyNotice /></>
+  if (pathname === '/privacy') return <Suspense fallback={<RouteLoadingScreen />}><LegalPage kind="privacy" /><PrivacyNotice /></Suspense>
+  if (pathname === '/terms' || pathname === '/agreement') return <Suspense fallback={<RouteLoadingScreen />}><LegalPage kind="terms" /><PrivacyNotice /></Suspense>
+  if (pathname === '/consent') return <Suspense fallback={<RouteLoadingScreen />}><LegalPage kind="consent" /><PrivacyNotice /></Suspense>
+  if (pathname === '/cookies') return <Suspense fallback={<RouteLoadingScreen />}><LegalPage kind="cookies" /><PrivacyNotice /></Suspense>
+  if (pathname === '/offer') return <Suspense fallback={<RouteLoadingScreen />}><LegalPage kind="offer" /><PrivacyNotice /></Suspense>
 
   if (params.get('canvas') === '1') {
     return <NotebookCanvas />
@@ -2046,7 +2059,7 @@ function App() {
     return <Suspense fallback={null}><AdminDashboard /></Suspense>
   }
 
-  return <><HomePage /><PrivacyNotice /></>
+  return <><HomePage /><Suspense fallback={null}><PrivacyNotice /></Suspense></>
 }
 
 export default App
