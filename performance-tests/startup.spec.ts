@@ -1,5 +1,25 @@
 import { expect, test } from '@playwright/test'
 
+test('desktop shows an immediate shell while JavaScript is still downloading', async ({ page }) => {
+  let releaseApplication = () => {}
+  const applicationStall = new Promise<void>((resolve) => { releaseApplication = resolve })
+
+  await page.route('**/assets/index-*.js', async (route) => {
+    await applicationStall
+    await route.continue().catch(() => {})
+  })
+
+  const startedAt = Date.now()
+  await page.goto('/main', { waitUntil: 'commit' })
+
+  try {
+    await expect(page.locator('.startup-shell')).toBeVisible({ timeout: 2_500 })
+    expect(Date.now() - startedAt).toBeLessThan(2_500)
+  } finally {
+    releaseApplication()
+  }
+})
+
 test('desktop shell does not wait for a stalled account request', async ({ page }) => {
   let authRequestSeen = false
   let releaseAuthRequest = () => {}

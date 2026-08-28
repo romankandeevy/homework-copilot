@@ -49,6 +49,215 @@
         document.documentElement.dataset.theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
       }
     </script>
+    <style>
+      .startup-shell {
+        min-height: 100vh;
+        min-height: 100dvh;
+        box-sizing: border-box;
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        color: #171717;
+        background:
+          radial-gradient(circle at 50% 0%, rgba(39, 85, 213, 0.08), transparent 36rem),
+          #fafafa;
+        font-family: Arial, sans-serif;
+      }
+
+      .startup-shell * {
+        box-sizing: border-box;
+      }
+
+      .startup-shell__header,
+      .startup-shell__footer {
+        width: min(100% - 40px, 1180px);
+        margin-inline: auto;
+      }
+
+      .startup-shell__header {
+        min-height: 72px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+        border-bottom: 1px solid rgba(23, 23, 23, 0.1);
+      }
+
+      .startup-shell__brand {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 800;
+        letter-spacing: -0.04em;
+      }
+
+      .startup-shell__status {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        margin: 0;
+        color: #606060;
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .startup-shell__status::before {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #2755d5;
+        box-shadow: 0 0 0 5px rgba(39, 85, 213, 0.12);
+        content: '';
+        animation: startup-pulse 1.5s ease-in-out infinite;
+      }
+
+      .startup-shell__main {
+        width: min(100% - 40px, 760px);
+        margin: auto;
+        padding-block: 64px;
+      }
+
+      .startup-shell__eyebrow {
+        margin: 0 0 14px;
+        color: #2755d5;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+      }
+
+      .startup-shell h1 {
+        max-width: 660px;
+        margin: 0;
+        font-size: clamp(34px, 6vw, 64px);
+        line-height: 0.98;
+        letter-spacing: -0.065em;
+      }
+
+      .startup-shell__lead {
+        max-width: 590px;
+        margin: 22px 0 0;
+        color: #606060;
+        font-size: 17px;
+        line-height: 1.55;
+      }
+
+      .startup-shell__card {
+        margin-top: 36px;
+        padding: 22px;
+        border: 1px solid rgba(23, 23, 23, 0.12);
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.82);
+        box-shadow: 0 24px 70px rgba(23, 23, 23, 0.08);
+      }
+
+      .startup-shell__label {
+        display: block;
+        margin-bottom: 10px;
+        font-size: 13px;
+        font-weight: 750;
+      }
+
+      .startup-shell__control {
+        min-height: 54px;
+        display: flex;
+        align-items: center;
+        padding: 0 16px;
+        overflow: hidden;
+        border: 1px solid rgba(23, 23, 23, 0.12);
+        border-radius: 12px;
+        color: #777;
+        background: #f3f3f3;
+      }
+
+      .startup-shell__progress {
+        height: 3px;
+        margin-top: 16px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: rgba(39, 85, 213, 0.12);
+      }
+
+      .startup-shell__progress::after {
+        display: block;
+        width: 42%;
+        height: 100%;
+        border-radius: inherit;
+        background: #2755d5;
+        content: '';
+        animation: startup-progress 1.3s ease-in-out infinite;
+      }
+
+      .startup-shell__footer {
+        padding-block: 22px;
+        color: #777;
+        font-size: 12px;
+      }
+
+      html[data-theme='dark'] .startup-shell {
+        color: #f1f1f1;
+        background:
+          radial-gradient(circle at 50% 0%, rgba(74, 112, 224, 0.16), transparent 36rem),
+          #0a0a0a;
+      }
+
+      html[data-theme='dark'] .startup-shell__header {
+        border-color: rgba(255, 255, 255, 0.12);
+      }
+
+      html[data-theme='dark'] .startup-shell__status,
+      html[data-theme='dark'] .startup-shell__lead,
+      html[data-theme='dark'] .startup-shell__footer {
+        color: #aaa;
+      }
+
+      html[data-theme='dark'] .startup-shell__card {
+        border-color: rgba(255, 255, 255, 0.12);
+        background: rgba(23, 23, 23, 0.86);
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.3);
+      }
+
+      html[data-theme='dark'] .startup-shell__control {
+        border-color: rgba(255, 255, 255, 0.12);
+        color: #aaa;
+        background: #202020;
+      }
+
+      @keyframes startup-pulse {
+        50% { opacity: 0.45; transform: scale(0.78); }
+      }
+
+      @keyframes startup-progress {
+        from { transform: translateX(-120%); }
+        to { transform: translateX(340%); }
+      }
+
+      @media (max-width: 640px) {
+        .startup-shell__header,
+        .startup-shell__footer,
+        .startup-shell__main {
+          width: min(100% - 28px, 760px);
+        }
+
+        .startup-shell__header {
+          min-height: 64px;
+        }
+
+        .startup-shell__main {
+          padding-block: 42px;
+        }
+
+        .startup-shell__card {
+          margin-top: 28px;
+          padding: 16px;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .startup-shell__status::before,
+        .startup-shell__progress::after {
+          animation: none;
+        }
+      }
+    </style>
   </head>
   <body>
     <!--
@@ -59,7 +268,25 @@
       FORM: Direct task entry inside the established visual world, seed d1000b40.
       FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
     -->
-    <div id="root"></div>
+    <div id="root">
+      <div class="startup-shell" role="status" aria-live="polite" aria-label="Homework Copilot загружается">
+        <header class="startup-shell__header">
+          <p class="startup-shell__brand">Homework Copilot</p>
+          <p class="startup-shell__status">Открываем сервис</p>
+        </header>
+        <main class="startup-shell__main">
+          <p class="startup-shell__eyebrow">Решение по номеру задачи</p>
+          <h1>Тетрадь уже открывается</h1>
+          <p class="startup-shell__lead">Подготавливаем учебник, номер задачи и сохранённые решения. Экран больше не будет оставаться пустым.</p>
+          <div class="startup-shell__card" aria-hidden="true">
+            <span class="startup-shell__label">Номер задачи</span>
+            <div class="startup-shell__control">Введите номер после загрузки</div>
+            <div class="startup-shell__progress"></div>
+          </div>
+        </main>
+        <footer class="startup-shell__footer">Homework Copilot · понятные решения для тетради</footer>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
