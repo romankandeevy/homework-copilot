@@ -147,6 +147,72 @@ export type Database = {
         }
         Relationships: []
       }
+      referral_codes: {
+        Row: {
+          code: string
+          created_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      referral_invites: {
+        Row: {
+          created_at: string
+          id: string
+          invitee_reward_amount: number
+          invitee_user_id: string
+          invitee_wallet_entry_id: string | null
+          qualifying_top_up_id: string | null
+          referral_code_id: string
+          referrer_reward_amount: number
+          referrer_user_id: string
+          referrer_wallet_entry_id: string | null
+          rewarded_at: string | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          invitee_reward_amount?: number
+          invitee_user_id: string
+          invitee_wallet_entry_id?: string | null
+          qualifying_top_up_id?: string | null
+          referral_code_id: string
+          referrer_reward_amount?: number
+          referrer_user_id: string
+          referrer_wallet_entry_id?: string | null
+          rewarded_at?: string | null
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          invitee_reward_amount?: number
+          invitee_user_id?: string
+          invitee_wallet_entry_id?: string | null
+          qualifying_top_up_id?: string | null
+          referral_code_id?: string
+          referrer_reward_amount?: number
+          referrer_user_id?: string
+          referrer_wallet_entry_id?: string | null
+          rewarded_at?: string | null
+          status?: string
+        }
+        Relationships: []
+      }
       homework_solutions: {
         Row: {
           condition_normalized: string
@@ -480,6 +546,10 @@ export type Database = {
         Args: { p_amount: number; p_reason: string; p_user_id: string }
         Returns: Json
       }
+      admin_record_verified_top_up: {
+        Args: { p_amount: number; p_provider_reference: string; p_user_id: string }
+        Returns: Json
+      }
       admin_dashboard: { Args: { p_period_days?: number }; Returns: Json }
       admin_list_users: {
         Args: { p_limit?: number; p_search?: string }
@@ -520,6 +590,8 @@ export type Database = {
         Returns: Json
       }
       get_admin_context: { Args: never; Returns: Json }
+      get_my_referral: { Args: never; Returns: Json }
+      bind_my_referral: { Args: { p_code: string }; Returns: Json }
       get_verified_homework_task: {
         Args: {
           p_edition: string

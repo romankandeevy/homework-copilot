@@ -39,6 +39,7 @@ import type { AccountData } from './lib/supabase'
 import type { HomeworkSolution, HomeworkSource } from './lib/homeworkContract'
 import { formatRubles } from './lib/currency'
 import { recordPendingLegalAcceptance, rememberPendingLegalAcceptance } from './lib/legalConsent'
+import { bindPendingReferral, captureReferralFromCurrentUrl } from './lib/referrals'
 import { applySeoMetadata, getSeoMetadata } from './lib/siteMetadata'
 import { useModalIsolation } from './lib/useModalIsolation'
 import { getSolutionPrice } from './lib/solutionPricing'
@@ -1381,6 +1382,10 @@ function HomePage() {
   const selectedTextbook = getTextbook(selectedTextbookId, availableTextbooks)
 
   useEffect(() => {
+    captureReferralFromCurrentUrl()
+  }, [])
+
+  useEffect(() => {
     const currentPath = currentApplicationPath()
     const normalizedPath = normalizeNavigationPath(currentPath)
     if (currentPath !== normalizedPath) {
@@ -1502,6 +1507,11 @@ function HomePage() {
   useEffect(() => {
     if (!supabaseClient || !user) return
     void recordPendingLegalAcceptance(supabaseClient, user.email)
+  }, [supabaseClient, user])
+
+  useEffect(() => {
+    if (!supabaseClient || !user) return
+    void bindPendingReferral(supabaseClient, user)
   }, [supabaseClient, user])
 
   useEffect(() => () => {

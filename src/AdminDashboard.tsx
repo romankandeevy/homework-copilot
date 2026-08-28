@@ -447,6 +447,9 @@ function databaseErrorMessage(error: { message?: string } | null) {
   if (message.includes('admin access required')) return 'Нет доступа к админке.'
   if (message.includes('balance cannot become negative')) return 'Баланс не может стать отрицательным.'
   if (message.includes('adjustment reason')) return 'Укажи причину: от 3 до 160 символов.'
+  if (message.includes('top up amount')) return 'Сумма пополнения должна быть целым числом от 1 до 1 000 000 ₽.'
+  if (message.includes('invalid provider reference')) return 'Укажи идентификатор транзакции: от 6 символов, без пробелов.'
+  if (message.includes('provider reference conflict')) return 'Этот идентификатор уже относится к другому пополнению.'
   if (message.includes('block reason')) return 'Укажи причину блокировки: от 3 до 500 символов.'
   if (message.includes('cannot block their own')) return 'Нельзя заблокировать собственный аккаунт.'
   if (message.includes('user not found')) return 'Пользователь не найден.'
@@ -474,6 +477,8 @@ export default function AdminDashboard() {
   const [detailLoading, setDetailLoading] = useState(false)
   const [amount, setAmount] = useState('')
   const [balanceReason, setBalanceReason] = useState('')
+  const [topUpAmount, setTopUpAmount] = useState('')
+  const [topUpReference, setTopUpReference] = useState('')
   const [banReason, setBanReason] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
   const [notice, setNotice] = useState('')
@@ -611,6 +616,8 @@ export default function AdminDashboard() {
     setError('')
     setAmount('')
     setBalanceReason('')
+    setTopUpAmount('')
+    setTopUpReference('')
     setBanReason('')
     await loadUserDetail(userId)
   }
@@ -645,6 +652,49 @@ export default function AdminDashboard() {
       setAmount('')
       setBalanceReason('')
       setNotice(`Баланс ${userName(detail.user)} обновлён.`)
+      await Promise.all([loadDashboard(periodDays), loadUsers(search), loadUserDetail(detail.user.id)])
+    }
+    setActionLoading(false)
+  }
+
+  const recordVerifiedTopUp = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!detail || actionLoading) return
+    if (isAdminPreview) {
+      setNotice('Предпросмотр: изменения не записываются.')
+      return
+    }
+    if (!supabase) return
+
+    const parsedAmount = Number(topUpAmount)
+    const normalizedReference = topUpReference.trim()
+    if (!Number.isInteger(parsedAmount) || parsedAmount < 1 || parsedAmount > 1000000) {
+      setError('Укажи целую сумму от 1 до 1 000 000 ₽.')
+      return
+    }
+    if (!/^[A-Za-z0-9][A-Za-z0-9._:/-]{5,159}$/.test(normalizedReference)) {
+      setError('Укажи идентификатор транзакции: от 6 символов, без пробелов.')
+      return
+    }
+
+    setActionLoading(true)
+    setError('')
+    const { data, error: topUpError } = await supabase.rpc('admin_record_verified_top_up', {
+      p_user_id: detail.user.id,
+      p_amount: parsedAmount,
+      p_provider_reference: normalizedReference,
+    })
+    if (topUpError) setError(databaseErrorMessage(topUpError))
+    else {
+      const referralRewarded = isRecord(data) && asBoolean(data.referralRewarded)
+      const applied = isRecord(data) && asBoolean(data.applied)
+      setTopUpAmount('')
+      setTopUpReference('')
+      setNotice(applied
+        ? referralRewarded
+          ? 'Пополнение подтверждено. Пригласившему начислено +10 ₽, приглашённому +5 ₽.'
+          : `Пополнение ${userName(detail.user)} подтверждено.`
+        : 'Это пополнение уже было подтверждено; повторных начислений нет.')
       await Promise.all([loadDashboard(periodDays), loadUsers(search), loadUserDetail(detail.user.id)])
     }
     setActionLoading(false)
@@ -877,6 +927,13 @@ export default function AdminDashboard() {
           </section>
 
           <section className="admin-drawer-balance"><div><span>Текущий баланс</span><strong>{formatRubles(detail.user.balance)}</strong></div><dl><div><dt>Последний визит</dt><dd>{formatDate(detail.user.lastSeenAt)}</dd></div><div><dt>Статус</dt><dd>{detail.user.isBanned ? 'Заблокирован' : 'Активен'}</dd></div></dl></section>
+
+          <form className="admin-action-form is-verified-top-up" onSubmit={recordVerifiedTopUp}>
+            <header><CurrencyRub size={19} weight="duotone" aria-hidden="true" /><div><h3>Подтвердить пополнение</h3><p>Первое подтверждённое пополнение запускает реферальные +10 ₽ и +5 ₽.</p></div></header>
+            <label><span>Сумма, ₽</span><input type="number" value={topUpAmount} onChange={(event) => setTopUpAmount(event.target.value)} min={1} max={1000000} step="1" inputMode="numeric" placeholder="Например, 100" /></label>
+            <label><span>Идентификатор транзакции</span><input value={topUpReference} onChange={(event) => setTopUpReference(event.target.value)} minLength={6} maxLength={160} autoComplete="off" placeholder="Например, bank-20260828-001" /></label>
+            <button className="admin-primary-action" type="submit" disabled={actionLoading}>{actionLoading ? 'Подтверждаем…' : 'Подтвердить пополнение'}</button>
+          </form>
 
           <form className="admin-action-form" onSubmit={adjustBalance}>
             <header><Wallet size={19} weight="duotone" aria-hidden="true" /><div><h3>Изменить баланс</h3><p>Положительное — начислить, отрицательное — списать.</p></div></header>

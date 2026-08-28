@@ -8,14 +8,18 @@ import {
   Check,
   CheckCircle,
   ClockCountdown,
+  CopySimple,
   EnvelopeSimple,
+  Gift,
   GoogleLogo,
+  LinkSimple,
   LockKey,
   Moon,
   ShieldCheck,
   SignOut,
   Sun,
   UserCircle,
+  UsersThree,
   X,
 } from '@phosphor-icons/react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
@@ -23,6 +27,8 @@ import type { AccountData } from '../lib/supabase'
 import { supabase } from '../lib/supabase'
 import { formatRubles } from '../lib/currency'
 import { forgetPendingLegalAcceptance, rememberPendingLegalAcceptance } from '../lib/legalConsent'
+import { getPendingReferralCode, loadReferralStatus } from '../lib/referrals'
+import type { ReferralStatus } from '../lib/referrals'
 import { useModalIsolation } from '../lib/useModalIsolation'
 import PasswordStrength from './PasswordStrength'
 import { isStrongPassword } from './passwordStrengthRules'
@@ -374,11 +380,16 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
         if (!isStrongPassword(password)) throw new Error('weak password')
         if (!agreementAccepted || !personalDataAccepted) throw new Error('legal consent')
         rememberPendingLegalAcceptance('email', email)
+        const referralCode = getPendingReferralCode()
         const { data, error: signUpError } = await supabase.auth.signUp({
           email: email.trim(),
           password,
           options: {
-            data: { full_name: fullName.trim(), grade },
+            data: {
+              full_name: fullName.trim(),
+              grade,
+              ...(referralCode ? { referral_code: referralCode } : {}),
+            },
             emailRedirectTo: verificationRedirectUrl(),
           },
         })
@@ -616,6 +627,85 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
   )
 }
 
+function ReferralCard() {
+  const [referral, setReferral] = useState<ReferralStatus | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [copied, setCopied] = useState(false)
+
+  const load = async () => {
+    if (!supabase) {
+      setLoading(false)
+      setError('Реферальная ссылка временно недоступна')
+      return
+    }
+    setLoading(true)
+    setError('')
+    try {
+      setReferral(await loadReferralStatus(supabase))
+    } catch {
+      setError('Не получилось загрузить реферальную ссылку')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void load()
+  }, [])
+
+  const referralLink = referral
+    ? `${window.location.origin}/?ref=${encodeURIComponent(referral.code)}`
+    : ''
+
+  const copyLink = async () => {
+    if (!referralLink) return
+    try {
+      await navigator.clipboard.writeText(referralLink)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1800)
+    } catch {
+      setError('Не получилось скопировать ссылку')
+    }
+  }
+
+  return (
+    <section className="account-referral-card" aria-labelledby="account-referral-title">
+      <header>
+        <span className="account-referral-icon"><Gift size={23} weight="duotone" aria-hidden="true" /></span>
+        <div>
+          <h3 id="account-referral-title">Пригласи друга</h3>
+          <p>После его первого подтверждённого пополнения тебе начислят <strong>+10 ₽</strong>, а ему — <strong>+5 ₽</strong>.</p>
+        </div>
+      </header>
+
+      {loading && <p className="account-referral-state" role="status">Создаём личную ссылку…</p>}
+      {!loading && error && <div className="account-referral-state is-error" role="alert"><span>{error}</span><button type="button" onClick={() => { void load() }}>Повторить</button></div>}
+      {!loading && referral && (
+        <>
+          <div className="account-referral-link">
+            <LinkSimple size={18} weight="bold" aria-hidden="true" />
+            <input aria-label="Личная реферальная ссылка" value={referralLink} readOnly onFocus={(event) => event.currentTarget.select()} />
+            <button type="button" onClick={() => { void copyLink() }}><CopySimple size={18} weight="bold" aria-hidden="true" />{copied ? 'Скопировано' : 'Копировать'}</button>
+          </div>
+          <div className="account-referral-stats" aria-label="Статистика приглашений">
+            <span><UsersThree size={18} weight="duotone" aria-hidden="true" /><b>{referral.invitedCount}</b> приглашено</span>
+            <span><Gift size={18} weight="duotone" aria-hidden="true" /><b>{formatRubles(referral.earnedAmount)}</b> начислено</span>
+          </div>
+          {referral.joinedViaReferral && (
+            <p className="account-referral-joined">
+              {referral.joinedRewardStatus === 'rewarded'
+                ? 'Твои +5 ₽ по приглашению уже начислены.'
+                : 'Ты зарегистрирован по приглашению: +5 ₽ начислят после первого подтверждённого пополнения.'}
+            </p>
+          )}
+          <small>Засчитывается только новый аккаунт, зарегистрированный по этой ссылке. Самоприглашения и повторные начисления исключены.</small>
+        </>
+      )}
+    </section>
+  )
+}
+
 function ProfileView({ user, account, notice, initialView, theme, onToggleTheme, onReloadAccount }: { user: User; account: AccountData | null; notice?: string; initialView: AccountView; theme: Theme; onToggleTheme: () => void; onReloadAccount: () => Promise<void> }) {
   const [fullName, setFullName] = useState(account?.profile.full_name ?? '')
   const [grade, setGrade] = useState(String(account?.profile.grade ?? 8))
@@ -720,6 +810,8 @@ function ProfileView({ user, account, notice, initialView, theme, onToggleTheme,
             <div><span>Доступно сейчас</span><strong id="account-wallet-title">{account ? formatRubles(account.balance) : '…'}</strong></div>
             <div className="account-wallet-rate"><strong>5–15 ₽</strong><span>одно решение, зависит от сложности</span></div>
           </section>
+
+          <ReferralCard />
 
           <section className="account-wallet-history" aria-labelledby="wallet-history-title">
             <div><h3 id="wallet-history-title">Последние операции</h3></div>

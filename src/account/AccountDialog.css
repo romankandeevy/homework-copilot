@@ -408,6 +408,24 @@
 .account-wallet-rate { display: grid; gap: var(--space-1); padding-bottom: var(--space-1); text-align: right; }
 .account-wallet-rate strong { font-family: var(--font-mono); font-size: var(--text-heading); }
 .account-wallet-rate span { font-size: var(--text-caption); opacity: 0.82; }
+.account-referral-card { display: grid; gap: var(--space-4); padding: var(--space-5); overflow: hidden; border: 1px solid color-mix(in oklch, var(--color-accent) 28%, var(--color-border)); border-radius: var(--radius-panel); background: linear-gradient(145deg, color-mix(in oklch, var(--color-accent) 8%, var(--color-surface)), var(--color-surface)); }
+.account-referral-card > header { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-3); align-items: start; }
+.account-referral-card > header > div { display: grid; gap: var(--space-1); }
+.account-referral-card h3 { margin: 0; font-size: var(--text-body); }
+.account-referral-card p { margin: 0; color: var(--color-text-muted); font-size: var(--text-caption); line-height: var(--leading-body); }
+.account-referral-card p strong { color: var(--color-text); font-family: var(--font-mono); }
+.account-referral-icon { display: grid; width: 2.6rem; height: 2.6rem; place-items: center; border-radius: var(--radius-control); background: var(--color-accent); color: var(--color-on-accent); }
+.account-referral-link { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--space-2); padding: var(--space-2); border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-surface); color: var(--color-text-subtle); }
+.account-referral-link input { min-width: 0; height: 2.5rem; padding: 0; overflow: hidden; border: 0; outline: 0; background: transparent; color: var(--color-text-muted); font: var(--text-caption)/1 var(--font-mono); text-overflow: ellipsis; }
+.account-referral-link button,
+.account-referral-state button { display: inline-flex; min-height: 2.5rem; align-items: center; justify-content: center; gap: var(--space-2); padding: 0 var(--space-3); border: 0; border-radius: var(--radius-control); background: var(--color-accent); color: var(--color-on-accent); font: inherit; font-size: var(--text-caption); font-weight: var(--weight-semibold); cursor: pointer; }
+.account-referral-stats { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.account-referral-stats span { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--color-text-subtle); font-size: var(--text-caption); }
+.account-referral-stats b { color: var(--color-text); font-family: var(--font-mono); }
+.account-referral-card > small { color: var(--color-text-subtle); font-size: var(--text-micro); line-height: var(--leading-ui); }
+.account-referral-state { display: flex; min-height: 3.5rem; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-3); border-radius: var(--radius-control); background: var(--color-surface-sunken); }
+.account-referral-state.is-error { color: var(--color-danger); }
+.account-referral-joined { padding: var(--space-3); border-radius: var(--radius-control); background: color-mix(in oklch, var(--color-success) 10%, transparent); color: var(--color-success-strong) !important; }
 .account-wallet-history { display: grid; }
 .account-wallet-history > div:first-child { padding-bottom: var(--space-4); }
 .account-wallet-history h3 { margin: 0; font-size: var(--text-body); }
@@ -451,6 +469,9 @@
   .account-wallet-view { padding: var(--space-4); }
   .account-wallet-hero { grid-template-columns: 1fr; gap: var(--space-5); padding: var(--space-5); }
   .account-wallet-rate { text-align: left; }
+  .account-referral-card { padding: var(--space-4); }
+  .account-referral-link { grid-template-columns: auto minmax(0, 1fr); }
+  .account-referral-link button { grid-column: 1 / -1; }
   .account-profile-footer { align-items: flex-start; flex-direction: column; padding: var(--space-4); }
   .account-profile-footer button { width: 100%; justify-content: center; }
 }

@@ -725,6 +725,8 @@
   color: var(--color-text);
 }
 
+.admin-action-form.is-verified-top-up { margin-top: 0; background: color-mix(in oklch, var(--color-accent) 6%, transparent); }
+
 .admin-ban-control { margin-top: 0; background: color-mix(in oklch, var(--color-danger) 5%, transparent); }
 .admin-ban-control.is-banned { background: color-mix(in oklch, var(--color-success) 5%, transparent); }
 .admin-ban-control.is-banned header { color: var(--color-success-strong); }
