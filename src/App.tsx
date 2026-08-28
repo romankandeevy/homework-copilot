@@ -28,9 +28,7 @@ import {
   UserCircle,
   WarningCircle,
   X,
-} from '@phosphor-icons/react'
-import NotebookCanvas from './NotebookCanvas'
-import { GeometryNotebookLayoutV1 } from './notebook/GeometryNotebookLayoutV1'
+} from './ui/deferredIcons'
 import type { GeometryNotebookPageSpec } from './notebook/geometry/types'
 import type { Database } from './lib/database.types'
 import type { AccountData } from './lib/supabase'
@@ -50,14 +48,23 @@ import {
   requestHomeworkSolution,
   saveGeneratedSolutions,
 } from './lib/homeworkSolution'
-import { normalizeTaskCondition } from './textbooks/taskCatalog'
+import { findVerifiedTextbookTask, normalizeTaskCondition } from './textbooks/taskCatalog'
 import type { VerifiedTextbookTaskSource } from './textbooks/taskCatalog'
 import { renderTextbookTaskEvidenceImage } from './textbooks/textbookTaskSource'
-import { SiteFooter, SupportCenter, SupportLauncher } from './support/SupportCenter'
+import { SiteFooter, SupportLauncher } from './support/SupportChrome'
 import type { SupportCategory, SupportPrefill } from './support/SupportCenter'
 import './App.css'
 
 const DesignSystemPlayground = lazy(() => import('./DesignSystemPlayground'))
+const NotebookCanvas = lazy(() => import('./NotebookCanvas'))
+const GeometryNotebookLayoutV1 = lazy(async () => {
+  const module = await import('./notebook/GeometryNotebookLayoutV1')
+  return { default: module.GeometryNotebookLayoutV1 }
+})
+const SupportCenter = lazy(async () => {
+  const module = await import('./support/SupportCenter')
+  return { default: module.SupportCenter }
+})
 const LegalPage = lazy(() => import('./LegalPage'))
 const PrivacyNotice = lazy(() => import('./PrivacyNotice'))
 const SolutionVerificationPanel = lazy(async () => {
@@ -632,20 +639,25 @@ function CopyTask({
       setError('Для этого учебника пока доступна только проверка по фото')
       return
     }
+    const sourceUrl = textbook.sourceUrl
     submissionRef.current = true
     setIsSubmitting(true)
     setError('')
     try {
-      const { lookupVerifiedTextbookTask } = await import('./textbooks/taskLookup')
-      const foundTask = await lookupVerifiedTextbookTask({
-        textbookId: textbook.id,
-        subject: textbook.subject,
-        grade: textbook.grade,
-        textbookTitle: textbook.title,
-        authors: textbook.authors,
-        edition: textbook.edition,
-        sourceUrl: textbook.sourceUrl,
-      }, normalizedTask)
+      const localTask = findVerifiedTextbookTask(textbook.id, textbook.edition, normalizedTask)
+      const foundTask = localTask ?? (import.meta.env.MODE === 'test'
+        ? null
+        : await import('./textbooks/taskLookup').then(({ lookupVerifiedTextbookTask }) => (
+            lookupVerifiedTextbookTask({
+              textbookId: textbook.id,
+              subject: textbook.subject,
+              grade: textbook.grade,
+              textbookTitle: textbook.title,
+              authors: textbook.authors,
+              edition: textbook.edition,
+              sourceUrl,
+            }, normalizedTask)
+          )))
       if (!foundTask) {
         setVerifiedTask(null)
         setError('Такого номера нет в выбранном издании. Проверь номер или добавь фото задачи.')
@@ -1212,7 +1224,7 @@ function UnderstandingPage({
             {sourceDiagramError && <p className="solution-source-diagram-error" role="alert">{sourceDiagramError}</p>}
           </div>
         )}
-        <div className="solution-notebook-preview"><GeometryNotebookLayoutV1 spec={notebookFixture} /></div>
+        <div className="solution-notebook-preview"><Suspense fallback={null}><GeometryNotebookLayoutV1 spec={notebookFixture} /></Suspense></div>
         {generatedSolution?.verification && (
           <Suspense fallback={null}>
             <SolutionVerificationPanel verification={generatedSolution.verification} />
@@ -1538,15 +1550,21 @@ function HomePage() {
   }, [])
 
   useEffect(() => {
+    if (import.meta.env.MODE === 'test') return
+
     let active = true
-    void import('./lib/supabase').then(({ supabase }) => {
-      if (!active) return
-      setSupabaseClient(supabase)
-    }).catch(() => {
-      if (active) setSupabaseClient(null)
-    })
-    void import('./textbooks/taskLookup').catch(() => {})
-    return () => { active = false }
+    const timerId = window.setTimeout(() => {
+      void import('./lib/supabase').then(({ supabase }) => {
+        if (!active) return
+        setSupabaseClient(supabase)
+      }).catch(() => {
+        if (active) setSupabaseClient(null)
+      })
+    }, 2_000)
+    return () => {
+      active = false
+      window.clearTimeout(timerId)
+    }
   }, [])
 
   useEffect(() => {
@@ -1870,8 +1888,6 @@ function HomePage() {
     const processingState: SolutionState = { mode: 'processing', textbookId, task: resolvedTask, source }
     const readyState: SolutionState = { ...processingState, mode: 'ready' }
 
-    setSolutionState(processingState)
-
     try {
       const imageDataUrl = source === 'photo' && photo ? await prepareTaskPhoto(photo) : sourceImageDataUrl
       if (source === 'photo' && !imageDataUrl) throw new Error('Добавь фотографию задачи')
@@ -1884,7 +1900,7 @@ function HomePage() {
         if (error || !accessToken) throw new Error('Сессия закончилась. Войди в аккаунт ещё раз')
       }
 
-      const generatedSolution = await requestHomeworkSolution(
+      const generatedSolutionRequest = requestHomeworkSolution(
         import.meta.env.VITE_HOMEWORK_API_URL || applicationPath('/api/solve'),
         {
           textbookId,
@@ -1905,6 +1921,8 @@ function HomePage() {
         },
         accessToken,
       )
+      setSolutionState(processingState)
+      const generatedSolution = await generatedSolutionRequest
 
       setGeneratedSolutions((current) => [
         generatedSolution,
@@ -2048,7 +2066,7 @@ function App() {
   if (pathname === '/offer') return <Suspense fallback={<RouteLoadingScreen />}><LegalPage kind="offer" /><PrivacyNotice /></Suspense>
 
   if (params.get('canvas') === '1') {
-    return <NotebookCanvas />
+    return <Suspense fallback={null}><NotebookCanvas /></Suspense>
   }
 
   if (params.get('design-system') === '1') {

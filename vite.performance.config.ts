@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import { reactCompatAliases, splitInitialChunks } from './vite.optimization.ts'
+import { reactCompatAliases } from './vite.optimization.ts'
 
 export default defineConfig({
   plugins: [react()],
@@ -13,10 +13,5 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist-performance',
-    rollupOptions: {
-      output: {
-        manualChunks: splitInitialChunks,
-      },
-    },
   },
 })

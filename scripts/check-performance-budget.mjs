@@ -19,9 +19,9 @@ const assets = [
   {
     label: 'initial JavaScript',
     names: scriptNames,
-    rawLimit: 340 * 1024,
-    gzipLimit: 95 * 1024,
-    maxFileGzipLimit: 24 * 1024,
+    rawLimit: 140 * 1024,
+    gzipLimit: 45 * 1024,
+    maxFileGzipLimit: 30 * 1024,
   },
   {
     label: 'initial CSS',

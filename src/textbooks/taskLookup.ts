@@ -1,4 +1,3 @@
-import { supabase } from '../lib/supabase'
 import {
   findVerifiedTextbookTask,
   type TextbookTaskDiagramRegion,
@@ -39,6 +38,9 @@ function parseSourceRegion(value: unknown): TextbookTaskSourceRegion | null {
 
 export async function lookupVerifiedTextbookTask(textbook: TextbookIdentity, task: string): Promise<VerifiedTextbookTaskSource | null> {
   const localTask = findVerifiedTextbookTask(textbook.textbookId, textbook.edition, task)
+  if (import.meta.env.MODE === 'test') return localTask
+
+  const { supabase } = await import('../lib/supabase')
   if (!supabase) return localTask
 
   const { data, error } = await supabase.rpc('get_verified_homework_task', {

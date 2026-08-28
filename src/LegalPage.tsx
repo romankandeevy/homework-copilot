@@ -3,7 +3,7 @@ import type { JSX } from 'react'
 import { ArrowLeft, ArrowUpRight } from '@phosphor-icons/react'
 import { legalDocumentVersion } from './lib/legalConsent'
 import { applySeoMetadata, getSeoMetadata } from './lib/siteMetadata'
-import { SiteFooter } from './support/SupportCenter'
+import { SiteFooter } from './support/SupportChrome'
 import './LegalPage.css'
 
 export type LegalPageKind = 'privacy' | 'terms' | 'consent' | 'cookies' | 'offer'
