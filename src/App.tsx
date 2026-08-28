@@ -28,7 +28,11 @@ import {
   UserCircle,
   WarningCircle,
   X,
-} from './ui/deferredIcons'
+} from '@phosphor-icons/react'
+import LegalPage from './LegalPage'
+import PrivacyNotice from './PrivacyNotice'
+import NotebookCanvas from './NotebookCanvas'
+import { GeometryNotebookLayoutV1 } from './notebook/GeometryNotebookLayoutV1'
 import type { GeometryNotebookPageSpec } from './notebook/geometry/types'
 import type { Database } from './lib/database.types'
 import type { AccountData } from './lib/supabase'
@@ -48,31 +52,18 @@ import {
   requestHomeworkSolution,
   saveGeneratedSolutions,
 } from './lib/homeworkSolution'
-import { findVerifiedTextbookTask, normalizeTaskCondition } from './textbooks/taskCatalog'
+import { normalizeTaskCondition } from './textbooks/taskCatalog'
 import type { VerifiedTextbookTaskSource } from './textbooks/taskCatalog'
+import { lookupVerifiedTextbookTask } from './textbooks/taskLookup'
 import { renderTextbookTaskEvidenceImage } from './textbooks/textbookTaskSource'
-import { SiteFooter, SupportLauncher } from './support/SupportChrome'
+import TextbookTaskSourcePreview from './textbooks/TextbookTaskSourcePreview'
+import TextbookLibraryPage from './textbooks/TextbookLibraryPage'
+import { SolutionVerificationPanel } from './solution/SolutionVerificationPanel'
+import { SiteFooter, SupportCenter, SupportLauncher } from './support/SupportCenter'
 import type { SupportCategory, SupportPrefill } from './support/SupportCenter'
 import './App.css'
 
 const DesignSystemPlayground = lazy(() => import('./DesignSystemPlayground'))
-const NotebookCanvas = lazy(() => import('./NotebookCanvas'))
-const GeometryNotebookLayoutV1 = lazy(async () => {
-  const module = await import('./notebook/GeometryNotebookLayoutV1')
-  return { default: module.GeometryNotebookLayoutV1 }
-})
-const SupportCenter = lazy(async () => {
-  const module = await import('./support/SupportCenter')
-  return { default: module.SupportCenter }
-})
-const LegalPage = lazy(() => import('./LegalPage'))
-const PrivacyNotice = lazy(() => import('./PrivacyNotice'))
-const SolutionVerificationPanel = lazy(async () => {
-  const module = await import('./solution/SolutionVerificationPanel')
-  return { default: module.SolutionVerificationPanel }
-})
-const TextbookTaskSourcePreview = lazy(() => import('./textbooks/TextbookTaskSourcePreview'))
-const TextbookLibraryPage = lazy(() => import('./textbooks/TextbookLibraryPage'))
 const AccountDialog = lazy(() => import('./account/AccountDialog'))
 const SchedulePage = lazy(() => import('./SchedulePage'))
 const AdminDashboard = lazy(() => import('./AdminDashboard'))
@@ -81,6 +72,9 @@ type Theme = 'light' | 'dark'
 type AccountView = 'profile' | 'wallet'
 type TextbookId = string
 type TextbookSourceType = 'pdf' | 'epub' | 'image' | 'link' | 'official'
+
+const authIsConfigured = import.meta.env.MODE !== 'test'
+  && Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY)
 
 type Textbook = {
   id: TextbookId
@@ -555,11 +549,7 @@ function TaskConditionPreview({ task, actions }: { task: VerifiedTextbookTaskSou
         <span id="task-condition-title">Условие задачи № {task.task}</span>
         {!conditionNeedsScan && <p>{task.condition}</p>}
         <small>Источник: PDF учебника «{task.textbookTitle}»{task.sourcePage ? `, стр. ${task.sourcePage}` : ''}. Издание учебника: {task.edition}.</small>
-        {(conditionNeedsScan || task.hasDiagram) && (
-          <Suspense fallback={null}>
-            <TextbookTaskSourcePreview task={task} includeCondition={conditionNeedsScan} />
-          </Suspense>
-        )}
+        {(conditionNeedsScan || task.hasDiagram) && <TextbookTaskSourcePreview task={task} includeCondition={conditionNeedsScan} />}
         {actions && <div className="task-condition-actions">{actions}</div>}
       </div>
     </section>
@@ -639,25 +629,19 @@ function CopyTask({
       setError('Для этого учебника пока доступна только проверка по фото')
       return
     }
-    const sourceUrl = textbook.sourceUrl
     submissionRef.current = true
     setIsSubmitting(true)
     setError('')
     try {
-      const localTask = findVerifiedTextbookTask(textbook.id, textbook.edition, normalizedTask)
-      const foundTask = localTask ?? (import.meta.env.MODE === 'test'
-        ? null
-        : await import('./textbooks/taskLookup').then(({ lookupVerifiedTextbookTask }) => (
-            lookupVerifiedTextbookTask({
-              textbookId: textbook.id,
-              subject: textbook.subject,
-              grade: textbook.grade,
-              textbookTitle: textbook.title,
-              authors: textbook.authors,
-              edition: textbook.edition,
-              sourceUrl,
-            }, normalizedTask)
-          )))
+      const foundTask = await lookupVerifiedTextbookTask({
+        textbookId: textbook.id,
+        subject: textbook.subject,
+        grade: textbook.grade,
+        textbookTitle: textbook.title,
+        authors: textbook.authors,
+        edition: textbook.edition,
+        sourceUrl: textbook.sourceUrl,
+      }, normalizedTask)
       if (!foundTask) {
         setVerifiedTask(null)
         setError('Такого номера нет в выбранном издании. Проверь номер или добавь фото задачи.')
@@ -1131,25 +1115,22 @@ function UnderstandingPage({
     }
 
     const textbook = getTextbook(generatedSolution.textbookId)
-    const sourceUrl = textbook.sourceUrl
-    if (!sourceUrl
+    if (!textbook.sourceUrl
       || textbook.edition !== generatedSolution.textbookEdition
-      || sourceUrl !== generatedSolution.sourceUrl) {
+      || textbook.sourceUrl !== generatedSolution.sourceUrl) {
       setSourceDiagramError('Не получилось сверить чертёж с выбранным изданием')
       return () => { active = false }
     }
 
-    void import('./textbooks/taskLookup').then(({ lookupVerifiedTextbookTask }) => (
-      lookupVerifiedTextbookTask({
-        textbookId: textbook.id,
-        subject: textbook.subject,
-        grade: textbook.grade,
-        textbookTitle: textbook.title,
-        authors: textbook.authors,
-        edition: textbook.edition,
-        sourceUrl,
-      }, generatedSolution.task)
-    )).then(async (verifiedTask) => {
+    void lookupVerifiedTextbookTask({
+      textbookId: textbook.id,
+      subject: textbook.subject,
+      grade: textbook.grade,
+      textbookTitle: textbook.title,
+      authors: textbook.authors,
+      edition: textbook.edition,
+      sourceUrl: textbook.sourceUrl,
+    }, generatedSolution.task).then(async (verifiedTask) => {
       if (!active || !verifiedTask?.hasDiagram) return
       const imageUrl = await renderTextbookTaskEvidenceImage(verifiedTask.sourceUrl, verifiedTask.diagramRegions)
       if (!active) return
@@ -1224,12 +1205,8 @@ function UnderstandingPage({
             {sourceDiagramError && <p className="solution-source-diagram-error" role="alert">{sourceDiagramError}</p>}
           </div>
         )}
-        <div className="solution-notebook-preview"><Suspense fallback={null}><GeometryNotebookLayoutV1 spec={notebookFixture} /></Suspense></div>
-        {generatedSolution?.verification && (
-          <Suspense fallback={null}>
-            <SolutionVerificationPanel verification={generatedSolution.verification} />
-          </Suspense>
-        )}
+        <div className="solution-notebook-preview"><GeometryNotebookLayoutV1 spec={notebookFixture} /></div>
+        {generatedSolution?.verification && <SolutionVerificationPanel verification={generatedSolution.verification} />}
         {actions}
       </section>
     )
@@ -1268,11 +1245,7 @@ function UnderstandingPage({
             </section>
           )}
         </article>
-        {generatedSolution.verification && (
-          <Suspense fallback={null}>
-            <SolutionVerificationPanel verification={generatedSolution.verification} />
-          </Suspense>
-        )}
+        {generatedSolution.verification && <SolutionVerificationPanel verification={generatedSolution.verification} />}
         {actions}
       </section>
     )
@@ -1337,14 +1310,7 @@ function HomePage() {
     return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'
   })
   const [activeNavigation, setActiveNavigation] = useState<NavigationLabel>(() => currentNavigationRoute().label)
-  const [taskNumber, setTaskNumber] = useState(() => {
-    try {
-      const startupTask = window.sessionStorage.getItem('homework-copilot:startup-task') ?? ''
-      return /^\d{1,4}$/.test(startupTask) ? startupTask : ''
-    } catch {
-      return ''
-    }
-  })
+  const [taskNumber, setTaskNumber] = useState('')
   const [selectedTextbookId, setSelectedTextbookId] = useState<TextbookId>(() => {
     try {
       return window.localStorage.getItem(selectedTextbookStorageKey) || 'geometry'
@@ -1361,6 +1327,8 @@ function HomePage() {
   const [supabaseClient, setSupabaseClient] = useState<SupabaseClient<Database> | null>(null)
   const [user, setUser] = useState<User | null>(null)
   const [account, setAccount] = useState<AccountData | null>(null)
+  const [authReady, setAuthReady] = useState(!authIsConfigured)
+  const [accountReady, setAccountReady] = useState(!authIsConfigured)
   const [accountOpen, setAccountOpen] = useState(() => ['reset', 'verified', 'confirm'].includes(new URLSearchParams(window.location.search).get('auth') ?? ''))
   const [accountView, setAccountView] = useState<AccountView>('profile')
   const [passwordRecovery, setPasswordRecovery] = useState(() => new URLSearchParams(window.location.search).get('auth') === 'reset')
@@ -1557,47 +1525,40 @@ function HomePage() {
   }, [])
 
   useEffect(() => {
-    if (import.meta.env.MODE === 'test') return
-
     let active = true
-    const timerId = window.setTimeout(() => {
-      void import('./lib/supabase').then(({ supabase }) => {
-        if (!active) return
-        setSupabaseClient(supabase)
-      }).catch(() => {
-        if (active) setSupabaseClient(null)
-      })
-    }, 2_000)
-    return () => {
-      active = false
-      window.clearTimeout(timerId)
-    }
+    void import('./lib/supabase').then(({ supabase }) => {
+      if (!active) return
+      setSupabaseClient(supabase)
+      if (!supabase) {
+        setAuthReady(true)
+        setAccountReady(true)
+      }
+    })
+    return () => { active = false }
   }, [])
 
   useEffect(() => {
     if (!supabaseClient) return
     let active = true
 
-    void supabaseClient.auth.getSession().then(({ data, error }) => {
+    void supabaseClient.auth.getSession().then(({ data }) => {
       if (!active) return
-      if (error) {
-        setUser(null)
-        setAccount(null)
-        return
-      }
       const nextUser = data.session?.user ?? null
       setUser(nextUser)
-    }).catch(() => {
-      if (!active) return
-      setUser(null)
-      setAccount(null)
+      setAuthReady(true)
+      if (!nextUser) setAccountReady(true)
     })
 
     const { data: { subscription } } = supabaseClient.auth.onAuthStateChange((event, session) => {
       const nextUser = session?.user ?? null
-      setUser(nextUser)
+      setUser((current) => {
+        if (current?.id !== nextUser?.id) setAccountReady(!nextUser)
+        return nextUser
+      })
+      setAuthReady(true)
       if (!nextUser) {
         setAccount(null)
+        setAccountReady(true)
       }
       if (event === 'PASSWORD_RECOVERY') {
         setPasswordRecovery(true)
@@ -1708,6 +1669,7 @@ function HomePage() {
   const refreshAccount = useCallback(async () => {
     if (!user) {
       setAccount(null)
+      setAccountReady(true)
       return
     }
     try {
@@ -1715,6 +1677,8 @@ function HomePage() {
       setAccount(await loadAccountData(user))
     } catch {
       setAccountNotice('Не получилось загрузить профиль. Попробуй открыть его ещё раз')
+    } finally {
+      setAccountReady(true)
     }
   }, [user])
 
@@ -1895,6 +1859,8 @@ function HomePage() {
     const processingState: SolutionState = { mode: 'processing', textbookId, task: resolvedTask, source }
     const readyState: SolutionState = { ...processingState, mode: 'ready' }
 
+    setSolutionState(processingState)
+
     try {
       const imageDataUrl = source === 'photo' && photo ? await prepareTaskPhoto(photo) : sourceImageDataUrl
       if (source === 'photo' && !imageDataUrl) throw new Error('Добавь фотографию задачи')
@@ -1907,7 +1873,7 @@ function HomePage() {
         if (error || !accessToken) throw new Error('Сессия закончилась. Войди в аккаунт ещё раз')
       }
 
-      const generatedSolutionRequest = requestHomeworkSolution(
+      const generatedSolution = await requestHomeworkSolution(
         import.meta.env.VITE_HOMEWORK_API_URL || applicationPath('/api/solve'),
         {
           textbookId,
@@ -1928,8 +1894,6 @@ function HomePage() {
         },
         accessToken,
       )
-      setSolutionState(processingState)
-      const generatedSolution = await generatedSolutionRequest
 
       setGeneratedSolutions((current) => [
         generatedSolution,
@@ -1968,6 +1932,15 @@ function HomePage() {
   }
   const openSharedSolution = (textbookId: TextbookId, task: string) => {
     checkTextbookTask(textbookId, task)
+  }
+
+  if (!authReady || (user && !accountReady)) {
+    return (
+      <main className="session-loading-screen" aria-label="Загружаем аккаунт" aria-busy="true">
+        <BrandLockup />
+        <SpinnerGap size={24} weight="bold" aria-hidden="true" />
+      </main>
+    )
   }
 
   if (user && account?.control?.is_banned) {
@@ -2016,14 +1989,12 @@ function HomePage() {
         ) : activeNavigation === 'Решения' ? (
           <SolutionsPage user={user} personalSolutions={personalSolutions} textbooks={availableTextbooks} onOpenAccount={openAccount} onOpenSolution={openSolution} onOpenSharedSolution={openSharedSolution} />
         ) : (
-          <Suspense fallback={<div className="route-loading" role="status">Загружаем учебники…</div>}>
-            <TextbookLibraryPage
-              items={availableTextbooks}
-              selectedTextbookId={selectedTextbookId}
-              onSelectTextbook={setSelectedTextbookId}
-              onCheckTask={checkTextbookTask}
-            />
-          </Suspense>
+          <TextbookLibraryPage
+            items={availableTextbooks}
+            selectedTextbookId={selectedTextbookId}
+            onSelectTextbook={setSelectedTextbookId}
+            onCheckTask={checkTextbookTask}
+          />
         )}
         <SiteFooter onOpenSupport={() => openSupport()} />
       </div>
@@ -2053,27 +2024,18 @@ function HomePage() {
   )
 }
 
-function RouteLoadingScreen() {
-  return (
-    <main className="session-loading-screen" aria-label="Загружаем страницу" aria-busy="true">
-      <BrandLockup />
-      <SpinnerGap size={24} weight="bold" aria-hidden="true" />
-    </main>
-  )
-}
-
 function App() {
   const params = new URLSearchParams(window.location.search)
   const pathname = currentApplicationPath()
 
-  if (pathname === '/privacy') return <Suspense fallback={<RouteLoadingScreen />}><LegalPage kind="privacy" /><PrivacyNotice /></Suspense>
-  if (pathname === '/terms' || pathname === '/agreement') return <Suspense fallback={<RouteLoadingScreen />}><LegalPage kind="terms" /><PrivacyNotice /></Suspense>
-  if (pathname === '/consent') return <Suspense fallback={<RouteLoadingScreen />}><LegalPage kind="consent" /><PrivacyNotice /></Suspense>
-  if (pathname === '/cookies') return <Suspense fallback={<RouteLoadingScreen />}><LegalPage kind="cookies" /><PrivacyNotice /></Suspense>
-  if (pathname === '/offer') return <Suspense fallback={<RouteLoadingScreen />}><LegalPage kind="offer" /><PrivacyNotice /></Suspense>
+  if (pathname === '/privacy') return <><LegalPage kind="privacy" /><PrivacyNotice /></>
+  if (pathname === '/terms' || pathname === '/agreement') return <><LegalPage kind="terms" /><PrivacyNotice /></>
+  if (pathname === '/consent') return <><LegalPage kind="consent" /><PrivacyNotice /></>
+  if (pathname === '/cookies') return <><LegalPage kind="cookies" /><PrivacyNotice /></>
+  if (pathname === '/offer') return <><LegalPage kind="offer" /><PrivacyNotice /></>
 
   if (params.get('canvas') === '1') {
-    return <Suspense fallback={null}><NotebookCanvas /></Suspense>
+    return <NotebookCanvas />
   }
 
   if (params.get('design-system') === '1') {
@@ -2084,7 +2046,7 @@ function App() {
     return <Suspense fallback={null}><AdminDashboard /></Suspense>
   }
 
-  return <><HomePage /><Suspense fallback={null}><PrivacyNotice /></Suspense></>
+  return <><HomePage /><PrivacyNotice /></>
 }
 
 export default App

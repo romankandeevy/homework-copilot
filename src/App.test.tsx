@@ -164,9 +164,9 @@ describe('Homework Copilot task flow', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Условие верное' }))
 
     expect(await screen.findByRole('heading', { name: 'Решение № 2' })).toBeInTheDocument()
-    expect(await screen.findByText('№ 2', { selector: '.notebook-number' })).toBeInTheDocument()
-    expect(await screen.findByText('Итоговые ответы движка')).toBeInTheDocument()
-    expect(await screen.findByText('2/2')).toBeInTheDocument()
+    expect(screen.getByText('№ 2', { selector: '.notebook-number' })).toBeInTheDocument()
+    expect(screen.getByText('Итоговые ответы движка')).toBeInTheDocument()
+    expect(screen.getByText('2/2')).toBeInTheDocument()
     fireEvent.click(document.querySelector<HTMLButtonElement>('.route-secondary-action')!)
     expect(screen.getByRole('heading', { name: 'Списать задачу' })).toBeInTheDocument()
   })
@@ -192,7 +192,7 @@ describe('Homework Copilot task flow', () => {
     window.history.replaceState({}, '', '/cdz')
     render(<App />)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Задача № 2 · 5 ₽' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Задача № 2 · 5 ₽' }))
     expect(screen.getByRole('button', { name: 'Проверить условие' })).toBeEnabled()
     fireEvent.click(screen.getByRole('button', { name: 'Проверить условие' }))
 

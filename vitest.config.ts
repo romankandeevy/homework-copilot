@@ -6,7 +6,6 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
-    testTimeout: 15_000,
-    exclude: ['tests/**', 'performance-tests/**', 'sites-homework-copilot/**', '**/node_modules/**'],
+    exclude: ['tests/**', 'sites-homework-copilot/**', '**/node_modules/**'],
   },
 })
