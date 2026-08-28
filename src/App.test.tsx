@@ -222,4 +222,25 @@ describe('Homework Copilot task flow', () => {
     fireEvent.change(input, { target: { value: '99999' } })
     expect(input).toHaveValue('9999')
   })
+
+  it('confirms the attached photo without browser OCR and sends only the image', async () => {
+    const fetchMock = installSuccessfulSolver()
+    render(<App />)
+
+    const file = new File(['photo-bytes'], 'task.png', { type: 'image/png' })
+    fireEvent.change(document.querySelector<HTMLInputElement>('#task-photo')!, { target: { files: [file] } })
+    fireEvent.click(screen.getByRole('button', { name: 'Продолжить с фото' }))
+
+    expect(await screen.findByRole('img', { name: 'Прикреплённое фото задачи' })).toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: /условие/i })).not.toBeInTheDocument()
+    expect(screen.queryByText(/распознал/i)).not.toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Решить по этому фото' }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
+    const request = JSON.parse(String(fetchMock.mock.calls[0][1]?.body)) as SolveHomeworkRequest
+    expect(request.source).toBe('photo')
+    expect(request.condition).toBeUndefined()
+    expect(request.imageDataUrl).toMatch(/^data:image\/png;base64,/)
+  })
 })

@@ -91,19 +91,6 @@ export async function prepareTaskPhoto(file: File): Promise<string> {
   return readFileAsDataUrl(compressed)
 }
 
-export async function recognizeTaskPhoto(file: File): Promise<string> {
-  const { createWorker } = await import('tesseract.js')
-  const worker = await createWorker(['rus', 'eng'])
-  try {
-    const { data } = await worker.recognize(file, {}, { text: true })
-    const condition = data.text.replace(/\s+/g, ' ').trim()
-    if (condition.length < 12) throw new Error('Не получилось прочитать условие с фотографии. Сделай снимок ближе и чётче')
-    return condition
-  } finally {
-    await worker.terminate()
-  }
-}
-
 export async function requestHomeworkSolution(
   endpoint: string,
   request: SolveHomeworkRequest,

@@ -95,7 +95,7 @@ const photoDecisions = {
   diagramReason: 'Условие относится к треугольнику ABC.',
   requiredElements: ['△ABC', '∠C = 90°'],
   notebookFormat: 'Краткая формула суммы углов и ответ.',
-  selfChecks: ['Условие распознано.', 'Сумма углов равна 180°.', 'Ответ содержит единицу измерения угла.'],
+  selfChecks: ['Условие прочитано с изображения.', 'Сумма углов равна 180°.', 'Ответ содержит единицу измерения угла.'],
 }
 
 const taskThreeDraft = {
@@ -267,7 +267,7 @@ describe('homework solver', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('sends photo bytes to the multimodal provider with a strict answer schema', async () => {
+  it('sends the photo itself to the multimodal provider without an OCR condition', async () => {
     const fetchMock = reviewedResponses(photoDraft)
     await solveWithKie(photoTask, { apiKey: 'secret-test-key', fetchImpl: fetchMock })
     const [, options] = fetchMock.mock.calls[0]
@@ -276,9 +276,9 @@ describe('homework solver', () => {
       response_format?: { type: string }
       tools?: unknown
     }
-    expect(payload.messages[1].content).toEqual(expect.arrayContaining([
+    expect(payload.messages[1].content).toEqual([
       { type: 'image_url', image_url: { url: 'data:image/png;base64,cGhvdG8=' } },
-    ]))
+    ])
     expect(payload.response_format?.type).toBe('json_schema')
     expect(payload.tools).toBeUndefined()
     expect(fetchMock).toHaveBeenCalledTimes(2)

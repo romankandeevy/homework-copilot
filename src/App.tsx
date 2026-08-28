@@ -49,7 +49,6 @@ import {
   loadGeneratedSolutions,
   parseStoredHomeworkSolution,
   prepareTaskPhoto,
-  recognizeTaskPhoto,
   requestHomeworkSolution,
   saveGeneratedSolutions,
 } from './lib/homeworkSolution'
@@ -602,7 +601,7 @@ function CopyTask({
 }) {
   const [error, setError] = useState('')
   const [photo, setPhoto] = useState<File | null>(null)
-  const [pendingPhoto, setPendingPhoto] = useState<{ file: File; condition: string } | null>(null)
+  const [pendingPhoto, setPendingPhoto] = useState<{ file: File; imageDataUrl: string } | null>(null)
   const [pendingKey, setPendingKey] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [verifiedTask, setVerifiedTask] = useState<VerifiedTextbookTaskSource | null>(null)
@@ -633,8 +632,8 @@ function CopyTask({
       submissionRef.current = true
       setIsSubmitting(true)
       try {
-        const condition = await recognizeTaskPhoto(photo)
-        setPendingPhoto({ file: photo, condition })
+        const imageDataUrl = await prepareTaskPhoto(photo)
+        setPendingPhoto({ file: photo, imageDataUrl })
         setPendingKey(submissionKey)
       } catch (submissionError) {
         setError(submissionError instanceof Error ? submissionError.message : 'Не получилось отправить фотографию задачи')
@@ -705,9 +704,20 @@ function CopyTask({
     setIsSubmitting(true)
     setError('')
     try {
-      await onSubmit(pendingPhoto.file.name, true, 'photo', pendingKey, pendingPhoto.file, undefined, pendingPhoto.condition)
-      setPendingPhoto(null)
-      setPendingKey('')
+      const submitted = await onSubmit(
+        pendingPhoto.file.name,
+        true,
+        'photo',
+        pendingKey,
+        undefined,
+        undefined,
+        undefined,
+        pendingPhoto.imageDataUrl,
+      )
+      if (submitted) {
+        setPendingPhoto(null)
+        setPendingKey('')
+      }
     } catch (submissionError) {
       setError(submissionError instanceof Error ? submissionError.message : 'Не получилось отправить задачу')
     } finally {
@@ -782,16 +792,18 @@ function CopyTask({
           />
         )}
         {pendingPhoto && (
-          <section className="task-confirmation" aria-labelledby="photo-condition-title">
+          <section className="task-confirmation" aria-labelledby="photo-preview-title">
             <div>
-              <strong id="photo-condition-title">Распознали условие с фото</strong>
-              <label htmlFor="photo-condition">Проверь и при необходимости исправь текст</label>
-              <textarea id="photo-condition" value={pendingPhoto.condition} onChange={(event) => setPendingPhoto((current) => current ? { ...current, condition: event.target.value } : current)} />
+              <strong id="photo-preview-title">Фото задачи приложено</strong>
+              <figure className="photo-task-preview">
+                <img src={pendingPhoto.imageDataUrl} alt="Прикреплённое фото задачи" />
+                <figcaption>Модель сама прочитает условие с изображения.</figcaption>
+              </figure>
               <p>После подтверждения спишем {solutionPrice} ₽.</p>
             </div>
             <div className="task-confirmation-actions">
-              <button type="button" onClick={() => { void confirmPhoto() }} disabled={isSubmitting || !pendingPhoto.condition.trim()}>Да, это моя задача</button>
-              <button type="button" onClick={rejectTask} disabled={isSubmitting}>Условие неверное / выбрать другое</button>
+              <button type="button" onClick={() => { void confirmPhoto() }} disabled={isSubmitting}>Решить по этому фото</button>
+              <button type="button" onClick={removePhoto} disabled={isSubmitting}>Выбрать другое фото</button>
             </div>
           </section>
         )}
@@ -845,7 +857,7 @@ function CopyTask({
 
           {(!verifiedTask || photo) && (
             <button className="copy-task-submit" type="submit" disabled={!canSubmit || isSubmitting || Boolean(pendingPhoto)}>
-              {isSubmitting ? 'Проверяем…' : photo ? 'Распознать условие' : 'Проверить условие'}
+              {isSubmitting ? 'Готовим…' : photo ? 'Продолжить с фото' : 'Проверить условие'}
               {!isSubmitting && <ArrowRight size={20} weight="bold" aria-hidden="true" />}
             </button>
           )}
@@ -857,8 +869,8 @@ function CopyTask({
             <p className="base-match" aria-live="polite">
               {photo
                 ? pendingPhoto
-                  ? <><CheckCircle size={18} weight="duotone" aria-hidden="true" /> Условие распознано. Подтверди его перед решением.</>
-                  : <><ClockCountdown size={18} weight="duotone" aria-hidden="true" /> Сначала распознаем условие с фотографии.</>
+                  ? <><CheckCircle size={18} weight="duotone" aria-hidden="true" /> Фото приложено. Подтверди его перед решением.</>
+                  : <><ClockCountdown size={18} weight="duotone" aria-hidden="true" /> Сначала покажем выбранное фото.</>
                 : verifiedTask
                   ? <><CheckCircle size={18} weight="duotone" aria-hidden="true" /> Условие найдено. Подтверди его перед списанием.</>
                   : <><ClockCountdown size={18} weight="duotone" aria-hidden="true" /> Сначала проверим условие именно в выбранном издании.</>}
@@ -892,7 +904,7 @@ function SolutionStatus({ state, textbooks: items, onOpenSolution }: { state: So
         <CheckCircle size={38} weight="duotone" aria-hidden="true" />
         <div>
           <h2 id="ready-solution-title">{state.source === 'photo' ? 'Решение по фото готово' : `№ ${state.task} уже готова`}</h2>
-          <p>{textbook.subject}. {textbook.title}. {state.source === 'photo' ? 'Условие распознано, готовый ответ можно переписать.' : 'Решение найдено в общей базе, ждать не нужно.'}</p>
+          <p>{textbook.subject}. {textbook.title}. {state.source === 'photo' ? 'Модель прочитала фото, готовый ответ можно переписать.' : 'Решение найдено в общей базе, ждать не нужно.'}</p>
         </div>
         <button type="button" onClick={() => onOpenSolution(state)}>Открыть решение <ArrowRight size={18} weight="bold" aria-hidden="true" /></button>
       </section>
@@ -904,7 +916,7 @@ function SolutionStatus({ state, textbooks: items, onOpenSolution }: { state: So
       <header className="section-heading">
         <div>
           <h2 id="active-solution-title">{state.source === 'photo' ? 'Готовим задачу с фото' : `Готовим № ${state.task}`}</h2>
-          <p>{textbook.subject}. {textbook.title}. {state.source === 'photo' ? 'Распознаём условие и готовим решение.' : 'Готовое решение появится автоматически.'}</p>
+          <p>{textbook.subject}. {textbook.title}. {state.source === 'photo' ? 'Читаем фото и готовим решение.' : 'Готовое решение появится автоматически.'}</p>
         </div>
         <span className="solution-eta">Обычно несколько секунд</span>
       </header>
@@ -1855,10 +1867,6 @@ function HomePage() {
     if (source === 'number' && !verifiedTask) {
       throw new Error('Точное условие задачи в выбранном издании не найдено. Решение не запускается')
     }
-    if (source === 'photo' && !confirmedCondition?.trim()) {
-      throw new Error('Сначала распознай и подтверди условие с фотографии')
-    }
-
     if (supabaseClient && !user) {
       rememberAccountTrigger()
       setAccountNotice('Войди или зарегистрируйся, чтобы сохранить решение и списать его с баланса')

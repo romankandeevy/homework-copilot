@@ -1007,8 +1007,9 @@
 .task-confirmation > div:first-child { display: grid; gap: var(--space-2); }
 .task-confirmation strong { font-size: var(--text-ui); }
 .task-confirmation p { margin: 0; color: var(--color-text-muted); font-size: var(--text-small); line-height: var(--leading-copy); }
-.task-confirmation label { color: var(--color-text-muted); font-size: var(--text-micro); font-weight: var(--weight-semibold); }
-.task-confirmation textarea { width: 100%; min-height: 7rem; resize: vertical; padding: var(--space-3); border: 1px solid var(--color-border-strong); border-radius: var(--radius-control); background: var(--color-surface); color: var(--color-text); font: inherit; font-size: var(--text-small); line-height: var(--leading-copy); }
+.photo-task-preview { display: grid; gap: var(--space-2); margin: 0; }
+.photo-task-preview img { display: block; width: min(100%, 46rem); max-height: 22rem; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: #fff; object-fit: contain; object-position: center; }
+.photo-task-preview figcaption { color: var(--color-text-muted); font-size: var(--text-small); line-height: var(--leading-copy); }
 .task-confirmation-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); }
 .task-confirmation-actions button { min-height: 2.75rem; padding: 0 var(--space-4); border: 1px solid var(--color-border-strong); border-radius: var(--radius-control); background: var(--color-surface); color: var(--color-text); font: inherit; font-size: var(--text-small); font-weight: var(--weight-semibold); cursor: pointer; }
 .task-confirmation-actions button:first-child { border-color: var(--color-accent); background: var(--color-accent); color: var(--color-on-accent); }
