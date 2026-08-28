@@ -27,7 +27,7 @@ import type { AccountData } from '../lib/supabase'
 import { supabase } from '../lib/supabase'
 import { formatRubles } from '../lib/currency'
 import { forgetPendingLegalAcceptance, rememberPendingLegalAcceptance } from '../lib/legalConsent'
-import { getPendingReferralCode, loadReferralStatus } from '../lib/referrals'
+import { loadReferralStatus, preparePendingReferralClaim } from '../lib/referrals'
 import type { ReferralStatus } from '../lib/referrals'
 import { useModalIsolation } from '../lib/useModalIsolation'
 import PasswordStrength from './PasswordStrength'
@@ -102,6 +102,7 @@ function authErrorMessage(message: string) {
   if (normalized.includes('email rate limit')) return 'Слишком много писем. Попробуй немного позже'
   if (normalized.includes('email not confirmed')) return 'Сначала подтверди почту кодом из письма'
   if (normalized.includes('token') || normalized.includes('otp')) return 'Код неверный или уже истёк'
+  if (normalized.includes('referral claim unavailable')) return 'Не получилось закрепить приглашение. Повтори попытку'
   return 'Не получилось выполнить запрос. Проверь данные и попробуй ещё раз'
 }
 
@@ -293,7 +294,17 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
     setLoading(true)
     setStatus('')
     setError('')
-    if (screen === 'sign-up') rememberPendingLegalAcceptance('google')
+    if (screen === 'sign-up') {
+      rememberPendingLegalAcceptance('google')
+      try {
+        await preparePendingReferralClaim(supabase)
+      } catch (claimError) {
+        forgetPendingLegalAcceptance()
+        setError(authErrorMessage(claimError instanceof Error ? claimError.message : ''))
+        setLoading(false)
+        return
+      }
+    }
     sessionStorage.setItem('homework-copilot:google-auth-pending', '1')
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: 'google',
@@ -380,7 +391,7 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
         if (!isStrongPassword(password)) throw new Error('weak password')
         if (!agreementAccepted || !personalDataAccepted) throw new Error('legal consent')
         rememberPendingLegalAcceptance('email', email)
-        const referralCode = getPendingReferralCode()
+        const referralClaimToken = await preparePendingReferralClaim(supabase)
         const { data, error: signUpError } = await supabase.auth.signUp({
           email: email.trim(),
           password,
@@ -388,7 +399,7 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
             data: {
               full_name: fullName.trim(),
               grade,
-              ...(referralCode ? { referral_code: referralCode } : {}),
+              ...(referralClaimToken ? { referral_claim_token: referralClaimToken } : {}),
             },
             emailRedirectTo: verificationRedirectUrl(),
           },

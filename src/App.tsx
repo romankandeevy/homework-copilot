@@ -39,7 +39,7 @@ import type { AccountData } from './lib/supabase'
 import type { HomeworkSolution, HomeworkSource } from './lib/homeworkContract'
 import { formatRubles } from './lib/currency'
 import { recordPendingLegalAcceptance, rememberPendingLegalAcceptance } from './lib/legalConsent'
-import { bindPendingReferral, captureReferralFromCurrentUrl } from './lib/referrals'
+import { bindPendingReferral, captureReferralFromCurrentUrl, preparePendingReferralClaim } from './lib/referrals'
 import { applySeoMetadata, getSeoMetadata } from './lib/siteMetadata'
 import { useModalIsolation } from './lib/useModalIsolation'
 import { getSolutionPrice } from './lib/solutionPricing'
@@ -1384,6 +1384,11 @@ function HomePage() {
   useEffect(() => {
     captureReferralFromCurrentUrl()
   }, [])
+
+  useEffect(() => {
+    if (!supabaseClient) return
+    void preparePendingReferralClaim(supabaseClient).catch(() => undefined)
+  }, [supabaseClient])
 
   useEffect(() => {
     const currentPath = currentApplicationPath()

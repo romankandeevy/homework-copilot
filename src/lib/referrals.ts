@@ -18,6 +18,7 @@ export type ReferralStatus = {
 type PendingReferral = {
   code: string
   capturedAt: string
+  claimToken?: string
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -32,6 +33,14 @@ export function normalizeReferralCode(value: unknown) {
   if (typeof value !== 'string') return null
   const normalized = value.trim().toUpperCase()
   return /^[A-Z0-9]{10}$/.test(normalized) ? normalized : null
+}
+
+function normalizeClaimToken(value: unknown) {
+  if (typeof value !== 'string') return null
+  const normalized = value.trim().toLowerCase()
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(normalized)
+    ? normalized
+    : null
 }
 
 export function parseReferralUrl(href: string) {
@@ -62,6 +71,10 @@ export function captureReferralFromCurrentUrl() {
 }
 
 export function getPendingReferralCode() {
+  return readPendingReferral()?.code ?? null
+}
+
+function readPendingReferral(): PendingReferral | null {
   try {
     const parsed = JSON.parse(window.localStorage.getItem(pendingReferralStorageKey) ?? 'null') as unknown
     if (!isRecord(parsed)) return null
@@ -71,7 +84,11 @@ export function getPendingReferralCode() {
       window.localStorage.removeItem(pendingReferralStorageKey)
       return null
     }
-    return code
+    return {
+      code,
+      capturedAt: new Date(capturedAt).toISOString(),
+      ...(normalizeClaimToken(parsed.claimToken) ? { claimToken: normalizeClaimToken(parsed.claimToken)! } : {}),
+    }
   } catch {
     return null
   }
@@ -113,17 +130,43 @@ export async function loadReferralStatus(client: SupabaseClient<Database>) {
   return status
 }
 
-export async function bindPendingReferral(client: SupabaseClient<Database>, user: User) {
-  const code = getPendingReferralCode()
-  if (!code) return false
+export async function preparePendingReferralClaim(client: SupabaseClient<Database>) {
+  const pending = readPendingReferral()
+  if (!pending) return null
+  if (pending.claimToken) return pending.claimToken
 
-  const accountCreatedAt = Date.parse(user.created_at)
-  if (!Number.isFinite(accountCreatedAt) || Date.now() - accountCreatedAt > 24 * 60 * 60 * 1000) {
-    clearPendingReferral()
-    return false
+  const { data, error } = await client.rpc('begin_referral_registration', { p_code: pending.code })
+  if (error) {
+    const permanentError = error.message.includes('invalid referral code') || error.message.includes('referral code not found')
+    if (permanentError) {
+      clearPendingReferral()
+      return null
+    }
+    throw new Error('referral claim unavailable')
   }
 
-  const { error } = await client.rpc('bind_my_referral', { p_code: code })
+  const claimToken = isRecord(data) ? normalizeClaimToken(data.claimToken) : null
+  if (!claimToken) throw new Error('referral claim unavailable')
+
+  try {
+    window.localStorage.setItem(pendingReferralStorageKey, JSON.stringify({ ...pending, claimToken }))
+  } catch {
+    throw new Error('referral claim unavailable')
+  }
+  return claimToken
+}
+
+export async function bindPendingReferral(client: SupabaseClient<Database>, user: User) {
+  if (!user.id) return false
+  let claimToken: string | null = null
+  try {
+    claimToken = await preparePendingReferralClaim(client)
+  } catch {
+    return false
+  }
+  if (!claimToken) return false
+
+  const { error } = await client.rpc('bind_my_referral', { p_code: claimToken })
   if (!error) {
     clearPendingReferral()
     return true
@@ -131,9 +174,8 @@ export async function bindPendingReferral(client: SupabaseClient<Database>, user
 
   const permanentError = [
     'available only during registration',
-    'invalid referral code',
-    'referral code not found',
-    'another referral is already bound',
+    'invalid referral claim',
+    'referral claim not found',
     'self referral is not allowed',
     'after a top up',
   ].some((fragment) => error.message.includes(fragment))

@@ -592,6 +592,7 @@ export type Database = {
       get_admin_context: { Args: never; Returns: Json }
       get_my_referral: { Args: never; Returns: Json }
       bind_my_referral: { Args: { p_code: string }; Returns: Json }
+      begin_referral_registration: { Args: { p_code: string }; Returns: Json }
       get_verified_homework_task: {
         Args: {
           p_edition: string

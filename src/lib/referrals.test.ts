@@ -6,6 +6,7 @@ import {
   parseReferralStatus,
   parseReferralUrl,
   pendingReferralStorageKey,
+  preparePendingReferralClaim,
 } from './referrals'
 
 describe('referrals', () => {
@@ -36,6 +37,21 @@ describe('referrals', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-08-20T00:00:00.000Z'))
     expect(getPendingReferralCode()).toBeNull()
+  })
+
+  it('exchanges the public code for a single-use registration claim', async () => {
+    window.history.replaceState({}, '', '/?ref=ab12cd34ef')
+    captureReferralFromCurrentUrl()
+    const rpc = vi.fn().mockResolvedValue({
+      data: { claimToken: '0f65dd61-a5df-4b65-980c-74f1ef7cdf13' },
+      error: null,
+    })
+    const client = { rpc } as unknown as Parameters<typeof preparePendingReferralClaim>[0]
+
+    await expect(preparePendingReferralClaim(client)).resolves.toBe('0f65dd61-a5df-4b65-980c-74f1ef7cdf13')
+    await expect(preparePendingReferralClaim(client)).resolves.toBe('0f65dd61-a5df-4b65-980c-74f1ef7cdf13')
+    expect(rpc).toHaveBeenCalledOnce()
+    expect(rpc).toHaveBeenCalledWith('begin_referral_registration', { p_code: 'AB12CD34EF' })
   })
 
   it('parses the server summary without exposing user ids', () => {
