@@ -4,19 +4,23 @@ import { resolve } from 'node:path'
 import { chromium } from '@playwright/test'
 
 const port = 4187
-const origin = `http://127.0.0.1:${port}`
+const configuredOrigin = (process.argv[2] || process.env.LEGAL_BASE_URL)?.replace(/\/+$/, '')
+const origin = configuredOrigin || `http://127.0.0.1:${port}`
+const navigationWaitUntil = configuredOrigin ? 'commit' : 'domcontentloaded'
 const outputDirectory = resolve('test-results', 'legal-browser')
 await mkdir(outputDirectory, { recursive: true })
 
-const server = spawn(process.execPath, ['node_modules/vite/bin/vite.js', 'preview', '--host', '127.0.0.1', '--port', String(port)], {
-  cwd: process.cwd(),
-  stdio: ['ignore', 'pipe', 'pipe'],
-  windowsHide: true,
-})
+const server = configuredOrigin
+  ? null
+  : spawn(process.execPath, ['node_modules/vite/bin/vite.js', 'preview', '--host', '127.0.0.1', '--port', String(port)], {
+      cwd: process.cwd(),
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    })
 
 let serverOutput = ''
-server.stdout.on('data', (chunk) => { serverOutput += chunk })
-server.stderr.on('data', (chunk) => { serverOutput += chunk })
+server?.stdout.on('data', (chunk) => { serverOutput += chunk })
+server?.stderr.on('data', (chunk) => { serverOutput += chunk })
 
 async function waitForServer() {
   for (let attempt = 0; attempt < 80; attempt += 1) {
@@ -34,7 +38,7 @@ async function waitForServer() {
 const failures = []
 const browser = await chromium.launch({ headless: true })
 try {
-  await waitForServer()
+  if (!configuredOrigin) await waitForServer()
   for (const viewport of [{ width: 375, height: 812 }, { width: 768, height: 1024 }, { width: 1440, height: 960 }]) {
     const page = await browser.newPage({ viewport })
     const runtimeErrors = []
@@ -42,7 +46,7 @@ try {
     page.on('pageerror', (error) => runtimeErrors.push(`page: ${error.message}`))
     page.on('requestfailed', (request) => runtimeErrors.push(`network: ${request.url()} ${request.failure()?.errorText ?? ''}`))
 
-    await page.goto(`${origin}/privacy`, { waitUntil: 'networkidle' })
+    await page.goto(`${origin}/privacy`, { waitUntil: navigationWaitUntil })
     await page.locator('h1').filter({ hasText: 'Политика обработки персональных данных' }).waitFor()
     await page.evaluate(() => document.fonts.ready)
 
@@ -65,7 +69,8 @@ try {
     await page.screenshot({ path: resolve(outputDirectory, `footer-${viewport.width}.png`) })
 
     for (const route of ['cookies', 'offer', 'terms', 'consent']) {
-      await page.goto(`${origin}/${route}`, { waitUntil: 'networkidle' })
+      await page.goto(`${origin}/${route}`, { waitUntil: navigationWaitUntil })
+      await page.locator('h1').waitFor()
       const routeOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
       if (routeOverflow > 0) failures.push(`${viewport.width}px /${route}: horizontal overflow ${routeOverflow}px`)
     }
@@ -75,12 +80,12 @@ try {
   }
 } finally {
   await browser.close()
-  server.kill()
+  server?.kill()
 }
 
 if (failures.length) {
   console.error(failures.join('\n'))
   process.exitCode = 1
 } else {
-  console.log('Legal browser verification passed at 375px, 768px, and 1440px')
+  console.log(`Legal browser verification passed at 375px, 768px, and 1440px against ${origin}`)
 }
