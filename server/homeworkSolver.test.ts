@@ -298,6 +298,22 @@ describe('homework solver', () => {
     })
   })
 
+  it('does not abort a model stage with an application timeout', async () => {
+    const signals: Array<AbortSignal | null | undefined> = []
+    const responses = [photoDraft, { approved: true, issues: [], solution: photoDraft }]
+    const fetchMock: typeof fetch = async (_input, init) => {
+      signals.push(init?.signal)
+      return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(responses.shift()) } }] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+
+    await solveWithKie(photoTask, { apiKey: 'secret-test-key', fetchImpl: fetchMock })
+
+    expect(signals).toEqual([undefined, undefined])
+  })
+
   it('normalizes provider point identifiers together with every reference', async () => {
     const scene = photoDraft.diagram.scene
     const lowercase = {

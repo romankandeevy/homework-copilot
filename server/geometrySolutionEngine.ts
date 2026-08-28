@@ -602,7 +602,6 @@ async function callModel(
           json_schema: { name: schemaName, strict: true, schema },
         },
       }),
-      signal: AbortSignal.timeout(reviewing ? 62_000 : 52_000),
     })
   } catch (error) {
     if (error instanceof Error && (error.name === 'AbortError' || error.name === 'TimeoutError')) {

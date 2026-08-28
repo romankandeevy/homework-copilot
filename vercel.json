@@ -2,7 +2,7 @@
   "functions": {
     "api/solve.ts": {
       "includeFiles": "{server/**,src/lib/**,src/textbooks/**}",
-      "maxDuration": 120
+      "maxDuration": 300
     },
     "api/support.ts": {
       "includeFiles": "{server/**,src/lib/**}",
