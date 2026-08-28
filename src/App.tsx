@@ -43,6 +43,7 @@ import { bindPendingReferral, captureReferralFromCurrentUrl, preparePendingRefer
 import { applySeoMetadata, getSeoMetadata } from './lib/siteMetadata'
 import { useModalIsolation } from './lib/useModalIsolation'
 import { getSolutionPrice } from './lib/solutionPricing'
+import { catalogSolutionEntries, findAvailableNumberSolution } from './lib/solutionLibrary'
 import {
   isReviewedHomeworkSolution,
   loadGeneratedSolutions,
@@ -1005,20 +1006,26 @@ function SolutionsPage({
   user,
   personalSolutions,
   textbooks: items,
+  sharedSolutions,
+  sharedSolutionsStatus,
   onOpenAccount,
   onOpenSolution,
   onOpenSharedSolution,
+  onRefreshSharedSolutions,
 }: {
   user: User | null
   personalSolutions: readonly PersonalSolution[]
   textbooks: readonly Textbook[]
+  sharedSolutions: readonly SharedHomeworkSolution[]
+  sharedSolutionsStatus: 'loading' | 'ready' | 'error'
   onOpenAccount: () => void
   onOpenSolution: (state: SolutionState) => void
   onOpenSharedSolution: (textbookId: TextbookId, task: string) => void
+  onRefreshSharedSolutions: () => void
 }) {
   const [query, setQuery] = useState('')
   const [activeSection, setActiveSection] = useState<'personal' | 'shared'>(user ? 'personal' : 'shared')
-  const entries = useMemo(() => items.flatMap((textbook) => textbook.solvedTasks.map((task) => ({ textbook, task }))), [items])
+  const entries = useMemo(() => catalogSolutionEntries(sharedSolutions, items), [items, sharedSolutions])
   const normalizedQuery = query.trim().toLocaleLowerCase('ru')
   const matches = (textbook: Textbook, task: string) => `${textbook.subject} ${textbook.title} ${task}`.toLocaleLowerCase('ru').includes(normalizedQuery)
   const results = entries.filter(({ textbook, task }) => matches(textbook, task))
@@ -1075,8 +1082,10 @@ function SolutionsPage({
             </div>
           ) : <section className="route-empty" aria-labelledby="solutions-empty-title"><Notebook size={34} weight="duotone" aria-hidden="true" /><div><h2 id="solutions-empty-title">Решений пока нет</h2><p>Открой готовый ответ или отправь новую задачу, и она появится здесь.</p></div></section>}
         </section> : <section className="solutions-directory-section" aria-labelledby="shared-solutions-title">
-          <header className="solutions-directory-heading"><h2 id="shared-solutions-title">База решений</h2><span>{results.length}</span></header>
-          {results.length > 0 ? <div className="solution-list route-solution-list">
+          <header className="solutions-directory-heading"><h2 id="shared-solutions-title">База решений</h2><span>{sharedSolutionsStatus === 'loading' ? '…' : results.length}</span></header>
+          {sharedSolutionsStatus === 'loading' ? <div className="route-loading" role="status">Загружаем базу решений…</div>
+            : sharedSolutionsStatus === 'error' ? <section className="route-empty" aria-labelledby="base-error-title"><WarningCircle size={34} weight="duotone" aria-hidden="true" /><div><h2 id="base-error-title">База временно недоступна</h2><p>Повтори загрузку. Сохранённые решения не потеряны.</p><button className="route-secondary-action" type="button" onClick={onRefreshSharedSolutions}>Повторить</button></div></section>
+            : results.length > 0 ? <div className="solution-list route-solution-list">
             {results.map(({ textbook, task }) => {
               const Icon = textbook.icon
               return (
@@ -1345,6 +1354,7 @@ function HomePage() {
   const [selectedSolution, setSelectedSolution] = useState<SolutionState | null>(() => currentNavigationRoute().solution)
   const [generatedSolutions, setGeneratedSolutions] = useState<HomeworkSolution[]>(loadGeneratedSolutions)
   const [sharedSolutions, setSharedSolutions] = useState<SharedHomeworkSolution[]>([])
+  const [sharedSolutionsStatus, setSharedSolutionsStatus] = useState<'loading' | 'ready' | 'error'>(authIsConfigured ? 'loading' : 'ready')
   const [textbookPickerOpen, setTextbookPickerOpen] = useState(false)
   const [supabaseClient, setSupabaseClient] = useState<SupabaseClient<Database> | null>(null)
   const [user, setUser] = useState<User | null>(null)
@@ -1478,6 +1488,7 @@ function HomePage() {
 
   const refreshSharedSolutions = useCallback(async () => {
     if (!supabaseClient) return
+    setSharedSolutionsStatus((current) => current === 'ready' ? current : 'loading')
 
     const { data, error } = await supabaseClient
       .from('homework_solution_catalog')
@@ -1485,7 +1496,13 @@ function HomePage() {
       .order('created_at', { ascending: false })
       .limit(500)
 
-    if (!error && data) setSharedSolutions(data)
+    if (error || !data) {
+      setSharedSolutionsStatus('error')
+      return
+    }
+
+    setSharedSolutions(data)
+    setSharedSolutionsStatus('ready')
   }, [supabaseClient])
 
   useEffect(() => {
@@ -1502,11 +1519,7 @@ function HomePage() {
     let active = true
 
     const restorePurchasedSolutions = async () => {
-      const { data, error } = await supabaseClient
-        .from('homework_solutions')
-        .select('solution, created_at')
-        .order('created_at', { ascending: false })
-        .limit(100)
+      const { data, error } = await supabaseClient.rpc('get_my_homework_solutions')
 
       if (!active || error || !data) return
 
@@ -1953,6 +1966,11 @@ function HomePage() {
     navigate('Главная')
   }
   const openSharedSolution = (textbookId: TextbookId, task: string) => {
+    const availableSolution = findAvailableNumberSolution(visibleGeneratedSolutions, textbookId, task)
+    if (availableSolution) {
+      openSolution({ mode: 'ready', textbookId, task, source: 'number' })
+      return
+    }
     checkTextbookTask(textbookId, task)
   }
 
@@ -2010,7 +2028,17 @@ function HomePage() {
           ) : activeNavigation === 'Расписание' ? (
             <Suspense fallback={<div className="route-loading" role="status">Загружаем расписание…</div>}><SchedulePage userId={user?.id ?? null} grade={account?.profile.grade ?? 8} /></Suspense>
           ) : activeNavigation === 'Решения' ? (
-            <SolutionsPage user={user} personalSolutions={personalSolutions} textbooks={availableTextbooks} onOpenAccount={openAccount} onOpenSolution={openSolution} onOpenSharedSolution={openSharedSolution} />
+            <SolutionsPage
+              user={user}
+              personalSolutions={personalSolutions}
+              textbooks={availableTextbooks}
+              sharedSolutions={sharedSolutions}
+              sharedSolutionsStatus={sharedSolutionsStatus}
+              onOpenAccount={openAccount}
+              onOpenSolution={openSolution}
+              onOpenSharedSolution={openSharedSolution}
+              onRefreshSharedSolutions={() => { void refreshSharedSolutions() }}
+            />
           ) : (
             <CdzComingSoon onGoHome={() => navigate('Главная')} />
           )}

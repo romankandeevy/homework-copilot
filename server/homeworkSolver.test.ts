@@ -476,9 +476,22 @@ describe('homework solver', () => {
   })
 
   it('returns an actionable 503 for a photo when the provider is not configured', async () => {
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     const http = createHttp('POST', photoTask)
     await handleHomeworkSolverRequest(http.request, http.response, {})
     expect(http.response.statusCode).toBe(503)
     expect(http.body().error).toContain('KIE_API_KEY')
+
+    const event = errorLog.mock.calls
+      .map(([entry]) => JSON.parse(String(entry)) as Record<string, unknown>)
+      .find((entry) => entry.event === 'homework_solve_failed')
+    expect(event).toMatchObject({
+      task: photoTask.task,
+      source: 'photo',
+      stage: 'generate',
+      status: 503,
+    })
+    expect(JSON.stringify(event)).not.toContain(photoTask.condition)
+    errorLog.mockRestore()
   })
 })

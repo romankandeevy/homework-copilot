@@ -345,6 +345,21 @@ function sendJson(response: ServerResponse, status: number, payload: unknown) {
   response.end(JSON.stringify(payload))
 }
 
+function requestId(request: IncomingMessage) {
+  const value = request.headers['x-vercel-id']
+  return Array.isArray(value) ? value[0] : value ?? 'local'
+}
+
+function logSolverEvent(
+  level: 'info' | 'error',
+  event: string,
+  context: Record<string, string | number | boolean | undefined>,
+) {
+  const payload = JSON.stringify({ level, event, ...context })
+  if (level === 'error') console.error(payload)
+  else console.log(payload)
+}
+
 const allowedBrowserOrigins = new Set([
   'https://www.homeworkcopilot.ru',
   'https://homeworkcopilot.ru',
@@ -368,6 +383,8 @@ export async function handleHomeworkSolverRequest(
   options: SolverOptions,
 ) {
   const browserAllowed = allowProductionBrowser(request, response)
+  const startedAt = Date.now()
+  const solveRequestId = requestId(request)
 
   if (request.method === 'OPTIONS') {
     if (!browserAllowed) {
@@ -396,23 +413,62 @@ export async function handleHomeworkSolverRequest(
     return
   }
 
+  let taskNumber: string | undefined
+  let source: SolveHomeworkRequest['source'] | undefined
+  let stage = 'validate'
+
   try {
     const task = await validateRequest(await readJsonBody(request), options)
+    taskNumber = task.task
+    source = task.source
+    logSolverEvent('info', 'homework_solve_started', {
+      requestId: solveRequestId,
+      task: taskNumber,
+      source,
+    })
+
+    stage = 'authenticate'
     const account = await authenticateAccount(request, options)
+    stage = 'restore'
     const existingSolution = await completeStoredSolution(account, task)
     if (existingSolution && isCurrentReviewedSolution(existingSolution)) {
+      logSolverEvent('info', 'homework_solve_reused', {
+        requestId: solveRequestId,
+        task: taskNumber,
+        source,
+        durationMs: Date.now() - startedAt,
+      })
       sendJson(response, 200, { solution: existingSolution })
       return
     }
 
+    stage = 'balance'
     if (!existingSolution) await ensureAccountBalance(account, task)
+    stage = 'generate'
     const solution = await solveWithKie(task, options, account?.userId)
+    stage = 'persist'
     const completedSolution = await completeStoredSolution(account, task, solution)
     if (!completedSolution || !isCurrentReviewedSolution(completedSolution)) {
       throw new HomeworkSolverError(502, 'Не получилось сохранить готовое решение')
     }
+    logSolverEvent('info', 'homework_solve_completed', {
+      requestId: solveRequestId,
+      task: taskNumber,
+      source,
+      durationMs: Date.now() - startedAt,
+    })
     sendJson(response, 200, { solution: completedSolution })
   } catch (error) {
+    const status = error instanceof HomeworkSolverError ? error.status : 500
+    logSolverEvent('error', 'homework_solve_failed', {
+      requestId: solveRequestId,
+      task: taskNumber,
+      source,
+      stage,
+      status,
+      durationMs: Date.now() - startedAt,
+      error: error instanceof HomeworkSolverError ? error.message : 'unexpected solver error',
+    })
     if (error instanceof HomeworkSolverError) {
       sendJson(response, error.status, { error: error.message })
       return
