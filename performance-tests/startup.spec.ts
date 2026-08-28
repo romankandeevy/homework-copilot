@@ -55,6 +55,9 @@ test('desktop shell does not wait for a stalled account request', async ({ page 
     expect(Date.now() - startedAt).toBeLessThan(2_500)
     await expect.poll(() => authRequestSeen, { timeout: 2_500 }).toBe(true)
     await expect(page.locator('.session-loading-screen')).toHaveCount(0)
+    const taskNumber = page.getByRole('textbox', { name: 'Номер задачи' })
+    await taskNumber.fill('123')
+    await expect(taskNumber).toHaveValue('123')
   } finally {
     releaseAuthRequest()
   }
