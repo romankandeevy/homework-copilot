@@ -99,7 +99,7 @@ function SiteFooter({ onOpenSupport }: { onOpenSupport?: () => void }) {
     <footer className="site-footer">
       <div className="site-footer-grid">
         <section className="site-footer-intro" aria-label="О Homework Copilot">
-          <a className="site-footer-brand" href="/main" aria-label="Homework Copilot, на главную">
+          <a className="site-footer-brand" href="/" aria-label="Homework Copilot, на главную">
             <span className="site-footer-mark" aria-hidden="true">H<span>C</span></span>
             <strong>Homework Copilot</strong>
           </a>
@@ -109,7 +109,7 @@ function SiteFooter({ onOpenSupport }: { onOpenSupport?: () => void }) {
 
         <nav className="site-footer-column" aria-label="Сервис">
           <h2>Сервис</h2>
-          <a href="/main">Главная</a>
+          <a href="/">Главная</a>
           <a href="/cdz">Учебники и ЦДЗ</a>
           <a href="/solutions">Решения</a>
           <a href="/schedule">Расписание</a>
@@ -124,8 +124,11 @@ function SiteFooter({ onOpenSupport }: { onOpenSupport?: () => void }) {
 
         <nav className="site-footer-column" aria-label="Документы">
           <h2>Документы</h2>
-          <a href="/privacy">Конфиденциальность</a>
-          <a href="/terms">Условия сервиса</a>
+          <a href="/terms">Пользовательское соглашение</a>
+          <a href="/privacy">Политика данных</a>
+          <a href="/consent">Согласие на обработку данных</a>
+          <a href="/cookies">Cookie и хранилище</a>
+          <a href="/offer">Публичная оферта</a>
         </nav>
       </div>
       <div className="site-footer-meta">

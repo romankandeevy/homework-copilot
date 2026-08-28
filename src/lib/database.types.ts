@@ -117,6 +117,36 @@ export type Database = {
           },
         ]
       }
+      legal_acceptances: {
+        Row: {
+          accepted_at: string
+          agreement_version: string
+          consent_version: string
+          id: string
+          privacy_version: string
+          source: string
+          user_id: string
+        }
+        Insert: {
+          accepted_at?: string
+          agreement_version: string
+          consent_version: string
+          id?: string
+          privacy_version: string
+          source: string
+          user_id: string
+        }
+        Update: {
+          accepted_at?: string
+          agreement_version?: string
+          consent_version?: string
+          id?: string
+          privacy_version?: string
+          source?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       homework_solutions: {
         Row: {
           condition_normalized: string
@@ -517,6 +547,10 @@ export type Database = {
           p_textbook_id?: string
         }
         Returns: number
+      }
+      record_current_legal_acceptance: {
+        Args: { p_source: string }
+        Returns: undefined
       }
       track_my_activity: {
         Args: { p_event: string; p_path?: string }

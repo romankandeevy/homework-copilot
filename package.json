@@ -5,9 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build && node scripts/create-static-routes.mjs",
+    "build": "npm run check:unicode && tsc -b && vite build && node scripts/create-static-routes.mjs",
+    "check:unicode": "node scripts/check-mixed-alphabets.mjs",
+    "assets:og": "node scripts/render-og-card.mjs",
     "lint": "oxlint",
     "test": "vitest run",
+    "test:legal-browser": "node scripts/verify-legal-browser.mjs",
     "test:visual": "playwright test",
     "preview": "vite preview"
   },

@@ -56,4 +56,20 @@ describe('AccountDialog profile', () => {
     expect(screen.getByRole('link', { name: 'Конфиденциальность' })).toHaveAttribute('href', '/privacy')
     expect(screen.getByRole('link', { name: 'Правила сервиса' })).toHaveAttribute('href', '/terms')
   })
+
+  it('requires separate agreement and personal-data consent during registration', () => {
+    render(<AccountDialog user={null} account={null} passwordRecovery={false} initialView="profile" theme="light" onToggleTheme={() => undefined} onClose={() => undefined} onReloadAccount={async () => undefined} />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Регистрация' }))
+
+    const agreement = screen.getByRole('checkbox', { name: /пользовательское соглашение/ })
+    const personalData = screen.getByRole('checkbox', { name: /отдельно даю/ })
+    const google = screen.getByRole('button', { name: 'Продолжить с Google' })
+    expect(google).toBeDisabled()
+
+    fireEvent.click(agreement)
+    expect(google).toBeDisabled()
+    fireEvent.click(personalData)
+    expect(google).toBeEnabled()
+    expect(screen.getByRole('link', { name: 'согласие на обработку персональных данных' })).toHaveAttribute('href', '/consent')
+  })
 })

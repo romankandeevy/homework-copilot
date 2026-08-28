@@ -30,6 +30,7 @@ import {
   X,
 } from '@phosphor-icons/react'
 import LegalPage from './LegalPage'
+import PrivacyNotice from './PrivacyNotice'
 import NotebookCanvas from './NotebookCanvas'
 import { GeometryNotebookLayoutV1 } from './notebook/GeometryNotebookLayoutV1'
 import type { GeometryNotebookPageSpec } from './notebook/geometry/types'
@@ -37,6 +38,8 @@ import type { Database } from './lib/database.types'
 import type { AccountData } from './lib/supabase'
 import type { HomeworkSolution, HomeworkSource } from './lib/homeworkContract'
 import { formatRubles } from './lib/currency'
+import { recordPendingLegalAcceptance, rememberPendingLegalAcceptance } from './lib/legalConsent'
+import { applySeoMetadata, getSeoMetadata } from './lib/siteMetadata'
 import { useModalIsolation } from './lib/useModalIsolation'
 import { getSolutionPrice } from './lib/solutionPricing'
 import {
@@ -1405,9 +1408,15 @@ function HomePage() {
   }, [])
 
   useEffect(() => {
-    const pageTitle = selectedSolution ? `Решение № ${selectedSolution.task}` : activeNavigation
-    document.title = pageTitle === 'Главная' ? 'Homework Copilot' : `${pageTitle} — Homework Copilot`
-  }, [activeNavigation, selectedSolution])
+    const route = supportOpen
+      ? '/support'
+      : selectedSolution
+        ? `/solutions/${encodeURIComponent(selectedSolution.textbookId)}/${encodeURIComponent(selectedSolution.task)}`
+        : activeNavigation === 'Главная'
+          ? '/'
+          : applicationRoutes.find((item) => item.label === activeNavigation)?.path ?? '/'
+    applySeoMetadata(getSeoMetadata(route, selectedSolution?.task))
+  }, [activeNavigation, selectedSolution, supportOpen])
 
   useEffect(() => {
     if (!availableTextbooks.some((textbook) => textbook.id === selectedTextbookId)) {
@@ -1488,6 +1497,11 @@ function HomePage() {
 
     void restorePurchasedSolutions()
     return () => { active = false }
+  }, [supabaseClient, user])
+
+  useEffect(() => {
+    if (!supabaseClient || !user) return
+    void recordPendingLegalAcceptance(supabaseClient, user.email)
   }, [supabaseClient, user])
 
   useEffect(() => () => {
@@ -1605,6 +1619,7 @@ function HomePage() {
         return
       }
 
+      rememberPendingLegalAcceptance('google', googleEmail)
       sessionStorage.setItem('homework-copilot:google-verification-email', googleEmail)
       const { error: codeError } = await authClient.auth.signInWithOtp({
         email: googleEmail,
@@ -1998,8 +2013,11 @@ function App() {
   const params = new URLSearchParams(window.location.search)
   const pathname = currentApplicationPath()
 
-  if (pathname === '/privacy') return <LegalPage kind="privacy" />
-  if (pathname === '/terms') return <LegalPage kind="terms" />
+  if (pathname === '/privacy') return <><LegalPage kind="privacy" /><PrivacyNotice /></>
+  if (pathname === '/terms' || pathname === '/agreement') return <><LegalPage kind="terms" /><PrivacyNotice /></>
+  if (pathname === '/consent') return <><LegalPage kind="consent" /><PrivacyNotice /></>
+  if (pathname === '/cookies') return <><LegalPage kind="cookies" /><PrivacyNotice /></>
+  if (pathname === '/offer') return <><LegalPage kind="offer" /><PrivacyNotice /></>
 
   if (params.get('canvas') === '1') {
     return <NotebookCanvas />
@@ -2013,7 +2031,7 @@ function App() {
     return <Suspense fallback={null}><AdminDashboard /></Suspense>
   }
 
-  return <HomePage />
+  return <><HomePage /><PrivacyNotice /></>
 }
 
 export default App

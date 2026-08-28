@@ -298,6 +298,7 @@
 .account-auth-secondary button:disabled { color: var(--color-text-subtle); cursor: not-allowed; }
 .account-auth-legal { margin: calc(-1 * var(--space-2)) 0 0; color: var(--color-text-subtle); font-size: var(--text-micro); line-height: var(--leading-ui); text-align: center; }
 .account-auth-legal a { color: var(--color-text-muted); }
+.account-legal-consents { display: grid; gap: var(--space-3); padding: var(--space-3); border: 1px solid var(--auth-line, var(--color-border)); border-radius: var(--radius-md); background: var(--auth-field, var(--color-surface)); }
 .account-consent {
   display: grid;
   grid-template-columns: 1.25rem minmax(0, 1fr);

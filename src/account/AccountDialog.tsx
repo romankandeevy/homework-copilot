@@ -22,6 +22,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import type { AccountData } from '../lib/supabase'
 import { supabase } from '../lib/supabase'
 import { formatRubles } from '../lib/currency'
+import { forgetPendingLegalAcceptance, rememberPendingLegalAcceptance } from '../lib/legalConsent'
 import { useModalIsolation } from '../lib/useModalIsolation'
 import PasswordStrength from './PasswordStrength'
 import { isStrongPassword } from './passwordStrengthRules'
@@ -234,7 +235,8 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [legalAccepted, setLegalAccepted] = useState(false)
+  const [agreementAccepted, setAgreementAccepted] = useState(false)
+  const [personalDataAccepted, setPersonalDataAccepted] = useState(false)
   const passwordStrengthId = useId()
   const requiresStrongPassword = screen === 'sign-up' || screen === 'reset'
   const passwordIsValid = requiresStrongPassword ? isStrongPassword(password) : password.length >= 8
@@ -242,7 +244,7 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
   const expiresIn = verificationSecondsLeft(sentAt, emailCodeLifetime, now)
 
   const formIsValid = screen === 'sign-up'
-    ? fullName.trim().length >= 2 && isValidEmail(email) && passwordIsValid && legalAccepted
+    ? fullName.trim().length >= 2 && isValidEmail(email) && passwordIsValid && agreementAccepted && personalDataAccepted
     : screen === 'sign-in'
       ? isValidEmail(email) && password.length >= 8
       : screen === 'forgot'
@@ -278,9 +280,14 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
 
   const continueWithGoogle = async () => {
     if (!supabase || loading) return
+    if (screen === 'sign-up' && (!agreementAccepted || !personalDataAccepted)) {
+      setError('Прими соглашение и отдельное согласие на обработку данных')
+      return
+    }
     setLoading(true)
     setStatus('')
     setError('')
+    if (screen === 'sign-up') rememberPendingLegalAcceptance('google')
     sessionStorage.setItem('homework-copilot:google-auth-pending', '1')
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: 'google',
@@ -290,6 +297,7 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
       },
     })
     if (oauthError) {
+      forgetPendingLegalAcceptance()
       sessionStorage.removeItem('homework-copilot:google-auth-pending')
       setError(authErrorMessage(oauthError.message))
       setLoading(false)
@@ -364,6 +372,8 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
       if (screen === 'sign-up') {
         if (fullName.trim().length < 2) throw new Error('name')
         if (!isStrongPassword(password)) throw new Error('weak password')
+        if (!agreementAccepted || !personalDataAccepted) throw new Error('legal consent')
+        rememberPendingLegalAcceptance('email', email)
         const { data, error: signUpError } = await supabase.auth.signUp({
           email: email.trim(),
           password,
@@ -402,9 +412,11 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
       setScreen('sign-in')
       setPassword('')
     } catch (caught) {
+      if (screen === 'sign-up') forgetPendingLegalAcceptance()
       const message = caught instanceof Error ? caught.message : ''
       if (message === 'name') setError('Введи имя')
       else if (message === 'weak password') setError('Выполни все требования к паролю')
+      else if (message === 'legal consent') setError('Прими соглашение и отдельное согласие на обработку данных')
       else setError(authErrorMessage(message))
     } finally {
       setLoading(false)
@@ -464,9 +476,24 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
 
       {notice && <p className="account-notice">{notice}</p>}
 
+      {screen === 'sign-up' && (
+        <div className="account-legal-consents">
+          <label className="account-consent">
+            <input type="checkbox" checked={agreementAccepted} onChange={(event) => setAgreementAccepted(event.target.checked)} />
+            <span aria-hidden="true"><Check size={14} weight="bold" /></span>
+            <em>Я принимаю <a href="/terms" target="_blank" rel="noreferrer">пользовательское соглашение</a></em>
+          </label>
+          <label className="account-consent">
+            <input type="checkbox" checked={personalDataAccepted} onChange={(event) => setPersonalDataAccepted(event.target.checked)} />
+            <span aria-hidden="true"><Check size={14} weight="bold" /></span>
+            <em>Я отдельно даю <a href="/consent" target="_blank" rel="noreferrer">согласие на обработку персональных данных</a> и прочитал <a href="/privacy" target="_blank" rel="noreferrer">политику данных</a></em>
+          </label>
+        </div>
+      )}
+
       {(screen === 'sign-in' || screen === 'sign-up') && (
         <>
-          <button className="account-google-button" type="button" onClick={() => { void continueWithGoogle() }} disabled={loading}>
+          <button className="account-google-button" type="button" onClick={() => { void continueWithGoogle() }} disabled={loading || (screen === 'sign-up' && (!agreementAccepted || !personalDataAccepted))}>
             <GoogleLogo size={20} weight="bold" aria-hidden="true" />
             Продолжить с Google
           </button>
@@ -555,14 +582,6 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
             </label>
             {requiresStrongPassword && <PasswordStrength id={passwordStrengthId} value={password} />}
           </div>
-        )}
-
-        {screen === 'sign-up' && (
-          <label className="account-consent">
-            <input type="checkbox" checked={legalAccepted} onChange={(event) => setLegalAccepted(event.target.checked)} />
-            <span aria-hidden="true"><Check size={14} weight="bold" /></span>
-            <em>Я принимаю <a href="/terms" target="_blank" rel="noreferrer">условия использования</a> и <a href="/privacy" target="_blank" rel="noreferrer">политику конфиденциальности</a></em>
-          </label>
         )}
 
         {error && <p className="account-form-message is-error" role="alert">{error}</p>}
