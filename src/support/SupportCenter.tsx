@@ -4,7 +4,6 @@ import type { SupabaseClient, User } from '@supabase/supabase-js'
 import {
   ArrowLeft,
   ArrowRight,
-  ArrowSquareOut,
   ChatCircleText,
   CheckCircle,
   CircleNotch,
@@ -141,7 +140,6 @@ function SiteFooter({ onOpenSupport }: { onOpenSupport?: () => void }) {
           <h2>Помощь</h2>
           {onOpenSupport ? <button type="button" onClick={onOpenSupport}>Написать в поддержку</button> : <a href="/support">Написать в поддержку</a>}
           <a href="/support#faq">FAQ</a>
-          <a className="site-footer-external" href="https://t.me/homeworkcopilot_roma_support_bot" target="_blank" rel="noopener noreferrer">Telegram-бот <ArrowSquareOut size={15} weight="bold" aria-hidden="true" /></a>
         </nav>
 
         <nav className="site-footer-column site-footer-column-documents" aria-label="Документы">

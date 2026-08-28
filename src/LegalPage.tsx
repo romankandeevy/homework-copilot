@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import type { JSX } from 'react'
-import { ArrowLeft, ArrowUpRight } from '@phosphor-icons/react'
+import { ArrowLeft, ArrowUpRight, Trash } from '@phosphor-icons/react'
 import { legalDocumentVersion } from './lib/legalConsent'
 import { applySeoMetadata, getSeoMetadata } from './lib/siteMetadata'
 import { SiteFooter } from './support/SupportCenter'
@@ -185,6 +185,17 @@ function PersonalDataConsent() {
   )
 }
 
+function clearBrowserStorage() {
+  if (!window.confirm('Удалить локальные данные Homework Copilot на этом устройстве? Ты выйдешь из аккаунта.')) return
+  try {
+    window.localStorage.clear()
+    window.sessionStorage.clear()
+  } catch {
+    // Storage access can be blocked by the browser.
+  }
+  window.location.assign('/')
+}
+
 function CookiePolicy() {
   return (
     <>
@@ -207,6 +218,7 @@ function CookiePolicy() {
       <section>
         <h2>5. Как удалить данные</h2>
         <p>Локальные записи можно удалить в настройках браузера для домена homeworkcopilot.ru. После удаления тема, выбранный учебник, локальное расписание и вход на этом устройстве могут сброситься.</p>
+        <button className="legal-storage-clear" type="button" onClick={clearBrowserStorage}><Trash size={18} weight="duotone" aria-hidden="true" /> Очистить данные браузера</button>
       </section>
       <section>
         <h2>6. Когда появится выбор категорий</h2>
