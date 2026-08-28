@@ -98,15 +98,36 @@ function SupportLauncher({ onClick }: { onClick: () => void }) {
 function SiteFooter({ onOpenSupport }: { onOpenSupport?: () => void }) {
   return (
     <footer className="site-footer">
-      <div className="site-footer-grid">
-        <section className="site-footer-intro" aria-label="О Homework Copilot">
-          <a className="site-footer-brand" href="/" aria-label="Homework Copilot, на главную">
-            <span className="site-footer-mark" aria-hidden="true">H<span>C</span></span>
-            <strong>Homework Copilot</strong>
-          </a>
-          <p>Находи условия по учебнику, сохраняй решения и собирай расписание в одном аккаунте.</p>
-          <span className="site-footer-note"><i aria-hidden="true" />Решения помогают учиться. Проверяй ответ перед сдачей.</span>
+      <div className="site-footer-hero">
+        <a className="site-footer-brand" href="/" aria-label="Homework Copilot, на главную">
+          <span className="site-footer-monogram" aria-hidden="true"><span>H</span><span>C</span></span>
+          <span className="site-footer-brand-copy">
+            <strong><span>Homework</span><span>Copilot</span></strong>
+            <small>Понятная домашняя работа</small>
+          </span>
+        </a>
+
+        <section className="site-footer-support" aria-labelledby="site-footer-support-title">
+          <div>
+            <span className="site-footer-eyebrow">Поддержка</span>
+            <h2 id="site-footer-support-title">Помощь рядом</h2>
+            <p>Ответим прямо в личном кабинете</p>
+          </div>
+          {onOpenSupport ? (
+            <button className="site-footer-support-action" type="button" onClick={onOpenSupport}>
+              Написать в поддержку
+              <ArrowRight size={18} weight="bold" aria-hidden="true" />
+            </button>
+          ) : (
+            <a className="site-footer-support-action" href="/support">
+              Написать в поддержку
+              <ArrowRight size={18} weight="bold" aria-hidden="true" />
+            </a>
+          )}
         </section>
+      </div>
+
+      <div className="site-footer-directory">
 
         <nav className="site-footer-column" aria-label="Сервис">
           <h2>Сервис</h2>
@@ -123,7 +144,7 @@ function SiteFooter({ onOpenSupport }: { onOpenSupport?: () => void }) {
           <a className="site-footer-external" href="https://t.me/homeworkcopilot_roma_support_bot" target="_blank" rel="noopener noreferrer">Telegram-бот <ArrowSquareOut size={15} weight="bold" aria-hidden="true" /></a>
         </nav>
 
-        <nav className="site-footer-column" aria-label="Документы">
+        <nav className="site-footer-column site-footer-column-documents" aria-label="Документы">
           <h2>Документы</h2>
           <a href="/terms">Пользовательское соглашение</a>
           <a href="/privacy">Политика данных</a>
@@ -134,7 +155,7 @@ function SiteFooter({ onOpenSupport }: { onOpenSupport?: () => void }) {
       </div>
       <div className="site-footer-meta">
         <span>© 2026 Homework Copilot</span>
-        <span>Поддержка отвечает в личном кабинете</span>
+        <span>Решения помогают учиться. Проверяй ответ перед сдачей.</span>
       </div>
     </footer>
   )
