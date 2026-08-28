@@ -11,6 +11,7 @@
     "lint": "oxlint",
     "test": "vitest run",
     "test:legal-browser": "node scripts/verify-legal-browser.mjs",
+    "test:referral-browser": "node scripts/verify-referral-browser.mjs",
     "test:visual": "playwright test",
     "preview": "vite preview"
   },
