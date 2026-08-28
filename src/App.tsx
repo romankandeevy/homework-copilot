@@ -1973,46 +1973,48 @@ function HomePage() {
     <main className="product-shell">
       <ProductTopbar theme={theme} activeLabel={activeNavigation} onNavigate={navigate} onToggleTheme={toggleTheme} user={user} account={account} onOpenAccount={openAccount} onOpenWallet={openWallet} />
       <div className="product-content">
-        {activeNavigation === 'Главная' && <PageHeader account={account} />}
-        {activeNavigation === 'Главная' ? (
-          <div className="home-content">
-            <CopyTask
-              taskNumber={taskNumber}
-              textbook={selectedTextbook}
-              textbooks={availableTextbooks}
-              onTaskNumberChange={setTaskNumber}
-              onTextbookChange={setSelectedTextbookId}
-              onCreateTextbook={createTextbook}
-              onSubmit={submitTask}
-              textbookPickerOpen={textbookPickerOpen}
-              onTextbookPickerOpenChange={setTextbookPickerOpen}
-            />
-            <div className="home-grid">
-              <div className="home-column home-column-primary">
-                {solutionState && <SolutionStatus state={solutionState} textbooks={availableTextbooks} onOpenSolution={openSolution} />}
-                {user ? <MySolutions items={personalSolutions} onOpenAll={() => navigate('Решения')} onOpenSolution={openSolution} /> : <GuestWorkspace onOpenAccount={openAccount} />}
-              </div>
-              <div className="home-column home-column-secondary">
-                <BaseShortcut onOpenBase={() => navigate('Решения')} />
+        <div className="product-route">
+          {activeNavigation === 'Главная' && <PageHeader account={account} />}
+          {activeNavigation === 'Главная' ? (
+            <div className="home-content">
+              <CopyTask
+                taskNumber={taskNumber}
+                textbook={selectedTextbook}
+                textbooks={availableTextbooks}
+                onTaskNumberChange={setTaskNumber}
+                onTextbookChange={setSelectedTextbookId}
+                onCreateTextbook={createTextbook}
+                onSubmit={submitTask}
+                textbookPickerOpen={textbookPickerOpen}
+                onTextbookPickerOpenChange={setTextbookPickerOpen}
+              />
+              <div className="home-grid">
+                <div className="home-column home-column-primary">
+                  {solutionState && <SolutionStatus state={solutionState} textbooks={availableTextbooks} onOpenSolution={openSolution} />}
+                  {user ? <MySolutions items={personalSolutions} onOpenAll={() => navigate('Решения')} onOpenSolution={openSolution} /> : <GuestWorkspace onOpenAccount={openAccount} />}
+                </div>
+                <div className="home-column home-column-secondary">
+                  <BaseShortcut onOpenBase={() => navigate('Решения')} />
+                </div>
               </div>
             </div>
-          </div>
-        ) : selectedSolution ? (
-          <UnderstandingPage
-            solution={selectedSolution}
-            generatedSolution={visibleGeneratedSolutions.find(
-              (solution) => solution.textbookId === selectedSolution.textbookId && solution.task === selectedSolution.task,
-            )}
-            onGoHome={() => navigate('Главная')}
-            onOpenSupport={(context) => openSupport('wrong_solution', context)}
-          />
-        ) : activeNavigation === 'Расписание' ? (
-          <Suspense fallback={<div className="route-loading" role="status">Загружаем расписание…</div>}><SchedulePage userId={user?.id ?? null} grade={account?.profile.grade ?? 8} /></Suspense>
-        ) : activeNavigation === 'Решения' ? (
-          <SolutionsPage user={user} personalSolutions={personalSolutions} textbooks={availableTextbooks} onOpenAccount={openAccount} onOpenSolution={openSolution} onOpenSharedSolution={openSharedSolution} />
-        ) : (
-          <CdzComingSoon onGoHome={() => navigate('Главная')} />
-        )}
+          ) : selectedSolution ? (
+            <UnderstandingPage
+              solution={selectedSolution}
+              generatedSolution={visibleGeneratedSolutions.find(
+                (solution) => solution.textbookId === selectedSolution.textbookId && solution.task === selectedSolution.task,
+              )}
+              onGoHome={() => navigate('Главная')}
+              onOpenSupport={(context) => openSupport('wrong_solution', context)}
+            />
+          ) : activeNavigation === 'Расписание' ? (
+            <Suspense fallback={<div className="route-loading" role="status">Загружаем расписание…</div>}><SchedulePage userId={user?.id ?? null} grade={account?.profile.grade ?? 8} /></Suspense>
+          ) : activeNavigation === 'Решения' ? (
+            <SolutionsPage user={user} personalSolutions={personalSolutions} textbooks={availableTextbooks} onOpenAccount={openAccount} onOpenSolution={openSolution} onOpenSharedSolution={openSharedSolution} />
+          ) : (
+            <CdzComingSoon onGoHome={() => navigate('Главная')} />
+          )}
+        </div>
         <SiteFooter onOpenSupport={() => openSupport()} />
       </div>
       <SupportLauncher onClick={() => openSupport()} />

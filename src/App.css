@@ -160,6 +160,8 @@
   padding: 0 clamp(1.5rem, 3vw, 3.5rem) var(--space-12);
 }
 
+.product-route { min-height: calc(100dvh - 5rem); }
+
 .page-header {
   display: flex;
   width: min(100%, var(--content-width));
@@ -2385,6 +2387,8 @@
     overflow-y: auto;
     overscroll-behavior-y: contain;
   }
+
+  .product-route { min-height: 100%; }
 
   .mobile-navigation {
     position: relative;

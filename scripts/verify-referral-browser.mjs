@@ -235,6 +235,17 @@ try {
     if (supportState.noteBorder !== supportState.referenceBorder) failures.push(`support-${viewport.width}: reward note uses a tinted border`)
     if (supportState.regularCardBorder !== supportState.referenceBorder) failures.push(`support-${viewport.width}: category card uses a tinted border`)
     await page.screenshot({ path: resolve(outputDirectory, `support-${viewport.width}.png`), fullPage: true })
+
+    await page.goto(`${origin}/solutions`, { waitUntil: 'domcontentloaded' })
+    await page.getByRole('heading', { name: 'Решения', exact: true }).waitFor()
+    const footerBeforeScroll = await page.locator('.site-footer').evaluate((footer) => ({
+      top: footer.getBoundingClientRect().top,
+      viewportHeight: window.innerHeight,
+    }))
+    if (footerBeforeScroll.top < footerBeforeScroll.viewportHeight) failures.push(`solutions-${viewport.width}: footer is visible before scrolling`)
+    await page.screenshot({ path: resolve(outputDirectory, `solutions-${viewport.width}.png`) })
+    await page.locator('.site-footer').scrollIntoViewIfNeeded()
+    if (!await page.locator('.site-footer').isVisible()) failures.push(`solutions-${viewport.width}: footer is not reachable by scrolling`)
     await context.close()
   }
 
