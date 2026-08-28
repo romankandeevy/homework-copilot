@@ -14,6 +14,18 @@
     }
   },
   "redirects": [
+    {
+      "source": "/",
+      "has": [{ "type": "host", "value": "homeworkcopilot.ru" }],
+      "destination": "https://www.homeworkcopilot.ru/",
+      "permanent": true
+    },
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "homeworkcopilot.ru" }],
+      "destination": "https://www.homeworkcopilot.ru/:path*",
+      "permanent": true
+    },
     { "source": "/main", "destination": "/", "permanent": true },
     { "source": "/base", "destination": "/solutions", "permanent": true },
     { "source": "/tasks", "destination": "/cdz", "permanent": true },
