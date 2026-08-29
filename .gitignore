@@ -37,3 +37,6 @@ sites-homework-copilot/
 *.njsproj
 *.sln
 *.sw?
+
+# Исполняемые файлы tesseract.js раскладываются локально из node_modules
+public/tesseract/

@@ -639,10 +639,20 @@ function engineMessage(request: SolveHomeworkRequest, extra = '') {
   }
 
   const sourceHint = request.condition ? `Проверенное условие: ${request.condition}` : ''
+  // Для решения по фотографии название учебника, авторы и издание приходят
+  // произвольным текстом от клиента и на разбор задачи не влияют — условие
+  // читается прямо с изображения. В промпт их не подставляем, чтобы не давать
+  // готовый канал для внедрения инструкций в модель.
+  const fromPhoto = request.source === 'photo'
+  const bookLine = fromPhoto ? null : `Учебник: ${request.textbookTitle}. Авторы: ${request.authors}.`
+  const editionLine = fromPhoto
+    ? `Задача: ${request.task}.`
+    : `Издание: ${request.edition}. Задача: ${request.task}.`
+
   const prompt = [
     `Предмет: ${request.subject}. Класс: ${request.grade}.`,
-    `Учебник: ${request.textbookTitle}. Авторы: ${request.authors}.`,
-    `Издание: ${request.edition}. Задача: ${request.task}.`,
+    bookLine,
+    editionLine,
     sourceHint,
     'Приложенное изображение содержит авторитетный фрагмент источника и, если есть, исходный рисунок.',
     extra,
@@ -1088,4 +1098,3 @@ export async function solveHomeworkWithReview(
   }
 }
 
-export const geometrySolutionSchemas = { decisionSchema, draftSchema, reviewSchema }

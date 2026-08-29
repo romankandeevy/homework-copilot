@@ -354,7 +354,14 @@ function SchedulePage({ userId = null, grade = 8 }: { userId?: string | null; gr
       let pass: 'loading' | 'table' | 'cells' = 'loading'
       let cellProgress = 0
       let cellCount = 1
+      // Воркер и wasm-ядро берём со своего домена, а не со стороннего CDN:
+      // иначе компрометация CDN означала бы выполнение произвольного кода
+      // в браузере ученика, а блокировка CDN — отказ распознавания.
+      // Языковые модели остаются внешними — это данные, а не исполняемый код.
+      const assetBase = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/tesseract`
       const worker = await createWorker(['rus', 'eng'], undefined, {
+        workerPath: `${assetBase}/worker.min.js`,
+        corePath: `${assetBase}/core`,
         logger: ({ progress, status }) => {
           if (ocrRunRef.current !== runId) return
           if (status === 'recognizing text' && pass === 'table') {

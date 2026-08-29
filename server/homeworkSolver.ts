@@ -257,17 +257,55 @@ async function authenticateAccount(request: IncomingMessage, options: SolverOpti
   return { client, userId: data.user.id }
 }
 
-async function ensureAccountBalance(account: AuthenticatedAccount | null, request: SolveHomeworkRequest) {
-  if (!account) return
-  const { data, error } = await account.client
-    .from('wallet_accounts')
-    .select('balance')
-    .eq('user_id', account.userId)
-    .single()
-
-  if (error) throw new HomeworkSolverError(502, 'Не получилось проверить баланс')
+// Оплата резервируется ДО вызова платной модели. Проверка «хватает ли денег»
+// без списания оставляла гонку: параллельные запросы с разными ключами
+// идемпотентности проходили её одновременно и запускали модель несколько раз,
+// а списывалось за один. Резерв идемпотентен по ключу запроса; если решение
+// получить не удалось, он возвращается через refundSolutionCredit.
+async function reserveSolutionCredit(
+  account: AuthenticatedAccount | null,
+  request: SolveHomeworkRequest,
+): Promise<boolean> {
+  if (!account) return false
   const price = getSolutionPrice(request.textbookId, request.task, request.source)
-  if (data.balance < price) throw new HomeworkSolverError(402, 'На балансе меньше ' + price + ' ₽')
+  const { data, error } = await account.client.rpc('reserve_solution_credit', {
+    p_idempotency_key: request.idempotencyKey,
+    p_task_number: Number.isFinite(Number(request.task)) ? Number(request.task) : null,
+    p_textbook_id: request.textbookId,
+    p_source: request.source,
+    p_description: 'Решение задачи ' + request.task,
+  })
+
+  if (error) {
+    if (error.message.includes('insufficient balance')) {
+      throw new HomeworkSolverError(402, 'На балансе меньше ' + price + ' ₽')
+    }
+    if (error.message.includes('account is blocked')) {
+      throw new HomeworkSolverError(403, 'Аккаунт заблокирован')
+    }
+    throw new HomeworkSolverError(502, 'Не получилось зарезервировать оплату')
+  }
+
+  return Boolean(data && typeof data === 'object' && !Array.isArray(data) && data.reserved === true)
+}
+
+// Компенсация резерва. Возврат проходит только если решение так и не выдано —
+// это проверяет сама функция в базе, поэтому вызов безопасен и при гонках.
+// Ошибку возврата глушим намеренно: она не должна подменять исходную причину сбоя.
+async function refundSolutionCredit(
+  account: AuthenticatedAccount | null,
+  request: SolveHomeworkRequest,
+  reason: string,
+): Promise<void> {
+  if (!account) return
+  try {
+    await account.client.rpc('refund_solution_credit', {
+      p_idempotency_key: request.idempotencyKey,
+      p_reason: reason.slice(0, 160),
+    })
+  } catch {
+    // Резерв разгребёт ручная сверка; исходную ошибку это скрывать не должно.
+  }
 }
 
 async function completeStoredSolution(
@@ -443,21 +481,26 @@ export async function handleHomeworkSolverRequest(
     }
 
     stage = 'balance'
-    if (!existingSolution) await ensureAccountBalance(account, task)
-    stage = 'generate'
-    const solution = await solveWithKie(task, options, account?.userId)
-    stage = 'persist'
-    const completedSolution = await completeStoredSolution(account, task, solution)
-    if (!completedSolution || !isCurrentReviewedSolution(completedSolution)) {
-      throw new HomeworkSolverError(502, 'Не получилось сохранить готовое решение')
+    const reserved = existingSolution ? false : await reserveSolutionCredit(account, task)
+    try {
+      stage = 'generate'
+      const solution = await solveWithKie(task, options, account?.userId)
+      stage = 'persist'
+      const completedSolution = await completeStoredSolution(account, task, solution)
+      if (!completedSolution || !isCurrentReviewedSolution(completedSolution)) {
+        throw new HomeworkSolverError(502, 'Не получилось сохранить готовое решение')
+      }
+      logSolverEvent('info', 'homework_solve_completed', {
+        requestId: solveRequestId,
+        task: taskNumber,
+        source,
+        durationMs: Date.now() - startedAt,
+      })
+      sendJson(response, 200, { solution: completedSolution })
+    } catch (error) {
+      if (reserved) await refundSolutionCredit(account, task, 'Решение не удалось получить')
+      throw error
     }
-    logSolverEvent('info', 'homework_solve_completed', {
-      requestId: solveRequestId,
-      task: taskNumber,
-      source,
-      durationMs: Date.now() - startedAt,
-    })
-    sendJson(response, 200, { solution: completedSolution })
   } catch (error) {
     const status = error instanceof HomeworkSolverError ? error.status : 500
     logSolverEvent('error', 'homework_solve_failed', {

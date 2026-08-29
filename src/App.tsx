@@ -31,7 +31,6 @@ import {
 } from '@phosphor-icons/react'
 import LegalPage from './LegalPage'
 import PrivacyNotice from './PrivacyNotice'
-import NotebookCanvas from './NotebookCanvas'
 import { GeometryNotebookLayoutV1 } from './notebook/GeometryNotebookLayoutV1'
 import type { GeometryNotebookPageSpec } from './notebook/geometry/types'
 import type { Database } from './lib/database.types'
@@ -63,6 +62,8 @@ import type { SupportCategory, SupportPrefill } from './support/SupportCenter'
 import './App.css'
 
 const DesignSystemPlayground = lazy(() => import('./DesignSystemPlayground'))
+// Холст тетради нужен только в разработке — в главном чанке ему делать нечего.
+const NotebookCanvas = lazy(() => import('./NotebookCanvas'))
 const AccountDialog = lazy(() => import('./account/AccountDialog'))
 const SchedulePage = lazy(() => import('./SchedulePage'))
 const AdminDashboard = lazy(() => import('./AdminDashboard'))
@@ -2089,12 +2090,15 @@ function App() {
   if (pathname === '/cookies') return <><LegalPage kind="cookies" /><PrivacyNotice /></>
   if (pathname === '/offer') return <><LegalPage kind="offer" /><PrivacyNotice /></>
 
-  if (params.get('canvas') === '1') {
-    return <NotebookCanvas />
-  }
+  // Инструменты разработки не должны открываться на проде по угадываемой ссылке.
+  if (import.meta.env.DEV) {
+    if (params.get('canvas') === '1') {
+      return <Suspense fallback={null}><NotebookCanvas /></Suspense>
+    }
 
-  if (params.get('design-system') === '1') {
-    return <Suspense fallback={null}><DesignSystemPlayground /></Suspense>
+    if (params.get('design-system') === '1') {
+      return <Suspense fallback={null}><DesignSystemPlayground /></Suspense>
+    }
   }
 
   if (pathname === '/admin') {

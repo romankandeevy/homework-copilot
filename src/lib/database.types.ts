@@ -601,6 +601,29 @@ export type Database = {
         }
         Returns: Json
       }
+      reserve_solution_credit: {
+        Args: {
+          p_description?: string
+          p_idempotency_key: string
+          p_source?: string
+          p_task_number?: number | null
+          p_textbook_id?: string | null
+        }
+        Returns: {
+          alreadyReserved?: boolean
+          balance: number | null
+          price?: number
+          reserved: boolean
+        }
+      }
+      refund_solution_credit: {
+        Args: { p_idempotency_key: string; p_reason?: string }
+        Returns: {
+          balance?: number | null
+          reason?: string
+          refunded: boolean
+        }
+      }
       get_admin_context: { Args: never; Returns: Json }
       get_my_referral: { Args: never; Returns: Json }
       get_my_homework_solutions: {

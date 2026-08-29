@@ -390,13 +390,13 @@ describe('homework solver', () => {
 
   it('stores a confirmed answer and payment atomically after balance validation', async () => {
     const saved = await solveWithKie(task, {}, 'student-1')
-    const rpc = vi.fn().mockResolvedValueOnce({ data: null, error: null }).mockResolvedValueOnce({ data: saved, error: null })
-    const single = vi.fn().mockResolvedValue({ data: { balance: 20 }, error: null })
-    const eq = vi.fn(() => ({ single }))
-    const select = vi.fn(() => ({ eq }))
+    const rpc = vi.fn()
+      .mockResolvedValueOnce({ data: null, error: null })
+      .mockResolvedValueOnce({ data: { reserved: true, balance: 15, price: 5 }, error: null })
+      .mockResolvedValueOnce({ data: saved, error: null })
     vi.mocked(createClient).mockReturnValueOnce({
       auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'student-1' } }, error: null }) },
-      from: vi.fn(() => ({ select })),
+      from: vi.fn(),
       rpc,
     } as never)
 
@@ -411,7 +411,14 @@ describe('homework solver', () => {
 
     expect(http.response.statusCode).toBe(200)
     expect(fetchMock).not.toHaveBeenCalled()
-    expect(rpc).toHaveBeenCalledTimes(2)
+    expect(rpc).toHaveBeenCalledTimes(3)
+    // Резерв уходит ДО вызова модели, а не после него.
+    expect(rpc.mock.calls[1]).toEqual(['reserve_solution_credit', expect.objectContaining({
+      p_idempotency_key: task.idempotencyKey,
+      p_task_number: 2,
+      p_textbook_id: 'geometry',
+      p_source: 'number',
+    })])
     expect(rpc.mock.calls[0]).toEqual(['complete_homework_solution', expect.objectContaining({
       p_idempotency_key: task.idempotencyKey,
       p_source: 'number',
@@ -421,7 +428,7 @@ describe('homework solver', () => {
       p_source_url: verifiedTask.sourceUrl,
       p_condition: verifiedTask.condition,
     })])
-    expect(rpc.mock.calls[1][1]).toMatchObject({
+    expect(rpc.mock.calls[2][1]).toMatchObject({
       p_idempotency_key: task.idempotencyKey,
       p_solution: { ownerId: 'student-1', answer: '3 прямые' },
     })
@@ -453,26 +460,54 @@ describe('homework solver', () => {
     expect(from).not.toHaveBeenCalled()
   })
 
-  it('checks balance before processing a new confirmed solution', async () => {
-    const rpc = vi.fn().mockResolvedValue({ data: null, error: null })
-    const single = vi.fn().mockResolvedValue({ data: { balance: 3 }, error: null })
-    const eq = vi.fn(() => ({ single }))
-    const select = vi.fn(() => ({ eq }))
+  it('refuses to call the model when the reservation cannot be paid', async () => {
+    const rpc = vi.fn()
+      .mockResolvedValueOnce({ data: null, error: null })
+      .mockResolvedValueOnce({ data: null, error: { message: 'insufficient balance' } })
     vi.mocked(createClient).mockReturnValueOnce({
       auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'student-1' } }, error: null }) },
-      from: vi.fn(() => ({ select })),
+      from: vi.fn(),
       rpc,
     } as never)
 
     const http = createHttp('POST', task)
     http.request.headers.authorization = 'Bearer test-session'
+    const fetchMock = vi.fn<typeof fetch>()
+    await handleHomeworkSolverRequest(http.request, http.response, {
+      supabaseUrl: 'https://project.supabase.co',
+      supabasePublishableKey: 'publishable-test-key',
+      fetchImpl: fetchMock,
+    })
+    expect(http.response.statusCode).toBe(402)
+    expect(http.body().error).toBe('На балансе меньше 5 ₽')
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(rpc).toHaveBeenCalledTimes(2)
+    expect(rpc.mock.calls[1][0]).toBe('reserve_solution_credit')
+  })
+
+  it('returns the reservation to the account when the model fails', async () => {
+    const rpc = vi.fn()
+      .mockResolvedValueOnce({ data: null, error: null })
+      .mockResolvedValueOnce({ data: { reserved: true, balance: 15, price: 5 }, error: null })
+      .mockResolvedValue({ data: { refunded: true, balance: 20 }, error: null })
+    vi.mocked(createClient).mockReturnValueOnce({
+      auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'student-1' } }, error: null }) },
+      from: vi.fn(),
+      rpc,
+    } as never)
+
+    // Провайдер не настроен: solveWithKie падает сразу после резерва.
+    const http = createHttp('POST', photoTask)
+    http.request.headers.authorization = 'Bearer test-session'
     await handleHomeworkSolverRequest(http.request, http.response, {
       supabaseUrl: 'https://project.supabase.co',
       supabasePublishableKey: 'publishable-test-key',
     })
-    expect(http.response.statusCode).toBe(402)
-    expect(http.body().error).toBe('На балансе меньше 5 ₽')
-    expect(rpc).toHaveBeenCalledOnce()
+
+    expect(http.response.statusCode).toBe(503)
+    const refundCall = rpc.mock.calls.find((call) => call[0] === 'refund_solution_credit')
+    expect(refundCall).toBeDefined()
+    expect(refundCall?.[1]).toMatchObject({ p_idempotency_key: photoTask.idempotencyKey })
   })
 
   it('returns an actionable 503 for a photo when the provider is not configured', async () => {

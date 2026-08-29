@@ -23,7 +23,3 @@ export function getSolutionPrice(textbookId: string, task: string | number, sour
   if (positionInChapter < mediumTaskLimit) return 10
   return 15
 }
-
-export function getSolutionBatchTotal(textbookId: string, tasks: readonly number[]) {
-  return tasks.reduce((total, task) => total + getSolutionPrice(textbookId, task), 0)
-}
