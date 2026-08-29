@@ -1041,12 +1041,59 @@ export function isCurrentReviewedSolution(solution: HomeworkSolution) {
     && validateSolutionQuality(solution).length === 0
 }
 
+// Провайдер примерно в трети случаев отдаёт пустой или битый JSON вместо
+// решения — это подтвердилось прогоном на живых задачах. Ошибка транзиентная:
+// тот же запрос со второй попытки проходит. Повторяем ограниченно и только
+// пока укладываемся в бюджет времени функции (maxDuration 180 с).
+const transientModelFailures = new Set([
+  'Модель вернула некорректный JSON',
+  'Модель не вернула решение',
+  'Не получилось подключиться к модели решения',
+])
+
+async function callModelWithRetry(
+  options: EngineOptions,
+  system: string,
+  message: ReturnType<typeof engineMessage>,
+  schemaName: string,
+  schema: object,
+  deadline: number,
+) {
+  let lastError: unknown
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      const payload = await callModel(options, system, message, schemaName, schema)
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+        throw new GeometrySolutionEngineError('Модель не вернула решение')
+      }
+      return payload
+    } catch (error) {
+      lastError = error
+      const retryable = error instanceof GeometrySolutionEngineError
+        && transientModelFailures.has(error.message)
+      // Вторая попытка занимает столько же, сколько первая: если времени
+      // до дедлайна не осталось, честнее вернуть ошибку сразу.
+      if (!retryable || attempt === 2 || Date.now() > deadline) throw error
+    }
+  }
+  throw lastError
+}
+
 export async function solveHomeworkWithReview(
   request: SolveHomeworkRequest,
   options: EngineOptions,
   ownerId?: string,
 ) {
-  const rawDraft = await callModel(options, authorInstructions, engineMessage(request), 'homework_solution_draft', draftSchema)
+  // На повтор оставляем время только в первой половине бюджета функции.
+  const retryDeadline = Date.now() + 70_000
+  const rawDraft = await callModelWithRetry(
+    options,
+    authorInstructions,
+    engineMessage(request),
+    'homework_solution_draft',
+    draftSchema,
+    retryDeadline,
+  )
   const draft = normalizeDraft(rawDraft)
   const firstSolution = toSolution(draft, request, ownerId, false)
   const deterministicIssues = [
@@ -1063,7 +1110,14 @@ export async function solveHomeworkWithReview(
     `Автоматические замечания: ${deterministicIssues.length > 0 ? deterministicIssues.join('; ') : 'нет'}.`,
     `Кандидат: ${JSON.stringify(draft)}`,
   ].join('\n')
-  const rawReview = await callModel(options, reviewerInstructions, engineMessage(request, reviewPrompt), 'homework_solution_review', reviewSchema)
+  const rawReview = await callModelWithRetry(
+    options,
+    reviewerInstructions,
+    engineMessage(request, reviewPrompt),
+    'homework_solution_review',
+    reviewSchema,
+    retryDeadline,
+  )
   if (!rawReview || typeof rawReview !== 'object' || Array.isArray(rawReview)) {
     throw new GeometrySolutionEngineError('Редактор не вернул проверенное решение')
   }
