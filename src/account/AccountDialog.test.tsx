@@ -16,7 +16,7 @@ const account: AccountData = {
     last_seen_at: null,
     updated_at: '2026-08-24T00:00:00.000Z',
   },
-  balance: 20,
+  balance: 2000,
   control: null,
   entries: [{
     id: 'entry-1',

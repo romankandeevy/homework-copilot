@@ -4,6 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { homeworkSolutionEngineVersion } from '../src/lib/homeworkContract.ts'
 import type { HomeworkSolution, HomeworkTaskType, SolveHomeworkRequest } from '../src/lib/homeworkContract.ts'
 import type { Database, Json } from '../src/lib/database.types.ts'
+import { formatRubles } from '../src/lib/currency.ts'
 import { getSolutionPrice } from '../src/lib/solutionPricing.ts'
 import { findVerifiedTextbookTask, geometryTextbookIdentity, normalizeTaskCondition } from '../src/textbooks/taskCatalog.ts'
 import {
@@ -278,7 +279,7 @@ async function reserveSolutionCredit(
 
   if (error) {
     if (error.message.includes('insufficient balance')) {
-      throw new HomeworkSolverError(402, 'На балансе меньше ' + price + ' ₽')
+      throw new HomeworkSolverError(402, 'На балансе меньше ' + formatRubles(price))
     }
     if (error.message.includes('account is blocked')) {
       throw new HomeworkSolverError(403, 'Аккаунт заблокирован')
@@ -334,7 +335,7 @@ async function completeStoredSolution(
     throw new HomeworkSolverError(
       error.message.includes('insufficient balance') ? 402 : 502,
       error.message.includes('insufficient balance')
-        ? 'На балансе меньше ' + price + ' ₽'
+        ? 'На балансе меньше ' + formatRubles(price)
         : 'Не получилось безопасно сохранить готовое решение',
     )
   }

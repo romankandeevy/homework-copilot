@@ -21,7 +21,7 @@ import {
   Wallet,
   X,
 } from '@phosphor-icons/react'
-import { formatRubles } from './lib/currency'
+import { formatRubles, rublesToKopecks } from './lib/currency'
 import type { Json } from './lib/database.types'
 import { supabase } from './lib/supabase'
 import AdminSolutionLibrary from './AdminSolutionLibrary'
@@ -707,9 +707,10 @@ export default function AdminDashboard() {
 
     setActionLoading('balance')
     setError('')
+    // Оператор вводит рубли, база работает в копейках.
     const { error: adjustmentError } = await supabase.rpc('admin_adjust_balance', {
       p_user_id: detail.user.id,
-      p_amount: parsedAmount,
+      p_amount: rublesToKopecks(parsedAmount),
       p_reason: balanceReason.trim(),
     })
     if (adjustmentError) setError(databaseErrorMessage(adjustmentError))
@@ -784,7 +785,7 @@ export default function AdminDashboard() {
     setError('')
     const { data, error: topUpError } = await supabase.rpc('admin_record_verified_top_up', {
       p_user_id: detail.user.id,
-      p_amount: parsedAmount,
+      p_amount: rublesToKopecks(parsedAmount),
       p_provider_reference: normalizedReference,
     })
     if (topUpError) setError(databaseErrorMessage(topUpError))

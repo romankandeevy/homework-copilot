@@ -4,6 +4,10 @@
       "includeFiles": "{server/**,src/lib/**,src/textbooks/**}",
       "maxDuration": 300
     },
+    "api/chat.ts": {
+      "includeFiles": "{server/**,src/lib/**}",
+      "maxDuration": 300
+    },
     "api/support.ts": {
       "includeFiles": "{server/**,src/lib/**}",
       "maxDuration": 30

@@ -41,6 +41,153 @@ export type Database = {
         }
         Relationships: []
       }
+      chat_conversations: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          id: string
+          last_message_at: string | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          last_message_at?: string | null
+          title?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          last_message_at?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      chat_messages: {
+        Row: {
+          attachments: Json
+          content: string
+          conversation_id: string
+          created_at: string
+          id: string
+          model_id: string | null
+          role: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          attachments?: Json
+          content?: string
+          conversation_id: string
+          created_at?: string
+          id?: string
+          model_id?: string | null
+          role: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          attachments?: Json
+          content?: string
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          model_id?: string | null
+          role?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "chat_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_generations: {
+        Row: {
+          charged_kopecks: number
+          conversation_id: string | null
+          created_at: string
+          credits_consumed: number | null
+          duration_ms: number | null
+          error: string | null
+          finished_at: string | null
+          id: string
+          idempotency_key: string
+          image_count: number
+          input_tokens: number | null
+          markup_percent: number
+          message_id: string | null
+          model_id: string
+          output_tokens: number | null
+          provider_cost_kopecks: number
+          reserved_kopecks: number
+          status: string
+          tariff_version: number
+          used_web_search: boolean
+          user_id: string
+        }
+        Insert: {
+          charged_kopecks?: number
+          conversation_id?: string | null
+          created_at?: string
+          credits_consumed?: number | null
+          duration_ms?: number | null
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          idempotency_key: string
+          image_count?: number
+          input_tokens?: number | null
+          markup_percent?: number
+          message_id?: string | null
+          model_id: string
+          output_tokens?: number | null
+          provider_cost_kopecks?: number
+          reserved_kopecks?: number
+          status?: string
+          tariff_version?: number
+          used_web_search?: boolean
+          user_id: string
+        }
+        Update: {
+          charged_kopecks?: number
+          conversation_id?: string | null
+          created_at?: string
+          credits_consumed?: number | null
+          duration_ms?: number | null
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          idempotency_key?: string
+          image_count?: number
+          input_tokens?: number | null
+          markup_percent?: number
+          message_id?: string | null
+          model_id?: string
+          output_tokens?: number | null
+          provider_cost_kopecks?: number
+          reserved_kopecks?: number
+          status?: string
+          tariff_version?: number
+          used_web_search?: boolean
+          user_id?: string
+        }
+        Relationships: []
+      }
+
       homework_solution_access: {
         Row: {
           idempotency_key: string
@@ -542,6 +689,65 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_chat_conversation: {
+        Args: { p_title?: string }
+        Returns: { id: string; title: string; createdAt: string }
+      }
+      rename_chat_conversation: {
+        Args: { p_conversation_id: string; p_title: string }
+        Returns: { id: string; title: string }
+      }
+      delete_chat_conversation: {
+        Args: { p_conversation_id: string }
+        Returns: { deleted: boolean; messages: number }
+      }
+      list_chat_models: {
+        Args: never
+        Returns: {
+          enabled: boolean
+          models: Array<{
+            id: string
+            title: string
+            description: string
+            supportsImages: boolean
+            supportsWebSearch: boolean
+            maxChargeKopecks: number
+          }>
+        }
+      }
+      reserve_chat_generation: {
+        Args: {
+          p_conversation_id: string | null
+          p_idempotency_key: string
+          p_image_count?: number
+          p_model_id: string
+          p_use_web_search?: boolean
+        }
+        Returns: {
+          alreadyReserved: boolean
+          balanceKopecks: number | null
+          generationId: string
+          reservedKopecks: number
+        }
+      }
+      settle_chat_generation: {
+        Args: {
+          p_credits_consumed?: number | null
+          p_duration_ms?: number | null
+          p_error?: string | null
+          p_generation_id: string
+          p_input_tokens?: number | null
+          p_message_id?: string | null
+          p_output_tokens?: number | null
+          p_status: string
+        }
+        Returns: {
+          balanceKopecks: number | null
+          chargedKopecks: number
+          refundedKopecks: number
+          settled: boolean
+        }
+      }
       admin_adjust_balance: {
         Args: { p_amount: number; p_reason: string; p_user_id: string }
         Returns: Json

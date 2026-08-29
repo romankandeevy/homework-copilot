@@ -10,6 +10,7 @@ import {
   CaretDown,
   CaretRight,
   Check,
+  ChatsCircle,
   CheckCircle,
   ClockCountdown,
   Flask,
@@ -64,6 +65,7 @@ import './App.css'
 const DesignSystemPlayground = lazy(() => import('./DesignSystemPlayground'))
 // Холст тетради нужен только в разработке — в главном чанке ему делать нечего.
 const NotebookCanvas = lazy(() => import('./NotebookCanvas'))
+const ChatPage = lazy(() => import('./chat/ChatPage'))
 const AccountDialog = lazy(() => import('./account/AccountDialog'))
 const SchedulePage = lazy(() => import('./SchedulePage'))
 const AdminDashboard = lazy(() => import('./AdminDashboard'))
@@ -118,6 +120,7 @@ const applicationRoutes = [
   { label: 'Главная', path: '/main', icon: House },
   { label: 'Решения', path: '/solutions', icon: Notebook },
   { label: 'ЦДЗ', path: '/cdz', icon: Stack },
+  { label: 'ИИ-чат', path: '/chat', icon: ChatsCircle },
   { label: 'Задачи', path: '/tasks', icon: ShoppingCartSimple },
   { label: 'Расписание', path: '/schedule', icon: CalendarDots },
 ] as const
@@ -786,7 +789,7 @@ function CopyTask({
           <TaskConditionPreview
             task={verifiedTask}
             actions={<>
-              <small className="task-condition-charge">После подтверждения спишем {solutionPrice} ₽.</small>
+              <small className="task-condition-charge">После подтверждения спишем {formatRubles(solutionPrice)}.</small>
               <button className="task-condition-confirm" type="button" onClick={() => { void confirmTask() }} disabled={isSubmitting}>Условие верное</button>
               <button className="task-condition-reject" type="button" onClick={rejectTask} disabled={isSubmitting}>Выбрать другой номер</button>
             </>}
@@ -800,7 +803,7 @@ function CopyTask({
                 <img src={pendingPhoto.imageDataUrl} alt="Прикреплённое фото задачи" />
                 <figcaption>Модель сама прочитает условие с изображения.</figcaption>
               </figure>
-              <p>После подтверждения спишем {solutionPrice} ₽.</p>
+              <p>После подтверждения спишем {formatRubles(solutionPrice)}.</p>
             </div>
             <div className="task-confirmation-actions">
               <button type="button" onClick={() => { void confirmPhoto() }} disabled={isSubmitting}>Решить по этому фото</button>
@@ -1895,7 +1898,7 @@ function HomePage() {
     if (supabaseClient && user && account && account.balance < solutionPrice) {
       rememberAccountTrigger()
       setAccountView('wallet')
-      setAccountNotice(`На балансе меньше ${solutionPrice} ₽`)
+      setAccountNotice(`На балансе меньше ${formatRubles(solutionPrice)}`)
       setAccountOpen(true)
       return false
     }
@@ -2034,6 +2037,8 @@ function HomePage() {
               onGoHome={() => navigate('Главная')}
               onOpenSupport={(context) => openSupport('wrong_solution', context)}
             />
+          ) : activeNavigation === 'ИИ-чат' ? (
+            <Suspense fallback={<div className="route-loading" role="status">Загружаем чат…</div>}><ChatPage userId={user?.id ?? null} onRequireAuth={openAccount} onOpenWallet={openWallet} /></Suspense>
           ) : activeNavigation === 'Расписание' ? (
             <Suspense fallback={<div className="route-loading" role="status">Загружаем расписание…</div>}><SchedulePage userId={user?.id ?? null} grade={account?.profile.grade ?? 8} /></Suspense>
           ) : activeNavigation === 'Решения' ? (
