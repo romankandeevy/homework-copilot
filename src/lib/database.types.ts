@@ -830,6 +830,10 @@ export type Database = {
           refunded: boolean
         }
       }
+      sign_homework_solution: {
+        Args: { p_solution: Json }
+        Returns: string
+      }
       get_admin_context: { Args: never; Returns: Json }
       get_my_referral: { Args: never; Returns: Json }
       get_my_homework_solutions: {

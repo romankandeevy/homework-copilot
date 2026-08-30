@@ -20,6 +20,9 @@ type SolverOptions = {
   model?: string
   supabaseUrl?: string
   supabasePublishableKey?: string
+  // Нужен, чтобы прочитать секрет подписи решений: без подписи база
+  // отвергает любое сгенерированное решение по номеру задачи.
+  serviceRoleKey?: string
   fetchImpl?: typeof fetch
   taskLookup?: (request: SolveHomeworkRequest) => Promise<VerifiedTaskRecord | null>
 }
@@ -309,18 +312,44 @@ async function refundSolutionCredit(
   }
 }
 
+// Подпись ставит сама база: секрет не покидает её, а каноническая строка
+// считается той же функцией, что и в проверяющем триггере, поэтому форматы
+// не могут разъехаться. Право вызова есть только у service_role.
+async function withServerProof(
+  solution: HomeworkSolution,
+  options: SolverOptions,
+): Promise<HomeworkSolution> {
+  if (!options.supabaseUrl || !options.serviceRoleKey) return solution
+
+  const admin = createClient<Database>(options.supabaseUrl, options.serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  })
+  const { data, error } = await admin.rpc('sign_homework_solution', {
+    p_solution: solution as unknown as Json,
+  })
+  if (error || typeof data !== 'string' || !/^[0-9a-f]{64}$/.test(data)) return solution
+
+  return { ...solution, _serverProof: data } as HomeworkSolution
+}
+
 async function completeStoredSolution(
   account: AuthenticatedAccount | null,
   request: SolveHomeworkRequest,
   solution?: HomeworkSolution,
+  options?: SolverOptions,
 ): Promise<HomeworkSolution | null> {
   if (!account) return solution ?? null
   const price = getSolutionPrice(request.textbookId, request.task, request.source)
   const condition = request.condition ?? solution?.condition ?? ''
   const conditionNormalized = normalizeTaskCondition(condition)
+  // Решение, сгенерированное движком, подписываем перед сохранением.
+  // Триггер в базе пускает в общий каталог только эталонный payload либо
+  // подписанный сервером — иначе любой клиент мог бы залить своё «решение».
+  const signedSolution = solution && options ? await withServerProof(solution, options) : solution
+
   const { data, error } = await account.client.rpc('complete_homework_solution', {
     p_idempotency_key: request.idempotencyKey,
-    ...(solution ? { p_solution: solution as unknown as Json } : {}),
+    ...(signedSolution ? { p_solution: signedSolution as unknown as Json } : {}),
     p_condition: condition,
     p_condition_normalized: conditionNormalized,
     p_edition: request.edition,
@@ -487,7 +516,7 @@ export async function handleHomeworkSolverRequest(
       stage = 'generate'
       const solution = await solveWithKie(task, options, account?.userId)
       stage = 'persist'
-      const completedSolution = await completeStoredSolution(account, task, solution)
+      const completedSolution = await completeStoredSolution(account, task, solution, options)
       if (!completedSolution || !isCurrentReviewedSolution(completedSolution)) {
         throw new HomeworkSolverError(502, 'Не получилось сохранить готовое решение')
       }

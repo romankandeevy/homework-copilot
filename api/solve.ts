@@ -7,5 +7,6 @@ export default async function handler(request: IncomingMessage, response: Server
     model: process.env.KIE_MODEL,
     supabaseUrl: process.env.VITE_SUPABASE_URL,
     supabasePublishableKey: process.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+    serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY,
   })
 }
