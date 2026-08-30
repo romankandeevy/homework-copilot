@@ -6,6 +6,7 @@ import {
   Atom,
   ArrowRight,
   BookOpenText,
+  Calculator,
   CalendarDots,
   CaretDown,
   CaretRight,
@@ -14,6 +15,7 @@ import {
   CheckCircle,
   ClockCountdown,
   Flask,
+  Function,
   Hash,
   House,
   ImageSquare,
@@ -73,7 +75,7 @@ const AdminDashboard = lazy(() => import('./AdminDashboard'))
 type Theme = 'light' | 'dark'
 type AccountView = 'profile' | 'wallet'
 type TextbookId = string
-type TextbookSourceType = 'pdf' | 'epub' | 'image' | 'link' | 'official'
+type TextbookSourceType = 'pdf' | 'epub' | 'image' | 'link' | 'official' | 'photo'
 
 const authIsConfigured = import.meta.env.MODE !== 'test'
   && Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY)
@@ -215,6 +217,33 @@ const textbooks: readonly Textbook[] = [
     sourceUrl: '/textbooks/chemistry-8-gabrielyan-2025.pdf',
     sourceType: 'pdf',
     previewBeforeReading: true,
+    indexed: false,
+  },
+  // Предметы без индекса задач: решаются по фотографии, поэтому конкретное
+  // издание для них не нужно и класс задаётся диапазоном — модель определит
+  // уровень по самой задаче.
+  {
+    id: 'algebra',
+    subject: 'Алгебра',
+    grade: '7-11 класс',
+    title: 'Любой учебник',
+    authors: 'Сфотографируй задачу из своего учебника',
+    edition: 'по фото',
+    solvedTasks: [],
+    icon: Function,
+    sourceType: 'photo',
+    indexed: false,
+  },
+  {
+    id: 'mathematics',
+    subject: 'Математика',
+    grade: '7-11 класс',
+    title: 'Любой учебник',
+    authors: 'Сфотографируй задачу из своего учебника',
+    edition: 'по фото',
+    solvedTasks: [],
+    icon: Calculator,
+    sourceType: 'photo',
     indexed: false,
   },
 ] as const

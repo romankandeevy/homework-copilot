@@ -217,7 +217,7 @@ const reviewSchema = {
 } as const
 
 const authorInstructions = [
-  'Ты создаёшь готовое школьное решение для российской программы 7–9 классов.',
+  'Ты создаёшь готовое школьное решение для российской школьной программы 7–11 классов.',
   'Сначала внутри себя определи точное условие, тип задачи, нужен ли чертёж, какие объекты и связи должны быть на чертеже, какой минимальный набор записей нужен в тетради, затем проверь результат.',
   'Не раскрывай скрытые рассуждения. Верни только JSON по схеме.',
   'В decisions запиши не ход мыслей, а короткие проверяемые выводы: что требуется, нужен ли чертёж и почему, что обязано быть на чертеже, какой формат нужен в тетради и какие факты уже проверены.',
@@ -934,11 +934,35 @@ function buildVerification(
   }
 }
 
+// Требования к записи зависят от предмета. Геометрия — самая формальная:
+// там решение почти целиком символьное и почти всегда нужен чертёж.
+// В физике и химии без слов не обойтись: «по закону сохранения импульса»
+// или «реакция идёт до конца» — это часть школьной записи, а не болтовня.
+// Единые пороги отбраковывали бы верные решения по этим предметам.
+function subjectProfile(subject: string) {
+  const normalized = subject.toLocaleLowerCase('ru-RU')
+  if (normalized.includes('геометр')) {
+    return { minimumSymbolicShare: 1, maxWordsPerStep: 8, allowsDiagram: true }
+  }
+  if (normalized.includes('алгебр') || normalized.includes('математ')) {
+    return { minimumSymbolicShare: 0.85, maxWordsPerStep: 10, allowsDiagram: true }
+  }
+  if (normalized.includes('физик')) {
+    return { minimumSymbolicShare: 0.7, maxWordsPerStep: 14, allowsDiagram: true }
+  }
+  if (normalized.includes('хими')) {
+    return { minimumSymbolicShare: 0.6, maxWordsPerStep: 14, allowsDiagram: false }
+  }
+  // Остальные предметы: формальной записи может не быть вовсе.
+  return { minimumSymbolicShare: 0.25, maxWordsPerStep: 20, allowsDiagram: false }
+}
+
 export function validateSolutionQuality(solution: HomeworkSolution) {
   const issues: string[] = []
   const taskType = solution.taskType ?? 'mixed'
+  const profile = subjectProfile(solution.subject)
   const diagramRequired = solution.quality?.diagramRequired === true
-  const requiredByCondition = conditionRequiresDiagram(solution)
+  const requiredByCondition = profile.allowsDiagram && conditionRequiresDiagram(solution)
   const steps = solution.steps
   const share = symbolicShare(steps)
   const russianWords = steps.join(' ').match(/[а-яё]{2,}/giu)?.length ?? 0
@@ -956,9 +980,12 @@ export function validateSolutionQuality(solution: HomeworkSolution) {
     issues.push('В решении осталась техническая разметка')
   }
   if (new Set(steps.map((line) => line.toLocaleLowerCase('ru-RU'))).size !== steps.length) issues.push('В решении повторяются строки')
-  if (steps.some((line) => (line.match(/[а-яё]{2,}/giu)?.length ?? 0) > 8)) issues.push('Есть словесный абзац вместо математической строки')
+  if (steps.some((line) => (line.match(/[а-яё]{2,}/giu)?.length ?? 0) > profile.maxWordsPerStep)) {
+    issues.push('Есть словесный абзац вместо школьной записи')
+  }
 
-  const minimumShare = taskType === 'construction' ? 0.72 : taskType === 'proof' ? 0.42 : taskType === 'calculation' ? 0.55 : 0.5
+  const baseShare = taskType === 'construction' ? 0.72 : taskType === 'proof' ? 0.42 : taskType === 'calculation' ? 0.55 : 0.5
+  const minimumShare = baseShare * profile.minimumSymbolicShare
   if (share < minimumShare) issues.push('Слишком много слов и слишком мало математических обозначений')
   if (taskType === 'construction') {
     if (solution.goal.title !== 'Построить') issues.push('Задача на построение должна иметь цель «Построить»')
