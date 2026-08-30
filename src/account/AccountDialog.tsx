@@ -10,6 +10,8 @@ import {
   ClockCountdown,
   CopySimple,
   EnvelopeSimple,
+  Eye,
+  EyeSlash,
   Gift,
   GoogleLogo,
   LinkSimple,
@@ -110,6 +112,8 @@ function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
 }
 
+const consentErrorMessage = 'Прими соглашение и отдельное согласие на обработку данных'
+
 const gradeOptions = Array.from({ length: 11 }, (_, index) => index + 1)
 
 function GradeSelect({ value, onChange, compact = false }: { value: string; onChange: (value: string) => void; compact?: boolean }) {
@@ -197,7 +201,7 @@ function GradeSelect({ value, onChange, compact = false }: { value: string; onCh
           setOpen((current) => !current)
         }}
       >
-        <span>{compact ? value : `${value} класс`}</span>
+        <span>{value ? (compact ? value : `${value} класс`) : 'Выбери'}</span>
         <CaretDown size={15} weight="bold" aria-hidden="true" />
       </button>
 
@@ -227,13 +231,16 @@ function GradeSelect({ value, onChange, compact = false }: { value: string; onCh
 }
 
 function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { passwordRecovery: boolean; pendingVerificationEmail?: string; notice?: string }) {
+  const viewRef = useRef<HTMLDivElement>(null)
   const [initialVerification] = useState(() => pendingVerificationEmail
     ? { email: pendingVerificationEmail, kind: 'google' as const }
     : readPendingVerification())
   const [screen, setScreen] = useState<AuthScreen>(passwordRecovery ? 'reset' : initialVerification ? 'verify-email' : 'sign-in')
   const [verificationKind, setVerificationKind] = useState<VerificationKind>(initialVerification?.kind ?? 'signup')
   const [fullName, setFullName] = useState('')
-  const [grade, setGrade] = useState('8')
+  // Класс никто не подставляет за ученика: восьмиклассников среди
+  // пользователей не большинство, а подставленный класс уходит в решения.
+  const [grade, setGrade] = useState('')
   const [email, setEmail] = useState(initialVerification?.email ?? '')
   const [password, setPassword] = useState('')
   const [verificationCode, setVerificationCode] = useState('')
@@ -242,6 +249,7 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [passwordVisible, setPasswordVisible] = useState(false)
   const [agreementAccepted, setAgreementAccepted] = useState(false)
   const [personalDataAccepted, setPersonalDataAccepted] = useState(false)
   const passwordStrengthId = useId()
@@ -251,7 +259,7 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
   const expiresIn = verificationSecondsLeft(sentAt, emailCodeLifetime, now)
 
   const formIsValid = screen === 'sign-up'
-    ? fullName.trim().length >= 2 && isValidEmail(email) && passwordIsValid && agreementAccepted && personalDataAccepted
+    ? fullName.trim().length >= 2 && Boolean(grade) && isValidEmail(email) && passwordIsValid && agreementAccepted && personalDataAccepted
     : screen === 'sign-in'
       ? isValidEmail(email) && password.length >= 8
       : screen === 'forgot'
@@ -283,14 +291,28 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
     setStatus('')
     setError('')
     setVerificationCode('')
+    // Содержимое окна выше самого окна, и после переключения вкладки
+    // прокрутка оставалась там же: человек оказывался посреди формы.
+    const scroller = viewRef.current?.closest('.account-dialog')
+    if (scroller) scroller.scrollTop = 0
   }
 
+  // Причина ушла — уходит и сообщение: иначе ошибка висит над формой,
+  // в которой уже всё исправлено.
+  useEffect(() => {
+    if (!agreementAccepted || !personalDataAccepted) return
+    setError((current) => (current === consentErrorMessage ? '' : current))
+  }, [agreementAccepted, personalDataAccepted])
+
   const continueWithGoogle = async () => {
-    if (!supabase || loading) return
+    if (loading) return
+    // Причина отказа проверяется до всего остального: кнопка больше
+    // не гаснет, поэтому объяснение должно приходить всегда.
     if (screen === 'sign-up' && (!agreementAccepted || !personalDataAccepted)) {
-      setError('Прими соглашение и отдельное согласие на обработку данных')
+      setError(consentErrorMessage)
       return
     }
+    if (!supabase) return
     setLoading(true)
     setStatus('')
     setError('')
@@ -438,7 +460,7 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
       const message = caught instanceof Error ? caught.message : ''
       if (message === 'name') setError('Введи имя')
       else if (message === 'weak password') setError('Выполни все требования к паролю')
-      else if (message === 'legal consent') setError('Прими соглашение и отдельное согласие на обработку данных')
+      else if (message === 'legal consent') setError(consentErrorMessage)
       else setError(authErrorMessage(message))
     } finally {
       setLoading(false)
@@ -466,7 +488,7 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
           : 'Продолжи с Google или войди по почте.'
 
   return (
-    <div className="account-auth-view">
+    <div className="account-auth-view" ref={viewRef}>
       <aside className="account-auth-context" aria-hidden="true">
         <div className="account-auth-wordmark"><span>HC</span><strong>Homework Copilot</strong></div>
         <div className="account-auth-context-copy">
@@ -498,24 +520,9 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
 
       {notice && <p className="account-notice">{notice}</p>}
 
-      {screen === 'sign-up' && (
-        <div className="account-legal-consents">
-          <label className="account-consent">
-            <input type="checkbox" checked={agreementAccepted} onChange={(event) => setAgreementAccepted(event.target.checked)} />
-            <span aria-hidden="true"><Check size={14} weight="bold" /></span>
-            <em>Я принимаю <a href="/terms" target="_blank" rel="noreferrer">пользовательское соглашение</a></em>
-          </label>
-          <label className="account-consent">
-            <input type="checkbox" checked={personalDataAccepted} onChange={(event) => setPersonalDataAccepted(event.target.checked)} />
-            <span aria-hidden="true"><Check size={14} weight="bold" /></span>
-            <em>Я отдельно даю <a href="/consent" target="_blank" rel="noreferrer">согласие на обработку персональных данных</a> и прочитал <a href="/privacy" target="_blank" rel="noreferrer">политику данных</a></em>
-          </label>
-        </div>
-      )}
-
       {(screen === 'sign-in' || screen === 'sign-up') && (
         <>
-          <button className="account-google-button" type="button" onClick={() => { void continueWithGoogle() }} disabled={loading || (screen === 'sign-up' && (!agreementAccepted || !personalDataAccepted))}>
+          <button className="account-google-button" type="button" onClick={() => { void continueWithGoogle() }} disabled={loading}>
             <GoogleLogo size={20} weight="bold" aria-hidden="true" />
             Продолжить с Google
           </button>
@@ -546,6 +553,7 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
               aria-describedby="account-code-help"
               autoFocus
               required
+              data-initial-focus=""
             />
             <p id="account-code-help">Можно вставить все шесть цифр сразу.</p>
             <button className="account-primary-button" type="submit" disabled={loading || expiresIn <= 0 || verificationCode.length !== 6}>
@@ -563,7 +571,7 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
               <span>Имя</span>
               <div className="account-input-shell">
                 <UserCircle size={19} weight="duotone" aria-hidden="true" />
-                <input value={fullName} onChange={(event) => setFullName(event.target.value)} autoComplete="name" maxLength={80} placeholder="Как к тебе обращаться" required autoFocus />
+                <input value={fullName} onChange={(event) => setFullName(event.target.value)} autoComplete="name" maxLength={80} placeholder="Как к тебе обращаться" required autoFocus data-initial-focus={screen === 'sign-up' ? '' : undefined} />
               </div>
             </label>
             <div className="account-grade-field">
@@ -578,7 +586,7 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
             <span>Почта</span>
             <div className="account-input-shell">
               <EnvelopeSimple size={19} weight="duotone" aria-hidden="true" />
-              <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" placeholder="name@example.com" required autoFocus={screen !== 'sign-up'} />
+              <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" placeholder="name@example.com" required autoFocus={screen !== 'sign-up'} data-initial-focus={screen === 'sign-in' || screen === 'forgot' ? '' : undefined} />
             </div>
           </label>
         )}
@@ -590,19 +598,47 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
               <div className="account-input-shell">
                 <LockKey size={19} weight="duotone" aria-hidden="true" />
                 <input
-                  type="password"
+                  type={passwordVisible ? 'text' : 'password'}
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   autoComplete={screen === 'sign-in' ? 'current-password' : 'new-password'}
                   minLength={requiresStrongPassword ? 12 : 8}
                   placeholder={requiresStrongPassword ? 'Не меньше 12 символов' : 'Твой пароль'}
-                  aria-describedby={requiresStrongPassword ? passwordStrengthId : undefined}
+                  aria-describedby={requiresStrongPassword && password ? passwordStrengthId : undefined}
                   required
                   autoFocus={screen === 'reset'}
                 />
+                {/* Двенадцать символов вслепую на телефоне не набирают. */}
+                <button
+                  className="account-password-reveal"
+                  type="button"
+                  onClick={() => setPasswordVisible((visible) => !visible)}
+                  aria-label={passwordVisible ? 'Скрыть пароль' : 'Показать пароль'}
+                  aria-pressed={passwordVisible}
+                >
+                  {passwordVisible ? <EyeSlash size={19} weight="duotone" aria-hidden="true" /> : <Eye size={19} weight="duotone" aria-hidden="true" />}
+                </button>
               </div>
             </label>
-            {requiresStrongPassword && <PasswordStrength id={passwordStrengthId} value={password} />}
+            {/* Требования показываются, когда человек начал набирать: до этого
+                их пересказывает плейсхолдер, а четыре строки правил только
+                удлиняют окно. */}
+            {requiresStrongPassword && password.length > 0 && <PasswordStrength id={passwordStrengthId} value={password} />}
+          </div>
+        )}
+
+        {screen === 'sign-up' && (
+          <div className="account-legal-consents">
+            <label className="account-consent">
+              <input type="checkbox" checked={agreementAccepted} onChange={(event) => setAgreementAccepted(event.target.checked)} required />
+              <span aria-hidden="true"><Check size={14} weight="bold" /></span>
+              <em>Я принимаю <a href="/terms" target="_blank" rel="noreferrer">пользовательское соглашение</a></em>
+            </label>
+            <label className="account-consent">
+              <input type="checkbox" checked={personalDataAccepted} onChange={(event) => setPersonalDataAccepted(event.target.checked)} required />
+              <span aria-hidden="true"><Check size={14} weight="bold" /></span>
+              <em>Я отдельно даю <a href="/consent" target="_blank" rel="noreferrer">согласие на обработку персональных данных</a> и прочитал <a href="/privacy" target="_blank" rel="noreferrer">политику данных</a></em>
+            </label>
           </div>
         )}
 

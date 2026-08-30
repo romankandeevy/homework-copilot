@@ -86,11 +86,19 @@ describe('Homework Copilot task flow', () => {
   // Индекса задач больше нет: условие всегда даёт ученик. Проверяем главное
   // свойство — сервис никогда не придумывает условие сам.
   // Условие всегда даёт ученик: сервис никогда не придумывает его сам.
-  it('не отправляет задачу без условия и без фото', () => {
+  // Кнопка не гаснет на пустой форме: по погасшей всё равно жмут, ничего
+  // не происходит и почему — не сказано. Вместо этого форма говорит, чего
+  // не хватает, и возвращает курсор в поле.
+  it('не отправляет задачу без условия и без фото, а объясняет причину', () => {
     const fetchMock = installSuccessfulSolver()
     render(<App />)
 
-    expect(screen.getByRole('button', { name: /Решить/ })).toBeDisabled()
+    const submit = screen.getByRole('button', { name: /Решить/ })
+    expect(submit).toBeEnabled()
+    fireEvent.click(submit)
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Впиши условие или приложи фото')
+    expect(screen.getByRole('textbox', { name: 'Условие задачи' })).toHaveFocus()
     expect(fetchMock).not.toHaveBeenCalled()
   })
 

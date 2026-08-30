@@ -36,21 +36,36 @@ export type TaskSubmission = {
 
 export default function CopyTask({
   onSubmit,
+  signedIn = false,
+  defaultGrade = '',
 }: {
   onSubmit: (submission: TaskSubmission) => Promise<boolean>
+  /** Гостю показываем, что после регистрации на счёте уже есть деньги. */
+  signedIn?: boolean
+  /** Класс из профиля: один и тот же вопрос не должен иметь двух ответов. */
+  defaultGrade?: string
 }) {
   const [condition, setCondition] = useState('')
   const [photo, setPhoto] = useState<File | null>(null)
   const [photoPreview, setPhotoPreview] = useState('')
   const [subject, setSubject] = useState('')
-  const [grade, setGrade] = useState('')
+  const [grade, setGrade] = useState(defaultGrade)
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const submissionRef = useRef(false)
+  const conditionRef = useRef<HTMLTextAreaElement>(null)
 
   const trimmedCondition = condition.trim()
   const canSubmit = trimmedCondition.length >= 15 || Boolean(photo)
   const price = getSolutionPrice()
+
+  // Профиль подгружается после первого рендера, поэтому класс из него
+  // подставляем позже — но только пока ученик не выбрал свой.
+  const gradeTouchedRef = useRef(false)
+  useEffect(() => {
+    if (gradeTouchedRef.current || !defaultGrade) return
+    setGrade(defaultGrade)
+  }, [defaultGrade])
 
   useEffect(() => {
     if (!photo) {
@@ -87,7 +102,17 @@ export default function CopyTask({
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (submissionRef.current || !canSubmit) return
+    if (submissionRef.current || isSubmitting) return
+
+    // Кнопка не гаснет на пустой форме: по погасшей кнопке всё равно жмут,
+    // ничего не происходит и почему — не сказано. Вместо этого возвращаем
+    // курсор в поле и говорим, чего не хватает.
+    if (!canSubmit) {
+      setError(trimmedCondition ? 'Условие слишком короткое — впиши его целиком или приложи фото' : 'Впиши условие или приложи фото')
+      conditionRef.current?.focus()
+      return
+    }
+
     submissionRef.current = true
     setIsSubmitting(true)
     setError('')
@@ -122,8 +147,19 @@ export default function CopyTask({
   return (
     <section className="copy-task" aria-labelledby="copy-task-title">
       <header className="copy-task-header">
-        <h1 id="copy-task-title">Списать задачу</h1>
-        <p>Впиши условие или приложи фото. Решение придёт готовым к переписыванию в тетрадь.</p>
+        <div className="copy-task-heading">
+          <h1 id="copy-task-title">Списать задачу</h1>
+          <p>Решение придёт готовым к переписыванию в тетрадь.</p>
+        </div>
+
+        {/* Цена стоит до ввода, а не после: узнать про оплату уже после того,
+            как условие набрано, читается как подвох — при пяти рублях цена
+            скорее успокаивает. */}
+        <p className="copy-task-price">
+          <strong>{formatRubles(price)}</strong>
+          <span>за решение</span>
+          {!signedIn && <em>Первые четыре — бесплатно: после регистрации на счёте 20 ₽</em>}
+        </p>
       </header>
 
       <form className="copy-task-form" aria-label="Задача" onSubmit={submit}>
@@ -131,6 +167,7 @@ export default function CopyTask({
         <textarea
           id="task-condition"
           className="task-condition-input"
+          ref={conditionRef}
           value={condition}
           onChange={(event) => {
             setCondition(event.target.value.slice(0, 5000))
@@ -169,35 +206,37 @@ export default function CopyTask({
             {photo ? 'Заменить фото' : 'Добавить фото'}
           </label>
 
+          {/* Подписи короткие: «Предмет — определим сами» не влезает в селект
+              на телефоне и обрезается ровно на том слове, ради которого
+              подпись и написана. */}
           <label className="task-select">
             <span className="sr-only">Предмет</span>
             <select value={subject} onChange={(event) => setSubject(event.target.value)}>
-              <option value="">Предмет — определим сами</option>
+              <option value="">Предмет: любой</option>
               {solvableSubjects.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
           </label>
 
           <label className="task-select">
             <span className="sr-only">Класс</span>
-            <select value={grade} onChange={(event) => setGrade(event.target.value)}>
-              <option value="">Класс — определим сами</option>
+            <select
+              value={grade}
+              onChange={(event) => { gradeTouchedRef.current = true; setGrade(event.target.value) }}
+            >
+              <option value="">Класс: любой</option>
               {solvableGrades.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
           </label>
 
-          <button className="copy-task-submit" type="submit" disabled={!canSubmit || isSubmitting}>
+          <button className="copy-task-submit" type="submit" disabled={isSubmitting}>
             {isSubmitting ? 'Решаем…' : 'Решить'}
             {!isSubmitting && <ArrowRight size={20} weight="bold" aria-hidden="true" />}
           </button>
         </div>
 
-        {error && <p className="task-number-error" id="task-entry-error" role="alert">{error}</p>}
-        {!error && !canSubmit && (
-          <p className="task-entry-helper">Впиши условие целиком или приложи фотографию задачи.</p>
-        )}
-        {!error && canSubmit && (
-          <p className="task-entry-helper">Решение стоит {formatRubles(price)}. Если задача не решится, деньги вернутся на баланс.</p>
-        )}
+        {error
+          ? <p className="task-number-error" id="task-entry-error" role="alert">{error}</p>
+          : <p className="task-entry-helper">Не решится — деньги вернутся на баланс.</p>}
       </form>
     </section>
   )

@@ -8,12 +8,14 @@ async function expectNoPageOverflow(page: import('@playwright/test').Page) {
 test.describe('центр поддержки', () => {
   test('opens from the universal footer and keeps FAQ available to guests', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 960 })
-    await page.goto('/main')
-    await page.getByRole('button', { name: 'Поддержка' }).last().click()
+    await page.goto('/app')
+    // Плавающей кнопки на главной больше нет: она перекрывала угол «Решить».
+    // Поддержка открывается из подвала, который есть на каждой странице.
+    await page.getByRole('button', { name: 'Написать в поддержку' }).first().click()
     await expect(page.getByRole('heading', { name: 'Разберёмся вместе' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Войти в аккаунт' })).toBeVisible()
-    await page.getByRole('button', { name: 'Как открыть решение задачи?' }).click()
-    await expect(page.getByText(/Выбери учебник, введи номер/).first()).toBeVisible()
+    await page.getByRole('button', { name: 'Как получить решение задачи?' }).click()
+    await expect(page.getByText(/Впиши условие на главной/).first()).toBeVisible()
     await expectNoPageOverflow(page)
   })
 
@@ -24,6 +26,6 @@ test.describe('центр поддержки', () => {
     await expect(page.getByRole('button', { name: 'Войти в аккаунт' })).toBeVisible()
     await expectNoPageOverflow(page)
     await page.getByRole('button', { name: 'Закрыть поддержку' }).click()
-    await expect(page).toHaveURL(/\/main$/)
+    await expect(page).toHaveURL(/\/app$/)
   })
 })

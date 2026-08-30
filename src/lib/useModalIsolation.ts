@@ -60,7 +60,8 @@ export function useModalIsolation<T extends HTMLElement>(open: boolean, onClose:
     window.addEventListener('keydown', onKeyDown)
     const focusTimer = window.setTimeout(() => {
       if (!dialogRef.current) return
-      const initialTarget = dialogRef.current.querySelector<HTMLElement>('[autofocus]')
+      const initialTarget = dialogRef.current.querySelector<HTMLElement>('[data-initial-focus]')
+        ?? dialogRef.current.querySelector<HTMLElement>('[autofocus]')
         ?? dialogRef.current.querySelector<HTMLElement>(focusableSelector)
         ?? dialogRef.current
       initialTarget.focus()

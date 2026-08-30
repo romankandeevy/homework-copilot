@@ -580,7 +580,7 @@ function SchedulePage({ userId = null, grade = 8 }: { userId?: string | null; gr
       >
         <div className="schedule-heading-copy">
           <div className="schedule-title-line">
-            <h2 id="schedule-title">Расписание</h2>
+            <h1 id="schedule-title">Расписание</h1>
             <span>{grade} класс</span>
           </div>
           <p>

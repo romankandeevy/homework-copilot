@@ -849,7 +849,7 @@ export default function ChatPage({ userId = null, onRequireAuth, onOpenWallet }:
       <header className="chat-heading">
         <div className="chat-heading-copy">
           <div className="chat-title-line">
-            <h2 id="chat-page-title">ИИ-чат</h2>
+            <h1 id="chat-page-title">ИИ-чат</h1>
             <span>помощник по домашке</span>
           </div>
           <p>

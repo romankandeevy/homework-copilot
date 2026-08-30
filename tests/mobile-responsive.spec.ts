@@ -46,12 +46,14 @@ test.describe('адаптация под телефон', () => {
 
     const topbar = page.locator('.product-topbar')
     const navigationItems = topbar.locator('.navigation-item')
+    // Разделы — ссылки, а не кнопки: их открывают в новой вкладке и копируют.
     await expect(navigationItems).toHaveCount(4)
-    await expect(page.getByRole('button', { name: 'Учебники', exact: true })).toHaveCount(0)
-    await expect(page.getByRole('button', { name: 'Задачи', exact: true })).toHaveCount(0)
+    await expect(topbar.getByRole('link', { name: 'Главная' })).toHaveAttribute('href', '/app')
+    await expect(topbar.getByRole('link', { name: 'Решения' })).toHaveAttribute('href', '/solutions')
+    // Незапущенного раздела в основном меню быть не должно.
+    await expect(topbar.getByRole('link', { name: 'ЦДЗ', exact: true })).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Мои решения', exact: true })).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'База решений', exact: true })).toHaveCount(0)
-    await expect(page.getByRole('button', { name: 'ЦДЗ', exact: true })).toHaveCount(1)
 
     for (let index = 0; index < await navigationItems.count(); index += 1) {
       const item = navigationItems.nth(index)
@@ -91,7 +93,7 @@ test.describe('адаптация под телефон', () => {
   test('личные решения и общая база находятся на одной странице', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await page.goto('/app')
-    await page.getByRole('button', { name: 'Решения', exact: true }).click()
+    await page.getByRole('navigation', { name: 'Основная навигация' }).getByRole('link', { name: 'Решения', exact: true }).click()
 
     await expect(page).toHaveURL(/\/solutions$/)
     const personalTab = page.getByRole('tab', { name: 'Мои решения' })
@@ -103,15 +105,27 @@ test.describe('адаптация под телефон', () => {
     await expect(page.getByRole('heading', { name: 'Мои решения' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'База решений' })).toHaveCount(0)
     await sharedTab.click()
+    // Пустая база — это не результат неудачного поиска: человек ничего
+    // не искал, и «Совпадений нет» читалось как «ты сделал что-то не так».
+    await expect(page.getByRole('heading', { name: 'База пополняется решёнными задачами' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Отправить свою задачу' })).toBeVisible()
     const search = page.getByRole('textbox', { name: 'Найти решение' })
     await search.fill('999')
-    await expect(page.getByRole('heading', { name: 'Совпадений нет' })).toBeVisible()
-    await search.fill('2')
-    await expect(page.getByRole('heading', { name: 'Совпадений нет' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'База пополняется решёнными задачами' })).toBeVisible()
     await expectNoPageOverflow(page)
   })
 
-  test('карточки на главной совпадают по высоте, цвету и расположению кнопок', async ({ page }) => {
+  test('под формой стоит одна карточка, а вход предложен строкой', async ({ page }) => {
+    await page.setViewportSize({ width: 1920, height: 935 })
+    await page.goto('/app')
+
+    const cards = page.locator('.home-action-card')
+    await expect(cards).toHaveCount(1)
+    await expect(cards.getByRole('heading', { name: 'База решений' })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Войти, чтобы сохранять решения/ })).toBeVisible()
+  })
+
+  test.skip('карточки на главной совпадают по высоте, цвету и расположению кнопок', async ({ page }) => {
     await page.setViewportSize({ width: 1920, height: 935 })
     await page.goto('/app')
 
@@ -179,7 +193,9 @@ test.describe('адаптация под телефон', () => {
       ])
       expect(contentBox).not.toBeNull()
       expect(navigationBox).not.toBeNull()
-      expect(navigationBox!.y + navigationBox!.height).toBeLessThanOrEqual(contentBox!.y)
+      // Панель разделов прижата к низу экрана и не наезжает на шапку.
+      expect(Math.round(navigationBox!.y + navigationBox!.height)).toBe(viewport.height)
+      expect(navigationBox!.y).toBeGreaterThan(contentBox!.y)
 
       const smallButtons = await page.locator('button').evaluateAll((buttons) => buttons
         .map((button) => {
@@ -271,10 +287,11 @@ test.describe('адаптация под телефон', () => {
     await expect(page.getByRole('textbox', { name: 'Имя' })).toBeVisible()
     await expect(page.getByRole('textbox', { name: 'Почта' })).toBeVisible()
     const grade = page.getByRole('combobox', { name: 'Класс' })
+    await expect(grade).toContainText('Выбери')
     await grade.click()
     const gradeList = page.getByRole('listbox', { name: 'Выбрать класс' })
     await expect(gradeList).toBeVisible()
-    await expect(page.getByRole('option', { name: '8 класс' })).toHaveAttribute('aria-selected', 'true')
+    await expect(page.getByRole('option', { name: '8 класс' })).toHaveAttribute('aria-selected', 'false')
     await page.getByRole('option', { name: '9 класс' }).click()
     await expect(grade).toContainText('9')
     await expect(gradeList).toBeHidden()
@@ -282,12 +299,12 @@ test.describe('адаптация под телефон', () => {
     await expect(createAccount).toBeDisabled()
     await page.getByRole('textbox', { name: 'Имя' }).fill('Рома')
     await page.getByRole('textbox', { name: 'Почта' }).fill('roma@example.com')
-    await page.getByLabel('Пароль').fill('12')
+    await page.getByLabel('Пароль', { exact: true }).fill('12')
     await expect(createAccount).toBeDisabled()
-    await page.getByLabel('Пароль').fill('12345678')
+    await page.getByLabel('Пароль', { exact: true }).fill('12345678')
     await expect(createAccount).toBeDisabled()
     await expect(page.getByText('Слишком предсказуемый')).toBeVisible()
-    await page.getByLabel('Пароль').fill('Homework2026!')
+    await page.getByLabel('Пароль', { exact: true }).fill('Homework2026!')
     await expect(createAccount).toBeDisabled()
     const agreement = page.getByRole('checkbox', { name: /пользовательское соглашение/ })
     const personalData = page.getByRole('checkbox', { name: /отдельно даю/ })
@@ -323,7 +340,7 @@ test.describe('адаптация под телефон', () => {
     for (const viewport of [{ width: 320, height: 812 }, { width: 667, height: 375 }]) {
       await page.setViewportSize(viewport)
       await page.goto('/app')
-      await page.getByRole('button', { name: 'Расписание', exact: true }).click()
+      await page.getByRole('navigation', { name: 'Основная навигация' }).getByRole('link', { name: 'Расписание', exact: true }).click()
       await expect(page.getByText(/Выбери день/)).toBeVisible()
       await expectNoPageOverflow(page)
       await expect(page.locator('.schedule-table-scroll')).toBeHidden()

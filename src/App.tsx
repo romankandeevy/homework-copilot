@@ -129,7 +129,10 @@ const applicationRoutes = [
   { label: 'Расписание', path: '/schedule', icon: CalendarDots },
 ] as const
 
-const navigation = applicationRoutes.filter(({ label }) => label !== 'Задачи')
+// В основном меню только то, что уже работает. «ЦДЗ» пока закрыт: пункт
+// занимал место, забирал клик и ничего не отдавал. Маршрут остаётся рабочим
+// и доступен из подвала, поэтому мёртвых ссылок не появляется.
+const navigation = applicationRoutes.filter(({ label }) => label !== 'Задачи' && label !== 'ЦДЗ')
 
 type NavigationLabel = (typeof applicationRoutes)[number]['label']
 
@@ -424,19 +427,38 @@ function ProductTopbar({
 }) {
   return (
     <header className="product-topbar">
-      <button className="topbar-brand" type="button" aria-label="На главную" onClick={() => onNavigate('Главная')}>
+      <a
+        className="topbar-brand"
+        href={applicationPath('/app')}
+        onClick={(event) => {
+          if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return
+          event.preventDefault()
+          onNavigate('Главная')
+        }}
+      >
         <BrandLockup />
-      </button>
+      </a>
 
       <nav className="product-navigation" aria-label="Основная навигация">
-        {navigation.map(({ label, icon: Icon }) => {
+        {navigation.map(({ label, path, icon: Icon }) => {
           const active = label === activeLabel
           return (
-            <button className={`navigation-item${active ? ' is-active' : ''}`} type="button" key={label} aria-current={active ? 'page' : undefined} onClick={() => onNavigate(label)}>
+            <a
+              className={`navigation-item${active ? ' is-active' : ''}`}
+              key={label}
+              href={applicationPath(path)}
+              aria-current={active ? 'page' : undefined}
+              onClick={(event) => {
+                // Обычный клик уводит роутером, а Ctrl, Cmd, средняя кнопка
+                // и «открыть в новой вкладке» работают как у любой ссылки.
+                if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return
+                event.preventDefault()
+                onNavigate(label)
+              }}
+            >
               <Icon size={19} weight="duotone" aria-hidden="true" />
               <span className="navigation-label">{label}</span>
-              {label === 'ЦДЗ' && <span className="navigation-status" aria-hidden="true">Скоро</span>}
-            </button>
+            </a>
           )
         })}
       </nav>
@@ -582,17 +604,14 @@ function HomeActionCard({
   )
 }
 
-function GuestWorkspace({ onOpenAccount }: { onOpenAccount: () => void }) {
+function GuestSolutionsNote({ onOpenAccount }: { onOpenAccount: () => void }) {
   return (
-    <HomeActionCard
-      className="guest-workspace"
-      icon={Notebook}
-      titleId="guest-workspace-title"
-      title="Твои решения появятся после входа"
-      description="Здесь будут твои решённые задачи и те, что ты открывал."
-      actionLabel="Войти"
-      onAction={onOpenAccount}
-    />
+    <p className="home-guest-note">
+      <button type="button" onClick={onOpenAccount}>
+        Войти, чтобы сохранять решения
+        <ArrowRight size={16} weight="bold" aria-hidden="true" />
+      </button>
+    </p>
   )
 }
 
@@ -645,6 +664,7 @@ function SolutionsPage({
   onOpenSolution,
   onOpenSharedSolution,
   onRefreshSharedSolutions,
+  onStartTask,
 }: {
   user: User | null
   personalSolutions: readonly PersonalSolution[]
@@ -655,6 +675,7 @@ function SolutionsPage({
   onOpenSolution: (state: SolutionState) => void
   onOpenSharedSolution: (textbookId: TextbookId, task: string) => void
   onRefreshSharedSolutions: () => void
+  onStartTask: () => void
 }) {
   const [query, setQuery] = useState('')
   const [activeSection, setActiveSection] = useState<'personal' | 'shared'>(user ? 'personal' : 'shared')
@@ -690,7 +711,9 @@ function SolutionsPage({
         <button id="shared-solutions-tab" data-section="shared" type="button" role="tab" aria-label="База решений" aria-controls="solutions-panel" aria-selected={activeSection === 'shared'} tabIndex={activeSection === 'shared' ? 0 : -1} onClick={() => setActiveSection('shared')}>
           <Stack size={18} weight="duotone" aria-hidden="true" />
           <span>База решений</span>
-          <small aria-hidden="true">{results.length}</small>
+          {/* Счётчик «0» на пустой базе не сообщает ничего, кроме того,
+              что смотреть нечего. */}
+          {entries.length > 0 && <small aria-hidden="true">{results.length}</small>}
         </button>
       </div>
       <label className="route-search" htmlFor="solutions-search"><MagnifyingGlass size={20} weight="duotone" aria-hidden="true" /><span>Найти решение</span><input id="solutions-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Предмет или номер задачи" autoComplete="off" /></label>
@@ -698,7 +721,7 @@ function SolutionsPage({
       <div id="solutions-panel" className="solutions-directory" role="tabpanel" aria-labelledby={activeSection === 'personal' ? 'personal-solutions-tab' : 'shared-solutions-tab'} tabIndex={0}>
         {activeSection === 'personal' ? <section className="solutions-directory-section" aria-labelledby="personal-solutions-title">
           <header className="solutions-directory-heading"><h2 id="personal-solutions-title">Мои решения</h2>{user && <span>{personalResults.length}</span>}</header>
-          {!user ? <GuestWorkspace onOpenAccount={onOpenAccount} /> : personalResults.length > 0 ? (
+          {!user ? <GuestSolutionsNote onOpenAccount={onOpenAccount} /> : personalResults.length > 0 ? (
             <div className="solution-list route-solution-list">
               {personalResults.map(({ textbookId, task, time, mode, source }) => {
                 const textbook = getTextbook(textbookId, items)
@@ -715,7 +738,7 @@ function SolutionsPage({
             </div>
           ) : <section className="route-empty" aria-labelledby="solutions-empty-title"><Notebook size={34} weight="duotone" aria-hidden="true" /><div><h2 id="solutions-empty-title">Решений пока нет</h2><p>Открой готовый ответ или отправь новую задачу, и она появится здесь.</p></div></section>}
         </section> : <section className="solutions-directory-section" aria-labelledby="shared-solutions-title">
-          <header className="solutions-directory-heading"><h2 id="shared-solutions-title">База решений</h2><span>{sharedSolutionsStatus === 'loading' ? '…' : results.length}</span></header>
+          <header className="solutions-directory-heading"><h2 id="shared-solutions-title">База решений</h2>{sharedSolutionsStatus === 'loading' ? <span>…</span> : entries.length > 0 ? <span>{results.length}</span> : null}</header>
           {sharedSolutionsStatus === 'loading' ? <div className="route-loading" role="status">Загружаем базу решений…</div>
             : sharedSolutionsStatus === 'error' ? <section className="route-empty" aria-labelledby="base-error-title"><WarningCircle size={34} weight="duotone" aria-hidden="true" /><div><h2 id="base-error-title">База временно недоступна</h2><p>Повтори загрузку. Сохранённые решения не потеряны.</p><button className="route-secondary-action" type="button" onClick={onRefreshSharedSolutions}>Повторить</button></div></section>
             : results.length > 0 ? <div className="solution-list route-solution-list">
@@ -730,7 +753,14 @@ function SolutionsPage({
                 </button>
               )
             })}
-          </div> : <section className="route-empty" aria-labelledby="base-empty-title"><MagnifyingGlass size={34} weight="duotone" aria-hidden="true" /><div><h2 id="base-empty-title">Совпадений нет</h2><p>Попробуй другой номер или отправь задачу с главной страницы.</p></div></section>}
+          </div> : entries.length === 0 ? (
+            /* База ещё пуста — это не результат неудачного поиска.
+               Человек ничего не искал, и «Совпадений нет» читается как
+               «ты сделал что-то не так». */
+            <section className="route-empty" aria-labelledby="base-empty-title"><Stack size={34} weight="duotone" aria-hidden="true" /><div><h2 id="base-empty-title">База пополняется решёнными задачами</h2><p>Здесь появятся ответы, которые уже кто-то заказал. Их можно будет открыть сразу.</p><button className="route-secondary-action" type="button" onClick={onStartTask}>Отправить свою задачу</button></div></section>
+          ) : (
+            <section className="route-empty" aria-labelledby="base-empty-title"><MagnifyingGlass size={34} weight="duotone" aria-hidden="true" /><div><h2 id="base-empty-title">По запросу «{query.trim()}» ничего нет</h2><p>Попробуй другой номер или предмет.</p><button className="route-secondary-action" type="button" onClick={onStartTask}>Отправить свою задачу</button></div></section>
+          )}
         </section>}
       </div>
     </section>
@@ -796,6 +826,10 @@ function UnderstandingPage({
     await navigator.clipboard.writeText(value)
     setCopied(true)
   }
+
+  const disclaimer = (
+    <p className="solution-disclaimer">Решение помогает разобраться. Проверь ответ перед сдачей.</p>
+  )
 
   const actions = (
     <div className="solution-actions">
@@ -872,6 +906,7 @@ function UnderstandingPage({
             </section>
           )}
         </article>
+        {disclaimer}
         {generatedSolution.verification && <SolutionVerificationPanel verification={generatedSolution.verification} />}
         {actions}
       </section>
@@ -1614,12 +1649,19 @@ function HomePage() {
           {activeNavigation === 'Главная' && <PageHeader account={account} />}
           {activeNavigation === 'Главная' ? (
             <div className="home-content">
-              <CopyTask onSubmit={submitFromForm} />
-              <div className="home-grid">
-                <div className="home-column home-column-primary">
-                  {solutionState && <SolutionStatus state={solutionState} textbooks={availableTextbooks} onOpenSolution={openSolution} />}
-                  {user ? <MySolutions items={personalSolutions} onOpenAll={() => navigate('Решения')} onOpenSolution={openSolution} /> : <GuestWorkspace onOpenAccount={openAccount} />}
-                </div>
+              <CopyTask
+                onSubmit={submitFromForm}
+                signedIn={Boolean(user)}
+                defaultGrade={account ? `${account.profile.grade} класс` : ''}
+              />
+              {!user && <GuestSolutionsNote onOpenAccount={openAccount} />}
+              <div className={`home-grid${solutionState || user ? '' : ' is-single'}`}>
+                {(solutionState || user) && (
+                  <div className="home-column home-column-primary">
+                    {solutionState && <SolutionStatus state={solutionState} textbooks={availableTextbooks} onOpenSolution={openSolution} />}
+                    {user && <MySolutions items={personalSolutions} onOpenAll={() => navigate('Решения')} onOpenSolution={openSolution} />}
+                  </div>
+                )}
                 <div className="home-column home-column-secondary">
                   <BaseShortcut onOpenBase={() => navigate('Решения')} />
                 </div>
@@ -1649,6 +1691,7 @@ function HomePage() {
               onOpenSolution={openSolution}
               onOpenSharedSolution={openSharedSolution}
               onRefreshSharedSolutions={() => { void refreshSharedSolutions() }}
+              onStartTask={() => navigate('Главная')}
             />
           ) : (
             <CdzComingSoon onGoHome={() => navigate('Главная')} />
@@ -1656,7 +1699,7 @@ function HomePage() {
         </div>
         <SiteFooter onOpenSupport={() => openSupport()} />
       </div>
-      <SupportLauncher onClick={() => openSupport()} />
+      {activeNavigation !== 'Главная' && <SupportLauncher onClick={() => openSupport()} />}
       {supportOpen && createPortal(
         <SupportCenter user={user} supabaseClient={supabaseClient} initialCategory={supportCategory} initialContext={supportContext} onRequireAuth={openAccount} onClose={closeSupport} />,
         document.body,

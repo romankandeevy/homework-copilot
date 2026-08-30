@@ -9,9 +9,10 @@
   backdrop-filter: blur(0.3rem);
 }
 
+/* Подложка одна и та же у обоих окон: отдельная почти непрозрачная
+   заливка была нужна только тёмному окну входа. */
 .account-dialog-backdrop.is-auth-backdrop {
-  background: oklch(10.5% 0 0 / 0.96);
-  backdrop-filter: none;
+  background: oklch(0% 0 0 / 0.72);
 }
 
 .account-dialog {
@@ -27,16 +28,16 @@
 }
 
 .account-dialog.is-auth {
-  --auth-canvas: oklch(14.5% 0 0);
-  --auth-panel: oklch(18.5% 0 0);
-  --auth-field: oklch(22.5% 0 0);
-  --auth-field-hover: oklch(27% 0 0);
-  --auth-line: oklch(38% 0 0);
-  --auth-text: oklch(97.5% 0 0);
-  --auth-muted: oklch(76% 0 0);
-  --auth-subtle: oklch(68% 0 0);
-  --auth-accent: oklch(57% 0.18 260);
-  --auth-accent-hover: oklch(63% 0.17 260);
+  --auth-canvas: var(--color-surface);
+  --auth-panel: var(--color-surface-raised);
+  --auth-field: var(--color-surface-raised);
+  --auth-field-hover: var(--color-surface-sunken);
+  --auth-line: var(--color-border);
+  --auth-text: var(--color-text);
+  --auth-muted: var(--color-text-muted);
+  --auth-subtle: var(--color-text-subtle);
+  --auth-accent: var(--color-accent);
+  --auth-accent-hover: var(--color-accent-hover);
   width: min(100%, 58rem);
   border: 1px solid var(--auth-line);
   background: var(--auth-canvas);
@@ -73,6 +74,7 @@
 .account-auth-view {
   display: grid;
   min-height: 38rem;
+  scroll-margin-top: 0;
   grid-template-columns: minmax(14rem, 0.72fr) minmax(0, 1.35fr);
 }
 
@@ -84,7 +86,7 @@
   padding: var(--space-8);
   border-right: 1px solid var(--auth-line);
   background: var(--auth-field);
-  color: white;
+  color: var(--auth-text);
 }
 
 .account-auth-wordmark { display: flex; align-items: center; gap: var(--space-3); font-size: var(--text-small); }
@@ -93,7 +95,7 @@
 .account-auth-context-copy { display: grid; gap: var(--space-4); }
 .account-auth-context-copy > strong { max-width: 11ch; font-family: var(--font-display); font-size: var(--text-heading); font-weight: var(--weight-display); line-height: 1.12; letter-spacing: 0; text-wrap: balance; }
 .account-auth-context-copy > p { max-width: 27ch; margin: 0; color: color-mix(in oklch, var(--auth-text) 78%, transparent); font-size: var(--text-small); line-height: var(--leading-body); }
-.account-auth-context-meta { display: flex; align-items: center; gap: var(--space-2); color: oklch(98% 0 0 / 0.82); font-size: var(--text-caption); font-weight: var(--weight-semibold); }
+.account-auth-context-meta { display: flex; align-items: center; gap: var(--space-2); color: var(--auth-muted); font-size: var(--text-caption); font-weight: var(--weight-semibold); }
 
 .account-auth-panel {
   display: grid;
@@ -153,7 +155,7 @@
 }
 
 .account-auth-tabs button.is-active { background: var(--color-surface-raised); color: var(--color-text); box-shadow: 0 1px 2px oklch(17% 0.025 260 / 0.08); }
-.account-notice { margin: 0; padding: var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-accent-soft); font-size: var(--text-small); line-height: var(--leading-ui); }
+.account-notice { margin: 0; padding: 0 0 0 var(--space-4); border-left: 2px solid var(--color-accent); color: var(--color-text-muted); font-size: var(--text-small); line-height: var(--leading-copy); }
 .account-google-button {
   display: inline-flex;
   min-height: 3rem;
@@ -214,8 +216,11 @@
 .account-field-row > .account-grade-field { display: grid; gap: var(--space-2); color: var(--color-text-muted); font-size: var(--text-small); font-weight: var(--weight-semibold); }
 
 .account-password-field { display: grid; gap: var(--space-3); }
-.account-field-row { display: grid; grid-template-columns: minmax(0, 1fr) 5.5rem; gap: var(--space-3); }
+/* Колонка класса шире прежней: поле стартует пустым, и подпись «Выбери»
+   должна помещаться целиком. */
+.account-field-row { display: grid; grid-template-columns: minmax(0, 1fr) 7.25rem; gap: var(--space-3); }
 .account-input-shell { display: grid; min-height: 3rem; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: var(--space-2); padding: 0 var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-surface); color: var(--color-text-subtle); }
+.account-input-shell:has(.account-password-reveal) { grid-template-columns: auto minmax(0, 1fr) auto; }
 .account-input-shell:focus-within { border-color: var(--color-accent-hover); box-shadow: 0 0 0 3px var(--color-accent-soft); }
 .account-input-shell input { width: 100%; min-width: 0; height: 2.8rem; border: 0; outline: 0; background: transparent; color: var(--color-text); font: inherit; }
 .account-input-shell input:focus-visible { box-shadow: none; }
@@ -322,8 +327,8 @@
 
 .account-dialog.is-auth .account-auth-tabs { border-color: var(--auth-line); background: var(--auth-canvas); }
 .account-dialog.is-auth .account-auth-tabs button { color: var(--auth-subtle); }
-.account-dialog.is-auth .account-auth-tabs button.is-active { background: var(--auth-field); color: var(--auth-text); box-shadow: none; }
-.account-dialog.is-auth .account-notice { border-color: var(--auth-line); background: var(--auth-field); color: var(--auth-text); }
+.account-dialog.is-auth .account-auth-tabs button.is-active { background: var(--color-strong); color: var(--color-on-strong); box-shadow: none; }
+.account-dialog.is-auth .account-notice { border-left-color: var(--auth-accent); color: var(--auth-muted); }
 .account-dialog.is-auth .account-google-button { border-color: var(--auth-line); background: var(--auth-field); color: var(--auth-text); }
 .account-dialog.is-auth .account-google-button:hover { border-color: var(--auth-accent-hover); background: var(--auth-field-hover); }
 .account-dialog.is-auth .account-google-button:disabled { color: var(--auth-subtle); }
@@ -354,7 +359,7 @@
 .account-dialog.is-auth .password-strength-rules li { color: var(--auth-subtle); }
 .account-dialog.is-auth .password-strength-rules li.is-met { color: var(--auth-muted); }
 .account-dialog.is-auth .password-rule-state { border-color: var(--auth-line); }
-.account-dialog.is-auth .account-primary-button { border-color: var(--auth-accent); background: var(--auth-accent); color: white; }
+.account-dialog.is-auth .account-primary-button { border-color: var(--auth-accent); background: var(--auth-accent); color: var(--color-on-accent); }
 .account-dialog.is-auth .account-primary-button:not(:disabled):hover { border-color: var(--auth-accent-hover); background: var(--auth-accent-hover); }
 .account-dialog.is-auth .account-primary-button:disabled { border-color: var(--auth-line); background: var(--auth-field); color: var(--auth-subtle); }
 .account-dialog.is-auth .account-auth-secondary button { color: var(--auth-muted); }
@@ -364,10 +369,10 @@
 .account-dialog.is-auth .account-auth-legal a { color: var(--auth-muted); text-underline-offset: 0.22em; }
 .account-dialog.is-auth .account-consent { color: var(--auth-muted); }
 .account-dialog.is-auth .account-consent > span { border-color: var(--auth-line); background: var(--auth-field); }
-.account-dialog.is-auth .account-consent input:checked + span { border-color: var(--auth-accent); background: var(--auth-accent); color: white; }
-.account-dialog.is-auth .account-form-message.is-error { color: color-mix(in oklch, var(--color-danger) 68%, white); }
-.account-dialog.is-auth .account-form-message.is-success { color: color-mix(in oklch, var(--color-success) 70%, white); }
-.account-dialog.is-auth ::selection { background: var(--auth-accent-hover); color: white; }
+.account-dialog.is-auth .account-consent input:checked + span { border-color: var(--auth-accent); background: var(--auth-accent); color: var(--color-on-accent); }
+.account-dialog.is-auth .account-form-message.is-error { color: var(--color-danger); }
+.account-dialog.is-auth .account-form-message.is-success { color: var(--color-success-strong); }
+.account-dialog.is-auth ::selection { background: var(--auth-accent-hover); color: var(--color-on-accent); }
 
 .account-profile-view { display: grid; min-height: 34rem; }
 .account-profile-notice { margin: var(--space-4) var(--space-6) 0; }
@@ -467,7 +472,7 @@
   .account-auth-brand h2 { font-size: var(--text-subtitle); }
   .account-email-check-lead { padding: var(--space-3); }
   .account-otp-input { min-height: 4.75rem; padding-inline: 0.75rem 0.45rem; font-size: var(--text-heading); letter-spacing: 0; }
-  .account-field-row { grid-template-columns: minmax(0, 1fr) 5rem; }
+  .account-field-row { grid-template-columns: minmax(0, 1fr) 6.75rem; }
   .password-strength-rules { grid-template-columns: 1fr; }
   .account-profile-header { padding: var(--space-4) 4.25rem var(--space-4) var(--space-4); }
   .account-profile-tabs { padding-inline: var(--space-4); }
@@ -500,4 +505,31 @@
   .account-grade-trigger > svg,
   .account-primary-button,
   .password-strength-cell > span { transition: none; }
+}
+
+/* Показать пароль. Кнопка живёт внутри оболочки поля, чтобы не растягивать
+   ряд и не сбивать фокусное кольцо самого поля. */
+.account-password-reveal {
+  display: grid;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex: 0 0 auto;
+  place-items: center;
+  margin-right: calc(var(--space-1) * -1);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text-subtle);
+  cursor: pointer;
+}
+
+.account-password-reveal:hover { color: var(--color-text); }
+.account-dialog.is-auth .account-password-reveal { color: var(--auth-subtle); }
+.account-dialog.is-auth .account-password-reveal:hover { color: var(--auth-text); }
+
+/* На невысоком окне левая панель не помогает войти, а высоту задаёт:
+   при 447 пикселях доступной высоты содержимое выходило под 900. */
+@media (max-height: 760px) {
+  .account-auth-view { min-height: 0; grid-template-columns: minmax(0, 1fr); }
+  .account-auth-context { display: none; }
 }

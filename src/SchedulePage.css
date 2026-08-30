@@ -26,7 +26,7 @@
   gap: var(--space-3);
 }
 
-.schedule-title-line h2 {
+.schedule-title-line h1 {
   margin: 0;
   font-family: var(--font-display);
   font-size: var(--text-display-small);
@@ -778,7 +778,7 @@
     gap: var(--space-2) var(--space-3);
   }
 
-  .schedule-title-line h2 { font-size: var(--text-heading); }
+  .schedule-title-line h1 { font-size: var(--text-heading); }
   .schedule-title-line > span { font-size: var(--text-ui); }
   .schedule-heading p { font-size: var(--text-small); }
   .schedule-desktop-hint { display: none; }
