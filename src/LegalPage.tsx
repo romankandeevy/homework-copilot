@@ -8,7 +8,11 @@ import './LegalPage.css'
 
 export type LegalPageKind = 'privacy' | 'terms' | 'consent' | 'cookies' | 'offer'
 
-const contactEmail = 'roman.kandeevy@gmail.com'
+// Личный ящик в юридических документах — прямой способ найти владельца
+// по любой претензии, и он же выглядит несерьёзно для сервиса с платежами.
+// Запросы по данным и правам идут на отдельный адрес, поддержка — на свой.
+const contactEmail = 'legal@homeworkcopilot.ru'
+const supportEmail = 'support@homeworkcopilot.ru'
 const operatorName = 'Роман Кандеев'
 
 const documents: { kind: LegalPageKind; path: string; label: string }[] = [
@@ -148,7 +152,7 @@ function TermsOfService() {
       </section>
       <section>
         <h2>10. Связь</h2>
-        <p>Вопросы и претензии можно отправить через <a href="/support">поддержку в аккаунте</a> или на <a href={`mailto:${contactEmail}`}>{contactEmail}</a>.</p>
+        <p>Вопросы и претензии можно отправить через <a href="/support">поддержку в аккаунте</a> или на <a href={`mailto:${supportEmail}`}>{supportEmail}</a>.</p>
       </section>
     </>
   )

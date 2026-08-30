@@ -101,7 +101,7 @@ describe('Homework Copilot task flow', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Проверить условие' }))
     expect(await screen.findByText('Условие задачи № 2')).toBeInTheDocument()
     expect(screen.getByText('Отметьте три точки A, B и C, не лежащие на одной прямой, и через каждую пару точек проведите прямую. Сколько прямых получилось?')).toBeInTheDocument()
-    expect(screen.getByText(/Источник: PDF учебника.*стр. 9\. Издание учебника: 14-е издание, Просвещение, 2023/)).toBeInTheDocument()
+    expect(screen.getByText(/Учебник «.*», стр. 9\./)).toBeInTheDocument()
     expect(screen.queryByRole('img', { name: /Три точки A, B и C/ })).not.toBeInTheDocument()
 
     expect(screen.getByRole('button', { name: 'Условие верное' })).toBeInTheDocument()

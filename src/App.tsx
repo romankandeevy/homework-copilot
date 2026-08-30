@@ -739,7 +739,12 @@ function TaskConditionPreview({ task, actions }: { task: VerifiedTextbookTaskSou
       <div className="task-condition-copy">
         <span id="task-condition-title">Условие задачи № {task.task}</span>
         {!conditionNeedsScan && <p>{task.condition}</p>}
-        <small>Источник: PDF учебника «{task.textbookTitle}»{task.sourcePage ? `, стр. ${task.sourcePage}` : ''}. Издание учебника: {task.edition}.</small>
+        {/* Раньше здесь печаталось «Источник: PDF учебника ... Издание: 14-е,
+            Просвещение, 2023». Скана у нас больше нет, а точное издание
+            с названием издательства на видном месте — прямая наводка на то,
+            чьё содержание используется. Ученику для сверки хватает названия
+            книги и страницы. */}
+        <small>Учебник «{task.textbookTitle}»{task.sourcePage ? `, стр. ${task.sourcePage}` : ''}.</small>
         {(conditionNeedsScan || task.hasDiagram) && <TextbookTaskSourcePreview task={task} includeCondition={conditionNeedsScan} />}
         {actions && <div className="task-condition-actions">{actions}</div>}
       </div>
