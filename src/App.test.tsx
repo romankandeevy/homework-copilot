@@ -136,8 +136,27 @@ describe('Homework Copilot task flow', () => {
     expect(screen.getByRole('heading', { name: 'Раздел пока закрыт' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Задача № 2 · 5 ₽' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Вернуться на главную' }))
-    expect(window.location.pathname).toBe('/main')
+    expect(window.location.pathname).toBe('/app')
     expect(screen.getByRole('heading', { name: 'Списать задачу' })).toBeInTheDocument()
+  })
+
+  // Витрина и приложение — разные адреса. `/` встречает нового посетителя,
+  // рабочая главная живёт на `/app`, а старый `/main` продолжает работать.
+  it('показывает витрину на корне и уводит в приложение по `/app`', () => {
+    window.history.replaceState({}, '', '/')
+    render(<App />)
+
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Сфоткал.')
+    expect(screen.queryByRole('heading', { name: 'Списать задачу' })).not.toBeInTheDocument()
+    expect(screen.getAllByRole('link', { name: /Решить задачу/ })[0]).toHaveAttribute('href', '/app')
+  })
+
+  it('оставляет прежний адрес `/main` рабочим', () => {
+    window.history.replaceState({}, '', '/main')
+    render(<App />)
+
+    expect(screen.getByRole('heading', { name: 'Списать задачу' })).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/app')
   })
 
   it('отправляет фото без распознавания в браузере', async () => {

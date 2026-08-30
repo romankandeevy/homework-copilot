@@ -8,6 +8,26 @@
 - Do not change the paper, grid, red margin, ink colour, writing font, title/solution alignment, task-number position, divider joint, or diagram zone without an explicitly approved layout-version change.
 - The approved fixture is task №123. Never update visual snapshot baselines without explicit manual design approval.
 
+# Витрина и приложение — разные адреса
+
+`/` — публичная витрина продукта (`src/landing/LandingPage.tsx`). Это первое,
+что видит новый посетитель: что за продукт, как он работает, сколько стоит и
+куда нажать. Рабочая часть живёт на `/app`, и туда ведут все действия витрины.
+
+- `/main` остаётся рабочим: ссылки на него уже разошлись. Он открывает
+  приложение и переписывается на `/app` через `normalizeNavigationPath`.
+- Витрина не заводит второй UI-kit: цвета, шрифты, радиусы и тени берутся из
+  `src/tokens.css`, подвал переиспользуется из `SupportCenter`.
+- Всё, что заявлено на витрине, проверяется по коду: цена — `solutionPricing.ts`,
+  стартовые 20 ₽ и бонусы за приглашение — миграции кошелька, двойной проход
+  и рецензент — `server/homeworkSolver.ts`. Ничего сверх этого не обещать.
+- Инструменты разработки (`?canvas=1`, `?design-system=1`) проверяются в `App()`
+  до маршрутов, иначе витрина перехватывает `/?canvas=1` и ломает утверждённые
+  визуальные снимки тетради.
+- Имена классов витрины не должны пересекаться с продуктовыми: `.analysis-line`
+  уже занят разбором в `WrittenAnalysis.css`, поэтому разметка витрины —
+  `.parse-line`.
+
 # Хостинг: фронт на Pages, функции на Vercel
 
 Разделение не историческая случайность и не техдолг — **не сводить на один хостинг.**

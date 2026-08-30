@@ -3,38 +3,94 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="description" content="Найди условие по учебнику и получи понятное решение задачи, которое удобно переписать в тетрадь." />
+    <meta name="description" content="Сфотографируй задачу или впиши условие. Получишь готовую запись для тетради: дано, ход решения, чертёж и ответ. Любой предмет с 5 по 11 класс." />
     <meta name="robots" content="index, follow" />
     <meta name="application-name" content="Homework Copilot" />
     <meta name="apple-mobile-web-app-title" content="Homework Copilot" />
     <meta property="og:type" content="website" />
     <meta property="og:locale" content="ru_RU" />
     <meta property="og:site_name" content="Homework Copilot" />
-    <meta property="og:title" content="Homework Copilot — готовые решения по номеру задачи" />
-    <meta property="og:description" content="Найди условие по учебнику и получи понятное решение задачи, которое удобно переписать в тетрадь." />
+    <meta property="og:title" content="Homework Copilot — решение задачи по фото за одну минуту" />
+    <meta property="og:description" content="Сфотографируй задачу или впиши условие. Получишь готовую запись для тетради: дано, ход решения, чертёж и ответ. Любой предмет с 5 по 11 класс." />
     <meta property="og:url" content="https://www.homeworkcopilot.ru/" />
     <meta property="og:image" content="https://www.homeworkcopilot.ru/og-card.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="Homework Copilot — решение задач по учебнику" />
+    <meta property="og:image:alt" content="Homework Copilot — решение школьной задачи по фотографии" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Homework Copilot — готовые решения по номеру задачи" />
-    <meta name="twitter:description" content="Найди условие по учебнику и получи понятное решение задачи, которое удобно переписать в тетрадь." />
+    <meta name="twitter:title" content="Homework Copilot — решение задачи по фото за одну минуту" />
+    <meta name="twitter:description" content="Сфотографируй задачу или впиши условие. Получишь готовую запись для тетради: дано, ход решения, чертёж и ответ. Любой предмет с 5 по 11 класс." />
     <meta name="twitter:image" content="https://www.homeworkcopilot.ru/og-card.png" />
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#fafafa" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a0a0a" />
     <link rel="canonical" href="https://www.homeworkcopilot.ru/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="manifest" href="/site.webmanifest" />
-    <title>Homework Copilot — готовые решения по номеру задачи</title>
+    <title>Homework Copilot — решение задачи по фото за одну минуту</title>
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
-        "@type": "WebSite",
-        "name": "Homework Copilot",
-        "url": "https://www.homeworkcopilot.ru/",
-        "inLanguage": "ru-RU",
-        "description": "Сервис для поиска условий по учебнику и подготовки понятных решений школьных задач."
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "name": "Homework Copilot",
+            "url": "https://www.homeworkcopilot.ru/",
+            "inLanguage": "ru-RU",
+            "description": "Сервис, который решает школьную задачу по фотографии или тексту условия и оформляет решение как запись в тетради."
+          },
+          {
+            "@type": "WebApplication",
+            "name": "Homework Copilot",
+            "url": "https://www.homeworkcopilot.ru/app",
+            "applicationCategory": "EducationalApplication",
+            "operatingSystem": "Веб-браузер",
+            "inLanguage": "ru-RU",
+            "description": "Условие задачи фотографией или текстом, решение с «дано», ходом решения, чертежом и ответом. 14 предметов, 5–11 класс.",
+            "offers": {
+              "@type": "Offer",
+              "price": "5",
+              "priceCurrency": "RUB",
+              "description": "Одно решение задачи"
+            }
+          },
+          {
+            "@type": "FAQPage",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "Нужен ли учебник из какого-то списка?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Нет. Условие приносит сам ученик — фотографией или текстом, поэтому подойдёт любой учебник, рабочая тетрадь, карточка от учителя или свой вариант."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Нужна ли регистрация?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Да: решение привязывается к аккаунту и балансу. Войти можно через Google или по почте с паролем. Сразу после регистрации на счёте 20 ₽."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Сколько это стоит?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Решение задачи — 5 ₽ независимо от предмета и способа ввода. Ответ в ИИ-чате — от 20 копеек. Расписание бесплатное."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "А если решение окажется неверным?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "В каждом решении есть кнопка «Сообщить об ошибке»: условие и ход решения уходят в поддержку целиком. Если задача не прошла внутреннюю проверку, она не выдаётся, и деньги остаются на балансе."
+                }
+              }
+            ]
+          }
+        ]
       }
     </script>
     <script>
@@ -52,11 +108,11 @@
   </head>
   <body>
     <!--
-      THESIS: One saved textbook and one task number lead either to an instant shared answer or one new notebook-ready solution; this is not a productivity dashboard.
-      OWN-WORLD: Neutral Graphite Mono surfaces, restrained cobalt signals, routed nodes, Unbounded display, Onest body.
-      STORY: See the balance, confirm the textbook, enter a number, open a shared answer instantly or wait for one new solution.
-      FIRST VIEWPORT: The active navigation route frames one calm graphite copying surface; the saved textbook sits directly above the task number and cobalt action.
-      FORM: Direct task entry inside the established visual world, seed d1000b40.
+      THESIS: The public root explains one promise — a photographed task comes back as a notebook page — and hands the visitor one obvious way into the product at /app.
+      OWN-WORLD: Neutral Graphite Mono surfaces, restrained cobalt signals, notebook paper and pencil figures, Unbounded display, Onest body.
+      STORY: Read the promise, watch one real task turn into a notebook page, see the price, open the app.
+      FIRST VIEWPORT: A short display headline over a live staged preview of the task form turning into a solved notebook page.
+      FORM: Product showcase built from the application's own surfaces, seed d1000b40.
       FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
     -->
     <div id="root"></div>

@@ -18,7 +18,7 @@ async function expectNoPageOverflow(page: import('@playwright/test').Page) {
 test.describe('адаптация под телефон', () => {
   test('тема и профиль находятся справа в верхней навигации', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
-    await page.goto('/')
+    await page.goto('/app')
 
     const topbar = page.locator('.product-topbar')
     const actions = page.locator('.topbar-actions')
@@ -42,7 +42,7 @@ test.describe('адаптация под телефон', () => {
 
   test('верхняя навигация отмечает активный раздел и остаётся сверху при прокрутке', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
-    await page.goto('/')
+    await page.goto('/app')
 
     const topbar = page.locator('.product-topbar')
     const navigationItems = topbar.locator('.navigation-item')
@@ -73,7 +73,7 @@ test.describe('адаптация под телефон', () => {
 
   test('логотип и все разделы помещаются в верхнюю строку на широком экране', async ({ page }) => {
     await page.setViewportSize({ width: 1920, height: 935 })
-    await page.goto('/')
+    await page.goto('/app')
 
     const [brandBox, navigationBox, topbarBox] = await Promise.all([
       page.locator('.topbar-brand .brand-lockup').boundingBox(),
@@ -90,7 +90,7 @@ test.describe('адаптация под телефон', () => {
 
   test('личные решения и общая база находятся на одной странице', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
-    await page.goto('/')
+    await page.goto('/app')
     await page.getByRole('button', { name: 'Решения', exact: true }).click()
 
     await expect(page).toHaveURL(/\/solutions$/)
@@ -113,7 +113,7 @@ test.describe('адаптация под телефон', () => {
 
   test('карточки на главной совпадают по высоте, цвету и расположению кнопок', async ({ page }) => {
     await page.setViewportSize({ width: 1920, height: 935 })
-    await page.goto('/')
+    await page.goto('/app')
 
     const cards = page.locator('.home-action-card')
     await expect(cards).toHaveCount(2)
@@ -146,7 +146,7 @@ test.describe('адаптация под телефон', () => {
 
   test('главная карточка чёрная в светлой теме и белая в тёмной', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
-    await page.goto('/')
+    await page.goto('/app')
 
     const card = page.locator('.copy-task')
     const title = card.getByRole('heading', { name: 'Списать задачу' })
@@ -166,7 +166,7 @@ test.describe('адаптация под телефон', () => {
   for (const viewport of phoneViewports) {
     test(`главная не переполняется на ${viewport.width}px`, async ({ page }) => {
       await page.setViewportSize(viewport)
-      await page.goto('/')
+      await page.goto('/app')
 
       await expectNoPageOverflow(page)
       const topbar = page.locator('.product-topbar')
@@ -198,7 +198,7 @@ test.describe('адаптация под телефон', () => {
 
   test('компактный телефон складывает ввод и сохраняет центрированный диалог', async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 812 })
-    await page.goto('/')
+    await page.goto('/app')
 
     const taskField = page.locator('.task-number-field')
     const photoField = page.locator('.photo-task-field')
@@ -226,7 +226,7 @@ test.describe('адаптация под телефон', () => {
   test('уменьшенное движение отключает анимацию диалога', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' })
     await page.setViewportSize({ width: 390, height: 844 })
-    await page.goto('/')
+    await page.goto('/app')
 
     await page.getByRole('button', { name: /Учебник Геометрия/ }).click()
 
@@ -236,7 +236,7 @@ test.describe('адаптация под телефон', () => {
 
   test('диалог учебника изолирует страницу, удерживает фокус и возвращает его', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
-    await page.goto('/')
+    await page.goto('/app')
 
     const trigger = page.getByRole('button', { name: /Учебник Геометрия/ })
     await trigger.click()
@@ -261,7 +261,7 @@ test.describe('адаптация под телефон', () => {
 
   test('регистрация помещается на экран и прокручивается внутри диалога', async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 812 })
-    await page.goto('/')
+    await page.goto('/app')
 
     await page.locator('.topbar-actions').getByRole('button', { name: 'Войти или зарегистрироваться' }).click()
     const dialog = page.getByRole('dialog', { name: 'Войди в аккаунт' })
@@ -322,7 +322,7 @@ test.describe('адаптация под телефон', () => {
   test('расписание показывает один выбранный день на телефоне и в альбомной ориентации', async ({ page }) => {
     for (const viewport of [{ width: 320, height: 812 }, { width: 667, height: 375 }]) {
       await page.setViewportSize(viewport)
-      await page.goto('/')
+      await page.goto('/app')
       await page.getByRole('button', { name: 'Расписание', exact: true }).click()
       await expect(page.getByText(/Выбери день/)).toBeVisible()
       await expectNoPageOverflow(page)

@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
 const outputDirectory = resolve('dist')
@@ -10,14 +10,24 @@ const numberedSolutionRoutes = {
 }
 
 const homepage = {
-  title: 'Homework Copilot — готовые решения по номеру задачи',
-  description: 'Найди условие по учебнику и получи понятное решение задачи, которое удобно переписать в тетрадь.',
+  title: 'Homework Copilot — решение задачи по фото за одну минуту',
+  description: 'Сфотографируй задачу или впиши условие. Получишь готовую запись для тетради: дано, ход решения, чертёж и ответ. Любой предмет с 5 по 11 класс.',
   canonicalPath: '/',
   robots: 'index, follow',
 }
 
+// Рабочая главная. `/main` — прежний адрес, он остаётся ради разошедшихся
+// ссылок и канонизируется на `/app`.
+const application = {
+  title: 'Решить задачу — Homework Copilot',
+  description: 'Рабочая страница Homework Copilot: условие текстом или фотографией, готовое решение и история задач.',
+  canonicalPath: '/app',
+  robots: 'index, follow',
+}
+
 const routeMetadata = new Map([
-  ['main', homepage],
+  ['app', application],
+  ['main', application],
   ['solutions', { title: 'Решения задач — Homework Copilot', description: 'Личные и готовые решения задач по выбранным школьным учебникам.', canonicalPath: '/solutions', robots: 'index, follow' }],
   ['base', { title: 'Решения задач — Homework Copilot', description: 'Личные и готовые решения задач по выбранным школьным учебникам.', canonicalPath: '/solutions', robots: 'index, follow' }],
   ['cdz', { title: 'Учебники и ЦДЗ — Homework Copilot', description: 'Выбери учебник и найди точное условие задачи по номеру перед получением решения.', canonicalPath: '/cdz', robots: 'index, follow' }],
@@ -62,7 +72,26 @@ function renderMetadata(baseHtml, metadata) {
   return html.replace(/<link\s+rel="canonical"\s+href="[^"]*"\s*\/>/i, `<link rel="canonical" href="${canonicalUrl}" />`)
 }
 
-const baseHtml = await readFile(resolve(outputDirectory, 'index.html'), 'utf8')
+/* Кириллические подрезки Unbounded и Onest нужны на каждой странице: ими
+   набраны заголовок и весь текст. Без предзагрузки они приезжают после
+   разбора CSS, и заголовок первого экрана перерисовывается уже после
+   отрисовки — это и есть сдвиг макета. Имена файлов содержат хэш сборки,
+   поэтому ссылки собираются здесь, а не пишутся руками в index.html. */
+async function fontPreloadLinks() {
+  const assets = await readdir(resolve(outputDirectory, 'assets'))
+  return ['unbounded-cyr', 'onest-cyr']
+    .map((face) => assets.find((file) => file.startsWith(`${face}-`) && file.endsWith('.woff2')))
+    .filter(Boolean)
+    .map((file) => `    <link rel="preload" href="/assets/${file}" as="font" type="font/woff2" crossorigin />`)
+    .join('\n')
+}
+
+const preloadLinks = await fontPreloadLinks()
+
+const baseHtml = (await readFile(resolve(outputDirectory, 'index.html'), 'utf8')).replace(
+  '<link rel="icon"',
+  preloadLinks ? `${preloadLinks}\n    <link rel="icon"` : '<link rel="icon"',
+)
 await writeFile(resolve(outputDirectory, 'index.html'), renderMetadata(baseHtml, homepage), 'utf8')
 
 for (const [route, metadata] of routeMetadata) {

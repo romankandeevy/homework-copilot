@@ -98,7 +98,7 @@ function SiteFooter({ onOpenSupport }: { onOpenSupport?: () => void }) {
   return (
     <footer className="site-footer">
       <div className="site-footer-hero">
-        <a className="site-footer-brand" href="/" aria-label="Homework Copilot, на главную">
+        <a className="site-footer-brand" href="/">
           <span className="site-footer-monogram" aria-hidden="true"><span>H</span><span>C</span></span>
           <span className="site-footer-brand-copy">
             <strong><span>Homework</span><span>Copilot</span></strong>
@@ -130,7 +130,7 @@ function SiteFooter({ onOpenSupport }: { onOpenSupport?: () => void }) {
 
         <nav className="site-footer-column" aria-label="Сервис">
           <h2>Сервис</h2>
-          <a href="/">Главная</a>
+          <a href="/app">Решить задачу</a>
           <a href="/cdz">Учебники и ЦДЗ</a>
           <a href="/solutions">Решения</a>
           <a href="/schedule">Расписание</a>

@@ -9,9 +9,15 @@ export type SeoMetadata = {
 
 const metadataByPath: Record<string, SeoMetadata> = {
   '/': {
-    title: 'Homework Copilot — готовые решения по номеру задачи',
-    description: 'Найди условие по учебнику и получи понятное решение задачи, которое удобно переписать в тетрадь.',
+    title: 'Homework Copilot — решение задачи по фото за одну минуту',
+    description: 'Сфотографируй задачу или впиши условие. Получишь готовую запись для тетради: дано, ход решения, чертёж и ответ. Любой предмет с 5 по 11 класс.',
     path: '/',
+    robots: 'index, follow',
+  },
+  '/app': {
+    title: 'Решить задачу — Homework Copilot',
+    description: 'Рабочая страница Homework Copilot: условие текстом или фотографией, готовое решение и история задач.',
+    path: '/app',
     robots: 'index, follow',
   },
   '/solutions': {
@@ -84,7 +90,7 @@ const metadataByPath: Record<string, SeoMetadata> = {
 
 function normalizePath(pathname: string) {
   const path = pathname.replace(/\/+$/, '') || '/'
-  if (path === '/main') return '/'
+  if (path === '/main') return '/app'
   if (path === '/base') return '/solutions'
   if (path === '/tasks' || path === '/textbooks') return '/cdz'
   if (path === '/agreement') return '/terms'

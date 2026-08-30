@@ -4,7 +4,7 @@ import { applySeoMetadata, getSeoMetadata } from './siteMetadata'
 
 describe('site metadata', () => {
   it('keeps private routes out of search and canonicalizes aliases', () => {
-    expect(getSeoMetadata('/main').path).toBe('/')
+    expect(getSeoMetadata('/main').path).toBe('/app')
     expect(getSeoMetadata('/solutions/geometry/123', '123').robots).toBe('noindex, nofollow')
     expect(getSeoMetadata('/schedule').robots).toBe('noindex, nofollow')
     expect(getSeoMetadata('/agreement').path).toBe('/terms')

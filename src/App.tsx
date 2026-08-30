@@ -35,6 +35,7 @@ import {
 } from '@phosphor-icons/react'
 import CopyTask from './CopyTask'
 import type { TaskSubmission } from './CopyTask'
+import LandingPage from './landing/LandingPage'
 import LegalPage from './LegalPage'
 import PrivacyNotice from './PrivacyNotice'
 import { GeometryNotebookLayoutV1 } from './notebook/GeometryNotebookLayoutV1'
@@ -120,7 +121,7 @@ const selectedTextbookStorageKey = 'homework-copilot:selected-textbook'
 
 
 const applicationRoutes = [
-  { label: 'Главная', path: '/main', icon: House },
+  { label: 'Главная', path: '/app', icon: House },
   { label: 'Решения', path: '/solutions', icon: Notebook },
   { label: 'ЦДЗ', path: '/cdz', icon: Stack },
   { label: 'ИИ-чат', path: '/chat', icon: ChatsCircle },
@@ -146,6 +147,9 @@ function currentNavigationRoute(pathname = window.location.pathname): { label: N
   const path = currentApplicationPath(pathname)
   if (path === '/textbooks' || path === '/tasks') return { label: 'ЦДЗ', solution: null }
   if (path === '/base') return { label: 'Решения', solution: null }
+  // `/main` — прежний адрес рабочей главной. Ссылки на него уже разошлись,
+  // поэтому он продолжает открывать приложение и лишь переписывается на `/app`.
+  if (path === '/main') return { label: 'Главная', solution: null }
   const destination = applicationRoutes.find((item) => item.path === path)
   if (destination) return { label: destination.label, solution: null }
 
@@ -170,7 +174,8 @@ function normalizeNavigationPath(pathname: string) {
   const path = currentApplicationPath(pathname)
   if (path === '/textbooks' || path === '/tasks') return '/cdz'
   if (path === '/base') return '/solutions'
-  return path === '/' ? '/main' : path
+  // `/` теперь публичная витрина, рабочая главная живёт на `/app`.
+  return path === '/' || path === '/main' ? '/app' : path
 }
 
 // Предметы, а не учебники.
@@ -950,7 +955,9 @@ function HomePage() {
   const [account, setAccount] = useState<AccountData | null>(null)
   const [authReady, setAuthReady] = useState(!authIsConfigured)
   const [accountReady, setAccountReady] = useState(!authIsConfigured)
-  const [accountOpen, setAccountOpen] = useState(() => ['reset', 'verified', 'confirm'].includes(new URLSearchParams(window.location.search).get('auth') ?? ''))
+  // `signin` приходит с витрины: там «Войти» должен открывать окно аккаунта,
+  // а не высаживать человека на рабочую главную с просьбой поискать вход.
+  const [accountOpen, setAccountOpen] = useState(() => ['reset', 'verified', 'confirm', 'signin'].includes(new URLSearchParams(window.location.search).get('auth') ?? ''))
   const [accountView, setAccountView] = useState<AccountView>('profile')
   const [passwordRecovery, setPasswordRecovery] = useState(() => new URLSearchParams(window.location.search).get('auth') === 'reset')
   const [pendingVerificationEmail, setPendingVerificationEmail] = useState(() => sessionStorage.getItem('homework-copilot:google-verification-email') ?? '')
@@ -961,7 +968,7 @@ function HomePage() {
   const googleVerificationStarted = useRef(false)
   const emailConfirmationStarted = useRef(false)
   const accountTriggerRef = useRef<HTMLElement | null>(null)
-  const supportReturnPathRef = useRef(currentApplicationPath() === '/support' ? '/main' : currentApplicationPath())
+  const supportReturnPathRef = useRef(currentApplicationPath() === '/support' ? '/app' : currentApplicationPath())
   const textbookObjectUrlsRef = useRef<string[]>([])
   const visibleGeneratedSolutions = useMemo(
     () => generatedSolutions.filter((solution) => (
@@ -1048,9 +1055,7 @@ function HomePage() {
       ? '/support'
       : selectedSolution
         ? `/solutions/${encodeURIComponent(selectedSolution.textbookId)}/${encodeURIComponent(selectedSolution.task)}`
-        : activeNavigation === 'Главная'
-          ? '/'
-          : applicationRoutes.find((item) => item.label === activeNavigation)?.path ?? '/'
+        : applicationRoutes.find((item) => item.label === activeNavigation)?.path ?? '/app'
     applySeoMetadata(getSeoMetadata(route, selectedSolution?.task))
   }, [activeNavigation, selectedSolution, supportOpen])
 
@@ -1393,14 +1398,14 @@ function HomePage() {
   }, [])
   const openSupport = useCallback((nextCategory: SupportCategory = 'general', context?: SupportPrefill) => {
     const currentPath = currentApplicationPath()
-    supportReturnPathRef.current = currentPath === '/support' ? '/main' : currentPath
+    supportReturnPathRef.current = currentPath === '/support' ? '/app' : currentPath
     setSupportCategory(nextCategory)
     setSupportContext(context)
     setSupportOpen(true)
     if (currentPath !== '/support') window.history.pushState({ support: true }, '', applicationPath('/support'))
   }, [])
   const closeSupport = useCallback(() => {
-    const returnPath = supportReturnPathRef.current || '/main'
+    const returnPath = supportReturnPathRef.current || '/app'
     setSupportOpen(false)
     setSupportContext(undefined)
     if (currentApplicationPath() === '/support') {
@@ -1681,12 +1686,6 @@ function App() {
   const params = new URLSearchParams(window.location.search)
   const pathname = currentApplicationPath()
 
-  if (pathname === '/privacy') return <><LegalPage kind="privacy" /><PrivacyNotice /></>
-  if (pathname === '/terms' || pathname === '/agreement') return <><LegalPage kind="terms" /><PrivacyNotice /></>
-  if (pathname === '/consent') return <><LegalPage kind="consent" /><PrivacyNotice /></>
-  if (pathname === '/cookies') return <><LegalPage kind="cookies" /><PrivacyNotice /></>
-  if (pathname === '/offer') return <><LegalPage kind="offer" /><PrivacyNotice /></>
-
   // Инструменты разработки не должны открываться на проде по угадываемой ссылке.
   if (import.meta.env.DEV) {
     if (params.get('canvas') === '1') {
@@ -1697,6 +1696,14 @@ function App() {
       return <Suspense fallback={null}><DesignSystemPlayground /></Suspense>
     }
   }
+
+  // `/` — публичная витрина, рабочая главная переехала на `/app`.
+  if (pathname === '/') return <><LandingPage /><PrivacyNotice /></>
+  if (pathname === '/privacy') return <><LegalPage kind="privacy" /><PrivacyNotice /></>
+  if (pathname === '/terms' || pathname === '/agreement') return <><LegalPage kind="terms" /><PrivacyNotice /></>
+  if (pathname === '/consent') return <><LegalPage kind="consent" /><PrivacyNotice /></>
+  if (pathname === '/cookies') return <><LegalPage kind="cookies" /><PrivacyNotice /></>
+  if (pathname === '/offer') return <><LegalPage kind="offer" /><PrivacyNotice /></>
 
   if (pathname === '/admin') {
     return <Suspense fallback={null}><AdminDashboard /></Suspense>

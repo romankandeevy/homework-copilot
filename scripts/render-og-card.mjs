@@ -26,7 +26,7 @@ try {
       .meta i { width: 10px; height: 10px; border-radius: 50%; background: #496dff; }
     </style></head><body><main>
       <div class="brand"><span class="mark">H<b>C</b></span><span>Homework Copilot</span></div>
-      <div class="copy"><h1>Решение задачи<br>по номеру из учебника</h1><p>Сверь условие и получи понятное решение, которое удобно переписать в тетрадь.</p></div>
+      <div class="copy"><h1>Сфоткал. Списал.</h1><p>Решение задачи с фото или текста: дано, ход решения, чертёж и ответ — готовой записью для тетради.</p></div>
       <div class="meta"><i></i><span>homeworkcopilot.ru</span></div>
     </main></body></html>`)
   await page.screenshot({ path: outputPath, type: 'png' })

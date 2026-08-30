@@ -6,7 +6,7 @@ async function openCodeScreen(page: import('@playwright/test').Page) {
     sessionStorage.setItem('homework-copilot:verification-kind', 'signup')
     sessionStorage.setItem('homework-copilot:verification-sent-at', String(Date.now()))
   })
-  await page.goto('/')
+  await page.goto('/app')
   await page.getByRole('button', { name: /Войти(?: или зарегистрироваться)?/ }).first().click()
   await expect(page.getByRole('heading', { name: 'Введи код' })).toBeVisible()
 }

@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 
 async function openSchedule(page: import('@playwright/test').Page) {
-  await page.goto('/')
+  await page.goto('/app')
   await page.getByRole('button', { name: 'Расписание' }).click()
   await expect(page.getByRole('heading', { name: 'Расписание' })).toBeVisible()
 }

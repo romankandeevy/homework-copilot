@@ -30,7 +30,7 @@
       "destination": "https://www.homeworkcopilot.ru/:path*",
       "permanent": true
     },
-    { "source": "/main", "destination": "/", "permanent": true },
+    { "source": "/main", "destination": "/app", "permanent": true },
     { "source": "/base", "destination": "/solutions", "permanent": true },
     { "source": "/tasks", "destination": "/cdz", "permanent": true },
     { "source": "/textbooks", "destination": "/cdz", "permanent": true },
@@ -82,6 +82,7 @@
     }
   ],
   "rewrites": [
+    { "source": "/app", "destination": "/index.html" },
     { "source": "/solutions", "destination": "/index.html" },
     { "source": "/solutions/:textbookId/:task", "destination": "/index.html" },
     { "source": "/cdz", "destination": "/index.html" },
