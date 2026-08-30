@@ -1142,10 +1142,75 @@ export async function solveHomeworkWithReview(
     approved: review.approved && finalIssues.length === 0,
     issues: [...review.issues, ...finalIssues].filter(Boolean),
   })
+  // Отказ проверки — обычно не «модель не умеет», а «модель забыла»:
+  // чаще всего это пропущенный чертёж или пустые связи в нём. Такой сбой
+  // стохастический, поэтому даём один исправляющий проход с прямым перечнем
+  // того, что именно надо починить. Ослаблять саму проверку нельзя:
+  // контракт геометрии в AGENTS.md запрещает менять требования к чертежу.
   if (!review.approved || finalIssues.length > 0) {
     const issues = [...review.issues, ...finalIssues].filter(Boolean)
-    throw new GeometrySolutionEngineError(`Решение не прошло проверку${issues.length > 0 ? `: ${issues.slice(0, 3).join('; ')}` : ''}`)
+    // Чинить имеет смысл только механические огрехи — пропущенный чертёж,
+    // пустые связи, формат записи. Если модель решала не ту задачу,
+    // повтор не поможет: это не забывчивость, а неверное понимание условия.
+    const conditionMismatch = !finalConditionMatched
+      || issues.some((issue) => issue.includes('не совпадает с приложенным заданием'))
+    const repairable = !conditionMismatch && Date.now() < retryDeadline + 60_000
+    if (!repairable) {
+      throw new GeometrySolutionEngineError(`Решение не прошло проверку${issues.length > 0 ? `: ${issues.slice(0, 3).join('; ')}` : ''}`)
+    }
+
+    const repairPrompt = [
+      'Предыдущая версия решения не прошла автоматическую проверку.',
+      `Исправь ровно эти замечания, ничего больше не меняя: ${issues.slice(0, 6).join('; ')}.`,
+      'Если среди замечаний есть отсутствующий или неполный чертёж — обязательно заполни diagram.kind = "construction",',
+      'опиши сцену через scene: точки с координатами, объекты и проверяемые constraints. Пустой scene недопустим.',
+      `Версия для исправления: ${JSON.stringify(review.solution)}`,
+    ].join('\n')
+
+    const rawRepair = await callModelWithRetry(
+      options,
+      reviewerInstructions,
+      engineMessage(request, repairPrompt),
+      'homework_solution_review',
+      reviewSchema,
+      retryDeadline,
+    )
+
+    const repairCandidate = rawRepair as Record<string, unknown>
+    const repaired: ReviewResult = {
+      approved: repairCandidate.approved === true,
+      issues: lines(repairCandidate.issues, 12, 160),
+      solution: normalizeDraft(repairCandidate.solution),
+    }
+    const repairedSolution = toSolution(repaired.solution, request, ownerId, repaired.approved)
+    const repairedIssues = [
+      ...validateSolutionQuality(repairedSolution),
+      ...validateDecisionSummary(repaired.solution.decisions, repaired.solution.diagramRequired),
+    ]
+    const repairedConditionMatched = !request.condition
+      || conditionSimilarity(request.condition, repairedSolution.condition) >= 0.55
+    if (!repairedConditionMatched) {
+      repairedIssues.push('Условие решения не совпадает с приложенным заданием')
+    }
+
+    options.onTrace?.({
+      stage: 'reviewer',
+      candidate: repaired.solution,
+      approved: repaired.approved && repairedIssues.length === 0,
+      issues: [...repaired.issues, ...repairedIssues].filter(Boolean),
+    })
+
+    if (!repaired.approved || repairedIssues.length > 0) {
+      const remaining = [...repaired.issues, ...repairedIssues].filter(Boolean)
+      throw new GeometrySolutionEngineError(`Решение не прошло проверку${remaining.length > 0 ? `: ${remaining.slice(0, 3).join('; ')}` : ''}`)
+    }
+
+    return {
+      ...repairedSolution,
+      verification: buildVerification(draft, deterministicIssues, repaired, repairedSolution, repairedConditionMatched),
+    }
   }
+
   return {
     ...solution,
     verification: buildVerification(draft, deterministicIssues, review, solution, finalConditionMatched),
