@@ -21,6 +21,7 @@ const models: ChatModelsState = {
       supportsImages: true,
       supportsWebSearch: true,
       maxChargeKopecks: 120,
+      minChargeKopecks: 20,
     },
     {
       id: 'gpt-5-6-luna',
@@ -29,6 +30,7 @@ const models: ChatModelsState = {
       supportsImages: false,
       supportsWebSearch: true,
       maxChargeKopecks: 250,
+      minChargeKopecks: 20,
     },
     {
       id: 'gemini-3-1-pro',
@@ -37,6 +39,7 @@ const models: ChatModelsState = {
       supportsImages: true,
       supportsWebSearch: true,
       maxChargeKopecks: 640,
+      minChargeKopecks: 20,
     },
     {
       id: 'gpt-5-6-terra',
@@ -45,6 +48,7 @@ const models: ChatModelsState = {
       supportsImages: true,
       supportsWebSearch: false,
       maxChargeKopecks: 480,
+      minChargeKopecks: 20,
     },
     {
       id: 'claude-sonnet-5',
@@ -53,6 +57,7 @@ const models: ChatModelsState = {
       supportsImages: true,
       supportsWebSearch: true,
       maxChargeKopecks: 1200,
+      minChargeKopecks: 20,
     },
   ],
 }

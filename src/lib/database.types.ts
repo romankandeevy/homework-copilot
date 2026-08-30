@@ -712,6 +712,7 @@ export type Database = {
             supportsImages: boolean
             supportsWebSearch: boolean
             maxChargeKopecks: number
+            minChargeKopecks: number
           }>
         }
       }
@@ -725,6 +726,7 @@ export type Database = {
         }
         Returns: {
           alreadyReserved: boolean
+          answerCharacterBudget: number
           balanceKopecks: number | null
           generationId: string
           reservedKopecks: number

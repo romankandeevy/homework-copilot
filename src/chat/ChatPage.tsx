@@ -235,7 +235,7 @@ function ModelPicker({
             >
               <span className="chat-model-option-head">
                 <strong>{model.title}</strong>
-                <span className="chat-model-price">до {formatKopecks(model.maxChargeKopecks)}</span>
+                <span className="chat-model-price">от {formatKopecks(model.minChargeKopecks)}</span>
               </span>
               <span className="chat-model-option-description">{model.description}</span>
               <span className="chat-model-option-tags">
@@ -951,7 +951,7 @@ export default function ChatPage({ userId = null, onRequireAuth, onOpenWallet }:
                 </ul>
                 <p className="chat-empty-price">
                   {selectedModel
-                    ? <>Отвечает {selectedModel.title} — не больше {formatKopecks(selectedModel.maxChargeKopecks)} за ответ.</>
+                    ? <>Отвечает {selectedModel.title}. Обычный вопрос — {formatKopecks(selectedModel.minChargeKopecks)}, длинный разбор дороже.</>
                     : 'Модели пока недоступны.'}
                 </p>
               </div>
@@ -1159,7 +1159,7 @@ export default function ChatPage({ userId = null, onRequireAuth, onOpenWallet }:
 
             <p className="chat-price-hint">
               {selectedModel
-                ? <>Спишем по факту, но не больше {formatKopecks(selectedModel.maxChargeKopecks)} за ответ. Модель не подменяется: если она недоступна, запрос завершится без списания.</>
+                ? <>Спишем после ответа и по факту: обычный вопрос — {formatKopecks(selectedModel.minChargeKopecks)}. Заранее с баланса ничего не снимаем, а если модель недоступна, списания не будет вовсе.</>
                 : 'Модели пока недоступны.'}
             </p>
           </form>

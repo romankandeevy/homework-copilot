@@ -10,6 +10,7 @@ export type ChatModel = {
   supportsImages: boolean
   supportsWebSearch: boolean
   maxChargeKopecks: number
+  minChargeKopecks: number
 }
 
 export type ChatModelsState = {
@@ -172,6 +173,7 @@ export async function listChatModels(): Promise<ChatModelsState> {
       supportsImages: Boolean(model.supportsImages),
       supportsWebSearch: Boolean(model.supportsWebSearch),
       maxChargeKopecks: Math.max(0, Math.round(model.maxChargeKopecks ?? 0)),
+      minChargeKopecks: Math.max(0, Math.round(model.minChargeKopecks ?? 0)),
     }))
 
   return { enabled: Boolean(data?.enabled), models }

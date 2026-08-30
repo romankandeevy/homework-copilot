@@ -1,9 +1,11 @@
 // Потоковый ИИ-чат.
 //
-// Деньги здесь устроены так же, как у решателя: резерв ДО вызова модели,
-// расчёт по факту после. Разница в том, что стоимость сообщения заранее
-// неизвестна, поэтому резервируется потолок модели, а неизрасходованный
-// остаток возвращается в `settle_chat_generation`.
+// Деньги здесь устроены иначе, чем у решателя: до ответа баланс не трогаем
+// вовсе, списываем по факту в `settle_chat_generation`. Стоимость сообщения
+// заранее неизвестна, но замораживать под неё потолок модели незачем —
+// активная генерация у пользователя всего одна, поэтому перерасход не может
+// превысить один ответ. Чтобы и он не увёл баланс в минус, база возвращает
+// бюджет символов: ответ не будет длиннее, чем баланс в состоянии оплатить.
 //
 // Все проверки — бан, лимиты частоты, дневной потолок, доступность модели —
 // живут в базе: RPC вызываются из браузера напрямую, и проверки здесь
@@ -251,7 +253,9 @@ export async function handleChatRequest(
     account = await authenticate(request, options)
     service = serviceClient(options)
 
-    // 1. Резерв. Он же проверяет бан, лимиты, доступность модели и деньги.
+    // 1. Открываем генерацию. Деньги при этом не трогаем: проверяются бан,
+    // лимиты, доступность модели и то, что на балансе есть хотя бы минимальное
+    // списание. База возвращает, ответ какой длины покрывает баланс.
     const { data: reservation, error: reserveError } = await account.client.rpc('reserve_chat_generation', {
       p_idempotency_key: body.idempotencyKey,
       p_conversation_id: body.conversationId,
@@ -285,6 +289,14 @@ export async function handleChatRequest(
 
     if (userMessageError || !userMessage) throw new ChatApiError(502, 'Не получилось сохранить сообщение')
 
+    // Длину ответа режем по тому, что баланс в состоянии оплатить. Это и есть
+    // замена заморозке денег: перерасходу неоткуда взяться, потому что
+    // активная генерация у пользователя всего одна.
+    const answerCharacters = Math.min(
+      maxAnswerCharacters,
+      Math.max(400, Number(reservation.answerCharacterBudget) || maxAnswerCharacters),
+    )
+
     stream = openStream(response)
     stream.send('meta', {
       generationId,
@@ -313,7 +325,7 @@ export async function handleChatRequest(
       modelId: body.modelId,
       messages,
       useWebSearch: body.useWebSearch,
-      maxAnswerCharacters,
+      maxAnswerCharacters: answerCharacters,
       timeoutMs: generationTimeoutMs,
       fetchImpl: options.fetchImpl,
       onDelta: (delta) => stream?.send('delta', { text: delta }),
@@ -327,7 +339,7 @@ export async function handleChatRequest(
         conversation_id: body.conversationId,
         user_id: account.userId,
         role: 'assistant',
-        content: answer.text.slice(0, maxAnswerCharacters),
+        content: answer.text.slice(0, answerCharacters),
         model_id: body.modelId,
         status: 'done',
       })
@@ -368,7 +380,9 @@ export async function handleChatRequest(
       ? error.message
       : 'Не получилось получить ответ. Попробуй ещё раз'
 
-    // Резерв всегда возвращается: за неполученный ответ денег не берём.
+    // За неполученный ответ денег не берём: расчёт с нулевым списанием
+    // закрывает генерацию, чтобы она не висела активной и не блокировала
+    // следующий вопрос.
     if (generationId && service) {
       try {
         await service.rpc('settle_chat_generation', {
@@ -378,7 +392,7 @@ export async function handleChatRequest(
           p_duration_ms: Date.now() - startedAt,
         })
       } catch {
-        // Возврат разгребёт реапер брошенных резервов; исходную ошибку
+        // Зависшую генерацию закроет реапер; исходную ошибку
         // пользователю это скрывать не должно.
       }
     }
