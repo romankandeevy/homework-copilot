@@ -348,7 +348,7 @@ describe('homework solver', () => {
     const http = createHttp('GET')
     await handleHomeworkSolverRequest(http.request, http.response, { apiKey: 'private-value' })
     expect(http.response.statusCode).toBe(200)
-    expect(http.body()).toEqual({ provider: 'kie.ai', model: 'gemini-3.1-pro', configured: true, engineVersion: 2 })
+    expect(http.body()).toEqual({ provider: 'kie.ai', model: 'gemini-3-pro', configured: true, engineVersion: 2 })
     expect(JSON.stringify(http.body())).not.toContain('private-value')
 
     const preflight = createHttp('OPTIONS')

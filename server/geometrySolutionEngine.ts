@@ -17,7 +17,9 @@ import type {
 import { normalizeTaskCondition } from '../src/textbooks/taskCatalog.ts'
 
 export { homeworkSolutionEngineVersion }
-export const defaultHomeworkModel = 'gemini-3.1-pro'
+// gemini-3.1-pro отказывала кодом 524 примерно в 40% проверочных запросов,
+// gemini-3-pro за ту же проверку не отказала ни разу.
+export const defaultHomeworkModel = 'gemini-3-pro'
 
 export type GeometrySolutionTraceEvent = {
   stage: 'author' | 'reviewer'
@@ -582,7 +584,6 @@ async function callModel(
   schema: object,
 ) {
   const model = options.model || defaultHomeworkModel
-  const reviewing = schemaName.endsWith('_review')
   let response: Response
   try {
     response = await (options.fetchImpl ?? fetch)(`https://api.kie.ai/${model}/v1/chat/completions`, {
@@ -595,7 +596,8 @@ async function callModel(
         model,
         messages: [{ role: 'system', content: system }, message],
         temperature: 0.1,
-        reasoning_effort: reviewing ? 'medium' : 'high',
+        // high вдвое дольше medium и по замерам даёт худший результат.
+        reasoning_effort: 'medium',
         include_thoughts: false,
         response_format: {
           type: 'json_schema',
@@ -624,6 +626,23 @@ async function callModel(
   } catch {
     throw new GeometrySolutionEngineError('Модель вернула некорректный ответ')
   }
+
+  // KIE отдаёт отказы с кодом HTTP 200 и телом {"code":…,"msg":…}: например
+  // 524 «модель недоступна». Проверки response.ok недостаточно — без разбора
+  // тела настоящий отказ провайдера выглядел как «битый JSON», и по логам
+  // выходило, что виновата модель, а не шлюз.
+  if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+    const envelope = payload as Record<string, unknown>
+    const code = typeof envelope.code === 'number' ? envelope.code : null
+    if (code !== null && code !== 200) {
+      if (code === 401 || code === 403) {
+        throw new GeometrySolutionEngineError('Провайдер отклонил ключ API')
+      }
+      if (code === 429) throw new GeometrySolutionEngineError('Модель временно перегружена')
+      throw new GeometrySolutionEngineError('Не получилось подключиться к модели решения')
+    }
+  }
+
   return parseJson(providerContent(payload))
 }
 
