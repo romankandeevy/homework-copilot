@@ -90,6 +90,9 @@ type Textbook = {
   sourceUrl?: string
   sourceType?: TextbookSourceType
   previewBeforeReading?: boolean
+  // Размечен ли учебник: есть ли для него индекс задач. Без индекса ученик
+  // выберет книгу и упрётся в стену — задача по номеру не найдётся.
+  indexed?: boolean
 }
 
 type SolutionState = {
@@ -180,9 +183,11 @@ const textbooks: readonly Textbook[] = [
     edition: '14-е издание, Просвещение, 2023',
     solvedTasks: [],
     icon: BookOpenText,
+    // Это не адрес файла, а ключ издания в индексе задач: сам PDF не хранится.
     sourceUrl: '/textbooks/geometry-7-9-atanasyan.pdf',
     sourceType: 'pdf',
     previewBeforeReading: true,
+    indexed: true,
   },
   {
     id: 'physics',
@@ -196,6 +201,7 @@ const textbooks: readonly Textbook[] = [
     sourceUrl: '/textbooks/physics-8-peryshkin-2026.pdf',
     sourceType: 'pdf',
     previewBeforeReading: true,
+    indexed: false,
   },
   {
     id: 'chemistry',
@@ -209,6 +215,7 @@ const textbooks: readonly Textbook[] = [
     sourceUrl: '/textbooks/chemistry-8-gabrielyan-2025.pdf',
     sourceType: 'pdf',
     previewBeforeReading: true,
+    indexed: false,
   },
 ] as const
 
@@ -523,7 +530,15 @@ function TextbookPicker({
                         onClick={() => selectTextbook(textbook.id)}
                       >
                         <Icon size={28} weight="duotone" aria-hidden="true" />
-                        <span><strong>{textbook.subject}, {textbook.grade}</strong><small>{textbook.title} · {textbook.authors}</small></span>
+                        <span>
+                          <strong>
+                            {textbook.subject}, {textbook.grade}
+                            {textbook.indexed
+                              ? <em className="textbook-badge is-ready">задачи размечены</em>
+                              : <em className="textbook-badge">только по фото</em>}
+                          </strong>
+                          <small>{textbook.title} · {textbook.authors}</small>
+                        </span>
                         {active && <Check size={17} weight="bold" aria-hidden="true" />}
                       </button>
                     )
@@ -1397,8 +1412,14 @@ function HomePage() {
     )),
     [generatedSolutions, user?.id],
   )
+  // Размеченные учебники идут первыми: по неразмеченному ученик всё равно
+  // не получит решение, и держать его вперемешку с рабочими — вводить в
+  // заблуждение. Свои загруженные книги — в конце, они всегда неразмечены.
   const availableTextbooks = useMemo(
-    () => [...textbooks, ...customTextbooks].map((textbook) => {
+    () => [...textbooks, ...customTextbooks].sort((left, right) => {
+      if (Boolean(left.indexed) !== Boolean(right.indexed)) return left.indexed ? -1 : 1
+      return left.subject.localeCompare(right.subject, 'ru-RU')
+    }).map((textbook) => {
       const sharedTasks = sharedSolutions
         .filter((solution) => solution.textbook_id === textbook.id
           && solution.textbook_edition === textbook.edition

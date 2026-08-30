@@ -263,7 +263,7 @@ describe('homework solver', () => {
     })
 
     expect(http.response.statusCode).toBe(400)
-    expect(http.body().error).toContain('фрагмент задачи')
+    expect(http.body().error).toContain('чертёж в учебнике')
     expect(fetchMock).not.toHaveBeenCalled()
   })
 

@@ -2539,3 +2539,66 @@
 
 .account-blocked-card button:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .account-blocked-card button:disabled { cursor: wait; opacity: 0.65; }
+
+/* Пометка у учебника в списке выбора: размечен он или доступен только по фото.
+   Без неё ученик выбирал физику наравне с геометрией и упирался в то,
+   что задача по номеру не находится. */
+.textbook-badge {
+  margin-left: var(--space-2);
+  padding: 0.125rem var(--space-2);
+  border: var(--border-thin) solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-sunken);
+  color: var(--color-text-subtle);
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  font-style: normal;
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.textbook-badge.is-ready {
+  border-color: color-mix(in oklch, var(--color-success) 45%, transparent);
+  background: var(--color-success-soft);
+  color: var(--color-success-strong);
+}
+
+@media (max-width: 560px) {
+  .textbook-badge { display: none; }
+}
+
+/* Условие текстом — когда скана учебника нет. Оформлено как выписка,
+   а не как ошибка: отсутствие файла это норма, а не сбой. */
+.task-source-preview.is-text {
+  margin: 0;
+  padding: var(--space-4);
+  border: var(--border-thin) solid var(--color-border);
+  border-radius: var(--radius-surface);
+  background: var(--color-surface);
+}
+
+.task-source-preview.is-text figcaption {
+  margin-bottom: var(--space-2);
+  color: var(--color-text-subtle);
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.task-source-preview.is-text blockquote {
+  margin: 0;
+  padding-left: var(--space-4);
+  border-left: 2px solid var(--color-brand-accent);
+  color: var(--color-text);
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
+}
+
+.task-source-preview.is-text .task-source-note {
+  margin: var(--space-3) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-small);
+}

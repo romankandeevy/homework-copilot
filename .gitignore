@@ -40,3 +40,6 @@ sites-homework-copilot/
 
 # Исполняемые файлы tesseract.js раскладываются локально из node_modules
 public/tesseract/
+
+# Сканы учебников на сайте не хранятся: условия берутся из своего индекса
+public/textbooks/

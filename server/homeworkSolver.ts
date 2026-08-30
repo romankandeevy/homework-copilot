@@ -231,9 +231,20 @@ async function validateRequest(value: unknown, options: SolverOptions): Promise<
       || sourcePage !== verifiedTask.sourcePage) {
       throw new HomeworkSolverError(422, 'Точное условие этой задачи в выбранном издании не найдено. Решение не запускается')
     }
-    if (!imageDataUrl) {
-      throw new HomeworkSolverError(400, 'Не получилось загрузить фрагмент задачи из учебника')
+    // Скан учебника больше не хранится: условие берётся из нашего индекса,
+    // а чертёж модель строит сама по тексту. Картинка перестала быть
+    // обязательной — кроме одного случая.
+    //
+    // Если задача ссылается на печатный рисунок («какие точки на рисунке 43»),
+    // без него она нерешаема в принципе: текста условия недостаточно, а
+    // построить такой чертёж по описанию нельзя. Тогда честно просим фото.
+    if (verifiedTask.hasDiagram && !imageDataUrl) {
+      throw new HomeworkSolverError(
+        400,
+        'У этой задачи есть чертёж в учебнике. Сфотографируй фрагмент задачи вместе с рисунком',
+      )
     }
+
     request.condition = verifiedTask.condition
     request.sourceUrl = verifiedTask.sourceUrl
     request.sourcePage = verifiedTask.sourcePage
