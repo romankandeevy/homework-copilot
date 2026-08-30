@@ -13,7 +13,20 @@ async function loadDocument(sourceUrl: string) {
   const loading = (async () => {
     const pdfjs = await import('pdfjs-dist')
     pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
-    const loadingTask: PDFDocumentLoadingTask = pdfjs.getDocument({ url: sourceUrl })
+    // Учебник весит 30–48 МБ, а нужен из него один фрагмент одной страницы.
+    // По умолчанию pdf.js докачивает файл целиком в фоне, поэтому условие
+    // показывалось только после загрузки всего учебника.
+    //   disableAutoFetch — не тянуть файл целиком, брать только нужное;
+    //   disableStream    — работать диапазонными запросами, а не потоком;
+    //   rangeChunkSize   — размер куска; 256 КБ заметно быстрее дефолтных 64 КБ
+    //                      на неоптимизированных сканах.
+    // Сервер поддерживает Range (проверено: Accept-Ranges: bytes).
+    const loadingTask: PDFDocumentLoadingTask = pdfjs.getDocument({
+      url: sourceUrl,
+      disableAutoFetch: true,
+      disableStream: true,
+      rangeChunkSize: 262144,
+    })
     return loadingTask.promise
   })()
   documentCache.set(sourceUrl, loading)
