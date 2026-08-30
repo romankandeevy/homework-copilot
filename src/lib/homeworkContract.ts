@@ -160,3 +160,87 @@ export type SolveHomeworkRequest = {
   imageDataUrl?: string
   idempotencyKey: string
 }
+
+/* Размеченный разбор — единый формат «готовой записи» для всех предметов.
+   Идея: любой школьный разбор раскладывается на строки, строка — на токены,
+   а у токена может быть школьный значок (черта, волнистая, дуга, рамка)
+   и короткая подпись сверху или снизу.
+   Одним форматом описываются синтаксический разбор предложения, разбор слова
+   по составу, уравнение реакции со степенями окисления, физическая формула
+   с подстановкой и разбор цитаты. */
+
+export const homeworkAnnotationMarks = [
+  'none',
+  'single',    // одна черта снизу — подлежащее
+  'double',    // две черты снизу — сказуемое
+  'wavy',      // волнистая снизу — определение
+  'dashed',    // пунктир снизу — дополнение
+  'dash-dot',  // штрихпунктир снизу — обстоятельство
+  'stem',      // скобка снизу — основа слова
+  'prefix',    // значок ¬ сверху — приставка
+  'root',      // дуга сверху — корень
+  'suffix',    // значок ∧ сверху — суффикс
+  'ending',    // рамка вокруг — окончание
+  'box',       // рамка вокруг — выделенная величина, ответ, коэффициент
+  'circle',    // обводка — отмеченный элемент записи
+] as const
+
+export type HomeworkAnnotationMark = typeof homeworkAnnotationMarks[number]
+
+export type HomeworkAnnotatedToken = {
+  /** Кусок записи: слово, морфема, формула, число с единицей. */
+  text: string
+  /** Школьный значок над, под или вокруг куска записи. */
+  mark?: HomeworkAnnotationMark
+  /** Короткая надстрочная пометка: степень окисления, время глагола, часть речи. */
+  label?: string
+  labelPlacement?: 'above' | 'below'
+  /** Что означает значок именно здесь; попадает в условные обозначения под разбором. */
+  note?: string
+  /** Токен пишется вплотную к предыдущему — так собираются морфемы одного слова. */
+  tight?: boolean
+}
+
+export const homeworkAnnotatedLineKinds = ['sentence', 'word', 'formula', 'equation', 'quote', 'plain'] as const
+export type HomeworkAnnotatedLineKind = typeof homeworkAnnotatedLineKinds[number]
+
+export type HomeworkAnnotatedLine = {
+  /** Влияет только на начертание строки: формулы и уравнения пишутся моноширинным. */
+  kind?: HomeworkAnnotatedLineKind
+  /** Пометка на поле слева от строки: «1.», «Формула», «Подстановка». */
+  lead?: string
+  tokens: HomeworkAnnotatedToken[]
+  /** Пояснение под строкой обычной записью. */
+  caption?: string
+}
+
+export type HomeworkAnnotationLegendEntry = {
+  mark: HomeworkAnnotationMark
+  label: string
+}
+
+export type HomeworkAnnotatedBlock = {
+  title?: string
+  lines: HomeworkAnnotatedLine[]
+  /** Условные обозначения. Если не заданы, собираются из note токенов. */
+  legend?: HomeworkAnnotationLegendEntry[]
+}
+
+export const homeworkAnalysisKinds = [
+  'sentence-parse',
+  'morphemes',
+  'word-analysis',
+  'equation',
+  'formula',
+  'quote',
+  'generic',
+] as const
+export type HomeworkAnalysisKind = typeof homeworkAnalysisKinds[number]
+
+export type HomeworkWrittenAnalysis = {
+  version: 1
+  kind: HomeworkAnalysisKind
+  /** Заголовок разбора; без него берётся стандартное название по kind. */
+  title?: string
+  blocks: HomeworkAnnotatedBlock[]
+}

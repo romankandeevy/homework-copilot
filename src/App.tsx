@@ -1,5 +1,4 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { FormEvent } from 'react'
 import { createPortal } from 'react-dom'
 import type { SupabaseClient, User } from '@supabase/supabase-js'
 import {
@@ -11,12 +10,10 @@ import {
   Calculator,
   Code,
   CalendarDots,
-  CaretDown,
   CaretRight,
   Check,
   ChatsCircle,
   CheckCircle,
-  ClockCountdown,
   Dna,
   Flask,
   Function,
@@ -26,8 +23,6 @@ import {
   Scroll,
   TextAa,
   House,
-  ImageSquare,
-  LinkSimple,
   MagnifyingGlass,
   Moon,
   Notebook,
@@ -35,11 +30,11 @@ import {
   SpinnerGap,
   Stack,
   Sun,
-  UploadSimple,
   UserCircle,
   WarningCircle,
-  X,
 } from '@phosphor-icons/react'
+import CopyTask from './CopyTask'
+import type { TaskSubmission } from './CopyTask'
 import LegalPage from './LegalPage'
 import PrivacyNotice from './PrivacyNotice'
 import { GeometryNotebookLayoutV1 } from './notebook/GeometryNotebookLayoutV1'
@@ -51,7 +46,6 @@ import { formatRubles } from './lib/currency'
 import { recordPendingLegalAcceptance, rememberPendingLegalAcceptance } from './lib/legalConsent'
 import { bindPendingReferral, captureReferralFromCurrentUrl, preparePendingReferralClaim } from './lib/referrals'
 import { applySeoMetadata, getSeoMetadata } from './lib/siteMetadata'
-import { useModalIsolation } from './lib/useModalIsolation'
 import { getSolutionPrice } from './lib/solutionPricing'
 import { catalogSolutionEntries, findAvailableNumberSolution } from './lib/solutionLibrary'
 import {
@@ -363,35 +357,6 @@ function getTextbook(id: TextbookId, items: readonly Textbook[] = textbooks) {
   return items.find((textbook) => textbook.id === id) ?? items[0] ?? textbooks[0]
 }
 
-function getTextbookSourceTypeFromUrl(url: URL): TextbookSourceType {
-  if (/\.pdf$/i.test(url.pathname)) return 'pdf'
-  if (/\.epub$/i.test(url.pathname)) return 'epub'
-  if (/\.(png|jpe?g|webp)$/i.test(url.pathname)) return 'image'
-  return 'link'
-}
-
-function createFileTextbook(file: File): Textbook {
-  const title = file.name.replace(/\.[^.]+$/, '')
-  const sourceType = file.type === 'application/pdf' || /\.pdf$/i.test(file.name)
-    ? 'pdf'
-    : /\.epub$/i.test(file.name)
-      ? 'epub'
-      : 'image'
-
-  return {
-    id: `file-${Date.now()}`,
-    subject: 'Мой учебник',
-    grade: '8 класс',
-    title,
-    authors: 'Добавлен с устройства',
-    edition: file.name,
-    solvedTasks: [],
-    icon: BookOpenText,
-    sourceUrl: URL.createObjectURL(file),
-    sourceType,
-  }
-}
-
 function BrandMark() {
   return (
     <span className="brand-mark" aria-hidden="true">
@@ -531,564 +496,6 @@ function CdzComingSoon({ onGoHome }: { onGoHome: () => void }) {
   )
 }
 
-function TextbookPicker({
-  selected,
-  items,
-  onSelect,
-  onCreate,
-  open,
-  onOpenChange,
-}: {
-  selected: Textbook
-  items: readonly Textbook[]
-  onSelect: (id: TextbookId) => void
-  onCreate: (textbook: Textbook) => void
-  open?: boolean
-  onOpenChange?: (open: boolean) => void
-}) {
-  const SelectedIcon = selected.icon
-  const triggerRef = useRef<HTMLButtonElement>(null)
-  const [query, setQuery] = useState('')
-  const [internalOpen, setInternalOpen] = useState(false)
-  const [importMode, setImportMode] = useState<'link' | 'file'>('link')
-  const [link, setLink] = useState('')
-  const [importError, setImportError] = useState('')
-  const isOpen = open ?? internalOpen
-  const filtered = useMemo(() => {
-    const normalized = query.trim().toLocaleLowerCase('ru')
-    if (!normalized) return items
-    return items.filter((textbook) => `${textbook.subject} ${textbook.title} ${textbook.authors} ${textbook.grade}`.toLocaleLowerCase('ru').includes(normalized))
-  }, [items, query])
-
-  const setDialogOpen = useCallback((nextOpen: boolean) => {
-    if (onOpenChange) onOpenChange(nextOpen)
-    else setInternalOpen(nextOpen)
-  }, [onOpenChange])
-  const closeDialog = useCallback(() => {
-    setDialogOpen(false)
-    setQuery('')
-    setImportError('')
-  }, [setDialogOpen])
-  const dialogRef = useModalIsolation<HTMLElement>(isOpen, closeDialog, triggerRef)
-
-  const selectTextbook = (id: TextbookId) => {
-    onSelect(id)
-    closeDialog()
-  }
-
-  const addFromLink = () => {
-    const value = link.trim()
-    if (!value) return
-
-    try {
-      const normalizedLink = /^https?:\/\//i.test(value) ? value : `https://${value}`
-      const url = new URL(normalizedLink)
-      if (!['http:', 'https:'].includes(url.protocol) || !url.hostname) throw new Error('invalid link')
-      const hostname = url.hostname.replace(/^www\./, '')
-      const textbook: Textbook = {
-        id: `link-${Date.now()}`,
-        subject: 'Мой учебник',
-        grade: '8 класс',
-        title: hostname,
-        authors: 'Добавлен по ссылке',
-        edition: url.href,
-        solvedTasks: [],
-        icon: BookOpenText,
-        sourceUrl: url.href,
-        sourceType: getTextbookSourceTypeFromUrl(url),
-      }
-      onCreate(textbook)
-      setLink('')
-      closeDialog()
-    } catch {
-      setImportError('Проверь ссылку на учебник')
-    }
-  }
-
-  const addFromFile = (file: File | null) => {
-    if (!file) return
-    const allowedExtension = /\.(pdf|epub|png|jpe?g|webp)$/i.test(file.name)
-    if (!allowedExtension) {
-      setImportError('Подойдёт PDF, EPUB или изображение')
-      return
-    }
-    onCreate(createFileTextbook(file))
-    closeDialog()
-  }
-
-  return (
-    <div className="textbook-picker">
-      <button ref={triggerRef} className="textbook-picker-trigger" type="button" aria-haspopup="dialog" aria-expanded={isOpen} onClick={() => setDialogOpen(true)}>
-        <SelectedIcon size={32} weight="duotone" aria-hidden="true" />
-        <span>
-          <small>Учебник</small>
-          <strong>{selected.subject}, {selected.grade}</strong>
-          <em>{selected.title} · {selected.authors}</em>
-        </span>
-        <span className="textbook-change">Сменить <CaretDown size={17} weight="bold" aria-hidden="true" /></span>
-      </button>
-
-      {isOpen && createPortal((
-        <div className="textbook-dialog-backdrop" role="presentation" onMouseDown={(event) => {
-          if (event.target === event.currentTarget) closeDialog()
-        }}>
-          <section ref={dialogRef} className="textbook-dialog" role="dialog" aria-modal="true" aria-labelledby="textbook-dialog-title" tabIndex={-1}>
-            <header className="textbook-dialog-header">
-              <div>
-                <h2 id="textbook-dialog-title">Выбери учебник</h2>
-                <p>Сохранённый учебник или новый по ссылке и файлу.</p>
-              </div>
-              <button type="button" onClick={closeDialog} aria-label="Закрыть выбор учебника"><X size={20} weight="bold" aria-hidden="true" /></button>
-            </header>
-
-            <div className="textbook-dialog-content">
-              <div className="textbook-library">
-                <label htmlFor="textbook-search">Сохранённые учебники</label>
-                <div className="textbook-search-control">
-                  <MagnifyingGlass size={19} weight="duotone" aria-hidden="true" />
-                  <input
-                    id="textbook-search"
-                    type="search"
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                    placeholder="Название или автор"
-                    autoComplete="off"
-                    autoFocus
-                  />
-                </div>
-                <div className="textbook-options" role="listbox" aria-label="Сохранённые учебники">
-                  {filtered.map((textbook) => {
-                    const Icon = textbook.icon
-                    const active = textbook.id === selected.id
-                    return (
-                      <button
-                        type="button"
-                        role="option"
-                        aria-selected={active}
-                        className={active ? 'is-selected' : ''}
-                        key={textbook.id}
-                        onClick={() => selectTextbook(textbook.id)}
-                      >
-                        <Icon size={28} weight="duotone" aria-hidden="true" />
-                        <span>
-                          <strong>
-                            {textbook.subject}, {textbook.grade}
-                            {textbook.indexed
-                              ? <em className="textbook-badge is-ready">задачи размечены</em>
-                              : <em className="textbook-badge">по фото или тексту</em>}
-                          </strong>
-                          <small>{textbook.title} · {textbook.authors}</small>
-                        </span>
-                        {active && <Check size={17} weight="bold" aria-hidden="true" />}
-                      </button>
-                    )
-                  })}
-                  {filtered.length === 0 && <p className="textbook-empty">Среди сохранённых учебников ничего не найдено.</p>}
-                </div>
-              </div>
-
-              <aside className="textbook-import" aria-labelledby="textbook-import-title">
-                <div>
-                  <h3 id="textbook-import-title">Добавить учебник</h3>
-                  <p>Импортируем название и выберем его для задачи.</p>
-                </div>
-                <div className="textbook-import-tabs" role="tablist" aria-label="Способ добавления">
-                  <button id="textbook-import-link-tab" type="button" role="tab" aria-controls="textbook-import-panel" aria-selected={importMode === 'link'} className={importMode === 'link' ? 'is-active' : ''} onClick={() => { setImportMode('link'); setImportError('') }}><LinkSimple size={18} weight="duotone" aria-hidden="true" /> Ссылка</button>
-                  <button id="textbook-import-file-tab" type="button" role="tab" aria-controls="textbook-import-panel" aria-selected={importMode === 'file'} className={importMode === 'file' ? 'is-active' : ''} onClick={() => { setImportMode('file'); setImportError('') }}><UploadSimple size={18} weight="duotone" aria-hidden="true" /> Файл</button>
-                </div>
-
-                <div id="textbook-import-panel" role="tabpanel" aria-labelledby={importMode === 'link' ? 'textbook-import-link-tab' : 'textbook-import-file-tab'} tabIndex={0}>
-                {importMode === 'link' ? (
-                  <div className="textbook-link-import">
-                    <label htmlFor="textbook-link">Ссылка на учебник</label>
-                    <input id="textbook-link" type="url" value={link} onChange={(event) => { setLink(event.target.value); setImportError('') }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addFromLink() } }} placeholder="example.com/textbook.pdf" autoComplete="url" />
-                    <button type="button" onClick={addFromLink} disabled={!link.trim()}>Добавить по ссылке <ArrowRight size={18} weight="bold" aria-hidden="true" /></button>
-                  </div>
-                ) : (
-                  <div className="textbook-file-import">
-                    <input id="textbook-file" type="file" accept=".pdf,.epub,image/jpeg,image/png,image/webp" onChange={(event) => addFromFile(event.target.files?.[0] ?? null)} />
-                    <label htmlFor="textbook-file"><UploadSimple size={28} weight="duotone" aria-hidden="true" /><span><strong>Выбрать файл</strong><small>PDF, EPUB, JPG, PNG или WEBP</small></span></label>
-                  </div>
-                )}
-                </div>
-                {importError && <p className="textbook-import-error" role="alert">{importError}</p>}
-              </aside>
-            </div>
-          </section>
-        </div>
-      ), document.body)}
-    </div>
-  )
-}
-
-
-function CopyTask({
-  taskNumber,
-  textbook,
-  textbooks,
-  onTaskNumberChange,
-  onTextbookChange,
-  onCreateTextbook,
-  onSubmit,
-  textbookPickerOpen,
-  onTextbookPickerOpenChange,
-}: {
-  taskNumber: string
-  textbook: Textbook
-  textbooks: readonly Textbook[]
-  onTaskNumberChange: (value: string) => void
-  onTextbookChange: (id: TextbookId) => void
-  onCreateTextbook: (textbook: Textbook) => void
-  onSubmit: (task: string, ready: boolean, source: HomeworkSource, idempotencyKey: string, photo?: File, verifiedTask?: VerifiedTextbookTaskSource, confirmedCondition?: string, sourceImageDataUrl?: string) => Promise<boolean>
-  textbookPickerOpen: boolean
-  onTextbookPickerOpenChange: (open: boolean) => void
-}) {
-  const [error, setError] = useState('')
-  const [photo, setPhoto] = useState<File | null>(null)
-  const [pendingPhoto, setPendingPhoto] = useState<{ file: File; imageDataUrl: string } | null>(null)
-  const [pendingKey, setPendingKey] = useState('')
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [verifiedTask, setVerifiedTask] = useState<VerifiedTextbookTaskSource | null>(null)
-  // Третий путь: ученик вписывает условие сам. Работает с любым учебником
-  // и любым предметом — индекс задач для него не нужен вовсе.
-  const [manualCondition, setManualCondition] = useState('')
-  const [manualOpen, setManualOpen] = useState(false)
-  const photoInputRef = useRef<HTMLInputElement>(null)
-  const submissionRef = useRef(false)
-  const normalizedTask = taskNumber.trim()
-  // У учебников без сквозной нумерации адрес задачи составной. Храним его
-  // одной строкой «параграф.упражнение.задание», а показываем тремя полями:
-  // ученику проще вписать три числа, чем угадывать формат.
-  const usesParagraphAddress = textbook.taskAddress === 'paragraph'
-  const addressParts = normalizedTask.split('.')
-  const addressParagraph = addressParts[0] ?? ''
-  const addressExercise = addressParts[1] ?? ''
-  const addressTask = addressParts[2] ?? ''
-  const setAddressPart = (index: number, value: string) => {
-    if (!/^\d{0,3}$/.test(value)) return
-    const next = [addressParagraph, addressExercise, addressTask]
-    next[index] = value
-    changeTaskNumber(next.join('.').replace(/\.+$/u, ''))
-  }
-  const validTaskNumber = usesParagraphAddress
-    ? /^\d{1,3}(?:\.\d{1,3}){1,2}$/.test(normalizedTask)
-    : /^\d{1,4}$/.test(normalizedTask)
-  const canSubmit = Boolean(photo || validTaskNumber)
-  const solutionPrice = photo ? 15 : normalizedTask ? getSolutionPrice(textbook.id, normalizedTask) : 5
-  const createSubmissionKey = () => typeof crypto.randomUUID === 'function'
-    ? `solution-${crypto.randomUUID()}`
-    : `solution-${Date.now()}-${Math.random().toString(16).slice(2)}`
-
-  useEffect(() => {
-    setVerifiedTask(null)
-    setPendingPhoto(null)
-    setPendingKey('')
-    setError('')
-  }, [textbook.edition, textbook.id])
-
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    if (submissionRef.current) return
-
-    if (photo) {
-      const submissionKey = createSubmissionKey()
-      setError('')
-      submissionRef.current = true
-      setIsSubmitting(true)
-      try {
-        const imageDataUrl = await prepareTaskPhoto(photo)
-        setPendingPhoto({ file: photo, imageDataUrl })
-        setPendingKey(submissionKey)
-      } catch (submissionError) {
-        setError(submissionError instanceof Error ? submissionError.message : 'Не получилось отправить фотографию задачи')
-      } finally {
-        submissionRef.current = false
-        setIsSubmitting(false)
-      }
-      return
-    }
-    // Индекса задач больше нет: искать условие негде и не нужно. Номер —
-    // это подпись решения, а само условие даёт ученик текстом или фотографией.
-    setManualOpen(true)
-    setError('')
-  }
-
-  const confirmPhoto = async () => {
-    if (!pendingPhoto || !pendingKey || submissionRef.current) return
-    submissionRef.current = true
-    setIsSubmitting(true)
-    setError('')
-    try {
-      const submitted = await onSubmit(
-        pendingPhoto.file.name,
-        true,
-        'photo',
-        pendingKey,
-        undefined,
-        undefined,
-        undefined,
-        pendingPhoto.imageDataUrl,
-      )
-      if (submitted) {
-        setPendingPhoto(null)
-        setPendingKey('')
-      }
-    } catch (submissionError) {
-      setError(submissionError instanceof Error ? submissionError.message : 'Не получилось отправить задачу')
-    } finally {
-      submissionRef.current = false
-      setIsSubmitting(false)
-    }
-  }
-
-  const submitManualCondition = async () => {
-    const condition = manualCondition.trim()
-    if (condition.length < 15 || submissionRef.current) return
-    submissionRef.current = true
-    setIsSubmitting(true)
-    setError('')
-    try {
-      const submitted = await onSubmit(
-        normalizedTask || 'условие',
-        true,
-        'text',
-        createSubmissionKey(),
-        undefined,
-        undefined,
-        condition,
-        undefined,
-      )
-      if (submitted) {
-        setManualCondition('')
-        setManualOpen(false)
-      }
-    } catch (submissionError) {
-      setError(submissionError instanceof Error ? submissionError.message : 'Не получилось отправить задачу')
-    } finally {
-      submissionRef.current = false
-      setIsSubmitting(false)
-    }
-  }
-
-
-  const changeTaskNumber = (value: string) => {
-    const nextValue = value.slice(0, 4)
-    if (!/^\d*$/.test(nextValue)) {
-      setError('Номер задачи: от 1 до 4 цифр')
-      return
-    }
-    if (error) setError('')
-    setVerifiedTask(null)
-    setPendingPhoto(null)
-    setPendingKey('')
-    if (nextValue) {
-      setPhoto(null)
-      if (photoInputRef.current) photoInputRef.current.value = ''
-    }
-    onTaskNumberChange(nextValue)
-  }
-
-  const changePhoto = (file: File | null) => {
-    if (!file) return
-    if (file.type && !file.type.startsWith('image/')) {
-      setError('Выбери файл с фотографией')
-      return
-    }
-    setError('')
-    setVerifiedTask(null)
-    setPendingPhoto(null)
-    setPendingKey('')
-    setPhoto(file)
-    onTaskNumberChange('')
-  }
-
-  const removePhoto = () => {
-    setPhoto(null)
-    setPendingPhoto(null)
-    setPendingKey('')
-    if (photoInputRef.current) photoInputRef.current.value = ''
-  }
-
-  return (
-    <section className="copy-task" aria-labelledby="copy-task-title">
-      <div className="copy-task-copy">
-        <h1 id="copy-task-title">Списать задачу</h1>
-        <p>Выбери учебник, введи номер или добавь фото задачи.</p>
-      </div>
-
-      <form className="copy-task-form" aria-label="Списать задачу" onSubmit={submit}>
-        <TextbookPicker selected={textbook} items={textbooks} onSelect={onTextbookChange} onCreate={onCreateTextbook} open={textbookPickerOpen} onOpenChange={onTextbookPickerOpenChange} />
-
-        {pendingPhoto && (
-          <section className="task-confirmation" aria-labelledby="photo-preview-title">
-            <div>
-              <strong id="photo-preview-title">Фото задачи приложено</strong>
-              <figure className="photo-task-preview">
-                <img src={pendingPhoto.imageDataUrl} alt="Прикреплённое фото задачи" />
-                <figcaption>Модель сама прочитает условие с изображения.</figcaption>
-              </figure>
-              <p>После подтверждения спишем {formatRubles(solutionPrice)}.</p>
-            </div>
-            <div className="task-confirmation-actions">
-              <button type="button" onClick={() => { void confirmPhoto() }} disabled={isSubmitting}>Решить по этому фото</button>
-              <button type="button" onClick={removePhoto} disabled={isSubmitting}>Выбрать другое фото</button>
-            </div>
-          </section>
-        )}
-
-        <div className="task-entry-row">
-          <div className="task-number-field">
-            <label htmlFor="task-number">Номер задачи <span className="task-number-optional">по желанию</span></label>
-            <div className={`task-number-control${usesParagraphAddress ? ' is-address' : ''}${error && !photo ? ' is-error' : ''}`}>
-              <Hash size={22} weight="duotone" aria-hidden="true" />
-              {usesParagraphAddress ? (
-                <div className="task-address-parts">
-                  <input
-                    id="task-number"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    maxLength={3}
-                    value={addressParagraph}
-                    onChange={(event) => setAddressPart(0, event.target.value)}
-                    placeholder="§"
-                    aria-label="Параграф"
-                    autoComplete="off"
-                    aria-invalid={Boolean(error && !photo)}
-                  />
-                  <span aria-hidden="true">·</span>
-                  <input
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    maxLength={3}
-                    value={addressExercise}
-                    onChange={(event) => setAddressPart(1, event.target.value)}
-                    placeholder="упр."
-                    aria-label="Упражнение"
-                    autoComplete="off"
-                  />
-                  <span aria-hidden="true">·</span>
-                  <input
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    maxLength={3}
-                    value={addressTask}
-                    onChange={(event) => setAddressPart(2, event.target.value)}
-                    placeholder="№"
-                    aria-label="Задание"
-                    autoComplete="off"
-                  />
-                </div>
-              ) : (
-                <input
-                  id="task-number"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  maxLength={4}
-                  value={taskNumber}
-                  onChange={(event) => changeTaskNumber(event.target.value)}
-                  placeholder="№"
-                  autoComplete="off"
-                  aria-invalid={Boolean(error && !photo)}
-                  aria-errormessage={error ? 'task-entry-error' : undefined}
-                  aria-describedby={!error && !canSubmit ? 'task-entry-helper' : undefined}
-                />
-              )}
-            </div>
-          </div>
-
-          <div className="photo-task-field">
-            <span>Или фото задачи</span>
-            <div className={`photo-task-control${photo ? ' has-photo' : ''}`}>
-              <input
-                ref={photoInputRef}
-                id="task-photo"
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
-                capture="environment"
-                onChange={(event) => changePhoto(event.target.files?.[0] ?? null)}
-              />
-              <label htmlFor="task-photo">
-                <ImageSquare size={24} weight="duotone" aria-hidden="true" />
-                <span>
-                  <strong>{photo ? photo.name : 'Добавить фото'}</strong>
-                  <small>{photo ? 'Нажми, чтобы заменить' : 'С камеры или из файлов'}</small>
-                </span>
-              </label>
-              {photo && (
-                <button type="button" onClick={removePhoto} aria-label="Удалить фото">
-                  <X size={17} weight="bold" aria-hidden="true" />
-                </button>
-              )}
-            </div>
-          </div>
-
-          {(!verifiedTask || photo) && (
-            <button className="copy-task-submit" type="submit" disabled={!canSubmit || isSubmitting || Boolean(pendingPhoto)}>
-              {isSubmitting ? 'Готовим…' : photo ? 'Продолжить с фото' : 'Ввести условие'}
-              {!isSubmitting && <ArrowRight size={20} weight="bold" aria-hidden="true" />}
-            </button>
-          )}
-        </div>
-
-        {/* Третий путь: вписать условие руками. Работает всегда — с любым
-            учебником, любым предметом и любой нумерацией, потому что ничего
-            искать не надо: условие уже перед нами. */}
-        <div className="manual-condition">
-          {manualOpen ? (
-            <div className="manual-condition-open">
-              <label htmlFor="manual-condition">
-                {normalizedTask ? `Условие задачи № ${normalizedTask}` : 'Условие задачи'}
-              </label>
-              <p className="manual-condition-hint">
-                Перепиши условие из учебника или сфотографируй задачу. Подойдёт любой учебник и любой класс.
-              </p>
-              <textarea
-                id="manual-condition"
-                value={manualCondition}
-                onChange={(event) => setManualCondition(event.target.value.slice(0, 5000))}
-                placeholder="Перепиши условие из учебника целиком"
-                rows={3}
-              />
-              <div className="manual-condition-actions">
-                <button
-                  type="button"
-                  className="copy-task-submit"
-                  disabled={manualCondition.trim().length < 15 || isSubmitting}
-                  onClick={() => void submitManualCondition()}
-                >
-                  {isSubmitting ? 'Решаем…' : `Решить за ${formatRubles(getSolutionPrice(textbook.id, normalizedTask || '1', 'text'))}`}
-                  {!isSubmitting && <ArrowRight size={20} weight="bold" aria-hidden="true" />}
-                </button>
-                <button type="button" className="manual-condition-cancel" onClick={() => { setManualOpen(false); setManualCondition('') }}>
-                  Отмена
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button type="button" className="manual-condition-trigger" onClick={() => setManualOpen(true)}>
-              Нет в списке? Впиши условие сам — решим задачу из любого учебника
-            </button>
-          )}
-        </div>
-
-        {error && <p className="task-number-error" id="task-entry-error" role="alert">{error}</p>}
-        {!error && !canSubmit && !manualOpen && <p className="task-entry-helper" id="task-entry-helper">Сфотографируй задачу или впиши её условие. Номер можно указать, чтобы потом найти решение.</p>}
-        {!error && (normalizedTask || photo) && (
-            <p className="base-match" aria-live="polite">
-              {photo
-                ? pendingPhoto
-                  ? <><CheckCircle size={18} weight="duotone" aria-hidden="true" /> Фото приложено. Подтверди его перед решением.</>
-                  : <><ClockCountdown size={18} weight="duotone" aria-hidden="true" /> Сначала покажем выбранное фото.</>
-                : verifiedTask
-                  ? <><CheckCircle size={18} weight="duotone" aria-hidden="true" /> Условие найдено. Подтверди его перед списанием.</>
-                  : <><ClockCountdown size={18} weight="duotone" aria-hidden="true" /> Сначала проверим условие именно в выбранном издании.</>}
-            </p>
-        )}
-      </form>
-    </section>
-  )
-}
-
 function SolutionStatus({ state, textbooks: items, onOpenSolution }: { state: SolutionState; textbooks: readonly Textbook[]; onOpenSolution: (state: SolutionState) => void }) {
   const textbook = getTextbook(state.textbookId, items)
 
@@ -1176,7 +583,7 @@ function GuestWorkspace({ onOpenAccount }: { onOpenAccount: () => void }) {
       icon={Notebook}
       titleId="guest-workspace-title"
       title="Твои решения появятся после входа"
-      description="Здесь будут только твои учебники, открытые ответы и задачи, которые ты заказывал."
+      description="Здесь будут твои решённые задачи и те, что ты открывал."
       actionLabel="Войти"
       onAction={onOpenAccount}
     />
@@ -1215,7 +622,7 @@ function BaseShortcut({ onOpenBase }: { onOpenBase: () => void }) {
       icon={Stack}
       titleId="base-shortcut-title"
       title="База решений"
-      description="Общие готовые решения по всем добавленным учебникам. Их можно открыть сразу."
+      description="Готовые решения, которые уже кто-то заказал. Их можно открыть сразу."
       actionLabel="Открыть базу"
       onAction={onOpenBase}
     />
@@ -1519,7 +926,6 @@ function HomePage() {
     return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'
   })
   const [activeNavigation, setActiveNavigation] = useState<NavigationLabel>(() => currentNavigationRoute().label)
-  const [taskNumber, setTaskNumber] = useState('')
   const [selectedTextbookId, setSelectedTextbookId] = useState<TextbookId>(() => {
     try {
       return window.localStorage.getItem(selectedTextbookStorageKey) || 'geometry'
@@ -1527,13 +933,12 @@ function HomePage() {
       return 'geometry'
     }
   })
-  const [customTextbooks, setCustomTextbooks] = useState<Textbook[]>([])
+  const [customTextbooks] = useState<Textbook[]>([])
   const [solutionState, setSolutionState] = useState<SolutionState | null>(null)
   const [selectedSolution, setSelectedSolution] = useState<SolutionState | null>(() => currentNavigationRoute().solution)
   const [generatedSolutions, setGeneratedSolutions] = useState<HomeworkSolution[]>(loadGeneratedSolutions)
   const [sharedSolutions, setSharedSolutions] = useState<SharedHomeworkSolution[]>([])
   const [sharedSolutionsStatus, setSharedSolutionsStatus] = useState<'loading' | 'ready' | 'error'>(authIsConfigured ? 'loading' : 'ready')
-  const [textbookPickerOpen, setTextbookPickerOpen] = useState(false)
   const [supabaseClient, setSupabaseClient] = useState<SupabaseClient<Database> | null>(null)
   const [user, setUser] = useState<User | null>(null)
   const [account, setAccount] = useState<AccountData | null>(null)
@@ -1595,7 +1000,6 @@ function HomePage() {
       : [],
     [user, visibleGeneratedSolutions],
   )
-  const selectedTextbook = getTextbook(selectedTextbookId, availableTextbooks)
 
   useEffect(() => {
     captureReferralFromCurrentUrl()
@@ -2018,6 +1422,26 @@ function HomePage() {
   }
   const openSolution = (state: SolutionState) => navigate('Решения', state)
 
+  // Переходник между формой и отправителем: форма отдаёт условие и фото,
+  // остальное подставляется здесь.
+  const submitFromForm = async (submission: TaskSubmission) => {
+    const imageDataUrl = submission.photo ? await prepareTaskPhoto(submission.photo) : undefined
+    return submitTask(
+      submission.condition.slice(0, 60) || 'Задача с фото',
+      true,
+      submission.source,
+      submission.idempotencyKey,
+      undefined,
+      undefined,
+      submission.condition || undefined,
+      imageDataUrl,
+      selectedTextbookId,
+      true,
+      submission.subject,
+      submission.grade,
+    )
+  }
+
   const submitTask = async (
     task: string,
     _ready: boolean,
@@ -2029,6 +1453,10 @@ function HomePage() {
     sourceImageDataUrl?: string,
     textbookId = selectedTextbookId,
     openWhenReady = true,
+    // Предмет и класс приходят из формы. Если ученик их не указал, останутся
+    // пустыми — тогда модель определит их сама по условию.
+    subjectOverride?: string,
+    gradeOverride?: string,
   ) => {
     const textbook = getTextbook(textbookId, availableTextbooks)
     const resolvedTask = source === 'photo'
@@ -2094,8 +1522,8 @@ function HomePage() {
           textbookId,
           task: resolvedTask,
           source,
-          subject: textbook.subject,
-          grade: textbook.grade,
+          subject: subjectOverride ?? textbook.subject,
+          grade: gradeOverride ?? textbook.grade,
           textbookTitle: textbook.title,
           authors: textbook.authors,
           edition: textbook.edition,
@@ -2139,14 +1567,10 @@ function HomePage() {
     }
   }
 
-  const createTextbook = (textbook: Textbook) => {
-    if (textbook.sourceUrl?.startsWith('blob:')) textbookObjectUrlsRef.current.push(textbook.sourceUrl)
-    setCustomTextbooks((current) => [...current, textbook])
-    setSelectedTextbookId(textbook.id)
-  }
-  const checkTextbookTask = (textbookId: TextbookId, task: string) => {
+  // Открыть форму с уже выбранным предметом. Номер задачи больше не поле
+  // поиска, поэтому переносим только предмет.
+  const checkTextbookTask = (textbookId: TextbookId) => {
     setSelectedTextbookId(textbookId)
-    setTaskNumber(task)
     navigate('Главная')
   }
   const openSharedSolution = (textbookId: TextbookId, task: string) => {
@@ -2155,7 +1579,7 @@ function HomePage() {
       openSolution({ mode: 'ready', textbookId, task, source: 'number' })
       return
     }
-    checkTextbookTask(textbookId, task)
+    checkTextbookTask(textbookId)
   }
 
   if (!authReady || (user && !accountReady)) {
@@ -2179,17 +1603,7 @@ function HomePage() {
           {activeNavigation === 'Главная' && <PageHeader account={account} />}
           {activeNavigation === 'Главная' ? (
             <div className="home-content">
-              <CopyTask
-                taskNumber={taskNumber}
-                textbook={selectedTextbook}
-                textbooks={availableTextbooks}
-                onTaskNumberChange={setTaskNumber}
-                onTextbookChange={setSelectedTextbookId}
-                onCreateTextbook={createTextbook}
-                onSubmit={submitTask}
-                textbookPickerOpen={textbookPickerOpen}
-                onTextbookPickerOpenChange={setTextbookPickerOpen}
-              />
+              <CopyTask onSubmit={submitFromForm} />
               <div className="home-grid">
                 <div className="home-column home-column-primary">
                   {solutionState && <SolutionStatus state={solutionState} textbooks={availableTextbooks} onOpenSolution={openSolution} />}

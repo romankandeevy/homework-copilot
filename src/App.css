@@ -2753,3 +2753,131 @@
   font-size: var(--text-caption);
   font-weight: var(--weight-regular);
 }
+
+/* ─── Форма задачи ──────────────────────────────────────────────────────────
+   Одно поле условия, фото и кнопка. Учебников и поиска по номеру больше нет,
+   поэтому форма сведена к тому единственному, что нужно: тексту задачи. */
+
+.task-condition-label {
+  display: block;
+  margin-bottom: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--text-small);
+  font-weight: var(--weight-semibold);
+}
+
+.task-condition-input {
+  width: 100%;
+  min-height: 7rem;
+  padding: var(--space-4);
+  border: var(--border-thin) solid var(--color-border);
+  border-radius: var(--radius-surface);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
+  resize: vertical;
+}
+
+.task-condition-input:focus-visible {
+  border-color: var(--color-border-strong);
+  outline: 0;
+  box-shadow: var(--focus-ring);
+}
+
+.task-photo-attached {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border: var(--border-thin) solid var(--color-border);
+  border-radius: var(--radius-surface);
+  background: var(--color-surface-sunken);
+}
+
+.task-photo-attached img {
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: var(--radius-control);
+  object-fit: cover;
+}
+
+.task-photo-attached strong {
+  display: block;
+  overflow: hidden;
+  font-size: var(--text-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-photo-attached small {
+  color: var(--color-text-subtle);
+  font-size: var(--text-caption);
+}
+
+.task-photo-attached > button {
+  display: inline-flex;
+  width: 2.75rem;
+  height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text-subtle);
+  cursor: pointer;
+}
+
+.task-photo-attached > button:hover { color: var(--color-text); }
+
+.task-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  margin-top: var(--space-3);
+}
+
+.task-controls #task-photo {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  border: 0;
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.task-photo-button,
+.task-select select {
+  display: inline-flex;
+  height: 2.75rem;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-4);
+  border: var(--border-thin) solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: var(--text-small);
+}
+
+.task-photo-button:hover,
+.task-select select:hover { border-color: var(--color-border-strong); }
+
+.task-select { display: inline-flex; min-width: 0; }
+.task-select select { max-width: 100%; }
+
+/* Кнопка решения — единственный кобальтовый акцент в форме. */
+.task-controls .copy-task-submit { margin-left: auto; }
+
+@media (max-width: 560px) {
+  .task-controls { display: grid; grid-template-columns: 1fr 1fr; }
+  .task-photo-button { grid-column: 1 / -1; justify-content: center; }
+  .task-controls .copy-task-submit { grid-column: 1 / -1; margin-left: 0; justify-content: center; }
+}
