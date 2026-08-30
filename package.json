@@ -6,7 +6,7 @@
   "scripts": {
     "predev": "node scripts/copy-tesseract-assets.mjs",
     "dev": "vite",
-    "prebuild": "node scripts/copy-tesseract-assets.mjs",
+    "prebuild": "node scripts/copy-tesseract-assets.mjs && node scripts/check-build-env.mjs",
     "build": "npm run check:unicode && tsc -b && vite build && node scripts/create-static-routes.mjs",
     "check:unicode": "node scripts/check-mixed-alphabets.mjs",
     "assets:og": "node scripts/render-og-card.mjs",
