@@ -15,6 +15,11 @@ import type {
   SolveHomeworkRequest,
 } from '../src/lib/homeworkContract.ts'
 import { normalizeTaskCondition } from '../src/textbooks/taskCatalog.ts'
+import {
+  buildDiagramFromModelPlan,
+  diagramPlanInstructions,
+  diagramPlanSchema,
+} from './diagramBuilder.ts'
 
 export { homeworkSolutionEngineVersion }
 // gemini-3.1-pro отказывала кодом 524 примерно в 40% проверочных запросов,
@@ -1211,6 +1216,66 @@ export async function solveHomeworkWithReview(
     const conditionMismatch = !finalConditionMatched
       || issues.some((issue) => issue.includes('не совпадает с приложенным заданием'))
     const repairable = !conditionMismatch && Date.now() < retryDeadline + 60_000
+
+    // Отдельный путь для самой частой поломки — чертежа. Просить у модели
+    // координаты бесполезно: она их либо не даёт, либо даёт такие, что связи
+    // не выполняются. Вместо этого просим ПЛАН ПОСТРОЕНИЯ, а координаты
+    // считаем сами — тогда чертёж корректен по построению.
+    // Замечания приходят и через «ё», и через «е» («чертёж» против «поле
+    // чертежа»), поэтому сравниваем по нормализованной строке. Плюс сюда
+    // относятся все претензии к самой сцене: вышедшие за поле точки,
+    // неверные связи, слипшиеся вершины — всё это построитель делает верно.
+    const diagramIssue = issues.some((issue) => {
+      const normalized = issue.toLocaleLowerCase('ru-RU').replaceAll('ё', 'е')
+      return normalized.includes('чертеж')
+        || normalized.includes('сцена')
+        || normalized.includes('поле чертежа')
+        || /perpendicular|parallel|midpoint|on-circle|collinear|equal-length/u.test(issue)
+    })
+    if (repairable && diagramIssue) {
+      const planPrompt = [
+        'Составь план построения чертежа к этой задаче.',
+        `Что не так с предыдущим чертежом: ${issues.filter((issue) => issue.toLowerCase().includes('чертёж')).slice(0, 3).join('; ')}.`,
+        `Условие: ${solution.condition}`,
+        `Дано: ${solution.given.join('; ')}`,
+        `${solution.goal.title}: ${solution.goal.text}`,
+        diagramPlanInstructions,
+      ].join('\n')
+
+      try {
+        const rawPlan = await callModelWithRetry(
+          options,
+          diagramPlanInstructions,
+          engineMessage(request, planPrompt),
+          'diagram_plan',
+          diagramPlanSchema,
+          retryDeadline,
+        )
+        const built = buildDiagramFromModelPlan(rawPlan)
+        if (built.ok) {
+          const withDiagram = { ...solution, diagram: built.diagram }
+          const rebuiltIssues = [
+            ...validateSolutionQuality(withDiagram),
+            ...validateDecisionSummary(review.solution.decisions, true),
+          ]
+          if (rebuiltIssues.length === 0) {
+            options.onTrace?.({
+              stage: 'reviewer',
+              candidate: { ...review.solution, diagram: built.diagram },
+              approved: true,
+              issues: [],
+            })
+            return {
+              ...withDiagram,
+              verification: buildVerification(draft, deterministicIssues, review, withDiagram, finalConditionMatched),
+            }
+          }
+        }
+      } catch {
+        // Построение не удалось — идём общим путём починки ниже.
+      }
+    }
+
     if (!repairable) {
       throw new GeometrySolutionEngineError(`Решение не прошло проверку${issues.length > 0 ? `: ${issues.slice(0, 3).join('; ')}` : ''}`)
     }
