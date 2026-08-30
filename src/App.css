@@ -2746,3 +2746,10 @@
   font-size: var(--text-small);
   line-height: var(--leading-ui);
 }
+
+.task-number-optional {
+  margin-left: var(--space-1);
+  color: var(--color-text-subtle);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-regular);
+}

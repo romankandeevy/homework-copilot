@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { FormEvent, ReactNode } from 'react'
+import type { FormEvent } from 'react'
 import { createPortal } from 'react-dom'
 import type { SupabaseClient, User } from '@supabase/supabase-js'
 import {
@@ -64,9 +64,6 @@ import {
 } from './lib/homeworkSolution'
 import { normalizeTaskCondition } from './textbooks/taskCatalog'
 import type { VerifiedTextbookTaskSource } from './textbooks/taskCatalog'
-import { lookupVerifiedTextbookTask } from './textbooks/taskLookup'
-import { renderTextbookTaskEvidenceImage } from './textbooks/textbookTaskSource'
-import TextbookTaskSourcePreview from './textbooks/TextbookTaskSourcePreview'
 import { SolutionVerificationPanel } from './solution/SolutionVerificationPanel'
 import { SiteFooter, SupportCenter, SupportLauncher } from './support/SupportCenter'
 import type { SupportCategory, SupportPrefill } from './support/SupportCenter'
@@ -126,12 +123,6 @@ type SharedHomeworkSolution = Database['public']['Tables']['homework_solution_ca
 const themeStorageKey = 'homework-copilot:theme'
 const selectedTextbookStorageKey = 'homework-copilot:selected-textbook'
 
-function getTaskSubmissionError(error: unknown) {
-  const message = error instanceof Error ? error.message : ''
-  return /dynamically imported module|importing a module script failed|failed to fetch module/i.test(message)
-    ? 'Сайт обновился. Перезагрузи страницу и попробуй ещё раз.'
-    : message || 'Не получилось отправить задачу'
-}
 
 const applicationRoutes = [
   { label: 'Главная', path: '/main', icon: House },
@@ -187,75 +178,74 @@ function normalizeNavigationPath(pathname: string) {
   return path === '/' ? '/main' : path
 }
 
+// Предметы, а не учебники.
+//
+// Раньше здесь были три конкретных издания, а условия задач брались из
+// нашего индекса, распознанного из чужих учебников. От этого отказались:
+// хранить и раздавать содержание учебников — прямой правовой риск, а купить
+// на это лицензию нельзя, такого продукта у издательств нет.
+//
+// Теперь условие задачи даёт сам ученик: фотографией или текстом. Работает
+// с любым учебником, любым классом и любым предметом, и ничего чужого мы
+// не храним.
 const textbooks: readonly Textbook[] = [
   {
-    id: 'geometry',
-    subject: 'Геометрия',
-    grade: '8 класс',
-    title: 'Геометрия. 7-9 классы',
-    authors: 'Л. С. Атанасян, В. Ф. Бутузов, С. Б. Кадомцев, Э. Г. Позняк, И. И. Юдина',
-    edition: '14-е издание, Просвещение, 2023',
+    id: 'mathematics',
+    subject: 'Математика',
+    grade: '7-11 класс',
+    title: 'Любой учебник',
+    authors: 'Сфотографируй задачу или впиши условие',
+    edition: 'по фото или тексту',
     solvedTasks: [],
-    icon: BookOpenText,
-    // Это не адрес файла, а ключ издания в индексе задач: сам PDF не хранится.
-    sourceUrl: '/textbooks/geometry-7-9-atanasyan.pdf',
-    sourceType: 'pdf',
-    previewBeforeReading: true,
-    indexed: true,
-  },
-  {
-    id: 'physics',
-    subject: 'Физика',
-    grade: '8 класс',
-    title: 'Физика. 8 класс',
-    authors: 'И. М. Перышкин, А. И. Иванов',
-    edition: 'Просвещение',
-    solvedTasks: [],
-    icon: Atom,
-    sourceUrl: '/textbooks/physics-8-peryshkin-2026.pdf',
-    sourceType: 'pdf',
-    previewBeforeReading: true,
-    indexed: false,
-    taskAddress: 'paragraph',
-  },
-  {
-    id: 'chemistry',
-    subject: 'Химия',
-    grade: '8 класс',
-    title: 'Химия. 8 класс. Базовый уровень',
-    authors: 'О. С. Габриелян, И. Г. Остроумов, С. А. Сладков',
-    edition: 'Просвещение',
-    solvedTasks: [],
-    icon: Flask,
-    sourceUrl: '/textbooks/chemistry-8-gabrielyan-2025.pdf',
-    sourceType: 'pdf',
-    previewBeforeReading: true,
+    icon: Calculator,
+    sourceType: 'photo',
     indexed: false,
   },
-  // Предметы без индекса задач: решаются по фотографии, поэтому конкретное
-  // издание для них не нужно и класс задаётся диапазоном — модель определит
-  // уровень по самой задаче.
   {
     id: 'algebra',
     subject: 'Алгебра',
     grade: '7-11 класс',
     title: 'Любой учебник',
-    authors: 'Сфотографируй задачу из своего учебника',
-    edition: 'по фото',
+    authors: 'Сфотографируй задачу или впиши условие',
+    edition: 'по фото или тексту',
     solvedTasks: [],
     icon: Function,
     sourceType: 'photo',
     indexed: false,
   },
   {
-    id: 'mathematics',
-    subject: 'Математика',
+    id: 'geometry',
+    subject: 'Геометрия',
     grade: '7-11 класс',
     title: 'Любой учебник',
-    authors: 'Сфотографируй задачу из своего учебника',
-    edition: 'по фото',
+    authors: 'Сфотографируй задачу или впиши условие',
+    edition: 'по фото или тексту',
     solvedTasks: [],
-    icon: Calculator,
+    icon: BookOpenText,
+    sourceType: 'photo',
+    indexed: false,
+  },
+  {
+    id: 'physics',
+    subject: 'Физика',
+    grade: '7-11 класс',
+    title: 'Любой учебник',
+    authors: 'Сфотографируй задачу или впиши условие',
+    edition: 'по фото или тексту',
+    solvedTasks: [],
+    icon: Atom,
+    sourceType: 'photo',
+    indexed: false,
+  },
+  {
+    id: 'chemistry',
+    subject: 'Химия',
+    grade: '7-11 класс',
+    title: 'Любой учебник',
+    authors: 'Сфотографируй задачу или впиши условие',
+    edition: 'по фото или тексту',
+    solvedTasks: [],
+    icon: Flask,
     sourceType: 'photo',
     indexed: false,
   },
@@ -731,26 +721,6 @@ function TextbookPicker({
   )
 }
 
-function TaskConditionPreview({ task, actions }: { task: VerifiedTextbookTaskSource; actions?: ReactNode }) {
-  const conditionNeedsScan = task.ocrConfidence < 95
-    || /[@{}&]|\b(?:HATE|Ha|HA|Puc|3[aа][mм]кнут\p{L}*|рисунKe|приият|ссли|Hair)\b|(?:^|[;:]\s*)[06]\)|\bВи\b|точк\p{L}*[^.;]{0,25}№/iu.test(task.condition)
-  return (
-    <section className="task-condition-preview task-condition-preview--copy-only" aria-labelledby="task-condition-title">
-      <div className="task-condition-copy">
-        <span id="task-condition-title">Условие задачи № {task.task}</span>
-        {!conditionNeedsScan && <p>{task.condition}</p>}
-        {/* Раньше здесь печаталось «Источник: PDF учебника ... Издание: 14-е,
-            Просвещение, 2023». Скана у нас больше нет, а точное издание
-            с названием издательства на видном месте — прямая наводка на то,
-            чьё содержание используется. Ученику для сверки хватает названия
-            книги и страницы. */}
-        <small>Учебник «{task.textbookTitle}»{task.sourcePage ? `, стр. ${task.sourcePage}` : ''}.</small>
-        {(conditionNeedsScan || task.hasDiagram) && <TextbookTaskSourcePreview task={task} includeCondition={conditionNeedsScan} />}
-        {actions && <div className="task-condition-actions">{actions}</div>}
-      </div>
-    </section>
-  )
-}
 
 function CopyTask({
   taskNumber,
@@ -837,66 +807,10 @@ function CopyTask({
       }
       return
     }
-    if (!validTaskNumber) {
-      setError(usesParagraphAddress
-        ? 'Укажи параграф и номер задания'
-        : 'Номер задачи: от 1 до 4 цифр')
-      return
-    }
-    // Учебник не размечен: номер сам по себе ничего не значит, искать нечего.
-    // Не отказываем, а просим условие — номер при этом сохраняется и попадёт
-    // в решение, так что для ученика путь остаётся единым: выбрал учебник,
-    // вписал номер.
-    if (!textbook.indexed || !textbook.sourceUrl) {
-      setManualOpen(true)
-      setError('')
-      return
-    }
-    submissionRef.current = true
-    setIsSubmitting(true)
+    // Индекса задач больше нет: искать условие негде и не нужно. Номер —
+    // это подпись решения, а само условие даёт ученик текстом или фотографией.
+    setManualOpen(true)
     setError('')
-    try {
-      const foundTask = await lookupVerifiedTextbookTask({
-        textbookId: textbook.id,
-        subject: textbook.subject,
-        grade: textbook.grade,
-        textbookTitle: textbook.title,
-        authors: textbook.authors,
-        edition: textbook.edition,
-        sourceUrl: textbook.sourceUrl,
-      }, normalizedTask)
-      if (!foundTask) {
-        setVerifiedTask(null)
-        setError('Такого номера нет в выбранном издании. Проверь номер или добавь фото задачи.')
-        return
-      }
-      setVerifiedTask(foundTask)
-    } catch (lookupError) {
-      setVerifiedTask(null)
-      setError(lookupError instanceof Error ? lookupError.message : 'Не получилось проверить условие')
-    } finally {
-      submissionRef.current = false
-      setIsSubmitting(false)
-    }
-  }
-
-  const confirmTask = async () => {
-    if (!verifiedTask || submissionRef.current) return
-    submissionRef.current = true
-    setIsSubmitting(true)
-    setError('')
-    try {
-      const evidenceRegions = [verifiedTask.sourceRegion, ...verifiedTask.diagramRegions]
-      const sourceImageDataUrl = evidenceRegions.length > 0
-        ? await renderTextbookTaskEvidenceImage(verifiedTask.sourceUrl, evidenceRegions)
-        : undefined
-      await onSubmit(verifiedTask.task, true, 'number', createSubmissionKey(), undefined, verifiedTask, undefined, sourceImageDataUrl)
-    } catch (submissionError) {
-      setError(getTaskSubmissionError(submissionError))
-    } finally {
-      submissionRef.current = false
-      setIsSubmitting(false)
-    }
   }
 
   const confirmPhoto = async () => {
@@ -956,12 +870,6 @@ function CopyTask({
     }
   }
 
-  const rejectTask = () => {
-    setVerifiedTask(null)
-    setPendingPhoto(null)
-    setPendingKey('')
-    setError('Выбери другой номер и сверь его с учебником.')
-  }
 
   const changeTaskNumber = (value: string) => {
     const nextValue = value.slice(0, 4)
@@ -1011,16 +919,6 @@ function CopyTask({
       <form className="copy-task-form" aria-label="Списать задачу" onSubmit={submit}>
         <TextbookPicker selected={textbook} items={textbooks} onSelect={onTextbookChange} onCreate={onCreateTextbook} open={textbookPickerOpen} onOpenChange={onTextbookPickerOpenChange} />
 
-        {verifiedTask && !photo && (
-          <TaskConditionPreview
-            task={verifiedTask}
-            actions={<>
-              <small className="task-condition-charge">После подтверждения спишем {formatRubles(solutionPrice)}.</small>
-              <button className="task-condition-confirm" type="button" onClick={() => { void confirmTask() }} disabled={isSubmitting}>Условие верное</button>
-              <button className="task-condition-reject" type="button" onClick={rejectTask} disabled={isSubmitting}>Выбрать другой номер</button>
-            </>}
-          />
-        )}
         {pendingPhoto && (
           <section className="task-confirmation" aria-labelledby="photo-preview-title">
             <div>
@@ -1040,7 +938,7 @@ function CopyTask({
 
         <div className="task-entry-row">
           <div className="task-number-field">
-            <label htmlFor="task-number">{usesParagraphAddress ? 'Адрес задачи' : 'Номер задачи'}</label>
+            <label htmlFor="task-number">Номер задачи <span className="task-number-optional">по желанию</span></label>
             <div className={`task-number-control${usesParagraphAddress ? ' is-address' : ''}${error && !photo ? ' is-error' : ''}`}>
               <Hash size={22} weight="duotone" aria-hidden="true" />
               {usesParagraphAddress ? (
@@ -1126,7 +1024,7 @@ function CopyTask({
 
           {(!verifiedTask || photo) && (
             <button className="copy-task-submit" type="submit" disabled={!canSubmit || isSubmitting || Boolean(pendingPhoto)}>
-              {isSubmitting ? 'Готовим…' : photo ? 'Продолжить с фото' : 'Проверить условие'}
+              {isSubmitting ? 'Готовим…' : photo ? 'Продолжить с фото' : 'Ввести условие'}
               {!isSubmitting && <ArrowRight size={20} weight="bold" aria-hidden="true" />}
             </button>
           )}
@@ -1142,9 +1040,7 @@ function CopyTask({
                 {normalizedTask ? `Условие задачи № ${normalizedTask}` : 'Условие задачи'}
               </label>
               <p className="manual-condition-hint">
-                {textbook.indexed
-                  ? 'Впиши условие или сфотографируй задачу — решим по нему.'
-                  : `Учебник «${textbook.title}» ещё не размечен, поэтому по номеру условие не найти. Перепиши его или сфотографируй задачу.`}
+                Перепиши условие из учебника или сфотографируй задачу. Подойдёт любой учебник и любой класс.
               </p>
               <textarea
                 id="manual-condition"
@@ -1176,7 +1072,7 @@ function CopyTask({
         </div>
 
         {error && <p className="task-number-error" id="task-entry-error" role="alert">{error}</p>}
-        {!error && !canSubmit && !manualOpen && <p className="task-entry-helper" id="task-entry-helper">Введи номер задачи, добавь фото или впиши условие.</p>}
+        {!error && !canSubmit && !manualOpen && <p className="task-entry-helper" id="task-entry-helper">Сфотографируй задачу или впиши её условие. Номер можно указать, чтобы потом найти решение.</p>}
         {!error && (normalizedTask || photo) && (
             <p className="base-match" aria-live="polite">
               {photo
@@ -1457,52 +1353,11 @@ function UnderstandingPage({
   onOpenSupport: (context: SupportPrefill) => void
 }) {
   const [copied, setCopied] = useState(false)
-  const [sourceDiagram, setSourceDiagram] = useState<GeometryNotebookPageSpec['sourceDiagram']>()
-  const [sourceDiagramError, setSourceDiagramError] = useState('')
-
-  useEffect(() => {
-    let active = true
-    setSourceDiagram(undefined)
-    setSourceDiagramError('')
-
-    if (!generatedSolution || generatedSolution.source !== 'number' || generatedSolution.subject !== 'Геометрия') {
-      return () => { active = false }
-    }
-
-    const textbook = getTextbook(generatedSolution.textbookId)
-    if (!textbook.sourceUrl
-      || textbook.edition !== generatedSolution.textbookEdition
-      || textbook.sourceUrl !== generatedSolution.sourceUrl) {
-      setSourceDiagramError('Не получилось сверить чертёж с выбранным изданием')
-      return () => { active = false }
-    }
-
-    void lookupVerifiedTextbookTask({
-      textbookId: textbook.id,
-      subject: textbook.subject,
-      grade: textbook.grade,
-      textbookTitle: textbook.title,
-      authors: textbook.authors,
-      edition: textbook.edition,
-      sourceUrl: textbook.sourceUrl,
-    }, generatedSolution.task).then(async (verifiedTask) => {
-      if (!active || !verifiedTask?.hasDiagram) return
-      const imageUrl = await renderTextbookTaskEvidenceImage(verifiedTask.sourceUrl, verifiedTask.diagramRegions)
-      if (!active) return
-      const figures = verifiedTask.diagramRegions.map((region) => region.figure).join(', ')
-      setSourceDiagram({
-        imageUrl,
-        alt: `Исходный рисунок ${figures} из учебника для задачи № ${verifiedTask.task}`,
-      })
-    }).catch(() => {
-      if (active) setSourceDiagramError('Не получилось загрузить исходный чертёж из учебника')
-    })
-
-    return () => { active = false }
-  }, [generatedSolution])
+  // Исходный чертёж из скана учебника больше не подгружается: сканов нет,
+  // а чертёж строится движком по условию.
 
   const notebookFixture = generatedSolution?.subject === 'Геометрия'
-    ? asGeometryNotebookSpec(generatedSolution, sourceDiagram)
+    ? asGeometryNotebookSpec(generatedSolution)
     : undefined
 
   const copySolution = async () => {
@@ -1557,7 +1412,6 @@ function UnderstandingPage({
           <div className="solution-condition">
             <strong>Условие</strong>
             <p>{generatedSolution.condition}</p>
-            {sourceDiagramError && <p className="solution-source-diagram-error" role="alert">{sourceDiagramError}</p>}
           </div>
         )}
         <div className="solution-notebook-preview"><GeometryNotebookLayoutV1 spec={notebookFixture} /></div>
@@ -2246,7 +2100,11 @@ function HomePage() {
           authors: textbook.authors,
           edition: textbook.edition,
           idempotencyKey,
-          sourceUrl: verifiedTask?.sourceUrl ?? textbook.sourceUrl ?? 'photo',
+          // Источник указываем, только если он есть. Раньше сюда подставлялась
+          // строка-заглушка «photo», и в решении оставался несуществующий адрес.
+          ...(verifiedTask?.sourceUrl ?? textbook.sourceUrl
+            ? { sourceUrl: verifiedTask?.sourceUrl ?? textbook.sourceUrl }
+            : {}),
           ...(verifiedTask || confirmedCondition ? {
             condition: verifiedTask?.condition ?? confirmedCondition,
             ...(verifiedTask?.sourcePage ? { sourcePage: verifiedTask.sourcePage } : {}),

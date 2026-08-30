@@ -4,15 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import App from './App'
 import type { HomeworkSolution, SolveHomeworkRequest } from './lib/homeworkContract'
 import { normalizeTaskCondition } from './textbooks/taskCatalog'
-import { renderTextbookTaskEvidenceImage } from './textbooks/textbookTaskSource'
 
-vi.mock('./textbooks/textbookTaskSource', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./textbooks/textbookTaskSource')>()
-  return {
-    ...actual,
-    renderTextbookTaskEvidenceImage: vi.fn(async () => 'data:image/jpeg;base64,c291cmNl'),
-  }
-})
 
 function mockGeneratedSolution(request: SolveHomeworkRequest): HomeworkSolution {
   const condition = request.condition ?? 'По фотографии найдите угол треугольника.'
@@ -91,103 +83,38 @@ describe('Homework Copilot task flow', () => {
     vi.unstubAllGlobals()
   })
 
-  it('shows task 2 exactly, then waits for confirmation before the request', async () => {
+  // Индекса задач больше нет: условие всегда даёт ученик. Проверяем главное
+  // свойство — сервис никогда не придумывает условие сам.
+  it('просит вписать условие вместо того, чтобы придумать его', async () => {
     const fetchMock = installSuccessfulSolver()
     render(<App />)
 
-    fireEvent.change(screen.getByRole('textbox', { name: 'Номер задачи' }), { target: { value: '2' } })
-    expect(screen.queryByText('Условие задачи № 2')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Проверить условие' })).toBeEnabled()
-    fireEvent.click(screen.getByRole('button', { name: 'Проверить условие' }))
-    expect(await screen.findByText('Условие задачи № 2')).toBeInTheDocument()
-    expect(screen.getByText('Отметьте три точки A, B и C, не лежащие на одной прямой, и через каждую пару точек проведите прямую. Сколько прямых получилось?')).toBeInTheDocument()
-    expect(screen.getByText(/Учебник «.*», стр. 9\./)).toBeInTheDocument()
-    expect(screen.queryByRole('img', { name: /Три точки A, B и C/ })).not.toBeInTheDocument()
+    fireEvent.change(screen.getByRole('textbox', { name: /Номер задачи/ }), { target: { value: '2' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Ввести условие' }))
 
-    expect(screen.getByRole('button', { name: 'Условие верное' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Выбрать другой номер' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Проверить условие' })).not.toBeInTheDocument()
-    expect(screen.queryByText('Нашли задачу № 2')).not.toBeInTheDocument()
-    expect(screen.getAllByText('Отметьте три точки A, B и C, не лежащие на одной прямой, и через каждую пару точек проведите прямую. Сколько прямых получилось?')).toHaveLength(1)
+    expect(await screen.findByRole('textbox', { name: /Условие задачи/ })).toBeInTheDocument()
+    expect(screen.queryByText(/Отметьте три точки/)).not.toBeInTheDocument()
     expect(fetchMock).not.toHaveBeenCalled()
+  })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Условие верное' }))
+  it('отправляет вписанное условие и не выдумывает источник', async () => {
+    const fetchMock = installSuccessfulSolver()
+    render(<App />)
+
+    fireEvent.change(screen.getByRole('textbox', { name: /Номер задачи/ }), { target: { value: '2' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Ввести условие' }))
+    const field = await screen.findByRole('textbox', { name: /Условие задачи/ })
+    fireEvent.change(field, { target: { value: 'Диагонали ромба равны 10 см и 24 см. Найдите сторону ромба.' } })
+    fireEvent.click(screen.getByRole('button', { name: /Решить за/ }))
+
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
     const request = JSON.parse(String(fetchMock.mock.calls[0][1]?.body)) as SolveHomeworkRequest
     expect(request).toMatchObject({
-      task: '2',
-      condition: 'Отметьте три точки A, B и C, не лежащие на одной прямой, и через каждую пару точек проведите прямую. Сколько прямых получилось?',
-      sourceUrl: '/textbooks/geometry-7-9-atanasyan.pdf',
-      sourcePage: 9,
-      imageDataUrl: 'data:image/jpeg;base64,c291cmNl',
+      source: 'text',
+      condition: 'Диагонали ромба равны 10 см и 24 см. Найдите сторону ромба.',
     })
-  })
-
-  it('does not offer a generated condition for an unknown number', async () => {
-    render(<App />)
-
-    fireEvent.change(screen.getByRole('textbox', { name: 'Номер задачи' }), { target: { value: '126' } })
-    expect(screen.queryByText(/Условие задачи №/)).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Проверить условие' })).toBeEnabled()
-    fireEvent.click(screen.getByRole('button', { name: 'Проверить условие' }))
-    expect(await screen.findByText('Такого номера нет в выбранном издании. Проверь номер или добавь фото задачи.')).toBeInTheDocument()
-  })
-
-  it('lets the student reject a found condition without creating a request', async () => {
-    const fetchMock = installSuccessfulSolver()
-    render(<App />)
-
-    fireEvent.change(screen.getByRole('textbox', { name: 'Номер задачи' }), { target: { value: '2' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Проверить условие' }))
-    await screen.findByText('Условие задачи № 2')
-    fireEvent.click(screen.getByRole('button', { name: 'Выбрать другой номер' }))
-
-    expect(screen.getByText('Выбери другой номер и сверь его с учебником.')).toBeInTheDocument()
-    expect(fetchMock).not.toHaveBeenCalled()
-  })
-
-  it('does not promote an unverified number as a textbook task', async () => {
-    render(<App />)
-    const input = screen.getByRole('textbox', { name: 'Номер задачи' })
-
-    fireEvent.change(input, { target: { value: '124' } })
-    expect(screen.queryByText('Условие задачи № 124')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Проверить условие' }))
-    expect(await screen.findByText('Такого номера нет в выбранном издании. Проверь номер или добавь фото задачи.')).toBeInTheDocument()
-  })
-
-  it('opens the approved notebook solution and returns to the home screen', async () => {
-    installSuccessfulSolver()
-    render(<App />)
-
-    fireEvent.change(screen.getByRole('textbox', { name: 'Номер задачи' }), { target: { value: '2' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Проверить условие' }))
-    await screen.findByText('Условие задачи № 2')
-    fireEvent.click(screen.getByRole('button', { name: 'Условие верное' }))
-
-    expect(await screen.findByRole('heading', { name: 'Решение № 2' })).toBeInTheDocument()
-    expect(screen.getByText('№ 2', { selector: '.notebook-number' })).toBeInTheDocument()
-    expect(screen.getByText('Итоговые ответы движка')).toBeInTheDocument()
-    expect(screen.getByText('2/2')).toBeInTheDocument()
-    fireEvent.click(document.querySelector<HTMLButtonElement>('.route-secondary-action')!)
-    expect(screen.getByRole('heading', { name: 'Списать задачу' })).toBeInTheDocument()
-  })
-
-  it('shows a no-charge error if a confirmed request is rejected', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => ({
-      ok: false,
-      json: async () => ({ error: 'Точное условие не прошло проверку' }),
-    })))
-    render(<App />)
-
-    fireEvent.change(screen.getByRole('textbox', { name: 'Номер задачи' }), { target: { value: '2' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Проверить условие' }))
-    await screen.findByText('Условие задачи № 2')
-    fireEvent.click(screen.getByRole('button', { name: 'Условие верное' }))
-
-    expect(await screen.findByRole('heading', { name: 'Не получилось решить задачу' })).toBeInTheDocument()
-    expect(screen.getByText('Точное условие не прошло проверку')).toBeInTheDocument()
-    expect(screen.getByText('Деньги за неготовое решение не списаны.')).toBeInTheDocument()
+    expect(request.sourceUrl).toBeUndefined()
+    expect(request.imageDataUrl).toBeUndefined()
   })
 
   it('keeps unreleased CDZ content behind a coming-soon route', () => {
@@ -201,24 +128,9 @@ describe('Homework Copilot task flow', () => {
     expect(screen.getByRole('heading', { name: 'Списать задачу' })).toBeInTheDocument()
   })
 
-  it('hides stale asset filenames behind a recovery message', async () => {
-    vi.mocked(renderTextbookTaskEvidenceImage).mockRejectedValueOnce(
-      new TypeError('Failed to fetch dynamically imported module: /assets/pdf-old.js'),
-    )
-    render(<App />)
-
-    fireEvent.change(screen.getByRole('textbox', { name: 'Номер задачи' }), { target: { value: '2' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Проверить условие' }))
-    await screen.findByText('Условие задачи № 2')
-    fireEvent.click(screen.getByRole('button', { name: 'Условие верное' }))
-
-    expect(await screen.findByText('Сайт обновился. Перезагрузи страницу и попробуй ещё раз.')).toBeInTheDocument()
-    expect(screen.queryByText(/pdf-old\.js/)).not.toBeInTheDocument()
-  })
-
   it('keeps the task field numeric and limited to four digits', () => {
     render(<App />)
-    const input = screen.getByRole('textbox', { name: 'Номер задачи' })
+    const input = screen.getByRole('textbox', { name: /Номер задачи/ })
     fireEvent.change(input, { target: { value: '99999' } })
     expect(input).toHaveValue('9999')
   })
