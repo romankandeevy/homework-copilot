@@ -1149,30 +1149,83 @@ export async function solveHomeworkWithReview(
 ) {
   // На повтор оставляем время только в первой половине бюджета функции.
   const retryDeadline = Date.now() + 70_000
-  const rawDraft = await callModelWithRetry(
-    options,
-    authorInstructions,
-    engineMessage(request),
-    'homework_solution_draft',
-    draftSchema,
-    retryDeadline,
-  )
-  const draft = normalizeDraft(rawDraft)
-  const firstSolution = toSolution(draft, request, ownerId, false)
-  const deterministicIssues = [
-    ...validateSolutionQuality(firstSolution),
-    ...validateDecisionSummary(draft.decisions, draft.diagramRequired),
-  ]
-  const authorConditionMatched = !request.condition || conditionSimilarity(request.condition, draft.condition) >= 0.55
-  if (!authorConditionMatched) {
-    deterministicIssues.push('Условие кандидата не совпадает с приложенным заданием')
+
+  // Раньше это были два ПОСЛЕДОВАТЕЛЬНЫХ вызова: автор пишет решение,
+  // затем рецензент его проверяет. Отсюда и брались 110–160 секунд.
+  //
+  // Теперь два НЕЗАВИСИМЫХ прохода идут параллельно. Стоит столько же —
+  // два вызова, — но занимает время одного. И проверка получается сильнее:
+  // два независимых решения, сошедшихся в ответе, — довод весомее, чем
+  // одобрение рецензента, который видел кандидата и склонен с ним соглашаться.
+  const evaluate = (candidate: EngineDraft) => {
+    const asSolution = toSolution(candidate, request, ownerId, false)
+    const issues = [
+      ...validateSolutionQuality(asSolution),
+      ...validateDecisionSummary(candidate.decisions, candidate.diagramRequired),
+    ]
+    if (request.condition && conditionSimilarity(request.condition, candidate.condition) < 0.55) {
+      issues.push('Условие кандидата не совпадает с приложенным заданием')
+    }
+    return { candidate, issues }
   }
-  options.onTrace?.({ stage: 'author', candidate: draft, approved: deterministicIssues.length === 0, issues: [...deterministicIssues] })
+
+  const samples = await Promise.all([0, 1].map(async () => {
+    const raw = await callModelWithRetry(
+      options,
+      authorInstructions,
+      engineMessage(request),
+      'homework_solution_draft',
+      draftSchema,
+      retryDeadline,
+    )
+    return evaluate(normalizeDraft(raw))
+  }))
+
+  const [first, second] = samples
+  const clean = samples.filter((sample) => sample.issues.length === 0)
+  const best = clean[0] ?? (first.issues.length <= second.issues.length ? first : second)
+
+  const draft = best.candidate
+  const deterministicIssues = [...best.issues]
+  const authorConditionMatched = !request.condition
+    || conditionSimilarity(request.condition, draft.condition) >= 0.55
+
+  options.onTrace?.({
+    stage: 'author',
+    candidate: draft,
+    approved: deterministicIssues.length === 0,
+    issues: [...deterministicIssues],
+  })
+
+  const sameAnswer = normalizeNotebookNotation(first.candidate.answer, 80)
+    === normalizeNotebookNotation(second.candidate.answer, 80)
+
+  // Оба прохода чистые и сошлись в ответе — рецензент не нужен, отдаём сразу.
+  // Это и есть основной выигрыш по времени: один вызов вместо двух подряд.
+  if (clean.length === 2 && sameAnswer) {
+    const agreed = toSolution(draft, request, ownerId, true)
+    options.onTrace?.({ stage: 'reviewer', candidate: draft, approved: true, issues: [] })
+    return {
+      ...agreed,
+      verification: buildVerification(
+        draft,
+        deterministicIssues,
+        { approved: true, issues: [], solution: draft },
+        agreed,
+        authorConditionMatched,
+      ),
+    }
+  }
+
+  // Проходы разошлись или один из них не прошёл проверку — зовём рецензента,
+  // и показываем ему оба варианта: расхождение само по себе подсказка.
   const reviewPrompt = [
     'Проверь и при необходимости полностью исправь кандидат.',
     `Автоматические замечания: ${deterministicIssues.length > 0 ? deterministicIssues.join('; ') : 'нет'}.`,
+    ...(sameAnswer ? [] : [`Второй независимый проход дал другой ответ: ${second.candidate.answer}. Определи, какой верен.`]),
     `Кандидат: ${JSON.stringify(draft)}`,
   ].join('\n')
+
   const rawReview = await callModelWithRetry(
     options,
     reviewerInstructions,

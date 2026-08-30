@@ -161,10 +161,15 @@ const photoDraft = {
   },
 }
 
+// Движок делает два независимых прохода параллельно и зовёт рецензента,
+// только если они разошлись. Оба прохода возвращают один и тот же черновик,
+// поэтому рецензент не понадобится — но ответ для него всё равно готовим
+// на случай, если проверка качества забракует кандидат.
 function reviewedResponses(draft: unknown) {
   return vi.fn<typeof fetch>()
     .mockResolvedValueOnce(providerResponse(draft))
-    .mockResolvedValueOnce(providerResponse({ approved: true, issues: [], solution: draft }))
+    .mockResolvedValueOnce(providerResponse(draft))
+    .mockResolvedValue(providerResponse({ approved: true, issues: [], solution: draft }))
 }
 
 function createHttp(method: string, body?: unknown) {
@@ -300,7 +305,9 @@ describe('homework solver', () => {
 
   it('does not abort a model stage with an application timeout', async () => {
     const signals: Array<AbortSignal | null | undefined> = []
-    const responses = [photoDraft, { approved: true, issues: [], solution: photoDraft }]
+    // Два независимых прохода идут параллельно, рецензент — только при
+    // расхождении. Оба прохода отдают один черновик, поэтому вызовов два.
+    const responses = [photoDraft, photoDraft, { approved: true, issues: [], solution: photoDraft }]
     const fetchMock: typeof fetch = async (_input, init) => {
       signals.push(init?.signal)
       return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(responses.shift()) } }] }), {
@@ -311,7 +318,7 @@ describe('homework solver', () => {
 
     await solveWithKie(photoTask, { apiKey: 'secret-test-key', fetchImpl: fetchMock })
 
-    expect(signals).toEqual([undefined, undefined])
+    expect(signals.every((signal) => signal === undefined)).toBe(true)
   })
 
   it('normalizes provider point identifiers together with every reference', async () => {

@@ -141,6 +141,8 @@ export type HomeworkSolution = {
     symbolicShare: number
   }
   verification?: HomeworkSolutionVerification
+  /** Размеченный разбор: готовая запись для тетради поверх обычных шагов решения. */
+  analysis?: HomeworkWrittenAnalysis
   createdAt: string
   ownerId?: string
 }
