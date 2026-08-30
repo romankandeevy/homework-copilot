@@ -295,7 +295,7 @@ async function reserveSolutionCredit(
   request: SolveHomeworkRequest,
 ): Promise<boolean> {
   if (!account) return false
-  const price = getSolutionPrice(request.textbookId, request.task, request.source)
+  const price = getSolutionPrice()
   const { data, error } = await account.client.rpc('reserve_solution_credit', {
     p_idempotency_key: request.idempotencyKey,
     p_task_number: Number.isFinite(Number(request.task)) ? Number(request.task) : null,
@@ -363,7 +363,7 @@ async function completeStoredSolution(
   options?: SolverOptions,
 ): Promise<HomeworkSolution | null> {
   if (!account) return solution ?? null
-  const price = getSolutionPrice(request.textbookId, request.task, request.source)
+  const price = getSolutionPrice()
   const condition = request.condition ?? solution?.condition ?? ''
   const conditionNormalized = normalizeTaskCondition(condition)
   // Решение, сгенерированное движком, подписываем перед сохранением.

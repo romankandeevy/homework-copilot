@@ -167,7 +167,7 @@ export default function TextbookLibraryPage({
     const taskCount = getReaderModel(textbook).taskCount
     return (progressByBook[textbook.id]?.selectedTasks ?? [])
       .filter((task) => task <= taskCount)
-      .map((task) => ({ textbook, task, price: getSolutionPrice(textbook.id, task) }))
+      .map((task) => ({ textbook, task, price: getSolutionPrice() }))
   })
   const totalPrice = cartItems.reduce((total, item) => total + item.price, 0)
 
@@ -296,7 +296,7 @@ export default function TextbookLibraryPage({
             <ol ref={taskListRef} className="textbook-task-list" aria-label={`Номера задач главы ${chapter.label}`}>
               {visibleTasks.map((task) => {
                 const selected = selectedTasks.includes(task)
-                const price = getSolutionPrice(selectedTextbook.id, task)
+                const price = getSolutionPrice()
                 return (
                   <li key={task}>
                     <button type="button" aria-label={`Задача № ${task} · ${price} ₽`} aria-pressed={selected} className={selected ? 'is-selected' : ''} onClick={() => toggleTask(task)}>

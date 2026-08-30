@@ -1468,7 +1468,7 @@ function HomePage() {
     const resolvedTask = source === 'photo'
       ? 'photo-' + idempotencyKey.replace(/[^a-z0-9-]/gi, '').slice(-44)
       : task
-    const solutionPrice = getSolutionPrice(textbookId, task, source)
+    const solutionPrice = getSolutionPrice()
 
     if (source === 'number' && !verifiedTask) {
       throw new Error('Точное условие задачи в выбранном издании не найдено. Решение не запускается')

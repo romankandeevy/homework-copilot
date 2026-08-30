@@ -1,32 +1,42 @@
-// Цены в копейках: 5 / 10 / 15 ₽.
-export const solutionPriceTiers = [500, 1000, 1500] as const
+/* Цена решения. Все суммы — целые копейки, как и баланс в базе.
 
-export type SolutionPrice = typeof solutionPriceTiers[number]
+   Раньше цена зависела от номера задачи: считалась позиция в «главе»
+   учебника, и первая треть стоила 5 ₽, вторая 10 ₽, последняя 15 ₽.
+   Ни глав, ни номера у нас больше нет — задачу приносит сам ученик
+   условием или фотографией, а номер стал необязательной подписью.
+   Лестница осталась мёртвым кодом и роняла оплату: без номера расчёт
+   отказывался считать цену вовсе, и резерв падал с ошибкой.
 
-function chapterLengthFor(textbookId: string) {
-  if (textbookId === 'geometry') return 60
-  if (textbookId === 'physics' || textbookId === 'chemistry') return 45
-  return 40
-}
+   Теперь цена одна и выведена из замеров себестоимости.
 
-// Условие, вписанное вручную, стоит столько же, сколько фото: в обоих
-// случаях задачу целиком разбирает модель, готового разбора у нас нет.
-export function getSolutionPrice(
-  textbookId: string,
-  task: string | number,
-  source: 'number' | 'photo' | 'text' = 'number',
-): SolutionPrice {
-  if (source === 'photo' || source === 'text') return 1500
+   Замер 30 августа 2026: два прогона по восемь живых задач через
+   solveHomeworkWithReview, расход взят из credits_consumed в ответах
+   провайдера. Один разбор задачи — это 3–4 вызова модели: два
+   независимых прохода, при расхождении рецензент, иногда починка чертежа.
 
-  const taskNumber = typeof task === 'number' ? task : Number.parseInt(task, 10)
-  if (!Number.isInteger(taskNumber) || taskNumber < 1) return 1500
+     алгебра 0,09 кр · биология 0,18 · история 0,24 · геометрия 0,25–0,28
+     физика 0,37 · русский 0,43 · химия 0,51
 
-  const chapterLength = chapterLengthFor(textbookId)
-  const positionInChapter = (taskNumber - 1) % chapterLength
-  const easyTaskLimit = Math.ceil(chapterLength / 3)
-  const mediumTaskLimit = Math.ceil((chapterLength * 2) / 3)
+   Итого 5,11 кредита на шестнадцать задач, из них двенадцать прошли
+   проверку качества. Кредит KIE стоит $0.005, то есть 42,8 коп по курсу
+   ЦБ 85,60 ₽ за доллар. Значит выданное решение обходится примерно
+   в 18 копеек — с учётом того, что за четверть задач, не прошедших
+   проверку, провайдеру заплачено, а с ученика не списано.
 
-  if (positionInChapter < easyTaskLimit) return 500
-  if (positionInChapter < mediumTaskLimit) return 1000
-  return 1500
+   Сверх себестоимости цена покрывает эквайринг, налог с оборота,
+   скачок курса и тарифа провайдера — за три дня наблюдений цена вызова
+   у KIE менялась дважды. Запас намеренно большой: пересматривать цену
+   на глазах у школьника хуже, чем заложить его сразу. */
+
+export const solutionPriceKopecks = 500
+
+export type SolutionPrice = typeof solutionPriceKopecks
+
+/* Цена не зависит ни от предмета, ни от способа ввода: и по фотографии,
+   и по условию текстом задачу целиком разбирает модель, готового разбора
+   у нас нет. Разброс себестоимости между предметами (0,09 против 0,51
+   кредита) в цену не выносим — школьник не должен гадать, во сколько ему
+   обойдётся химия против алгебры. */
+export function getSolutionPrice(): SolutionPrice {
+  return solutionPriceKopecks
 }

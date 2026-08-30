@@ -50,7 +50,7 @@ export default function CopyTask({
 
   const trimmedCondition = condition.trim()
   const canSubmit = trimmedCondition.length >= 15 || Boolean(photo)
-  const maxPrice = getSolutionPrice('any', '1', 'text')
+  const price = getSolutionPrice()
 
   useEffect(() => {
     if (!photo) {
@@ -196,7 +196,7 @@ export default function CopyTask({
           <p className="task-entry-helper">Впиши условие целиком или приложи фотографию задачи.</p>
         )}
         {!error && canSubmit && (
-          <p className="task-entry-helper">Спишем по факту, но не больше {formatRubles(maxPrice)} за решение.</p>
+          <p className="task-entry-helper">Решение стоит {formatRubles(price)}. Если задача не решится, деньги вернутся на баланс.</p>
         )}
       </form>
     </section>
