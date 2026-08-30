@@ -2258,6 +2258,21 @@
   .base-shortcut button { width: 100%; grid-column: 1 / -1; }
 }
 
+@media (max-width: 640px) {
+  /* Подпись вкладки важнее иконки: «Мои решения» и «База решений» перестают сокращаться. */
+  .solutions-tabs button { gap: var(--space-2); padding-inline: var(--space-2); }
+  .solutions-tabs button > svg { display: none; }
+
+  /* Пустое состояние раскладывается в столбец, иначе заголовок ломается о рисунок. */
+  .route-empty {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: var(--space-3);
+    padding: var(--space-5) var(--space-4);
+  }
+  .route-empty h2 { font-size: var(--text-subtitle); }
+}
+
 @media (max-width: 360px) {
   .task-entry-row { grid-template-columns: 1fr; }
   .copy-task-submit { grid-column: auto; }
@@ -2470,14 +2485,26 @@
   .topbar-actions .profile-button > span:nth-child(2),
   .topbar-actions .profile-button > svg { display: none; }
   .topbar-actions .balance-control { display: none; }
-  .product-navigation { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); overflow-x: visible; }
-  .navigation-item { min-width: 0; min-height: 2.75rem; gap: 0; padding: 0 var(--space-1); font-size: 0.6875rem; }
+  /* Пять разделов делят строку поровну: пятый пункт больше не переносится на второй ряд. */
+  .product-navigation { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; overflow-x: visible; }
+  .navigation-item { min-width: 0; min-height: 2.75rem; gap: 0; padding: 0; font-size: var(--text-micro); }
   .navigation-item > svg,
   .navigation-status { display: none; }
   .navigation-label { overflow: hidden; text-overflow: ellipsis; }
   .page-heading { display: grid; }
   .task-condition-preview { grid-template-columns: minmax(0, 1fr) 5.5rem; gap: var(--space-2); padding: var(--space-3); }
   .task-condition-preview--copy-only { grid-template-columns: minmax(0, 1fr); padding: var(--space-4); }
+}
+
+/* На узких телефонах «Расписание» должно помещаться целиком, без многоточия. */
+@media (max-width: 380px) {
+  .product-topbar {
+    padding-right: max(var(--space-2), env(safe-area-inset-right));
+    padding-left: max(var(--space-2), env(safe-area-inset-left));
+  }
+  /* Полоса разделов выходит за отступы шапки, чтобы «Расписание» помещалось целиком. */
+  .product-navigation { margin-inline: calc(var(--space-2) * -1); }
+  .navigation-item { padding-inline: 0; font-size: 0.625rem; }
 }
 
 @media (max-width: 360px) {
@@ -2565,8 +2592,20 @@
   color: var(--color-success-strong);
 }
 
+/* На телефоне пометка нужнее всего — там ученик и выбирает учебник.
+   Поэтому не прячем её, а переносим на свою строку под названием. */
 @media (max-width: 560px) {
-  .textbook-badge { display: none; }
+  .textbook-badge {
+    display: inline-block;
+    margin: var(--space-1) 0 0;
+  }
+
+  .textbook-options strong {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+  }
 }
 
 /* Условие текстом — когда скана учебника нет. Оформлено как выписка,

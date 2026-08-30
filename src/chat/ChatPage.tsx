@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import {
   ArrowClockwise,
+  ArrowRight,
   CaretDown,
   ChatsCircle,
   Check,
@@ -55,6 +56,14 @@ import ChatMarkup from './ChatMarkup'
 import './ChatPage.css'
 
 const MODEL_STORAGE_KEY = 'homework-copilot:chat-model-v1'
+
+/* Начала вопросов на пустом листе: подставляются в поле ввода и ждут продолжения,
+   ничего не отправляют сами. */
+const CHAT_PROMPT_IDEAS = [
+  { label: 'Разобрать задачу по шагам', prompt: 'Разбери задачу по шагам: ' },
+  { label: 'Объяснить тему с примером', prompt: 'Объясни тему простыми словами и приведи пример: ' },
+  { label: 'Проверить моё решение', prompt: 'Проверь моё решение и найди ошибку: ' },
+] as const
 
 type LoadState = 'loading' | 'ready' | 'error'
 
@@ -205,7 +214,6 @@ function ModelPicker({
       >
         <span className="chat-model-trigger-copy">
           <strong>{selected?.title ?? 'Модель недоступна'}</strong>
-          {selected && <span>не больше {formatKopecks(selected.maxChargeKopecks)} за ответ</span>}
         </span>
         <CaretDown size={15} weight="bold" aria-hidden="true" />
       </button>
@@ -672,6 +680,14 @@ export default function ChatPage({ userId = null, onRequireAuth, onOpenWallet }:
     textareaRef.current?.focus()
   }, [streaming])
 
+  const applyPromptIdea = useCallback((prompt: string) => {
+    setDraft(prompt)
+    const field = textareaRef.current
+    if (!field) return
+    field.focus()
+    window.requestAnimationFrame(() => field.setSelectionRange(prompt.length, prompt.length))
+  }, [])
+
   const addFiles = (files: FileList | null) => {
     if (!files || files.length === 0) return
     const accepted: PendingAttachment[] = []
@@ -916,10 +932,28 @@ export default function ChatPage({ userId = null, onRequireAuth, onOpenWallet }:
             )}
 
             {modelsStatus === 'ready' && chatEnabled && !requiresAuth && messagesStatus === 'ready' && messages.length === 0 && (
-              <div className="chat-state">
-                <ChatsCircle size={32} weight="duotone" aria-hidden="true" />
-                <strong>Пустой чат</strong>
-                <p>Напиши вопрос или прикрепи фото задачи — ответ появится здесь.</p>
+              <div className="chat-empty">
+                <p className="chat-empty-label">Чистый лист</p>
+                <h3>Спроси что угодно по домашке</h3>
+                <p className="chat-empty-copy">
+                  Разберём задачу по шагам, объясним тему или проверим готовое решение.
+                  Можно написать текстом или приложить фото.
+                </p>
+                <ul className="chat-empty-ideas">
+                  {CHAT_PROMPT_IDEAS.map((idea) => (
+                    <li key={idea.label}>
+                      <button type="button" onClick={() => applyPromptIdea(idea.prompt)}>
+                        <ArrowRight size={15} weight="bold" aria-hidden="true" />
+                        {idea.label}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <p className="chat-empty-price">
+                  {selectedModel
+                    ? <>Отвечает {selectedModel.title} — не больше {formatKopecks(selectedModel.maxChargeKopecks)} за ответ.</>
+                    : 'Модели пока недоступны.'}
+                </p>
               </div>
             )}
 
@@ -930,65 +964,70 @@ export default function ChatPage({ userId = null, onRequireAuth, onOpenWallet }:
               const isStreamingMessage = isAssistant && message.status === 'streaming'
 
               return (
-                <article key={message.id} className={`chat-message is-${message.role}`}>
-                  <header className="chat-message-head">
-                    <span className="chat-message-role">{isAssistant ? models.find((model) => model.id === message.modelId)?.title ?? 'Ответ' : 'Ты'}</span>
-                    <span className="chat-message-time">{messageTime(message.createdAt)}</span>
-                  </header>
-
-                  <div
-                    className="chat-message-body"
-                    aria-live={isStreamingMessage ? 'polite' : undefined}
-                    aria-atomic={isStreamingMessage ? false : undefined}
-                  >
-                    {isAssistant
-                      ? <ChatMarkup text={message.content} />
-                      : <p className="chat-user-text">{message.content}</p>}
-                    {isStreamingMessage && message.content === '' && <p className="chat-typing">Модель думает…</p>}
+                <article key={message.id} className={`chat-entry is-${message.role}`}>
+                  <div className="chat-entry-margin">
+                    <span className="chat-entry-time">{messageTime(message.createdAt)}</span>
                   </div>
 
-                  {messagePreviews.length > 0 && (
-                    <ul className="chat-message-photos">
-                      {messagePreviews.map((url) => (
-                        <li key={url}><img src={url} alt="Прикреплённая фотография задачи" /></li>
-                      ))}
-                    </ul>
-                  )}
-
-                  {messagePreviews.length === 0 && message.attachments.length > 0 && (
-                    <p className="chat-message-attachments">
-                      <Paperclip size={14} weight="bold" aria-hidden="true" />
-                      {message.attachments.length} {attachmentWord(message.attachments.length)}
+                  <div className="chat-entry-main">
+                    <p className="chat-entry-author">
+                      {isAssistant ? models.find((model) => model.id === message.modelId)?.title ?? 'Ответ' : 'Вопрос'}
                     </p>
-                  )}
 
-                  {messageCitations.length > 0 && (
-                    <div className="chat-citations">
-                      <h4>Источники</h4>
-                      <ul>
-                        {messageCitations.map((citation) => (
-                          <li key={citation.url}>
-                            <a href={citation.url} target="_blank" rel="noreferrer noopener">{citation.title || citation.url}</a>
-                          </li>
+                    <div
+                      className="chat-entry-body"
+                      aria-live={isStreamingMessage ? 'polite' : undefined}
+                      aria-atomic={isStreamingMessage ? false : undefined}
+                    >
+                      {isAssistant
+                        ? <ChatMarkup text={message.content} />
+                        : <p className="chat-user-text">{message.content}</p>}
+                      {isStreamingMessage && message.content === '' && <p className="chat-typing">Модель думает…</p>}
+                    </div>
+
+                    {messagePreviews.length > 0 && (
+                      <ul className="chat-message-photos">
+                        {messagePreviews.map((url) => (
+                          <li key={url}><img src={url} alt="Прикреплённая фотография задачи" /></li>
                         ))}
                       </ul>
-                    </div>
-                  )}
+                    )}
 
-                  {message.status === 'cancelled' && <p className="chat-message-note">Генерация остановлена. Списываем только фактический расход.</p>}
-                  {message.status === 'failed' && <p className="chat-message-note is-error">Ответ не получен. Деньги за неудачную генерацию не списываются.</p>}
+                    {messagePreviews.length === 0 && message.attachments.length > 0 && (
+                      <p className="chat-message-attachments">
+                        <Paperclip size={14} weight="bold" aria-hidden="true" />
+                        {message.attachments.length} {attachmentWord(message.attachments.length)}
+                      </p>
+                    )}
 
-                  {isAssistant && !isStreamingMessage && message.content !== '' && (
-                    <footer className="chat-message-actions">
-                      <CopyAnswerButton text={message.content} />
-                      {message.id === lastAssistant?.id && canRetry && (
-                        <button className="chat-message-action" type="button" onClick={retryAnswer}>
-                          <ArrowClockwise size={15} weight="bold" aria-hidden="true" />
-                          Повторить ответ
-                        </button>
-                      )}
-                    </footer>
-                  )}
+                    {messageCitations.length > 0 && (
+                      <div className="chat-citations">
+                        <h4>Источники</h4>
+                        <ul>
+                          {messageCitations.map((citation) => (
+                            <li key={citation.url}>
+                              <a href={citation.url} target="_blank" rel="noreferrer noopener">{citation.title || citation.url}</a>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {message.status === 'cancelled' && <p className="chat-message-note">Генерация остановлена. Списываем только фактический расход.</p>}
+                    {message.status === 'failed' && <p className="chat-message-note is-error">Ответ не получен. Деньги за неудачную генерацию не списываются.</p>}
+
+                    {isAssistant && !isStreamingMessage && message.content !== '' && (
+                      <footer className="chat-message-actions">
+                        <CopyAnswerButton text={message.content} />
+                        {message.id === lastAssistant?.id && canRetry && (
+                          <button className="chat-message-action" type="button" onClick={retryAnswer}>
+                            <ArrowClockwise size={15} weight="bold" aria-hidden="true" />
+                            Повторить ответ
+                          </button>
+                        )}
+                      </footer>
+                    )}
+                  </div>
                 </article>
               )
             })}
@@ -1016,105 +1055,107 @@ export default function ChatPage({ userId = null, onRequireAuth, onOpenWallet }:
           )}
 
           <form className="chat-composer" onSubmit={(event) => { void submit(event) }}>
-            {attachments.length > 0 && (
-              <ul className="chat-attachment-strip">
-                {attachments.map((attachment) => (
-                  <li key={attachment.id}>
-                    <img src={attachment.previewUrl} alt={`Фото «${attachment.file.name}»`} />
-                    <button
-                      type="button"
-                      aria-label={`Убрать фото «${attachment.file.name}»`}
-                      onClick={() => removeAttachment(attachment.id)}
-                    >
-                      <X size={13} weight="bold" aria-hidden="true" />
+            <div className="chat-composer-field">
+              {attachments.length > 0 && (
+                <ul className="chat-attachment-strip">
+                  {attachments.map((attachment) => (
+                    <li key={attachment.id}>
+                      <img src={attachment.previewUrl} alt={`Фото «${attachment.file.name}»`} />
+                      <button
+                        type="button"
+                        aria-label={`Убрать фото «${attachment.file.name}»`}
+                        onClick={() => removeAttachment(attachment.id)}
+                      >
+                        <X size={13} weight="bold" aria-hidden="true" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              <label className="sr-only" htmlFor="chat-input">Вопрос модели</label>
+              <textarea
+                id="chat-input"
+                ref={textareaRef}
+                className="chat-input"
+                value={draft}
+                rows={2}
+                maxLength={8000}
+                placeholder={chatEnabled ? 'Например: объясни, как решать квадратные уравнения' : 'Чат временно отключён'}
+                disabled={!chatEnabled || requiresAuth}
+                onChange={(event) => setDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault()
+                    event.currentTarget.form?.requestSubmit()
+                  }
+                }}
+              />
+
+              <div className="chat-composer-controls">
+                <div className="chat-composer-left">
+                  <input
+                    ref={fileInputRef}
+                    className="sr-only"
+                    type="file"
+                    accept={CHAT_ATTACHMENT_MIME_TYPES.join(',')}
+                    multiple
+                    onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                      addFiles(event.target.files)
+                      event.target.value = ''
+                    }}
+                  />
+                  <button
+                    className="chat-icon-button"
+                    type="button"
+                    disabled={!chatEnabled || requiresAuth || !selectedModel?.supportsImages || attachments.length >= CHAT_ATTACHMENT_LIMIT}
+                    aria-label={selectedModel?.supportsImages
+                      ? `Прикрепить фото, до ${CHAT_ATTACHMENT_LIMIT} штук по 10 МБ`
+                      : 'Выбранная модель не читает фотографии'}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <ImageSquare size={18} weight="bold" aria-hidden="true" />
+                  </button>
+
+                  {selectedModel?.supportsWebSearch && (
+                    <label className="chat-web-toggle">
+                      <input
+                        type="checkbox"
+                        checked={useWebSearch}
+                        disabled={!chatEnabled || requiresAuth}
+                        onChange={(event) => setUseWebSearch(event.target.checked)}
+                      />
+                      <span><GlobeSimple size={15} weight="bold" aria-hidden="true" />Искать в интернете</span>
+                    </label>
+                  )}
+
+                  <ModelPicker
+                    models={models}
+                    value={selectedModel?.id ?? ''}
+                    onChange={setSelectedModelId}
+                    disabled={!chatEnabled || requiresAuth || streaming}
+                  />
+                </div>
+
+                <div className="chat-composer-right">
+                  {streaming ? (
+                    <button className="chat-stop" type="button" onClick={stopGeneration}>
+                      <Stop size={16} weight="fill" aria-hidden="true" />
+                      Остановить
                     </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            {attachmentNotice && <p className="chat-attachment-notice" role="alert">{attachmentNotice}</p>}
-
-            <label className="sr-only" htmlFor="chat-input">Вопрос модели</label>
-            <textarea
-              id="chat-input"
-              ref={textareaRef}
-              className="chat-input"
-              value={draft}
-              rows={2}
-              maxLength={8000}
-              placeholder={chatEnabled ? 'Например: объясни, как решать квадратные уравнения' : 'Чат временно отключён'}
-              disabled={!chatEnabled || requiresAuth}
-              onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' && !event.shiftKey) {
-                  event.preventDefault()
-                  event.currentTarget.form?.requestSubmit()
-                }
-              }}
-            />
-
-            <div className="chat-composer-controls">
-              <div className="chat-composer-left">
-                <input
-                  ref={fileInputRef}
-                  className="sr-only"
-                  type="file"
-                  accept={CHAT_ATTACHMENT_MIME_TYPES.join(',')}
-                  multiple
-                  onChange={(event: ChangeEvent<HTMLInputElement>) => {
-                    addFiles(event.target.files)
-                    event.target.value = ''
-                  }}
-                />
-                <button
-                  className="chat-icon-button"
-                  type="button"
-                  disabled={!chatEnabled || requiresAuth || !selectedModel?.supportsImages || attachments.length >= CHAT_ATTACHMENT_LIMIT}
-                  aria-label={selectedModel?.supportsImages
-                    ? `Прикрепить фото, до ${CHAT_ATTACHMENT_LIMIT} штук по 10 МБ`
-                    : 'Выбранная модель не читает фотографии'}
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <ImageSquare size={18} weight="bold" aria-hidden="true" />
-                </button>
-
-                {selectedModel?.supportsWebSearch && (
-                  <label className="chat-web-toggle">
-                    <input
-                      type="checkbox"
-                      checked={useWebSearch}
-                      disabled={!chatEnabled || requiresAuth}
-                      onChange={(event) => setUseWebSearch(event.target.checked)}
-                    />
-                    <span><GlobeSimple size={15} weight="bold" aria-hidden="true" />Искать в интернете</span>
-                  </label>
-                )}
-
-                <ModelPicker
-                  models={models}
-                  value={selectedModel?.id ?? ''}
-                  onChange={setSelectedModelId}
-                  disabled={!chatEnabled || requiresAuth || streaming}
-                />
-              </div>
-
-              <div className="chat-composer-right">
-                {streaming ? (
-                  <button className="chat-stop" type="button" onClick={stopGeneration}>
-                    <Stop size={16} weight="fill" aria-hidden="true" />
-                    Остановить
-                  </button>
-                ) : (
-                  <button className="chat-send" type="submit" disabled={!canSend}>
-                    {uploading
-                      ? <SpinnerGap size={16} weight="bold" aria-hidden="true" className="chat-spin" />
-                      : <PaperPlaneTilt size={16} weight="fill" aria-hidden="true" />}
-                    {uploading ? 'Загружаем фото' : 'Отправить'}
-                  </button>
-                )}
+                  ) : (
+                    <button className="chat-send" type="submit" disabled={!canSend}>
+                      {uploading
+                        ? <SpinnerGap size={16} weight="bold" aria-hidden="true" className="chat-spin" />
+                        : <PaperPlaneTilt size={16} weight="fill" aria-hidden="true" />}
+                      {uploading ? 'Загружаем фото' : 'Отправить'}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
+
+            {attachmentNotice && <p className="chat-attachment-notice" role="alert">{attachmentNotice}</p>}
 
             <p className="chat-price-hint">
               {selectedModel
