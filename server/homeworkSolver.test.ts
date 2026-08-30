@@ -63,11 +63,19 @@ const providerSolution = {
   sourceVerified: true,
 }
 
-function providerResponse(content: unknown = providerSolution) {
+// У KIE два протокола, и движок ходит в оба: Gemini отвечает как OpenAI
+// chat/completions, GPT-5.x — как Responses API с блоками output.
+function providerBody(content: unknown, url: string) {
+  return url.includes('/codex/')
+    ? { output: [{ type: 'message', content: [{ type: 'output_text', text: JSON.stringify(content) }] }] }
+    : { choices: [{ message: { content: JSON.stringify(content) } }] }
+}
+
+function providerResponse(content: unknown = providerSolution, url = '') {
   return {
     ok: true,
     status: 200,
-    json: async () => ({ choices: [{ message: { content: JSON.stringify(content) } }] }),
+    json: async () => providerBody(content, url),
   } as Response
 }
 
@@ -166,10 +174,20 @@ const photoDraft = {
 // поэтому рецензент не понадобится — но ответ для него всё равно готовим
 // на случай, если проверка качества забракует кандидат.
 function reviewedResponses(draft: unknown) {
-  return vi.fn<typeof fetch>()
-    .mockResolvedValueOnce(providerResponse(draft))
-    .mockResolvedValueOnce(providerResponse(draft))
-    .mockResolvedValue(providerResponse({ approved: true, issues: [], solution: draft }))
+  return vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
+    const url = String(input)
+    const body = typeof init?.body === 'string' ? init.body : ''
+    const reviewing = body.includes('homework_solution_review')
+    return providerResponse(reviewing ? { approved: true, issues: [], solution: draft } : draft, url)
+  })
+}
+
+// Запрос конкретного семейства среди вызовов заглушки.
+function callTo(fetchMock: ReturnType<typeof reviewedResponses>, family: 'codex' | 'gemini') {
+  const call = fetchMock.mock.calls.find((entry) => (family === 'codex'
+    ? String(entry[0]).includes('/codex/')
+    : !String(entry[0]).includes('/codex/')))
+  return JSON.parse(String(call?.[1]?.body)) as Record<string, unknown>
 }
 
 function createHttp(method: string, body?: unknown) {
@@ -246,9 +264,13 @@ describe('homework solver', () => {
         ]),
       },
     })
-    const requestPayload = JSON.parse(String(fetchMock.mock.calls[0][1]?.body)) as { tools?: unknown; response_format?: { type: string } }
-    expect(requestPayload.tools).toBeUndefined()
-    expect(requestPayload.response_format?.type).toBe('json_schema')
+    // Строгая схема нужна обоим семействам, но называется в них по-разному.
+    const gemini = callTo(fetchMock, 'gemini') as { tools?: unknown; response_format?: { type: string } }
+    const codex = callTo(fetchMock, 'codex') as { tools?: unknown; text?: { format?: { type: string } } }
+    expect(gemini.tools).toBeUndefined()
+    expect(gemini.response_format?.type).toBe('json_schema')
+    expect(codex.tools).toBeUndefined()
+    expect(codex.text?.format?.type).toBe('json_schema')
   })
 
   it('requires the indexed source drawing when the task references a figure', async () => {
@@ -275,17 +297,21 @@ describe('homework solver', () => {
   it('sends the photo itself to the multimodal provider without an OCR condition', async () => {
     const fetchMock = reviewedResponses(photoDraft)
     await solveWithKie(photoTask, { apiKey: 'secret-test-key', fetchImpl: fetchMock })
-    const [, options] = fetchMock.mock.calls[0]
-    const payload = JSON.parse(String(options?.body)) as {
+    const gemini = callTo(fetchMock, 'gemini') as {
       messages: { content: unknown }[]
       response_format?: { type: string }
       tools?: unknown
     }
-    expect(payload.messages[1].content).toEqual([
+    const codex = callTo(fetchMock, 'codex') as { input: { content: unknown }[] }
+    expect(gemini.messages[1].content).toEqual([
       { type: 'image_url', image_url: { url: 'data:image/png;base64,cGhvdG8=' } },
     ])
-    expect(payload.response_format?.type).toBe('json_schema')
-    expect(payload.tools).toBeUndefined()
+    // Responses API называет ту же картинку иначе — иначе фото до модели не дойдёт.
+    expect(codex.input[0].content).toEqual([
+      { type: 'input_image', image_url: 'data:image/png;base64,cGhvdG8=' },
+    ])
+    expect(gemini.response_format?.type).toBe('json_schema')
+    expect(gemini.tools).toBeUndefined()
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
@@ -307,10 +333,13 @@ describe('homework solver', () => {
     const signals: Array<AbortSignal | null | undefined> = []
     // Два независимых прохода идут параллельно, рецензент — только при
     // расхождении. Оба прохода отдают один черновик, поэтому вызовов два.
-    const responses = [photoDraft, photoDraft, { approved: true, issues: [], solution: photoDraft }]
-    const fetchMock: typeof fetch = async (_input, init) => {
+    const fetchMock: typeof fetch = async (input, init) => {
       signals.push(init?.signal)
-      return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(responses.shift()) } }] }), {
+      const body = typeof init?.body === 'string' ? init.body : ''
+      const content = body.includes('homework_solution_review')
+        ? { approved: true, issues: [], solution: photoDraft }
+        : photoDraft
+      return new Response(JSON.stringify(providerBody(content, String(input))), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       })
@@ -355,7 +384,7 @@ describe('homework solver', () => {
     const http = createHttp('GET')
     await handleHomeworkSolverRequest(http.request, http.response, { apiKey: 'private-value' })
     expect(http.response.statusCode).toBe(200)
-    expect(http.body()).toEqual({ provider: 'kie.ai', model: 'gemini-3-pro', configured: true, engineVersion: 2 })
+    expect(http.body()).toEqual({ provider: 'kie.ai', model: 'gpt-5-6-luna', configured: true, engineVersion: 2 })
     expect(JSON.stringify(http.body())).not.toContain('private-value')
 
     const preflight = createHttp('OPTIONS')

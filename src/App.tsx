@@ -59,6 +59,7 @@ import {
 import { normalizeTaskCondition } from './textbooks/taskCatalog'
 import type { VerifiedTextbookTaskSource } from './textbooks/taskCatalog'
 import { SolutionVerificationPanel } from './solution/SolutionVerificationPanel'
+import { WrittenAnalysis } from './solution/WrittenAnalysis'
 import { SiteFooter, SupportCenter, SupportLauncher } from './support/SupportCenter'
 import type { SupportCategory, SupportPrefill } from './support/SupportCenter'
 import './App.css'
@@ -854,6 +855,11 @@ function UnderstandingPage({
             <h2>Решение</h2>
             {generatedSolution.steps.map((step, index) => <p key={step + index}>{step}</p>)}
           </section>
+          {generatedSolution.analysis && (
+            <section className="written-solution-section">
+              <WrittenAnalysis analysis={generatedSolution.analysis} />
+            </section>
+          )}
           {generatedSolution.answer && (
             <section className="written-solution-section written-solution-answer">
               <h2>Ответ</h2>

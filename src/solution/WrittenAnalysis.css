@@ -1,0 +1,296 @@
+/* Размеченная запись: лист с полем слева, значки нарисованы линиями.
+
+   Правило одно: значок — это геометрия, а не глиф. Подчёркивания идут
+   градиентами по низу токена (толщина и рисунок не зависят от шрифта),
+   рамки — настоящими границами, дуга корня — скруглением, крышка
+   суффикса — ломаной в SVG. Ни одного значка символом или эмодзи. */
+
+.written-analysis {
+  --analysis-margin: 3.25rem;
+  --analysis-ink: var(--color-text);
+  --analysis-rule-color: color-mix(in oklch, var(--color-danger) 68%, transparent);
+  --analysis-line: 0.125rem;
+
+  display: grid;
+  gap: var(--space-4);
+  margin: 0;
+  padding: var(--space-5) var(--space-5) var(--space-5) calc(var(--analysis-margin) + var(--space-4));
+  position: relative;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-surface);
+  background: var(--color-surface-raised);
+  overflow-x: auto;
+}
+
+:root[data-theme='dark'] .written-analysis {
+  --analysis-rule-color: color-mix(in oklch, var(--color-danger) 72%, transparent);
+}
+
+/* Красная линия поля — та же, что в чате и на тетрадном листе. */
+.written-analysis::before {
+  content: '';
+  position: absolute;
+  top: var(--space-3);
+  bottom: var(--space-3);
+  left: var(--analysis-margin);
+  width: 1px;
+  background: var(--analysis-rule-color);
+}
+
+.written-analysis-title {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--text-ui);
+  font-weight: var(--weight-semibold);
+}
+
+.written-analysis-block {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.written-analysis-block-title {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-small);
+  font-weight: var(--weight-semibold);
+}
+
+.analysis-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+/* Пометка на поле стоит слева от строки, а не над ней: так строка остаётся
+   целой и её видно как одну запись. */
+.analysis-line:has(.analysis-line-lead) {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: var(--space-3);
+}
+
+.analysis-line-lead {
+  grid-row: 1;
+  color: var(--color-text-subtle);
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-semibold);
+  white-space: nowrap;
+}
+
+.analysis-line-tokens {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  /* Строки со значками выше обычных: сверху пометка, снизу подчёркивание. */
+  row-gap: var(--space-5);
+  column-gap: 0.4em;
+  min-width: 0;
+  color: var(--analysis-ink);
+  font-size: var(--text-body);
+  line-height: 1.5;
+}
+
+.analysis-line-caption {
+  grid-column: 1 / -1;
+  color: var(--color-text-muted);
+  font-size: var(--text-small);
+  line-height: var(--leading-ui);
+}
+
+/* Формулы и уравнения пишутся моноширинным: в них важны разряды и выравнивание. */
+.analysis-line-formula .analysis-line-tokens,
+.analysis-line-equation .analysis-line-tokens {
+  font-family: var(--font-mono);
+  font-size: var(--text-small);
+}
+
+.analysis-token {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  padding-bottom: 0.28em;
+}
+
+/* Морфемы одного слова пишутся вплотную — иначе слово рассыпается на куски. */
+.analysis-token.is-tight { margin-left: -0.4em; }
+
+.analysis-token-label {
+  color: var(--color-text-subtle);
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-semibold);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.analysis-token-body {
+  position: relative;
+  display: inline-block;
+  padding: 0 0.06em;
+}
+
+.analysis-token-text { white-space: pre-wrap; }
+
+/* --- Подчёркивания членов предложения ---------------------------------
+   Градиентом, а не text-decoration: толщина линии тогда одинаковая
+   у всех членов и не зависит от кегля и шрифта. */
+
+.analysis-mark-single .analysis-token-body {
+  background: linear-gradient(currentcolor, currentcolor) 0 100% / 100% var(--analysis-line) no-repeat;
+}
+
+.analysis-mark-double .analysis-token-body {
+  background:
+    linear-gradient(currentcolor, currentcolor) 0 100% / 100% var(--analysis-line) no-repeat,
+    linear-gradient(currentcolor, currentcolor) 0 calc(100% - 0.2em) / 100% var(--analysis-line) no-repeat;
+}
+
+.analysis-mark-dashed .analysis-token-body {
+  background:
+    repeating-linear-gradient(90deg, currentcolor 0 0.5em, transparent 0.5em 0.85em)
+    0 100% / 100% var(--analysis-line) no-repeat;
+}
+
+.analysis-mark-dash-dot .analysis-token-body {
+  background:
+    repeating-linear-gradient(
+      90deg,
+      currentcolor 0 0.62em,
+      transparent 0.62em 0.94em,
+      currentcolor 0.94em 1.06em,
+      transparent 1.06em 1.38em
+    )
+    0 100% / 100% var(--analysis-line) no-repeat;
+}
+
+/* Волнистая — единственный случай, где встроенная отрисовка браузера точнее
+   любого градиента: волна остаётся волной на любом кегле. */
+.analysis-mark-wavy .analysis-token-body {
+  text-decoration: underline wavy currentcolor;
+  text-decoration-thickness: var(--analysis-line);
+  text-underline-offset: 0.22em;
+}
+
+/* --- Значки разбора по составу ---------------------------------------- */
+
+/* Приставка: уголок ¬ сверху. */
+.analysis-mark-prefix .analysis-token-body::before {
+  content: '';
+  position: absolute;
+  inset: -0.5em 0 auto 0;
+  height: 0.34em;
+  border-top: var(--analysis-line) solid currentcolor;
+  border-left: var(--analysis-line) solid currentcolor;
+}
+
+/* Корень: дуга сверху. */
+.analysis-mark-root .analysis-token-body::before {
+  content: '';
+  position: absolute;
+  inset: -0.62em 0 auto 0;
+  height: 0.44em;
+  border-top: var(--analysis-line) solid currentcolor;
+  border-left: var(--analysis-line) solid currentcolor;
+  border-right: var(--analysis-line) solid currentcolor;
+  border-radius: 60% 60% 0 0 / 100% 100% 0 0;
+}
+
+.analysis-token-cap {
+  position: absolute;
+  inset: -0.62em 0 auto 0;
+  width: 100%;
+  height: 0.44em;
+  color: currentcolor;
+  overflow: visible;
+}
+
+/* Окончание: рамка вокруг морфемы. */
+.analysis-mark-ending .analysis-token-body {
+  padding: 0.06em 0.16em;
+  border: var(--analysis-line) solid currentcolor;
+}
+
+/* Основа слова: скобка снизу под всей частью. */
+.analysis-mark-stem .analysis-token-body::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 -0.42em 0;
+  height: 0.3em;
+  border-bottom: var(--analysis-line) solid currentcolor;
+  border-left: var(--analysis-line) solid currentcolor;
+  border-right: var(--analysis-line) solid currentcolor;
+}
+
+/* --- Выделения -------------------------------------------------------- */
+
+.analysis-mark-box .analysis-token-body {
+  padding: 0.1em 0.3em;
+  border: var(--analysis-line) solid currentcolor;
+  border-radius: var(--radius-xs);
+  font-weight: var(--weight-semibold);
+}
+
+.analysis-mark-circle .analysis-token-body {
+  padding: 0.1em 0.42em;
+  border: var(--analysis-line) solid currentcolor;
+  border-radius: var(--radius-pill);
+}
+
+/* --- Условные обозначения --------------------------------------------- */
+
+.written-analysis-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-5);
+  margin: 0;
+  padding: var(--space-4) 0 0;
+  border-top: 1px solid var(--color-border);
+  list-style: none;
+}
+
+.written-analysis-legend li {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--text-small);
+}
+
+.analysis-legend-sample {
+  padding-bottom: 0.28em;
+  color: var(--color-text);
+  font-size: var(--text-small);
+}
+
+.written-analysis .visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (width <= 40rem) {
+  .written-analysis {
+    --analysis-margin: 1.75rem;
+
+    padding-left: calc(var(--analysis-margin) + var(--space-3));
+    padding-right: var(--space-3);
+  }
+
+  .analysis-line-tokens { font-size: var(--text-small); }
+
+  /* На узком экране пометка на поле не помещается рядом со строкой:
+     ставим её над записью, а не режем строку переносами. */
+  .analysis-line:has(.analysis-line-lead) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .analysis-line-lead { grid-row: auto; }
+}

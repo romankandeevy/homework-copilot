@@ -1,4 +1,7 @@
 import {
+  homeworkAnalysisKinds,
+  homeworkAnnotatedLineKinds,
+  homeworkAnnotationMarks,
   homeworkSceneConstraintKinds,
   homeworkSceneMarkKinds,
   homeworkSceneObjectKinds,
@@ -6,12 +9,16 @@ import {
   homeworkTaskTypes,
 } from '../src/lib/homeworkContract.ts'
 import type {
+  HomeworkAnalysisKind,
+  HomeworkAnnotatedLine,
+  HomeworkAnnotatedToken,
   HomeworkDecisionSummary,
   HomeworkDiagram,
   HomeworkDiagramScene,
   HomeworkSolution,
   HomeworkSolutionVerification,
   HomeworkTaskType,
+  HomeworkWrittenAnalysis,
   SolveHomeworkRequest,
 } from '../src/lib/homeworkContract.ts'
 import { normalizeTaskCondition } from '../src/textbooks/taskCatalog.ts'
@@ -22,9 +29,19 @@ import {
 } from './diagramBuilder.ts'
 
 export { homeworkSolutionEngineVersion }
-// gemini-3.1-pro отказывала кодом 524 примерно в 40% проверочных запросов,
-// gemini-3-pro за ту же проверку не отказала ни разу.
-export const defaultHomeworkModel = 'gemini-3-pro'
+
+// Два независимых прохода идут РАЗНЫМИ моделями из разных семейств.
+//
+// Два решения, сошедшихся в ответе, — довод весомее, когда они получены
+// не одной моделью дважды, а двумя независимыми. Плюс страховка от сбоя
+// провайдера: 30 августа семейство Claude лежало сутки целиком, и один
+// упавший проход не должен уносить с собой второй.
+//
+// Замер 30 августа: gemini-3-pro отвечала 39 с, gpt-5-6-luna — 2,7 с,
+// gemini-2.5-flash — 2,2 с, при одинаковой цене 0,01 кредита.
+export const defaultHomeworkModels = ['gpt-5-6-luna', 'gemini-2.5-flash'] as const
+// Одиночные вызовы — рецензент, починка чертежа, ответ GET /api/solve.
+export const defaultHomeworkModel = defaultHomeworkModels[0]
 
 export type GeometrySolutionTraceEvent = {
   stage: 'author' | 'reviewer'
@@ -51,6 +68,7 @@ type EngineDraft = {
   steps: string[]
   answer: string
   diagram: HomeworkDiagram
+  analysis?: HomeworkWrittenAnalysis
 }
 
 type ReviewResult = {
@@ -184,10 +202,73 @@ const decisionSchema = {
   },
 } as const
 
+// Размеченный разбор — школьная запись поверх обычных шагов: подчёркнутые
+// члены предложения, морфемы со значками, степени окисления над формулой.
+// Форма записи зависит от задания, а не от предмета целиком, поэтому здесь
+// один общий формат, а модель выбирает kind под конкретное задание.
+const annotatedTokenSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['text', 'mark', 'label', 'note', 'tight'],
+  properties: {
+    text: { type: 'string', description: 'Кусок записи: слово, морфема, формула, число с единицей.' },
+    mark: {
+      type: 'string',
+      enum: ['none', ...homeworkAnnotationMarks.filter((entry) => entry !== 'none')],
+      description: 'Школьный значок: single — подлежащее, double — сказуемое, wavy — определение, '
+        + 'dashed — дополнение, dash-dot — обстоятельство, prefix/root/suffix/ending — морфемы, '
+        + 'box — выделенная величина или ответ, circle — отмеченный элемент, stem — основа слова.',
+    },
+    label: { type: 'string', description: 'Короткая пометка над куском: часть речи, степень окисления, время глагола. Пусто, если не нужна.' },
+    note: { type: 'string', description: 'Что значит значок здесь; попадает в условные обозначения. Пусто, если значка нет.' },
+    tight: { type: 'boolean', description: 'true — писать вплотную к предыдущему куску; так собираются морфемы одного слова.' },
+  },
+} as const
+
+const annotatedLineSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['kind', 'lead', 'tokens', 'caption'],
+  properties: {
+    kind: { type: 'string', enum: [...homeworkAnnotatedLineKinds] },
+    lead: { type: 'string', description: 'Пометка на поле слева: «1.», «Формула», «Подстановка». Пусто, если не нужна.' },
+    tokens: { type: 'array', minItems: 1, maxItems: 24, items: annotatedTokenSchema },
+    caption: { type: 'string', description: 'Пояснение под строкой обычными словами. Пусто, если не нужно.' },
+  },
+} as const
+
+const analysisSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['kind', 'title', 'blocks'],
+  properties: {
+    kind: {
+      type: 'string',
+      enum: ['none', ...homeworkAnalysisKinds.filter((entry) => entry !== 'generic'), 'generic'],
+      description: 'none — заданию размеченная запись не нужна, хватает обычных шагов.',
+    },
+    title: { type: 'string', description: 'Заголовок разбора. Пусто — возьмётся стандартный по kind.' },
+    blocks: {
+      type: 'array',
+      minItems: 0,
+      maxItems: 4,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['title', 'lines'],
+        properties: {
+          title: { type: 'string' },
+          lines: { type: 'array', minItems: 1, maxItems: 12, items: annotatedLineSchema },
+        },
+      },
+    },
+  },
+} as const
+
 const draftSchema = {
   type: 'object',
   additionalProperties: false,
-  required: ['condition', 'taskType', 'diagramRequired', 'decisions', 'sourceVerified', 'given', 'goal', 'steps', 'answer', 'diagram'],
+  required: ['condition', 'taskType', 'diagramRequired', 'decisions', 'sourceVerified', 'given', 'goal', 'steps', 'answer', 'diagram', 'analysis'],
   properties: {
     condition: { type: 'string', description: 'Точная расшифровка условия по изображению источника.' },
     taskType: { type: 'string', enum: [...homeworkTaskTypes] },
@@ -207,6 +288,7 @@ const draftSchema = {
     steps: { type: 'array', minItems: 1, maxItems: 14, items: { type: 'string' } },
     answer: { type: 'string' },
     diagram: diagramSchema,
+    analysis: analysisSchema,
   },
 } as const
 
@@ -252,6 +334,24 @@ const authorInstructions = [
   'Условие «начертите», «проведите», «отметьте», «постройте» обычно требует diagramRequired=true.',
   'В Дано и цели используй краткие обозначения. Для чистого построения title=Построить.',
   'Для физики сохраняй единицы и СИ; для химии уравнивай реакции. Чертёж для них добавляй только когда он действительно нужен.',
+  // Размеченный разбор. Ключевое здесь — «под задание, а не под предмет»:
+  // в одном задании по русскому нужен разбор предложения, в другом надо
+  // вставить буквы, в третьем написать сочинение, и запись у них разная.
+  'Отдельно заполни analysis — размеченную запись, которую школьник перечертит в тетрадь один в один.',
+  'analysis.kind выбирай по конкретному заданию, а не по предмету: sentence-parse — разбор предложения по членам, '
+    + 'morphemes — разбор слова по составу, word-analysis — морфологический разбор, equation — уравнение реакции '
+    + 'или система, formula — формула с подстановкой значений, quote — цитата с пометками, generic — прочая размеченная запись.',
+  'analysis.kind=none, если заданию размеченная запись не нужна и хватает обычных шагов: вычисление, доказательство, построение, сочинение.',
+  'Разбор предложения: каждый член подчёркивается по школьному стандарту — подлежащее single, сказуемое double, '
+    + 'определение wavy, дополнение dashed, обстоятельство dash-dot. Служебные слова оставляй без значка.',
+  'Разбор по составу: слово разбей на морфемы отдельными токенами с tight=true у всех, кроме первого, '
+    + 'и значками prefix, root, suffix, ending.',
+  'Химия: строку уравнения давай kind=equation, степени окисления ставь в label над нужным элементом, '
+    + 'найденную величину помечай box.',
+  'Физика: три строки — формула (lead «Формула»), подстановка значений с единицами (lead «Подстановка»), '
+    + 'результат с единицей и меткой box (lead «Ответ»).',
+  'В note коротко пиши, что означает значок именно здесь: из note собираются условные обозначения под разбором.',
+  'Токены analysis — куски записи, а не готовая разметка: не пиши в text подчёркивания, звёздочки, теги и значки символами.',
 ].join(' ')
 
 const reviewerInstructions = [
@@ -265,6 +365,8 @@ const reviewerInstructions = [
   'У чистого construction без вопроса answer должен быть пустым.',
   'Если чертёж обязателен, заполни constraints проверяемыми связями; пустой constraints означает отказ проверки.',
   'В decisions зафиксируй только окончательные проверяемые выводы, без скрытого хода рассуждений.',
+  'Проверь analysis: значки должны соответствовать школьному стандарту, а разбор — конкретному заданию.',
+  'Поставь analysis.kind=none, если размеченная запись заданию не нужна или собрана неверно и починить её нечем.',
   'Не раскрывай скрытые рассуждения. Верни только JSON по схеме.',
 ].join(' ')
 
@@ -521,6 +623,68 @@ function compactConstructionSteps(steps: string[]) {
   return compacted.map((step) => `${step}.`)
 }
 
+// Модель отдаёт разбор плоскими строками, и мусор в них закономерен:
+// пустые токены, значок из другого стандарта, разметка символами внутри
+// text. Всё это чистится здесь, чтобы до вёрстки доезжала готовая запись.
+function normalizeAnnotatedToken(value: unknown): HomeworkAnnotatedToken | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const record = value as Record<string, unknown>
+  // Модель иногда всё-таки подчёркивает символами, хотя её просили не делать
+  // этого: значок рисует вёрстка, поэтому подчёркивания из текста убираем.
+  const body = normalizeNotebookNotation(record.text, 60).replace(/[_*`~]+/gu, '').trim()
+  if (!body) return null
+  const mark = homeworkAnnotationMarks.find((entry) => entry === record.mark) ?? 'none'
+  const token: HomeworkAnnotatedToken = { text: body }
+  if (mark !== 'none') token.mark = mark
+  const label = text(record.label, 24)
+  if (label) token.label = label
+  const note = text(record.note, 60)
+  if (note && mark !== 'none') token.note = note
+  if (record.tight === true) token.tight = true
+  return token
+}
+
+function normalizeAnnotatedLine(value: unknown): HomeworkAnnotatedLine | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const record = value as Record<string, unknown>
+  const tokens = Array.isArray(record.tokens)
+    ? record.tokens.map(normalizeAnnotatedToken).filter((entry): entry is HomeworkAnnotatedToken => entry !== null).slice(0, 24)
+    : []
+  if (tokens.length === 0) return null
+  const line: HomeworkAnnotatedLine = { tokens }
+  const kind = homeworkAnnotatedLineKinds.find((entry) => entry === record.kind)
+  if (kind && kind !== 'plain') line.kind = kind
+  const lead = text(record.lead, 24)
+  if (lead) line.lead = lead
+  const caption = normalizeNotebookNotation(record.caption, 120)
+  if (caption) line.caption = caption
+  return line
+}
+
+function normalizeAnalysis(value: unknown): HomeworkWrittenAnalysis | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const record = value as Record<string, unknown>
+  const kind = homeworkAnalysisKinds.find((entry) => entry === record.kind)
+  if (!kind) return undefined
+  const blocks = (Array.isArray(record.blocks) ? record.blocks : [])
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null
+      const block = entry as Record<string, unknown>
+      const lines = Array.isArray(block.lines)
+        ? block.lines.map(normalizeAnnotatedLine).filter((line): line is HomeworkAnnotatedLine => line !== null).slice(0, 12)
+        : []
+      if (lines.length === 0) return null
+      const title = text(block.title, 60)
+      return { ...(title ? { title } : {}), lines }
+    })
+    .filter((block): block is { title?: string; lines: HomeworkAnnotatedLine[] } => block !== null)
+    .slice(0, 4)
+  // Разбор без единой строки — это отсутствие разбора, а не пустой раздел.
+  if (blocks.length === 0) return undefined
+  const title = text(record.title, 60)
+  return { version: 1, kind: kind as HomeworkAnalysisKind, ...(title ? { title } : {}), blocks }
+}
+
 function normalizeDraft(value: unknown): EngineDraft {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new GeometrySolutionEngineError('Модель не вернула решение')
@@ -532,6 +696,7 @@ function normalizeDraft(value: unknown): EngineDraft {
   const taskType = homeworkTaskTypes.find((entry) => entry === candidate.taskType) ?? 'mixed'
   const rawGoalTitle = text(goal.title, 20)
   const goalTitle = rawGoalTitle === 'Доказать' || rawGoalTitle === 'Построить' ? rawGoalTitle : 'Найти'
+  const analysis = normalizeAnalysis(candidate.analysis)
 
   const draft: EngineDraft = {
     condition: normalizeNotebookNotation(candidate.condition),
@@ -551,6 +716,7 @@ function normalizeDraft(value: unknown): EngineDraft {
       : [],
     answer: normalizeNotebookNotation(candidate.answer, 80),
     diagram: normalizeDiagram(candidate.diagram),
+    ...(analysis ? { analysis } : {}),
   }
   return taskType === 'construction'
     ? { ...draft, steps: compactConstructionSteps(draft.steps) }
@@ -586,34 +752,102 @@ function providerContent(payload: unknown) {
     : message.content
 }
 
+// Responses API кладёт ответ не в choices, а в output: там вперемешку идут
+// блоки рассуждения (type: reasoning) и сам ответ (type: message).
+function responsesContent(payload: unknown) {
+  const root = payload && typeof payload === 'object' && !Array.isArray(payload)
+    ? payload as Record<string, unknown>
+    : {}
+  const output = Array.isArray(root.output) ? root.output : []
+  const chunks: string[] = []
+  for (const item of output) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue
+    const record = item as Record<string, unknown>
+    if (record.type !== 'message') continue
+    const parts = Array.isArray(record.content) ? record.content : []
+    for (const part of parts) {
+      if (!part || typeof part !== 'object' || Array.isArray(part)) continue
+      const value = text((part as Record<string, unknown>).text)
+      if (value) chunks.push(value)
+    }
+  }
+  return chunks.join('\n')
+}
+
+// У KIE нет единого API: семейство Gemini говорит по OpenAI-совместимому
+// chat/completions, а GPT-5.x — по Responses API на общем пути /codex.
+// Строгую JSON-схему держат оба, проверено живым запросом.
+function engineEndpoint(model: string) {
+  return model.startsWith('gpt-')
+    ? { protocol: 'responses' as const, url: 'https://api.kie.ai/codex/v1/responses' }
+    : { protocol: 'gemini' as const, url: `https://api.kie.ai/${model}/v1/chat/completions` }
+}
+
+// Responses API называет части сообщения иначе, чем chat/completions:
+// input_text вместо text и input_image вместо image_url с вложенным объектом.
+function responsesInput(message: ReturnType<typeof engineMessage>) {
+  const content = typeof message.content === 'string'
+    ? [{ type: 'input_text' as const, text: message.content }]
+    : message.content.map((part) => (part.type === 'image_url'
+      ? { type: 'input_image' as const, image_url: part.image_url.url }
+      : { type: 'input_text' as const, text: part.text }))
+  return [{ role: 'user', content }]
+}
+
+function engineRequestBody(
+  model: string,
+  protocol: 'gemini' | 'responses',
+  system: string,
+  message: ReturnType<typeof engineMessage>,
+  schemaName: string,
+  schema: object,
+) {
+  if (protocol === 'responses') {
+    return {
+      model,
+      // Без instructions KIE подставляет свой системный промпт Codex
+      // на сорок килобайт и полностью меняет поведение модели.
+      instructions: system,
+      input: responsesInput(message),
+      stream: false,
+      reasoning: { effort: 'medium' },
+      text: { format: { type: 'json_schema', name: schemaName, strict: true, schema } },
+    }
+  }
+
+  return {
+    model,
+    messages: [{ role: 'system', content: system }, message],
+    temperature: 0.1,
+    // high вдвое дольше medium и по замерам даёт худший результат.
+    reasoning_effort: 'medium',
+    include_thoughts: false,
+    response_format: {
+      type: 'json_schema',
+      json_schema: { name: schemaName, strict: true, schema },
+    },
+  }
+}
+
 async function callModel(
   options: EngineOptions,
   system: string,
   message: ReturnType<typeof engineMessage>,
   schemaName: string,
   schema: object,
+  modelOverride?: string,
 ) {
-  const model = options.model || defaultHomeworkModel
+  const model = modelOverride || options.model || defaultHomeworkModel
+  const { protocol, url } = engineEndpoint(model)
   let response: Response
   try {
-    response = await (options.fetchImpl ?? fetch)(`https://api.kie.ai/${model}/v1/chat/completions`, {
+    response = await (options.fetchImpl ?? fetch)(url, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${options.apiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        model,
-        messages: [{ role: 'system', content: system }, message],
-        temperature: 0.1,
-        // high вдвое дольше medium и по замерам даёт худший результат.
-        reasoning_effort: 'medium',
-        include_thoughts: false,
-        response_format: {
-          type: 'json_schema',
-          json_schema: { name: schemaName, strict: true, schema },
-        },
-      }),
+      body: JSON.stringify(engineRequestBody(model, protocol, system, message, schemaName, schema)),
     })
   } catch (error) {
     if (error instanceof Error && (error.name === 'AbortError' || error.name === 'TimeoutError')) {
@@ -653,7 +887,7 @@ async function callModel(
     }
   }
 
-  return parseJson(providerContent(payload))
+  return parseJson(protocol === 'responses' ? responsesContent(payload) : providerContent(payload))
 }
 
 function engineMessage(request: SolveHomeworkRequest, extra = '') {
@@ -1085,6 +1319,7 @@ function toSolution(
     steps: draft.steps,
     answer: draft.answer,
     diagram: draft.diagram,
+    ...(draft.analysis ? { analysis: draft.analysis } : {}),
     sourceVerified: draft.sourceVerified,
     taskType: draft.taskType,
     quality: {
@@ -1121,11 +1356,12 @@ async function callModelWithRetry(
   schemaName: string,
   schema: object,
   deadline: number,
+  modelOverride?: string,
 ) {
   let lastError: unknown
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
-      const payload = await callModel(options, system, message, schemaName, schema)
+      const payload = await callModel(options, system, message, schemaName, schema, modelOverride)
       if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
         throw new GeometrySolutionEngineError('Модель не вернула решение')
       }
@@ -1157,7 +1393,7 @@ export async function solveHomeworkWithReview(
   // два вызова, — но занимает время одного. И проверка получается сильнее:
   // два независимых решения, сошедшихся в ответе, — довод весомее, чем
   // одобрение рецензента, который видел кандидата и склонен с ним соглашаться.
-  const evaluate = (candidate: EngineDraft) => {
+  const evaluate = (candidate: EngineDraft, model: string) => {
     const asSolution = toSolution(candidate, request, ownerId, false)
     const issues = [
       ...validateSolutionQuality(asSolution),
@@ -1166,10 +1402,16 @@ export async function solveHomeworkWithReview(
     if (request.condition && conditionSimilarity(request.condition, candidate.condition) < 0.55) {
       issues.push('Условие кандидата не совпадает с приложенным заданием')
     }
-    return { candidate, issues }
+    return { candidate, issues, model }
   }
 
-  const samples = await Promise.all([0, 1].map(async () => {
+  // Проходы идут разными моделями из разных семейств — см. defaultHomeworkModels.
+  // Если модель задана явно через KIE_MODEL, уважаем её и берём одну на оба.
+  const passModels = options.model
+    ? [options.model, options.model]
+    : [...defaultHomeworkModels]
+
+  const settled = await Promise.allSettled(passModels.map(async (model) => {
     const raw = await callModelWithRetry(
       options,
       authorInstructions,
@@ -1177,15 +1419,33 @@ export async function solveHomeworkWithReview(
       'homework_solution_draft',
       draftSchema,
       retryDeadline,
+      model,
     )
-    return evaluate(normalizeDraft(raw))
+    return evaluate(normalizeDraft(raw), model)
   }))
 
-  const [first, second] = samples
+  // Семейства падают независимо: 30 августа Claude лежало сутки целиком.
+  // Пока хотя бы один проход дошёл, решение выдаём — иначе теряем ответ там,
+  // где раньше, с одной моделью на оба прохода, его бы тоже не было.
+  const samples = settled
+    .filter((entry): entry is PromiseFulfilledResult<ReturnType<typeof evaluate>> => entry.status === 'fulfilled')
+    .map((entry) => entry.value)
+  if (samples.length === 0) {
+    const failure = settled.find((entry) => entry.status === 'rejected')
+    throw failure && failure.status === 'rejected'
+      ? failure.reason
+      : new GeometrySolutionEngineError('Модель не вернула решение')
+  }
+
+  const [first, second = first] = samples
   const clean = samples.filter((sample) => sample.issues.length === 0)
   const best = clean[0] ?? (first.issues.length <= second.issues.length ? first : second)
 
   const draft = best.candidate
+  // Рецензента и починку зовём той моделью, чей проход дошёл: когда лежит
+  // целое семейство, звать его же второй раз — гарантированно потерять
+  // решение, которое у нас уже есть.
+  const workingModel = best.model
   const deterministicIssues = [...best.issues]
   const authorConditionMatched = !request.condition
     || conditionSimilarity(request.condition, draft.condition) >= 0.55
@@ -1233,6 +1493,7 @@ export async function solveHomeworkWithReview(
     'homework_solution_review',
     reviewSchema,
     retryDeadline,
+    workingModel,
   )
   if (!rawReview || typeof rawReview !== 'object' || Array.isArray(rawReview)) {
     throw new GeometrySolutionEngineError('Редактор не вернул проверенное решение')
@@ -1305,6 +1566,7 @@ export async function solveHomeworkWithReview(
           'diagram_plan',
           diagramPlanSchema,
           retryDeadline,
+          workingModel,
         )
         const built = buildDiagramFromModelPlan(rawPlan)
         if (built.ok) {
@@ -1350,6 +1612,7 @@ export async function solveHomeworkWithReview(
       'homework_solution_review',
       reviewSchema,
       retryDeadline,
+      workingModel,
     )
 
     const repairCandidate = rawRepair as Record<string, unknown>
