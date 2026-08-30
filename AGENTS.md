@@ -7,3 +7,35 @@
 - Keep the page in its fixed SVG coordinate system and scale the whole page on narrow screens. Do not reflow, independently resize, or reposition page zones.
 - Do not change the paper, grid, red margin, ink colour, writing font, title/solution alignment, task-number position, divider joint, or diagram zone without an explicitly approved layout-version change.
 - The approved fixture is task №123. Never update visual snapshot baselines without explicit manual design approval.
+
+# Хостинг: фронт на Pages, функции на Vercel
+
+Разделение не историческая случайность и не техдолг — **не сводить на один хостинг.**
+
+Проверено замерами 30 августа 2026 с российского провайдера: один и тот же
+файл `assets/index-*.js`, одна и та же выдача, разные имена в TLS SNI —
+
+| Откуда | Скорость |
+|---|---|
+| `www.homeworkcopilot.ru` → GitHub Pages | 246 КБ/с |
+| `www.homeworkcopilot.ru` → Vercel | 1,2 КБ/с |
+| `app.homeworkcopilot.ru` → Vercel | 1,5 КБ/с |
+| `homework-copilot-taupe.vercel.app` | 200 КБ/с |
+
+Трафик душится, когда наш домен идёт на адреса Vercel: первые килобайты
+проходят, дальше поток срезается до килобайта в секунду. HTML успевает
+приехать, бандл — нет, и страница не доходит до DOMContentLoaded. Поддомен
+не спасает: душится любое наше имя, указывающее на Vercel. Само `*.vercel.app`
+при этом не задето, поэтому короткие ответы функций ходят свободно.
+
+Отсюда рабочая схема:
+
+- фронт раздаёт GitHub Pages на `www.homeworkcopilot.ru` (workflow
+  `.github/workflows/deploy-pages.yml`);
+- serverless-функции живут на Vercel, клиент зовёт их по абсолютным адресам
+  `https://homework-copilot-taupe.vercel.app/api/*` из переменных сборки
+  `VITE_HOMEWORK_API_URL`, `VITE_SUPPORT_API_URL`, `VITE_CHAT_API_URL`;
+- `scripts/check-build-env.mjs` роняет сборку под Pages, если адреса функций
+  не заданы: без них клиент бьёт в относительный путь и попадает в SPA-заглушку.
+
+Если однажды душить начнут и `*.vercel.app` — переносить функции, а не фронт.
