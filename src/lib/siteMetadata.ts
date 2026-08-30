@@ -32,6 +32,12 @@ const metadataByPath: Record<string, SeoMetadata> = {
     path: '/schedule',
     robots: 'noindex, nofollow',
   },
+  '/chat': {
+    title: 'ИИ-чат — Homework Copilot',
+    description: 'Личные диалоги с ИИ в Homework Copilot.',
+    path: '/chat',
+    robots: 'noindex, nofollow',
+  },
   '/support': {
     title: 'Поддержка — Homework Copilot',
     description: 'Личные обращения в поддержку Homework Copilot.',

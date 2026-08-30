@@ -24,6 +24,7 @@ const routeMetadata = new Map([
   ['tasks', { title: 'Учебники и ЦДЗ — Homework Copilot', description: 'Выбери учебник и найди точное условие задачи по номеру перед получением решения.', canonicalPath: '/cdz', robots: 'index, follow' }],
   ['textbooks', { title: 'Учебники и ЦДЗ — Homework Copilot', description: 'Выбери учебник и найди точное условие задачи по номеру перед получением решения.', canonicalPath: '/cdz', robots: 'index, follow' }],
   ['schedule', { title: 'Расписание — Homework Copilot', description: 'Личное школьное расписание в Homework Copilot.', canonicalPath: '/schedule', robots: 'noindex, nofollow' }],
+  ['chat', { title: 'ИИ-чат — Homework Copilot', description: 'Личные диалоги с ИИ в Homework Copilot.', canonicalPath: '/chat', robots: 'noindex, nofollow' }],
   ['support', { title: 'Поддержка — Homework Copilot', description: 'Личные обращения в поддержку Homework Copilot.', canonicalPath: '/support', robots: 'noindex, nofollow' }],
   ['privacy', { title: 'Политика обработки персональных данных — Homework Copilot', description: 'Какие данные использует Homework Copilot, зачем они нужны и как управлять своими данными.', canonicalPath: '/privacy', robots: 'index, follow' }],
   ['terms', { title: 'Пользовательское соглашение — Homework Copilot', description: 'Правила использования Homework Copilot, аккаунта, решений и баланса.', canonicalPath: '/terms', robots: 'index, follow' }],
