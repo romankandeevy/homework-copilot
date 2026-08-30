@@ -20,7 +20,11 @@ export const homeworkDiagramKinds = [
 ] as const
 
 export type HomeworkDiagramKind = typeof homeworkDiagramKinds[number]
-export type HomeworkSource = 'number' | 'photo'
+// number — задача по номеру в размеченном учебнике;
+// photo  — фотография задачи;
+// text   — условие, вписанное учеником вручную. Последний путь работает
+//          с любым учебником и любым предметом: индекс для него не нужен.
+export type HomeworkSource = 'number' | 'photo' | 'text'
 
 export const homeworkSolutionEngineVersion = 2
 

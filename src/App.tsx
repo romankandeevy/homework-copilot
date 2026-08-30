@@ -5,8 +5,11 @@ import type { SupabaseClient, User } from '@supabase/supabase-js'
 import {
   Atom,
   ArrowRight,
+  Bank,
   BookOpenText,
+  Books,
   Calculator,
+  Code,
   CalendarDots,
   CaretDown,
   CaretRight,
@@ -14,9 +17,14 @@ import {
   ChatsCircle,
   CheckCircle,
   ClockCountdown,
+  Dna,
   Flask,
   Function,
+  Globe,
   Hash,
+  Planet,
+  Scroll,
+  TextAa,
   House,
   ImageSquare,
   LinkSimple,
@@ -95,6 +103,10 @@ type Textbook = {
   // Размечен ли учебник: есть ли для него индекс задач. Без индекса ученик
   // выберет книгу и упрётся в стену — задача по номеру не найдётся.
   indexed?: boolean
+  // Как адресуется задача. В большинстве учебников нумерация сквозная и
+  // хватает номера. У Пёрышкина её нет вовсе: задача адресуется тройкой
+  // «параграф, упражнение, задание», и одного номера недостаточно.
+  taskAddress?: 'number' | 'paragraph'
 }
 
 type SolutionState = {
@@ -204,6 +216,7 @@ const textbooks: readonly Textbook[] = [
     sourceType: 'pdf',
     previewBeforeReading: true,
     indexed: false,
+    taskAddress: 'paragraph',
   },
   {
     id: 'chemistry',
@@ -243,6 +256,114 @@ const textbooks: readonly Textbook[] = [
     edition: 'по фото',
     solvedTasks: [],
     icon: Calculator,
+    sourceType: 'photo',
+    indexed: false,
+  },
+  {
+    id: 'biology',
+    subject: 'Биология',
+    grade: '7-11 класс',
+    title: 'Любой учебник',
+    authors: 'Сфотографируй задачу или впиши условие',
+    edition: 'по фото или тексту',
+    solvedTasks: [],
+    icon: Dna,
+    sourceType: 'photo',
+    indexed: false,
+  },
+  {
+    id: 'informatics',
+    subject: 'Информатика',
+    grade: '7-11 класс',
+    title: 'Любой учебник',
+    authors: 'Сфотографируй задачу или впиши условие',
+    edition: 'по фото или тексту',
+    solvedTasks: [],
+    icon: Code,
+    sourceType: 'photo',
+    indexed: false,
+  },
+  {
+    id: 'russian',
+    subject: 'Русский язык',
+    grade: '7-11 класс',
+    title: 'Любой учебник',
+    authors: 'Сфотографируй задачу или впиши условие',
+    edition: 'по фото или тексту',
+    solvedTasks: [],
+    icon: TextAa,
+    sourceType: 'photo',
+    indexed: false,
+  },
+  {
+    id: 'literature',
+    subject: 'Литература',
+    grade: '7-11 класс',
+    title: 'Любой учебник',
+    authors: 'Сфотографируй задачу или впиши условие',
+    edition: 'по фото или тексту',
+    solvedTasks: [],
+    icon: Books,
+    sourceType: 'photo',
+    indexed: false,
+  },
+  {
+    id: 'english',
+    subject: 'Английский язык',
+    grade: '7-11 класс',
+    title: 'Любой учебник',
+    authors: 'Сфотографируй задачу или впиши условие',
+    edition: 'по фото или тексту',
+    solvedTasks: [],
+    icon: Globe,
+    sourceType: 'photo',
+    indexed: false,
+  },
+  {
+    id: 'history',
+    subject: 'История',
+    grade: '7-11 класс',
+    title: 'Любой учебник',
+    authors: 'Сфотографируй задачу или впиши условие',
+    edition: 'по фото или тексту',
+    solvedTasks: [],
+    icon: Scroll,
+    sourceType: 'photo',
+    indexed: false,
+  },
+  {
+    id: 'social',
+    subject: 'Обществознание',
+    grade: '7-11 класс',
+    title: 'Любой учебник',
+    authors: 'Сфотографируй задачу или впиши условие',
+    edition: 'по фото или тексту',
+    solvedTasks: [],
+    icon: Bank,
+    sourceType: 'photo',
+    indexed: false,
+  },
+  {
+    id: 'geography',
+    subject: 'География',
+    grade: '7-11 класс',
+    title: 'Любой учебник',
+    authors: 'Сфотографируй задачу или впиши условие',
+    edition: 'по фото или тексту',
+    solvedTasks: [],
+    icon: Globe,
+    sourceType: 'photo',
+    indexed: false,
+  },
+  {
+    id: 'astronomy',
+    subject: 'Астрономия',
+    grade: '7-11 класс',
+    title: 'Любой учебник',
+    authors: 'Сфотографируй задачу или впиши условие',
+    edition: 'по фото или тексту',
+    solvedTasks: [],
+    icon: Planet,
     sourceType: 'photo',
     indexed: false,
   },
@@ -564,7 +685,7 @@ function TextbookPicker({
                             {textbook.subject}, {textbook.grade}
                             {textbook.indexed
                               ? <em className="textbook-badge is-ready">задачи размечены</em>
-                              : <em className="textbook-badge">только по фото</em>}
+                              : <em className="textbook-badge">по фото или тексту</em>}
                           </strong>
                           <small>{textbook.title} · {textbook.authors}</small>
                         </span>
@@ -653,10 +774,30 @@ function CopyTask({
   const [pendingKey, setPendingKey] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [verifiedTask, setVerifiedTask] = useState<VerifiedTextbookTaskSource | null>(null)
+  // Третий путь: ученик вписывает условие сам. Работает с любым учебником
+  // и любым предметом — индекс задач для него не нужен вовсе.
+  const [manualCondition, setManualCondition] = useState('')
+  const [manualOpen, setManualOpen] = useState(false)
   const photoInputRef = useRef<HTMLInputElement>(null)
   const submissionRef = useRef(false)
   const normalizedTask = taskNumber.trim()
-  const validTaskNumber = /^\d{1,4}$/.test(normalizedTask)
+  // У учебников без сквозной нумерации адрес задачи составной. Храним его
+  // одной строкой «параграф.упражнение.задание», а показываем тремя полями:
+  // ученику проще вписать три числа, чем угадывать формат.
+  const usesParagraphAddress = textbook.taskAddress === 'paragraph'
+  const addressParts = normalizedTask.split('.')
+  const addressParagraph = addressParts[0] ?? ''
+  const addressExercise = addressParts[1] ?? ''
+  const addressTask = addressParts[2] ?? ''
+  const setAddressPart = (index: number, value: string) => {
+    if (!/^\d{0,3}$/.test(value)) return
+    const next = [addressParagraph, addressExercise, addressTask]
+    next[index] = value
+    changeTaskNumber(next.join('.').replace(/\.+$/u, ''))
+  }
+  const validTaskNumber = usesParagraphAddress
+    ? /^\d{1,3}(?:\.\d{1,3}){1,2}$/.test(normalizedTask)
+    : /^\d{1,4}$/.test(normalizedTask)
   const canSubmit = Boolean(photo || validTaskNumber)
   const solutionPrice = photo ? 15 : normalizedTask ? getSolutionPrice(textbook.id, normalizedTask) : 5
   const createSubmissionKey = () => typeof crypto.randomUUID === 'function'
@@ -691,12 +832,19 @@ function CopyTask({
       }
       return
     }
-    if (!/^\d{1,4}$/.test(normalizedTask)) {
-      setError('Номер задачи: от 1 до 4 цифр')
+    if (!validTaskNumber) {
+      setError(usesParagraphAddress
+        ? 'Укажи параграф и номер задания'
+        : 'Номер задачи: от 1 до 4 цифр')
       return
     }
-    if (!textbook.sourceUrl) {
-      setError('Для этого учебника пока доступна только проверка по фото')
+    // Учебник не размечен: номер сам по себе ничего не значит, искать нечего.
+    // Не отказываем, а просим условие — номер при этом сохраняется и попадёт
+    // в решение, так что для ученика путь остаётся единым: выбрал учебник,
+    // вписал номер.
+    if (!textbook.indexed || !textbook.sourceUrl) {
+      setManualOpen(true)
+      setError('')
       return
     }
     submissionRef.current = true
@@ -765,6 +913,35 @@ function CopyTask({
       if (submitted) {
         setPendingPhoto(null)
         setPendingKey('')
+      }
+    } catch (submissionError) {
+      setError(submissionError instanceof Error ? submissionError.message : 'Не получилось отправить задачу')
+    } finally {
+      submissionRef.current = false
+      setIsSubmitting(false)
+    }
+  }
+
+  const submitManualCondition = async () => {
+    const condition = manualCondition.trim()
+    if (condition.length < 15 || submissionRef.current) return
+    submissionRef.current = true
+    setIsSubmitting(true)
+    setError('')
+    try {
+      const submitted = await onSubmit(
+        normalizedTask || 'условие',
+        true,
+        'text',
+        createSubmissionKey(),
+        undefined,
+        undefined,
+        condition,
+        undefined,
+      )
+      if (submitted) {
+        setManualCondition('')
+        setManualOpen(false)
       }
     } catch (submissionError) {
       setError(submissionError instanceof Error ? submissionError.message : 'Не получилось отправить задачу')
@@ -858,22 +1035,61 @@ function CopyTask({
 
         <div className="task-entry-row">
           <div className="task-number-field">
-            <label htmlFor="task-number">Номер задачи</label>
-            <div className={`task-number-control${error && !photo ? ' is-error' : ''}`}>
+            <label htmlFor="task-number">{usesParagraphAddress ? 'Адрес задачи' : 'Номер задачи'}</label>
+            <div className={`task-number-control${usesParagraphAddress ? ' is-address' : ''}${error && !photo ? ' is-error' : ''}`}>
               <Hash size={22} weight="duotone" aria-hidden="true" />
-              <input
-                id="task-number"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                maxLength={4}
-                value={taskNumber}
-                onChange={(event) => changeTaskNumber(event.target.value)}
-                placeholder="№"
-                autoComplete="off"
-                aria-invalid={Boolean(error && !photo)}
-                aria-errormessage={error ? 'task-entry-error' : undefined}
-                aria-describedby={!error && !canSubmit ? 'task-entry-helper' : undefined}
-              />
+              {usesParagraphAddress ? (
+                <div className="task-address-parts">
+                  <input
+                    id="task-number"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={3}
+                    value={addressParagraph}
+                    onChange={(event) => setAddressPart(0, event.target.value)}
+                    placeholder="§"
+                    aria-label="Параграф"
+                    autoComplete="off"
+                    aria-invalid={Boolean(error && !photo)}
+                  />
+                  <span aria-hidden="true">·</span>
+                  <input
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={3}
+                    value={addressExercise}
+                    onChange={(event) => setAddressPart(1, event.target.value)}
+                    placeholder="упр."
+                    aria-label="Упражнение"
+                    autoComplete="off"
+                  />
+                  <span aria-hidden="true">·</span>
+                  <input
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={3}
+                    value={addressTask}
+                    onChange={(event) => setAddressPart(2, event.target.value)}
+                    placeholder="№"
+                    aria-label="Задание"
+                    autoComplete="off"
+                  />
+                </div>
+              ) : (
+                <input
+                  id="task-number"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={4}
+                  value={taskNumber}
+                  onChange={(event) => changeTaskNumber(event.target.value)}
+                  placeholder="№"
+                  autoComplete="off"
+                  aria-invalid={Boolean(error && !photo)}
+                  aria-errormessage={error ? 'task-entry-error' : undefined}
+                  aria-describedby={!error && !canSubmit ? 'task-entry-helper' : undefined}
+                />
+              )}
             </div>
           </div>
 
@@ -911,8 +1127,51 @@ function CopyTask({
           )}
         </div>
 
+        {/* Третий путь: вписать условие руками. Работает всегда — с любым
+            учебником, любым предметом и любой нумерацией, потому что ничего
+            искать не надо: условие уже перед нами. */}
+        <div className="manual-condition">
+          {manualOpen ? (
+            <div className="manual-condition-open">
+              <label htmlFor="manual-condition">
+                {normalizedTask ? `Условие задачи № ${normalizedTask}` : 'Условие задачи'}
+              </label>
+              <p className="manual-condition-hint">
+                {textbook.indexed
+                  ? 'Впиши условие или сфотографируй задачу — решим по нему.'
+                  : `Учебник «${textbook.title}» ещё не размечен, поэтому по номеру условие не найти. Перепиши его или сфотографируй задачу.`}
+              </p>
+              <textarea
+                id="manual-condition"
+                value={manualCondition}
+                onChange={(event) => setManualCondition(event.target.value.slice(0, 5000))}
+                placeholder="Перепиши условие из учебника целиком"
+                rows={3}
+              />
+              <div className="manual-condition-actions">
+                <button
+                  type="button"
+                  className="copy-task-submit"
+                  disabled={manualCondition.trim().length < 15 || isSubmitting}
+                  onClick={() => void submitManualCondition()}
+                >
+                  {isSubmitting ? 'Решаем…' : `Решить за ${formatRubles(getSolutionPrice(textbook.id, normalizedTask || '1', 'text'))}`}
+                  {!isSubmitting && <ArrowRight size={20} weight="bold" aria-hidden="true" />}
+                </button>
+                <button type="button" className="manual-condition-cancel" onClick={() => { setManualOpen(false); setManualCondition('') }}>
+                  Отмена
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button type="button" className="manual-condition-trigger" onClick={() => setManualOpen(true)}>
+              Нет в списке? Впиши условие сам — решим задачу из любого учебника
+            </button>
+          )}
+        </div>
+
         {error && <p className="task-number-error" id="task-entry-error" role="alert">{error}</p>}
-        {!error && !canSubmit && <p className="task-entry-helper" id="task-entry-helper">Введи номер задачи или добавь фото.</p>}
+        {!error && !canSubmit && !manualOpen && <p className="task-entry-helper" id="task-entry-helper">Введи номер задачи, добавь фото или впиши условие.</p>}
         {!error && (normalizedTask || photo) && (
             <p className="base-match" aria-live="polite">
               {photo

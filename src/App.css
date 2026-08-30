@@ -2641,3 +2641,108 @@
   color: var(--color-text-muted);
   font-size: var(--text-small);
 }
+
+/* Составной адрес задачи: три коротких поля вместо одного номера.
+   Нужен учебникам без сквозной нумерации, где задача адресуется
+   тройкой «параграф, упражнение, задание». */
+.task-address-parts {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.task-address-parts input {
+  min-width: 0;
+  width: 100%;
+  flex: 1;
+  text-align: center;
+}
+
+.task-address-parts > span {
+  color: var(--color-text-subtle);
+  font-weight: var(--weight-bold);
+  user-select: none;
+}
+
+/* Ввод условия вручную — универсальный путь: работает с любым учебником,
+   любым предметом и любой нумерацией, потому что искать ничего не нужно. */
+.manual-condition {
+  margin-top: var(--space-3);
+}
+
+.manual-condition-trigger {
+  padding: var(--space-2) 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-accent);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: var(--text-small);
+  font-weight: var(--weight-medium);
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.manual-condition-trigger:hover { color: var(--color-accent-hover); }
+
+.manual-condition-open {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: var(--border-thin) solid var(--color-border);
+  border-radius: var(--radius-surface);
+  background: var(--color-surface);
+}
+
+.manual-condition-open label {
+  color: var(--color-text-muted);
+  font-size: var(--text-small);
+  font-weight: var(--weight-semibold);
+}
+
+.manual-condition-open textarea {
+  width: 100%;
+  min-height: 5.5rem;
+  padding: var(--space-3);
+  border: var(--border-thin) solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-canvas);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
+  resize: vertical;
+}
+
+.manual-condition-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.manual-condition-cancel {
+  height: 2.75rem;
+  padding: 0 var(--space-4);
+  border: var(--border-thin) solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: var(--text-small);
+}
+
+@media (max-width: 560px) {
+  .manual-condition-actions > * { width: 100%; }
+}
+
+.manual-condition-hint {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-small);
+  line-height: var(--leading-ui);
+}

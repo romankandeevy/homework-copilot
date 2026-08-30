@@ -367,7 +367,7 @@ describe('homework solver', () => {
     const invalid = createHttp('POST', { ...task, task: '10000' })
     await handleHomeworkSolverRequest(invalid.request, invalid.response, { apiKey: 'test-key' })
     expect(invalid.response.statusCode).toBe(400)
-    expect(invalid.body().error).toContain('от 1 до 4 цифр')
+    expect(invalid.body().error).toContain('номер задачи или её адрес')
 
     const unconfirmed = createHttp('POST', { ...task, condition: 'Придуманное условие.' })
     const fetchMock = vi.fn<typeof fetch>()

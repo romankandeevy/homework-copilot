@@ -9,8 +9,14 @@ function chapterLengthFor(textbookId: string) {
   return 40
 }
 
-export function getSolutionPrice(textbookId: string, task: string | number, source: 'number' | 'photo' = 'number'): SolutionPrice {
-  if (source === 'photo') return 1500
+// Условие, вписанное вручную, стоит столько же, сколько фото: в обоих
+// случаях задачу целиком разбирает модель, готового разбора у нас нет.
+export function getSolutionPrice(
+  textbookId: string,
+  task: string | number,
+  source: 'number' | 'photo' | 'text' = 'number',
+): SolutionPrice {
+  if (source === 'photo' || source === 'text') return 1500
 
   const taskNumber = typeof task === 'number' ? task : Number.parseInt(task, 10)
   if (!Number.isInteger(taskNumber) || taskNumber < 1) return 1500

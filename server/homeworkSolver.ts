@@ -174,13 +174,21 @@ async function validateRequest(value: unknown, options: SolverOptions): Promise<
   }
 
   const candidate = value as Record<string, unknown>
-  const source = candidate.source === 'photo' ? 'photo' : candidate.source === 'number' ? 'number' : null
+  const source = candidate.source === 'photo'
+    ? 'photo'
+    : candidate.source === 'text'
+      ? 'text'
+      : candidate.source === 'number'
+        ? 'number'
+        : null
   const requiredFields = ['textbookId', 'task', 'subject', 'grade', 'textbookTitle', 'authors', 'edition', 'idempotencyKey']
   if (!source || requiredFields.some((field) => !text(candidate[field]))) {
     throw new HomeworkSolverError(400, 'Не хватает данных учебника или номера задачи')
   }
-  if (source === 'number' && !/^\d{1,4}$/.test(text(candidate.task))) {
-    throw new HomeworkSolverError(400, 'Номер задачи должен содержать от 1 до 4 цифр')
+  // Адрес задачи — либо сквозной номер, либо составной «параграф.упражнение.
+  // задание» для учебников без сквозной нумерации, вроде Пёрышкина.
+  if (source === 'number' && !/^\d{1,4}(?:\.\d{1,3}){0,2}$/.test(text(candidate.task))) {
+    throw new HomeworkSolverError(400, 'Укажи номер задачи или её адрес в учебнике')
   }
   const condition = text(candidate.condition)
   const sourceUrl = text(candidate.sourceUrl)
@@ -192,6 +200,11 @@ async function validateRequest(value: unknown, options: SolverOptions): Promise<
   }
   if (source === 'photo' && !imageDataUrl) {
     throw new HomeworkSolverError(400, 'Добавь фотографию задачи в формате JPEG, PNG или WebP')
+  }
+  // Условие, вписанное вручную, — единственный источник для этого пути,
+  // поэтому оно должно быть осмысленной длины, а не парой символов.
+  if (source === 'text' && condition.trim().length < 15) {
+    throw new HomeworkSolverError(400, 'Впиши условие задачи целиком — хотя бы одно предложение')
   }
   if (imageDataUrl.length > 4_000_000) {
     throw new HomeworkSolverError(413, 'Фотография задачи слишком большая')

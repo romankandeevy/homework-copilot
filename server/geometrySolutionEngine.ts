@@ -238,8 +238,8 @@ const authorInstructions = [
   // Отказ по этой причине встречался чаще всего вне геометрии: модель писала
   // rac и x^{2}, а тетрадь принимает только то, что школьник напишет ручкой.
   'Пиши так, как пишут в тетради от руки: дроби косой чертой (5/2), степени '
-    + 'надстрочными знаками (x², a³), корни знаком √, индексы подстрочными (x₁, v₀). '
-    + 'Никаких \frac, x^2, $...$, **жирного** и обратных слешей.',
+    + 'надстрочными знаками (x², a³), корни знаком √, индексы подстрочными (x₁, v₀, 101101₂). '
+    + 'Никаких \frac, x^2, x_{1}, $...$, **жирного**, обратных слешей и подчёркиваний.',
   'Разрешены символы ∈, ∉, ∥, ⟂, ∠, △, ∩, ∪, ⇒, ⇔, ≅, ∼, √, °, ² и обычные арифметические знаки.',
   'Если чертёж нужен, diagram.kind=construction. Описывай его только через scene.',
   'Координаты scene — локальная геометрическая плоскость 0..100, а не координаты страницы.',
@@ -964,7 +964,9 @@ function subjectProfile(subject: string) {
     return { minimumSymbolicShare: 0.6, maxWordsPerStep: 14, allowsDiagram: false }
   }
   // Остальные предметы: формальной записи может не быть вовсе.
-  return { minimumSymbolicShare: 0.25, maxWordsPerStep: 20, allowsDiagram: false }
+  // Гуманитарные предметы: формальной записи может не быть вовсе, поэтому
+  // доля математических обозначений здесь не показатель качества.
+  return { minimumSymbolicShare: 0, maxWordsPerStep: 24, allowsDiagram: false }
 }
 
 export function validateSolutionQuality(solution: HomeworkSolution) {
@@ -980,13 +982,13 @@ export function validateSolutionQuality(solution: HomeworkSolution) {
   if (!solution.sourceVerified) issues.push('Источник не подтверждён')
   if (solution.condition.length < 8) issues.push('Условие отсутствует или слишком короткое')
   if (suspiciousCondition(solution.condition)) issues.push('В условии остались признаки ошибки распознавания')
-  if (/\$|\\[A-Za-z]+|```|\*\*|<\/?[a-z]/iu.test(solution.condition)) issues.push('В условии осталась техническая разметка')
+  if (/\$|\\[A-Za-z]+|```|\*\*|<\/?[a-z][a-z0-9]*\s*\/?>/iu.test(solution.condition)) issues.push('В условии осталась техническая разметка')
   if (solution.given.length > 4 || solution.given.some((line) => line.length > 80)) issues.push('Раздел «Дано» слишком длинный')
   if (!solution.goal.text || solution.goal.text.length > 80) issues.push('Цель задачи не оформлена кратко')
   if (steps.length === 0 || steps.length > 14) issues.push('Неверное число строк решения')
   if (steps.some((line) => line.length > 92 || /[\r\n]/u.test(line))) issues.push('Есть строка, не помещающаяся в тетрадь')
-  if (steps.some((line) => /(?:```|\*\*|\\frac|\\angle|<\/?[a-z])/iu.test(line))) issues.push('В решении есть разметка вместо школьной записи')
-  if ([...solution.given, solution.goal.text, ...steps, solution.answer].some((line) => /\$|\\[A-Za-z]+|```|\*\*|<\/?[a-z]/iu.test(line))) {
+  if (steps.some((line) => /(?:```|\*\*|\\frac|\\angle|<\/?[a-z][a-z0-9]*\s*\/?>)/iu.test(line))) issues.push('В решении есть разметка вместо школьной записи')
+  if ([...solution.given, solution.goal.text, ...steps, solution.answer].some((line) => /\$|\\[A-Za-z]+|```|\*\*|<\/?[a-z][a-z0-9]*\s*\/?>/iu.test(line))) {
     issues.push('В решении осталась техническая разметка')
   }
   if (new Set(steps.map((line) => line.toLocaleLowerCase('ru-RU'))).size !== steps.length) issues.push('В решении повторяются строки')

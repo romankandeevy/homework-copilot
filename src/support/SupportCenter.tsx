@@ -29,7 +29,7 @@ export type SupportPrefill = {
     subject: string
     grade: string
     edition: string
-    source: 'number' | 'photo'
+    source: 'number' | 'photo' | 'text'
     task: string
     condition: string
     given: string[]
