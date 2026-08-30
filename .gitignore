@@ -43,3 +43,15 @@ public/tesseract/
 
 # Сканы учебников на сайте не хранятся: условия берутся из своего индекса
 public/textbooks/
+
+# Локальные черновики: замеры моделей и скриншоты аудита
+.audit-screenshots/
+cost-check.mjs
+engine-bench.mjs
+model-scan.mjs
+artifacts-task-*.png
+cdz-desktop.png
+cdz-mobile.png
+footer-light-1440.png
+photo-prod-mobile.png
+photo-prod-mobile-clean.png
