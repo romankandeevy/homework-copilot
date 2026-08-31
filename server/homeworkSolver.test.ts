@@ -169,6 +169,47 @@ const photoDraft = {
   },
 }
 
+/* Задача словесного предмета.
+
+   У неё ответ — предложение, и два прохода никогда не напишут его
+   одинаково. Сверяются они по короткому `answerKey`. */
+const russianCondition = 'Разберите по составу слово «подоконник» и укажите способ его образования.'
+
+const russianTask: SolveHomeworkRequest = {
+  textbookId: 'russian',
+  task: 'Разберите по составу слово «подоконник»',
+  source: 'text',
+  subject: 'Русский язык',
+  grade: '8 класс',
+  textbookTitle: 'Любой учебник',
+  authors: 'Сфотографируй задачу или впиши условие',
+  edition: 'по фото или тексту',
+  condition: russianCondition,
+  idempotencyKey: 'solution-test-russian-morphology',
+}
+
+const russianDraft = {
+  condition: russianCondition,
+  taskType: 'mixed',
+  diagramRequired: false,
+  decisions: {
+    taskGoal: 'Разобрать слово по составу и назвать способ образования.',
+    diagramRequired: false,
+    diagramReason: 'Задание относится к разбору слова, чертёж не нужен.',
+    requiredElements: ['приставка под-', 'корень -окон-', 'суффикс -ник-', 'способ образования'],
+    notebookFormat: 'Разбор по морфемам и строка со способом образования.',
+    selfChecks: ['Морфемы выделены.', 'Способ образования назван.', 'Ответ отвечает на вопрос задания.'],
+  },
+  sourceVerified: true,
+  given: ['подоконник'],
+  goal: { title: 'Найти', text: 'разбор по составу и способ образования' },
+  steps: ['под-окон-ник-∅.', 'окно → подоконник: приставочно-суффиксальный способ.'],
+  answer: 'Слово подоконник образовано приставочно-суффиксальным способом от слова окно.',
+  answerKey: 'приставочно-суффиксальный',
+  diagram: { kind: 'none', description: '', vertices: [], ...emptyDiagramFields },
+  analysis: null,
+}
+
 // Движок делает два независимых прохода параллельно и зовёт рецензента,
 // только если они разошлись. Оба прохода возвращают один и тот же черновик,
 // поэтому рецензент не понадобится — но ответ для него всё равно готовим
@@ -403,6 +444,58 @@ describe('homework solver', () => {
     const reviewCalls = fetchMock.mock.calls.filter(([, init]) => String(init?.body).includes('homework_solution_review'))
     expect(reviewCalls).toHaveLength(0)
     expect(drafts).toBe(2)
+  })
+
+  /* Сверка проходов по краткому ответу.
+
+     У словесного предмета в записи стоит предложение, и два прохода не
+     напишут его одинаково. Раньше это читалось как расхождение, и рецензента
+     звали там, где оба прохода пришли к одному: замер на проде 31 августа —
+     19 секунд на русском против нуля на геометрии. */
+  it('сверяет проходы по краткому ответу, а не по записи в тетради', async () => {
+    const otherWording = {
+      ...russianDraft,
+      answer: 'Подоконник — приставочно-суффиксальный способ образования от «окно».',
+    }
+    let drafts = 0
+
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
+      const url = String(input)
+      const body = typeof init?.body === 'string' ? init.body : ''
+      if (body.includes('homework_solution_review')) {
+        return providerResponse({ approved: true, issues: [], solution: russianDraft }, url)
+      }
+      drafts += 1
+      return providerResponse(drafts === 1 ? russianDraft : otherWording, url)
+    })
+
+    const solution = await solveWithKie(russianTask, { apiKey: 'secret-test-key', fetchImpl: fetchMock })
+
+    const reviewCalls = fetchMock.mock.calls.filter(([, init]) => String(init?.body).includes('homework_solution_review'))
+    expect(reviewCalls).toHaveLength(0)
+    expect(drafts).toBe(2)
+    // В тетрадь уходит запись, а не служебный ключ сверки.
+    expect(solution.answer).toBe(russianDraft.answer)
+  })
+
+  it('зовёт рецензента, когда краткие ответы проходов разошлись', async () => {
+    const disagreeing = { ...russianDraft, answerKey: 'суффиксальный' }
+    let drafts = 0
+
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
+      const url = String(input)
+      const body = typeof init?.body === 'string' ? init.body : ''
+      if (body.includes('homework_solution_review')) {
+        return providerResponse({ approved: true, issues: [], solution: russianDraft }, url)
+      }
+      drafts += 1
+      return providerResponse(drafts === 1 ? russianDraft : disagreeing, url)
+    })
+
+    await solveWithKie(russianTask, { apiKey: 'secret-test-key', fetchImpl: fetchMock })
+
+    const reviewCalls = fetchMock.mock.calls.filter(([, init]) => String(init?.body).includes('homework_solution_review'))
+    expect(reviewCalls).toHaveLength(1)
   })
 
   it('rejects a reviewed answer for a different condition', async () => {

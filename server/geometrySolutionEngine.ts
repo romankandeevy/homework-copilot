@@ -104,6 +104,9 @@ type EngineDraft = {
   goal: HomeworkSolution['goal']
   steps: string[]
   answer: string
+  /* Ответ в краткой проверяемой форме — только для сверки проходов между
+     собой. Ученику он не показывается: в тетради стоит `answer`. */
+  answerKey: string
   diagram: HomeworkDiagram
   analysis?: HomeworkWrittenAnalysis
 }
@@ -327,7 +330,7 @@ const ruleCheckSchema = {
 const draftSchema = {
   type: 'object',
   additionalProperties: false,
-  required: ['condition', 'taskType', 'diagramRequired', 'decisions', 'sourceVerified', 'given', 'goal', 'steps', 'answer', 'diagram', 'analysis', 'ruleChecks'],
+  required: ['condition', 'taskType', 'diagramRequired', 'decisions', 'sourceVerified', 'given', 'goal', 'steps', 'answer', 'answerKey', 'diagram', 'analysis', 'ruleChecks'],
   properties: {
     ruleChecks: ruleCheckSchema,
     condition: { type: 'string', description: 'Точная расшифровка условия по изображению источника.' },
@@ -347,6 +350,10 @@ const draftSchema = {
     },
     steps: { type: 'array', minItems: 1, maxItems: 14, items: { type: 'string' } },
     answer: { type: 'string' },
+    answerKey: {
+      type: 'string',
+      description: 'Тот же ответ в краткой проверяемой форме для сверки проходов: число с единицей, термин или короткий список.',
+    },
     diagram: diagramSchema,
     analysis: analysisSchema,
   },
@@ -380,6 +387,10 @@ const authorInstructions = [
   'Для construction решение — прежде всего законченный чертёж и одна короткая символическая строка; не пересказывай действия словами.',
   'В steps строительной задачи не используй глаголы и предложения: только отношения через символы, например «M, N ∈ [AB]; P, Q ∈ a ∖ [AB]; R, S ∉ a».',
   'Для чистого construction оставь answer пустым, если задача не просит числовой или словесный ответ.',
+  'В answerKey положи тот же ответ в самой краткой проверяемой форме: число с единицей, термин, '
+    + 'слово или короткий список через запятую. Без пояснений, без повтора условия, не длиннее 60 знаков. '
+    + 'По нему два независимых прохода сверяются между собой, поэтому он должен быть одинаков у любого, '
+    + 'кто решил задачу верно: не «слово образовано приставочно-суффиксальным способом», а «приставочно-суффиксальный».',
   'Для calculation и proof используй формулы, обозначения и короткие обоснования в скобках. Никаких абзацев.',
   'Каждая строка steps должна помещаться в строку школьной тетради и содержать математическое действие или вывод.',
   'Не используй Markdown, LaTeX, HTML, SVG, CSS и программный код.',
@@ -818,6 +829,7 @@ function normalizeDraft(value: unknown, limits = tightNotebookLimits): EngineDra
           .slice(0, 14)
       : [],
     answer: clampNotebookLine(normalizeNotebookNotation(candidate.answer), limits.answer),
+    answerKey: normalizeNotebookNotation(candidate.answerKey, 60),
     diagram: normalizeDiagram(candidate.diagram),
     ...(analysis ? { analysis } : {}),
   }
@@ -1557,9 +1569,7 @@ export function normalizeAnswerForComparison(value: string) {
   return normalizeNotebookNotation(value, 400)
     .toLocaleLowerCase('ru-RU')
     .replaceAll('ё', 'е')
-    // Подпись искомой величины: «AB = 10 см» и «10 см» — один ответ.
     .replace(/^(?:ответ\s*:?\s*)/u, '')
-    .replace(/\b[a-zа-я][a-zа-я0-9₀-₉']{0,3}\s*=\s*/gu, '')
     .replace(/(\d),(\d)/gu, '$1.$2')
     .replace(/[«»"'()]/gu, '')
     .replace(/\s+/gu, ' ')
@@ -1567,13 +1577,48 @@ export function normalizeAnswerForComparison(value: string) {
     .trim()
 }
 
+/* Числа с единицами и, если она есть, подписью величины.
+
+   Подпись держим отдельно, а не выбрасываем. Выбросить её проще, и тогда
+   «AB = 10 см» сходится с «10 см», — но вместе с ней сходятся и «AB = 10;
+   BC = 8» с «AB = 8; BC = 10», то есть перепутанные местами величины.
+   Поэтому: если подписи есть у обоих ответов, сверяем с подписями; если
+   хотя бы один написан без них — сверяем голые числа. */
 function answerFacts(value: string) {
   const normalized = normalizeAnswerForComparison(value)
-  const facts = [...normalized.matchAll(/(\d+(?:\.\d+)?)\s*([a-zа-я%°]{0,12})/gu)].map(([, number, rawUnit]) => {
+  const bare: string[] = []
+  const labelled: string[] = []
+
+  for (const match of normalized.matchAll(/(?:([a-zа-я][a-zа-я0-9₀-₉']{0,3})\s*=\s*)?(\d+(?:\.\d+)?)\s*([a-zа-я%°]{0,12})/gu)) {
+    const [, label, number, rawUnit] = match
     const unit = answerUnitAliases.get(rawUnit) ?? rawUnit
-    return `${Number(number)}${unit}`
-  })
-  return { normalized, facts }
+    const fact = `${Number(number)}${unit}`
+    bare.push(fact)
+    if (label) labelled.push(`${label}=${fact}`)
+  }
+
+  return { normalized, bare, labelled }
+}
+
+/* Слова ответа без служебной обвязки.
+
+   «приставочно-суффиксальный» и «приставочно-суффиксальный способ» —
+   один ответ. Из списка убраны только слова, которые не могут отличить
+   один верный ответ от другого: отрицания и термины в нём не трогаются. */
+const answerFillerWords = new Set([
+  'способ', 'способом', 'способа', 'образования', 'образовано', 'образован',
+  'ответ', 'слово', 'слова', 'это', 'является', 'равно', 'равен', 'равна', 'равны',
+])
+
+function answerWords(normalized: string) {
+  return normalized
+    .split(/[^a-zа-я0-9-]+/u)
+    .filter((word) => word.length > 1 && !answerFillerWords.has(word))
+    .sort()
+}
+
+function sameList(left: readonly string[], right: readonly string[]) {
+  return left.length === right.length && [...left].sort().every((entry, index) => entry === [...right].sort()[index])
 }
 
 export function answersAgree(left: string, right: string) {
@@ -1582,15 +1627,18 @@ export function answersAgree(left: string, right: string) {
 
   if (first.normalized === second.normalized) return true
   // Пустой ответ бывает у построения: сравнивать нечего, но и расхождения нет.
-  if (!first.normalized || !second.normalized) return first.normalized === second.normalized
+  if (!first.normalized || !second.normalized) return false
 
-  if (first.facts.length > 0 && first.facts.length === second.facts.length) {
-    const sortedFirst = [...first.facts].sort()
-    const sortedSecond = [...second.facts].sort()
-    return sortedFirst.every((fact, index) => fact === sortedSecond[index])
+  if (first.labelled.length > 0 && second.labelled.length > 0) {
+    return sameList(first.labelled, second.labelled)
   }
 
-  return false
+  if (first.bare.length > 0 || second.bare.length > 0) {
+    return sameList(first.bare, second.bare)
+  }
+
+  // Чисел нет вовсе — остаётся сравнение слов ответа.
+  return sameList(answerWords(first.normalized), answerWords(second.normalized))
 }
 
 const transientModelFailures = new Set([
@@ -1779,7 +1827,22 @@ export async function solveHomeworkWithReview(
     issues: [...deterministicIssues],
   })
 
-  const sameAnswer = answersAgree(first.candidate.answer, second.candidate.answer)
+  /* Сверяем проходы по краткому ответу, а не по записи в тетради.
+
+     У задачи с числом ответ и так короткий, и сверка работала. У словесного
+     предмета в `answer` стоит предложение, и два прохода никогда не напишут
+     его одинаково: «Подоконник образовано от слова окно приставочно-
+     суффиксальным способом» против «Слово образовано приставочно-
+     суффиксальным способом от слова окно» — один ответ, разные строки.
+     Отсюда и брался рецензент на русском там, где на геометрии его не было:
+     замер на проде 31 августа показал 19 секунд именно на этом.
+
+     `answerKey` — тот же ответ в проверяемой форме, его модель пишет сама:
+     «48 км», «приставочно-суффиксальный». Он короткий и одинаков у любого,
+     кто решил верно. Нет его — сверяемся по записи, как раньше. */
+  const sameAnswer = first.candidate.answerKey && second.candidate.answerKey
+    ? answersAgree(first.candidate.answerKey, second.candidate.answerKey)
+    : answersAgree(first.candidate.answer, second.candidate.answer)
 
   /* Отдаём без рецензента.
 
