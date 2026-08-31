@@ -560,23 +560,58 @@ function SolutionStatus({ state, textbooks: items, onOpenSolution }: { state: So
     )
   }
 
+  return <SolvingStatus state={state} subject={textbook.subject} />
+}
+
+/* Ожидание решения.
+
+   Показываем то, что действительно знаем: сколько идёт задача и через что
+   она проходит. Клиент видит один запрос и один ответ, промежуточных стадий
+   он не получает, поэтому изображать бегущий по шагам прогресс было бы
+   враньём — вместо этого честный секундомер и измеренный диапазон.
+
+   Диапазон из замеров 31 августа на живых задачах: 12,6 с без рецензента,
+   35,8 и 72,7 с с рецензентом. */
+function SolvingStatus({ state, subject }: { state: SolutionState; subject: string }) {
+  const [seconds, setSeconds] = useState(0)
+
+  useEffect(() => {
+    const startedAt = Date.now()
+    const timer = window.setInterval(() => {
+      setSeconds(Math.floor((Date.now() - startedAt) / 1000))
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  const elapsed = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
+  // За измеренным потолком перестаём обещать «вот-вот» и говорим прямо.
+  const takingLong = seconds >= 75
+
   return (
-    <section className="active-solution" aria-labelledby="active-solution-title">
-      <header className="section-heading">
+    <section className="solving-status" aria-labelledby="active-solution-title" role="status" aria-live="polite" aria-busy="true">
+      <header>
+        <span className="solving-mark" aria-hidden="true">
+          <SpinnerGap className="solution-loader-orbit" size={26} weight="bold" />
+        </span>
         <div>
-          <h2 id="active-solution-title">{state.source === 'number' ? `Готовим № ${state.task}` : state.source === 'photo' ? 'Готовим задачу с фото' : 'Готовим решение задачи'}</h2>
-          <p>{textbook.subject}. {textbook.title}. {state.source === 'photo' ? 'Читаем фото и готовим решение.' : 'Готовое решение появится автоматически.'}</p>
+          <h2 id="active-solution-title">Решаем задачу</h2>
+          <p>{subject}{state.source === 'photo' ? ' · читаем условие с фотографии' : ''}</p>
         </div>
-        <span className="solution-eta">Обычно несколько секунд</span>
+        <time className="solving-elapsed" aria-label={`Идёт ${seconds} секунд`}>{elapsed}</time>
       </header>
 
-      <div className="solution-progress" role="status" aria-live="polite" aria-busy="true">
-        <SpinnerGap className="solution-loader-orbit" size={36} weight="bold" aria-label="Решаем задачу" />
-        <span className="solution-progress-copy"><strong>Решаем задачу</strong><small>Затем оформим ответ как в тетради</small></span>
-      </div>
+      <p className="solving-pipeline">
+        Задача идёт через два независимых прохода и сверку, затем ответ
+        оформляется тетрадной страницей.
+      </p>
 
-      <div className="solution-progress-track" role="progressbar" aria-label="Подготовка решения"><span /></div>
-      <p className="solution-status-note">Статус обновится автоматически. Эту страницу можно оставить открытой.</p>
+      <span className="solving-track" aria-hidden="true"><i /></span>
+
+      <p className="solving-note">
+        {takingLong
+          ? 'Задача сложная и считается дольше обычного. Если не уложимся, деньги вернутся на баланс.'
+          : 'Обычно 15–70 секунд. Страницу лучше оставить открытой.'}
+      </p>
     </section>
   )
 }
@@ -1623,7 +1658,9 @@ function HomePage() {
           task: resolvedTask,
           source,
           subject: subjectOverride ?? textbook.subject,
-          grade: gradeOverride ?? textbook.grade,
+          // Пустой выбор класса передаём прямо, а не диапазоном «7-11 класс»:
+          // модель должна понять, что класс не задан, и взять простейший способ.
+          grade: gradeOverride || 'не указан',
           textbookTitle: textbook.title,
           authors: textbook.authors,
           edition: textbook.edition,
