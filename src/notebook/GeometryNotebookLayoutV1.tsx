@@ -249,12 +249,12 @@ function NotebookSheet({ spec, segment }: { spec: GeometryNotebookPageSpec; segm
   )
 
   return (
-    <article className="geometry-notebook-page" data-testid="geometry-notebook-page" aria-label={`Лист тетради: задача ${spec.number}${isContinuation ? ', продолжение' : ''}`}>
+    <article className="geometry-notebook-page" data-testid="geometry-notebook-page" aria-label={`Лист тетради${spec.number ? `: задача ${spec.number}` : ''}${isContinuation ? ', продолжение' : ''}`}>
       <svg viewBox={page.viewBox} preserveAspectRatio="xMidYMin meet" aria-hidden="false">
         <rect width={page.width} height={page.height} fill={colors.paper} />
         {!isContinuation && (
           <>
-            <text className="notebook-number" x={zones.number.x} y={zones.number.y}>№ {spec.number}</text>
+            {spec.number && <text className="notebook-number" x={zones.number.x} y={zones.number.y}>№ {spec.number}</text>}
             <text className="notebook-title" x={zones.given.x} y={zones.given.titleY}>Дано:</text>
             {givenLines.map((line, index) => (
               <text
@@ -326,7 +326,7 @@ function NotebookSheet({ spec, segment }: { spec: GeometryNotebookPageSpec; segm
 
 export function GeometryNotebookLayoutV1({ spec }: { spec: GeometryNotebookPageSpec }) {
   return (
-    <section className="geometry-notebook-document" aria-label={`Решение задачи ${spec.number}`}>
+    <section className="geometry-notebook-document" aria-label={spec.number ? `Решение задачи ${spec.number}` : 'Решение задачи'}>
       {paginateSolution(spec).map((segment, index) => (
         <NotebookSheet key={`${spec.id}-${index}`} spec={spec} segment={segment} />
       ))}

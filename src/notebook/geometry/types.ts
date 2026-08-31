@@ -16,7 +16,11 @@ export type GeometryDiagramSpec = {
 
 export type GeometryNotebookPageSpec = {
   id: string
-  number: string
+  /* Номер задачи в учебнике. Его нет у задачи, которую ученик принёс текстом
+     или фотографией: там номера не существует, и подставлять вместо него
+     срез условия — печатать на листе «№ В прямоугольном треугольнике ABC
+     угол», обрезанное краем страницы. */
+  number?: string
   condition: string
   given: readonly string[]
   goal: {

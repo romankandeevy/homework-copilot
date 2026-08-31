@@ -21,6 +21,18 @@ describe('GeometryNotebookLayoutV1', () => {
     expect(screen.getByText('Решение.', { selector: '.notebook-title' })).toBeInTheDocument()
   })
 
+  /* Номера у принесённой задачи не существует.
+
+     В `task` у задачи из своего условия лежит его начало, и лист печатал
+     «№ В прямоугольном треугольнике ABC угол» — обрезанное краем страницы. */
+  it('не печатает номер у задачи, принесённой текстом или фотографией', () => {
+    const { number: _number, ...withoutNumber } = geometryFixtures[0]
+    const { container } = render(<GeometryNotebookLayoutV1 spec={withoutNumber} />)
+
+    expect(container.querySelector('.notebook-number')).not.toBeInTheDocument()
+    expect(screen.getByText('Решение.', { selector: '.notebook-title' })).toBeInTheDocument()
+  })
+
   it('keeps seven solution lines and the answer on one sheet without an invented figure', () => {
     const { container } = render(<GeometryNotebookLayoutV1 spec={{
       ...geometryFixtures[0],

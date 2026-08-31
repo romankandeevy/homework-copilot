@@ -735,7 +735,11 @@ function asGeometryNotebookSpec(
 ): GeometryNotebookPageSpec {
   return {
     id: 'generated-' + solution.textbookId + '-' + solution.task,
-    number: solution.source === 'photo' ? 'фото' : solution.task,
+    // Номер печатается только у задачи из учебника. У задачи с фотографии
+    // или из своего условия номера нет: в `task` лежит начало условия, и на
+    // листе получалось «№ В прямоугольном треугольнике ABC угол», обрезанное
+    // краем страницы.
+    ...(solution.source === 'number' ? { number: solution.task } : {}),
     condition: solution.condition,
     given: solution.given.slice(0, 3),
     goal: solution.goal,
