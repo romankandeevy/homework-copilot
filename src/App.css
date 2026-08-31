@@ -2400,6 +2400,10 @@
 .task-condition-input {
   width: 100%;
   min-height: 7rem;
+  /* Высоту ставит скрипт по объёму текста. Предел — на случай условия
+     в несколько тысяч знаков: дальше поле начинает прокручиваться, но уже
+     собственной полосой, а не системной. */
+  max-height: 60vh;
   padding: var(--space-4);
   border: var(--border-thin) solid var(--color-border);
   border-radius: var(--radius-surface);
@@ -2408,7 +2412,18 @@
   font-family: var(--font-body);
   font-size: var(--text-body);
   line-height: var(--leading-body);
-  resize: vertical;
+  overflow-y: auto;
+  resize: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
+}
+
+.task-condition-input::-webkit-scrollbar { width: 0.5rem; }
+.task-condition-input::-webkit-scrollbar-track { background: transparent; }
+.task-condition-input::-webkit-scrollbar-thumb {
+  border: 2px solid var(--color-surface);
+  border-radius: var(--radius-pill);
+  background: var(--color-border-strong);
 }
 
 .task-condition-input:focus-visible {

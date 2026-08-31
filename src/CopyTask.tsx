@@ -61,6 +61,16 @@ export default function CopyTask({
   const canSubmit = trimmedCondition.length >= 15 || Boolean(photo)
   const price = getSolutionPrice()
 
+  // Поле подстраивается под объём условия, вместо того чтобы прокручиваться
+  // внутри четырёх строк. Сначала сбрасываем высоту: без этого поле умеет
+  // только расти и не сжимается, когда текст стёрли.
+  useEffect(() => {
+    const field = conditionRef.current
+    if (!field) return
+    field.style.height = 'auto'
+    field.style.height = `${field.scrollHeight}px`
+  }, [condition, photo])
+
   // Профиль подгружается после первого рендера, поэтому класс из него
   // подставляем позже — но только пока ученик не выбрал свой.
   const gradeTouchedRef = useRef(false)
