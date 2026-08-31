@@ -1277,6 +1277,7 @@ function buildVerification(
   reviewer: ReviewResult,
   solution: HomeworkSolution,
   conditionMatched: boolean,
+  agreement?: HomeworkSolutionVerification['agreement'],
 ): HomeworkSolutionVerification {
   const scene = solution.diagram.scene
   const symbolicPercent = Math.round((solution.quality?.symbolicShare ?? 0) * 100)
@@ -1289,6 +1290,7 @@ function buildVerification(
     reviewer: reviewer.solution.decisions,
     reviewerApproved: reviewer.approved,
     reviewerIssues: [...reviewer.issues],
+    ...(agreement ? { agreement } : {}),
     checks: [
       {
         label: 'Источник',
@@ -1840,9 +1842,11 @@ export async function solveHomeworkWithReview(
      `answerKey` — тот же ответ в проверяемой форме, его модель пишет сама:
      «48 км», «приставочно-суффиксальный». Он короткий и одинаков у любого,
      кто решил верно. Нет его — сверяемся по записи, как раньше. */
-  const sameAnswer = first.candidate.answerKey && second.candidate.answerKey
+  const answerKeysPresent = Boolean(first.candidate.answerKey && second.candidate.answerKey)
+  const sameAnswer = answerKeysPresent
     ? answersAgree(first.candidate.answerKey, second.candidate.answerKey)
     : answersAgree(first.candidate.answer, second.candidate.answer)
+  const agreement = { sameAnswer, answerKeysPresent }
 
   /* Отдаём без рецензента.
 
@@ -1866,6 +1870,7 @@ export async function solveHomeworkWithReview(
         { approved: true, issues: [], solution: draft },
         agreed,
         authorConditionMatched,
+        agreement,
       ),
     }
   }
@@ -1877,6 +1882,21 @@ export async function solveHomeworkWithReview(
      уже закончился. Новый вызов делаем, только когда спекуляция не о том
      кандидате — тогда ей на смену идёт разбор с подсказкой о расхождении. */
   const speculative = startedReview()
+
+  /* Почему понадобился рецензент.
+
+     Без этой строки причину приходится угадывать по времени стадий: два
+     прогона на проде ушли на то, чтобы выяснить, что решение было чистым,
+     а разошлись строки ответа. Содержимого здесь нет — только признаки. */
+  console.log(JSON.stringify({
+    level: 'info',
+    event: 'homework_review_called',
+    subject: request.subject,
+    authorIssues: deterministicIssues.length,
+    sameAnswer,
+    answerKeysPresent,
+    speculative: Boolean(speculative && speculative.draft === draft),
+  }))
 
   const rawReview = await (speculative && speculative.draft === draft
     ? speculative.promise
@@ -1970,7 +1990,7 @@ export async function solveHomeworkWithReview(
             })
             return {
               ...withDiagram,
-              verification: buildVerification(draft, deterministicIssues, review, withDiagram, finalConditionMatched),
+              verification: buildVerification(draft, deterministicIssues, review, withDiagram, finalConditionMatched, agreement),
             }
           }
         }
@@ -2032,13 +2052,13 @@ export async function solveHomeworkWithReview(
 
     return {
       ...repairedSolution,
-      verification: buildVerification(draft, deterministicIssues, repaired, repairedSolution, repairedConditionMatched),
+      verification: buildVerification(draft, deterministicIssues, repaired, repairedSolution, repairedConditionMatched, agreement),
     }
   }
 
   return {
     ...solution,
-    verification: buildVerification(draft, deterministicIssues, review, solution, finalConditionMatched),
+    verification: buildVerification(draft, deterministicIssues, review, solution, finalConditionMatched, agreement),
   }
 }
 

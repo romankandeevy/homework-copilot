@@ -111,6 +111,14 @@ export type HomeworkSolutionVerification = {
   reviewerApproved: boolean
   reviewerIssues: string[]
   checks: HomeworkVerificationCheck[]
+  /* Сошлись ли независимые проходы в ответе и был ли у них для этого краткий
+     ключ сверки. Ученику не показывается: это след того, как решение
+     проверялось. Без него причину вызова рецензента приходится угадывать
+     по длительности стадий. */
+  agreement?: {
+    sameAnswer: boolean
+    answerKeysPresent: boolean
+  }
 }
 
 export type HomeworkSolution = {
