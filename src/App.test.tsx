@@ -109,6 +109,7 @@ describe('Homework Copilot task flow', () => {
     fireEvent.change(screen.getByRole('textbox', { name: 'Условие задачи' }), {
       target: { value: 'Диагонали ромба равны 10 см и 24 см. Найдите сторону ромба.' },
     })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Предмет' }), { target: { value: 'Геометрия' } })
     fireEvent.click(screen.getByRole('button', { name: /Решить/ }))
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
@@ -119,6 +120,29 @@ describe('Homework Copilot task flow', () => {
     })
     expect(request.sourceUrl).toBeUndefined()
     expect(request.imageDataUrl).toBeUndefined()
+  })
+
+  /* Предмет обязателен.
+
+     От него зависят правила, по которым решение проверяется: «единица
+     измерения при ответе», «корень выделен в разборе по составу». Без
+     предмета проверять нечем, и вместо мгновенной проверки правилами
+     пришлось бы звать модель ещё раз. */
+  it('не отправляет задачу без предмета и говорит, чего не хватает', async () => {
+    const fetchMock = installSuccessfulSolver()
+    render(<App />)
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Условие задачи' }), {
+      target: { value: 'Диагонали ромба равны 10 см и 24 см. Найдите сторону ромба.' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /Решить/ }))
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Выбери предмет')
+    expect(fetchMock).not.toHaveBeenCalled()
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Предмет' }), { target: { value: 'Геометрия' } })
+    fireEvent.click(screen.getByRole('button', { name: /Решить/ }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
   })
 
   it('передаёт выбранные предмет и класс', async () => {
@@ -233,14 +257,15 @@ describe('Homework Copilot task flow', () => {
     vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})))
     render(<App />)
 
-    const conditions = [
-      'Решите уравнение x² − 5x + 6 = 0 и укажите больший корень.',
-      'Разберите слово «пришкольный» по составу и укажите способ образования.',
-      'В треугольнике ABC угол C равен 90°, AC = 6, BC = 8. Найдите AB.',
+    const conditions: readonly (readonly [string, string])[] = [
+      ['Решите уравнение x² − 5x + 6 = 0 и укажите больший корень.', 'Алгебра'],
+      ['Разберите слово «пришкольный» по составу и укажите способ образования.', 'Русский язык'],
+      ['В треугольнике ABC угол C равен 90°, AC = 6, BC = 8. Найдите AB.', 'Геометрия'],
     ]
 
-    for (const condition of conditions) {
+    for (const [condition, subject] of conditions) {
       fireEvent.change(screen.getByRole('textbox', { name: 'Условие задачи' }), { target: { value: condition } })
+      fireEvent.change(screen.getByRole('combobox', { name: 'Предмет' }), { target: { value: subject } })
       fireEvent.click(screen.getByRole('button', { name: /Решить/ }))
       // eslint-disable-next-line no-await-in-loop
       await waitFor(() => expect(screen.getByRole('textbox', { name: 'Условие задачи' })).toHaveValue(''))
@@ -249,7 +274,7 @@ describe('Homework Copilot task flow', () => {
     await waitFor(() => expect(screen.getAllByRole('heading', { name: 'Решаем задачу' })).toHaveLength(2))
     expect(await screen.findByText(/ждёт очереди/)).toBeInTheDocument()
     // Ни одно условие не потерялось.
-    conditions.forEach((condition) => expect(screen.getByText(condition)).toBeInTheDocument())
+    conditions.forEach(([condition]) => expect(screen.getByText(condition)).toBeInTheDocument())
   })
 
   /* Неудача.
@@ -266,6 +291,7 @@ describe('Homework Copilot task flow', () => {
 
     const condition = 'Найдите массовую долю кислорода в серной кислоте H2SO4.'
     fireEvent.change(screen.getByRole('textbox', { name: 'Условие задачи' }), { target: { value: condition } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Предмет' }), { target: { value: 'Химия' } })
     fireEvent.click(screen.getByRole('button', { name: /Решить/ }))
 
     expect(await screen.findByRole('heading', { name: 'Решение не дошло' })).toBeInTheDocument()
@@ -292,6 +318,7 @@ describe('Homework Copilot task flow', () => {
     expect(screen.queryByText(/распознал/i)).not.toBeInTheDocument()
     expect(fetchMock).not.toHaveBeenCalled()
 
+    fireEvent.change(screen.getByRole('combobox', { name: 'Предмет' }), { target: { value: 'Геометрия' } })
     fireEvent.click(screen.getByRole('button', { name: /Решить/ }))
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
     const request = JSON.parse(String(fetchMock.mock.calls[0][1]?.body)) as SolveHomeworkRequest

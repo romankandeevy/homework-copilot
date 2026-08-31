@@ -325,16 +325,84 @@ describe('homework solver', () => {
       tools?: unknown
     }
     const codex = callTo(fetchMock, 'codex') as { input: { content: unknown }[] }
-    expect(gemini.messages[1].content).toEqual([
-      { type: 'image_url', image_url: { url: 'data:image/png;base64,cGhvdG8=' } },
-    ])
+    const geminiParts = gemini.messages[1].content as { type: string; text?: string; image_url?: { url: string } }[]
+    expect(geminiParts.at(-1)).toEqual({ type: 'image_url', image_url: { url: 'data:image/png;base64,cGhvdG8=' } })
     // Responses API называет ту же картинку иначе — иначе фото до модели не дойдёт.
-    expect(codex.input[0].content).toEqual([
-      { type: 'input_image', image_url: 'data:image/png;base64,cGhvdG8=' },
-    ])
+    const codexParts = codex.input[0].content as { type: string; text?: string; image_url?: string }[]
+    expect(codexParts.at(-1)).toEqual({ type: 'input_image', image_url: 'data:image/png;base64,cGhvdG8=' })
+
+    /* Текстом идут только предмет, класс и правила предмета.
+
+       Условия в промпте нет и быть не должно: по фото источник — сама
+       фотография, и подсунутый текст условия увёл бы решение от неё.
+       А предмет и класс до этого не доходили вовсе — на фото-пути промпт
+       состоял из одной картинки, и правила проверять было нечем. */
+    const geminiText = geminiParts.filter((part) => part.type === 'text').map((part) => part.text ?? '').join(' ')
+    expect(geminiText).toContain('Предмет: Геометрия')
+    expect(geminiText).toContain('Правила предмета')
+    expect(geminiText).not.toContain(photoTask.condition ?? 'условие задачи из текста')
     expect(gemini.response_format?.type).toBe('json_schema')
     expect(gemini.tools).toBeUndefined()
     expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  /* Рецензент больше не ждёт отставший проход.
+
+     Раньше порядок был строго последовательным: дождаться обоих проходов
+     (до 25 секунд отсрочки отставшему), только потом звать рецензента.
+     Замер на проде 31 августа: 25-50 секунд из 43-78 уходило на эту стадию.
+     Нужен рецензент или нет, видно уже по первому дошедшему проходу. */
+  it('зовёт рецензента, не дожидаясь второго прохода, когда первый нарушил правила', async () => {
+    // Черновик без единицы измерения при ответе — нарушение правила предмета.
+    const dirtyDraft = { ...photoDraft, answer: '90' }
+    let drafts = 0
+    let secondPassDone = false
+    let reviewStartedEarly: boolean | null = null
+
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
+      const url = String(input)
+      const body = typeof init?.body === 'string' ? init.body : ''
+
+      if (body.includes('homework_solution_review')) {
+        reviewStartedEarly ??= !secondPassDone
+        return providerResponse({ approved: true, issues: [], solution: photoDraft }, url)
+      }
+
+      drafts += 1
+      if (drafts === 1) return providerResponse(dirtyDraft, url)
+      await new Promise((resolve) => { setTimeout(resolve, 50) })
+      secondPassDone = true
+      return providerResponse(dirtyDraft, url)
+    })
+
+    const solution = await solveWithKie(photoTask, { apiKey: 'secret-test-key', fetchImpl: fetchMock })
+
+    expect(reviewStartedEarly).toBe(true)
+    expect(solution.answer).toBe(providerSolution.answer)
+  })
+
+  /* Чистый проход, с которым сошёлся второй, отдаётся без рецензента.
+
+     Прежнее условие требовало безупречности от обоих проходов, хотя ученику
+     уходит один. Замечания ко второму формальные, и держать из-за них третий
+     вызов модели значило платить временем ученика за чужой формат записи. */
+  it('отдаёт согласованное решение без вызова рецензента', async () => {
+    const dirtyDraft = { ...photoDraft, given: [...photoDraft.given, 'лишняя строка', 'ещё одна', 'и ещё', 'и пятая'] }
+    let drafts = 0
+
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
+      const url = String(input)
+      const body = typeof init?.body === 'string' ? init.body : ''
+      if (body.includes('homework_solution_review')) return providerResponse({ approved: true, issues: [], solution: photoDraft }, url)
+      drafts += 1
+      return providerResponse(drafts === 1 ? photoDraft : dirtyDraft, url)
+    })
+
+    await solveWithKie(photoTask, { apiKey: 'secret-test-key', fetchImpl: fetchMock })
+
+    const reviewCalls = fetchMock.mock.calls.filter(([, init]) => String(init?.body).includes('homework_solution_review'))
+    expect(reviewCalls).toHaveLength(0)
+    expect(drafts).toBe(2)
   })
 
   it('rejects a reviewed answer for a different condition', async () => {

@@ -7,6 +7,7 @@ import type { HomeworkSolution, HomeworkTaskType, SolveHomeworkRequest } from '.
 import type { Database, Json } from '../src/lib/database.types.ts'
 import { formatRubles } from '../src/lib/currency.ts'
 import { getSolutionPrice } from '../src/lib/solutionPricing.ts'
+import { isSolvableSubject } from '../src/lib/subjects.ts'
 import { findVerifiedTextbookTask, geometryTextbookIdentity, normalizeTaskCondition } from '../src/textbooks/taskCatalog.ts'
 import {
   defaultHomeworkModel,
@@ -193,6 +194,11 @@ async function validateRequest(value: unknown, options: SolverOptions): Promise<
   const requiredFields = ['textbookId', 'task', 'subject', 'grade', 'textbookTitle', 'authors', 'edition', 'idempotencyKey']
   if (!source || requiredFields.some((field) => !text(candidate[field]))) {
     throw new HomeworkSolverError(400, 'Не хватает данных учебника или номера задачи')
+  }
+  // Предмет больше не подсказка, а ключ к правилам проверки: у каждого свои
+  // требования к записи, и без предмета проверять решение нечем.
+  if (!isSolvableSubject(text(candidate.subject))) {
+    throw new HomeworkSolverError(400, 'Выбери предмет: от него зависят правила проверки решения')
   }
   // Адрес задачи — либо сквозной номер, либо составной «параграф.упражнение.
   // задание» для учебников без сквозной нумерации, вроде Пёрышкина.

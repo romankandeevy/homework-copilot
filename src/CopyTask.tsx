@@ -4,6 +4,7 @@ import { ArrowRight, ImageSquare, X } from '@phosphor-icons/react'
 import type { HomeworkSource } from './lib/homeworkContract'
 import { formatRubles } from './lib/currency'
 import { getSolutionPrice } from './lib/solutionPricing'
+import { solvableGrades, solvableSubjects } from './lib/subjects'
 
 // Форма постановки задачи.
 //
@@ -11,24 +12,20 @@ import { getSolutionPrice } from './lib/solutionPricing'
 // учебников отказались, поэтому осталось главное: условие даёт ученик —
 // текстом, фотографией или тем и другим сразу.
 //
-// Предмет и класс необязательны. Если их не указать, модель определит сама.
-// Класс влияет не только на сложность: способ решения одной и той же задачи
-// в 7 и в 11 классе разный, и запись в тетради тоже.
-
-export const solvableSubjects = [
-  'Математика', 'Алгебра', 'Геометрия', 'Физика', 'Химия', 'Биология',
-  'Информатика', 'Русский язык', 'Литература', 'Английский язык',
-  'История', 'Обществознание', 'География', 'Астрономия',
-] as const
-
-export const solvableGrades = [
-  '5 класс', '6 класс', '7 класс', '8 класс', '9 класс', '10 класс', '11 класс',
-] as const
+// Предмет обязателен. Он перестал быть подсказкой: от него зависят правила,
+// по которым решение проверяется, — «единица измерения при ответе», «корень
+// выделен в разборе по составу», «уравнение реакции уравнено». Не зная
+// предмета, проверять решение нечем, и вместо мгновенной проверки правилами
+// приходится звать модель ещё раз.
+//
+// Класс остаётся необязательным. Он влияет на способ решения — одна и та же
+// задача в 7 и в 11 классе решается по-разному, — но без него решение
+// получится, просто самым простым способом.
 
 export type TaskSubmission = {
   condition: string
   photo?: File
-  subject?: string
+  subject: string
   grade?: string
   source: HomeworkSource
   idempotencyKey: string
@@ -56,6 +53,7 @@ export default function CopyTask({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const submissionRef = useRef(false)
   const conditionRef = useRef<HTMLTextAreaElement>(null)
+  const subjectRef = useRef<HTMLSelectElement>(null)
 
   const trimmedCondition = condition.trim()
   const canSubmit = trimmedCondition.length >= 15 || Boolean(photo)
@@ -125,6 +123,13 @@ export default function CopyTask({
       return
     }
 
+    // Предмет задаёт правила проверки решения, поэтому без него не отправляем.
+    if (!subject) {
+      setError('Выбери предмет: по нему проверяется решение')
+      subjectRef.current?.focus()
+      return
+    }
+
     submissionRef.current = true
     setIsSubmitting(true)
     setError('')
@@ -137,7 +142,7 @@ export default function CopyTask({
       const submitted = await onSubmit({
         condition: trimmedCondition,
         ...(photo ? { photo } : {}),
-        ...(subject ? { subject } : {}),
+        subject,
         ...(grade ? { grade } : {}),
         // Если текста нет вовсе, задача читается с фотографии.
         source: trimmedCondition ? 'text' : 'photo',
@@ -227,11 +232,16 @@ export default function CopyTask({
           {/* Подписи короткие: «Предмет — определим сами» не влезает в селект
               на телефоне и обрезается ровно на том слове, ради которого
               подпись и написана. */}
-          <label className="task-select">
+          <label className={`task-select${!subject && error ? ' is-missing' : ''}`}>
             <span className="sr-only">Предмет</span>
-            <select value={subject} onChange={(event) => setSubject(event.target.value)}>
-              <option value="">Предмет: любой</option>
-              {solvableSubjects.map((item) => <option key={item} value={item}>{item}</option>)}
+            <select
+              ref={subjectRef}
+              value={subject}
+              aria-invalid={!subject && Boolean(error) || undefined}
+              onChange={(event) => { setSubject(event.target.value); if (error) setError('') }}
+            >
+              <option value="">Выбери предмет</option>
+              {solvableSubjects.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}
             </select>
           </label>
 

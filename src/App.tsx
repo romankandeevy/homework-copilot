@@ -48,6 +48,7 @@ import { bindPendingReferral, captureReferralFromCurrentUrl, preparePendingRefer
 import { forgetGuestSolution, getGuestId, guestSolutionUsed, rememberGuestSolutionUsed } from './lib/guestSolutions'
 import { applySeoMetadata, getSeoMetadata } from './lib/siteMetadata'
 import { getSolutionPrice } from './lib/solutionPricing'
+import { findSubjectByName } from './lib/subjects'
 import {
   isReviewedHomeworkSolution,
   loadGeneratedSolutions,
@@ -1467,8 +1468,13 @@ function HomePage() {
   }
   const openSolution = (state: SolutionState) => navigate('Решения', state)
 
-  // Переходник между формой и очередью: форма отдаёт условие и фото,
-  // остальное подставляется здесь.
+  /* Переходник между формой и очередью: форма отдаёт условие и фото,
+     остальное подставляется здесь.
+
+     Предмет теперь задаёт и хранилище решения: `textbookId` — это он же.
+     Раньше сюда шёл `selectedTextbookId` из прежнего выбора учебника, и
+     задача по русскому языку сохранялась под геометрией — в «Моих решениях»
+     она так и подписывалась. */
   const submitFromForm = async (submission: TaskSubmission) => {
     const imageDataUrl = submission.photo ? await prepareTaskPhoto(submission.photo) : undefined
     return enqueueTask({
@@ -1477,10 +1483,10 @@ function HomePage() {
       task: submission.condition.slice(0, 60).trim() || 'Задача с фото',
       source: submission.source,
       idempotencyKey: submission.idempotencyKey,
-      textbookId: selectedTextbookId,
+      textbookId: findSubjectByName(submission.subject)?.id ?? selectedTextbookId,
+      subject: submission.subject,
       ...(submission.condition ? { condition: submission.condition } : {}),
       ...(imageDataUrl ? { imageDataUrl } : {}),
-      ...(submission.subject ? { subject: submission.subject } : {}),
       ...(submission.grade ? { grade: submission.grade } : {}),
     })
   }
@@ -1754,9 +1760,9 @@ function HomePage() {
     source: HomeworkSource
     idempotencyKey: string
     textbookId: TextbookId
+    subject: string
     condition?: string
     imageDataUrl?: string
-    subject?: string
     grade?: string
   }) => {
     const textbook = getTextbook(submission.textbookId, availableTextbooks)
@@ -1821,7 +1827,7 @@ function HomePage() {
       textbookId: submission.textbookId,
       task: resolvedTask,
       source: submission.source,
-      subject: submission.subject || textbook.subject,
+      subject: submission.subject,
       grade: submission.grade ?? '',
       conditionPreview: conditionPreview.slice(0, 400),
       deviceId: deviceIdRef.current,
@@ -1838,7 +1844,7 @@ function HomePage() {
           textbookId: submission.textbookId,
           task: resolvedTask,
           source: submission.source,
-          subject: submission.subject || textbook.subject,
+          subject: submission.subject,
           grade: submission.grade ?? '',
           conditionPreview,
         },
@@ -1879,9 +1885,11 @@ function HomePage() {
       source: payload.source,
       idempotencyKey,
       textbookId: payload.textbookId,
+      // Предмет сохранён вместе с запросом: он был обязателен при первой
+      // отправке, и повтор идёт с ним же.
+      subject: payload.subject ?? getTextbook(payload.textbookId, availableTextbooks).subject,
       ...(payload.condition ? { condition: payload.condition } : {}),
       ...(payload.imageDataUrl ? { imageDataUrl: payload.imageDataUrl } : {}),
-      ...(payload.subject ? { subject: payload.subject } : {}),
       ...(payload.grade ? { grade: payload.grade } : {}),
     })
   }

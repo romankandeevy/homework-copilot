@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { HomeworkSolution } from '../src/lib/homeworkContract.ts'
-import { clampNotebookLine, isCurrentReviewedSolution, normalizeNotebookNotation, validateSolutionQuality } from './geometrySolutionEngine.ts'
+import { answersAgree, clampNotebookLine, isCurrentReviewedSolution, normalizeNotebookNotation, validateSolutionQuality } from './geometrySolutionEngine.ts'
 
 const taskFiveSolution: HomeworkSolution = {
   engineVersion: 2,
@@ -55,6 +55,45 @@ const taskFiveSolution: HomeworkSolution = {
    Пределы были сняты с геометрии, у которой лист фиксированный, и уезжали
    в русский язык: «Найти: Разобрать слово «подоконник» по составу, указать
    способ его образования и объясн» — обрезано посреди слова. */
+/* Сошлись ли проходы в ответе.
+
+   Строгое равенство строк почти никогда не выполнялось, и рецензента звали
+   на каждой задаче — 25-50 секунд из 43-78 в замере 31 августа на проде.
+   Сравнивать надо по существу: числа с единицами, а не запись. */
+describe('согласие проходов в ответе', () => {
+  it('считает согласием одно и то же число с подписью величины и без неё', () => {
+    expect(answersAgree('AB = 10 см', '10 см')).toBe(true)
+    expect(answersAgree('Ответ: 48 км.', '48 км')).toBe(true)
+    expect(answersAgree('S = 24 см²', '24 см²')).toBe(true)
+  })
+
+  it('не считает согласием разные числа', () => {
+    expect(answersAgree('10 см', '12 см')).toBe(false)
+    expect(answersAgree('48 км', '48 м')).toBe(false)
+  })
+
+  it('сводит запятую и точку в десятичной дроби', () => {
+    expect(answersAgree('2,5 кг', '2.5 кг')).toBe(true)
+  })
+
+  it('сравнивает набор чисел независимо от порядка', () => {
+    expect(answersAgree('AB = 10 см; S = 24 см²', 'S = 24 см², AB = 10 см')).toBe(true)
+  })
+
+  // Там, где чисел нет вовсе, остаётся сравнение слов — но уже без хвостовой
+  // пунктуации, которой проходы отличаются чаще всего.
+  it('сравнивает словесные ответы без хвостовой пунктуации', () => {
+    expect(answersAgree('Приставочно-суффиксальный способ.', 'приставочно-суффиксальный способ')).toBe(true)
+    expect(answersAgree('Суффиксальный способ', 'Приставочный способ')).toBe(false)
+  })
+
+  // У чистого построения ответа нет: сравнивать нечего, но и расхождения нет.
+  it('считает согласием два пустых ответа', () => {
+    expect(answersAgree('', '')).toBe(true)
+    expect(answersAgree('', '10 см')).toBe(false)
+  })
+})
+
 describe('пределы строки тетради', () => {
   const morphology: HomeworkSolution = {
     ...taskFiveSolution,

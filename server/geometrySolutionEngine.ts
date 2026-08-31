@@ -27,6 +27,7 @@ import {
   diagramPlanInstructions,
   diagramPlanSchema,
 } from './diagramBuilder.ts'
+import { subjectRuleQuestions, verifySubjectRules } from './subjectRules.ts'
 
 export { homeworkSolutionEngineVersion }
 
@@ -81,7 +82,19 @@ type EngineOptions = {
   onStage?: (stage: HomeworkSolveStage) => void
 }
 
+type RuleCheck = {
+  rule: string
+  passed: boolean
+  evidence: string
+}
+
+type SpeculativeReview = {
+  draft: EngineDraft
+  promise: Promise<unknown>
+}
+
 type EngineDraft = {
+  ruleChecks: readonly RuleCheck[]
   condition: string
   taskType: HomeworkTaskType
   diagramRequired: boolean
@@ -289,11 +302,34 @@ const analysisSchema = {
   },
 } as const
 
+/* Ответы на правила предмета.
+
+   Модель обязана ответить на каждый вопрос из «Правил предмета» до выдачи
+   решения и сама исправить нарушенное. Это дешевле третьего вызова: правило
+   разбирается в том же проходе, где пишется решение, а не в отдельном
+   разговоре после него. */
+const ruleCheckSchema = {
+  type: 'array',
+  minItems: 0,
+  maxItems: 12,
+  items: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['rule', 'passed', 'evidence'],
+    properties: {
+      rule: { type: 'string', description: 'Идентификатор правила из списка «Правила предмета».' },
+      passed: { type: 'boolean', description: 'Правило выполнено в выдаваемом решении.' },
+      evidence: { type: 'string', description: 'Чем именно правило выполнено: строка решения или ответ.' },
+    },
+  },
+} as const
+
 const draftSchema = {
   type: 'object',
   additionalProperties: false,
-  required: ['condition', 'taskType', 'diagramRequired', 'decisions', 'sourceVerified', 'given', 'goal', 'steps', 'answer', 'diagram', 'analysis'],
+  required: ['condition', 'taskType', 'diagramRequired', 'decisions', 'sourceVerified', 'given', 'goal', 'steps', 'answer', 'diagram', 'analysis', 'ruleChecks'],
   properties: {
+    ruleChecks: ruleCheckSchema,
     condition: { type: 'string', description: 'Точная расшифровка условия по изображению источника.' },
     taskType: { type: 'string', enum: [...homeworkTaskTypes] },
     diagramRequired: { type: 'boolean' },
@@ -728,6 +764,20 @@ function normalizeAnalysis(value: unknown): HomeworkWrittenAnalysis | undefined 
   return { version: 1, kind: kind as HomeworkAnalysisKind, ...(title ? { title } : {}), blocks }
 }
 
+function normalizeRuleChecks(value: unknown): RuleCheck[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null
+      const candidate = entry as Record<string, unknown>
+      const rule = text(candidate.rule, 60)
+      if (!rule) return null
+      return { rule, passed: candidate.passed === true, evidence: text(candidate.evidence, 200) }
+    })
+    .filter((entry): entry is RuleCheck => entry !== null)
+    .slice(0, 12)
+}
+
 function normalizeDraft(value: unknown, limits = tightNotebookLimits): EngineDraft {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new GeometrySolutionEngineError('Модель не вернула решение')
@@ -742,6 +792,7 @@ function normalizeDraft(value: unknown, limits = tightNotebookLimits): EngineDra
   const analysis = normalizeAnalysis(candidate.analysis)
 
   const draft: EngineDraft = {
+    ruleChecks: normalizeRuleChecks(candidate.ruleChecks),
     condition: normalizeNotebookNotation(candidate.condition),
     taskType,
     diagramRequired: candidate.diagramRequired === true,
@@ -942,12 +993,39 @@ async function callModel(
   return parseJson(protocol === 'responses' ? responsesContent(payload) : providerContent(payload))
 }
 
+/* Правила предмета в промпте.
+
+   Модель разбирает их в том же проходе, где пишет решение, и сама чинит
+   нарушенное. Это дешевле отдельного рецензента: не третий разговор после
+   решения, а требование внутри него. */
+function subjectRulesPrompt(subject: string) {
+  const rules = subjectRuleQuestions(subject)
+  if (rules.length === 0) return null
+
+  return [
+    'Правила предмета. До выдачи решения ответь на каждый вопрос в поле ruleChecks:',
+    ...rules.map((rule) => `- ${rule.id}: ${rule.question}`),
+    'Если хотя бы на один вопрос ответ «нет» — исправь решение и только потом отдавай его.',
+    'В ruleChecks не должно остаться passed: false.',
+  ].join('\n')
+}
+
 function engineMessage(request: SolveHomeworkRequest, extra = '') {
+  const rulesBlock = subjectRulesPrompt(request.subject)
+
   if (request.source === 'photo' && request.imageDataUrl) {
+    // Предмет и класс приходят из формы, а не с изображения, и на фото-пути
+    // раньше до модели не доходили вовсе: она видела только картинку.
+    const photoPrompt = [
+      `Предмет: ${request.subject}. Класс: ${request.grade}.`,
+      rulesBlock,
+      extra,
+    ].filter(Boolean).join('\n')
+
     return {
       role: 'user',
       content: [
-        ...(extra ? [{ type: 'text' as const, text: extra }] : []),
+        { type: 'text' as const, text: photoPrompt },
         { type: 'image_url' as const, image_url: { url: request.imageDataUrl } },
       ],
     } as const
@@ -966,6 +1044,7 @@ function engineMessage(request: SolveHomeworkRequest, extra = '') {
 
   const prompt = [
     `Предмет: ${request.subject}. Класс: ${request.grade}.`,
+    rulesBlock,
     bookLine,
     editionLine,
     sourceHint,
@@ -1421,6 +1500,9 @@ const passStragglerGraceMs = 25_000
 async function settleWithGrace<T>(
   tasks: Promise<T>[],
   graceMs: number,
+  // Вызывается на каждом дошедшем проходе сразу, не дожидаясь остальных:
+  // по первому же результату видно, понадобится ли рецензент.
+  onSettled?: (value: T) => void,
 ): Promise<PromiseSettledResult<T>[]> {
   const results: PromiseSettledResult<T>[] = tasks.map(() => ({
     status: 'rejected',
@@ -1429,7 +1511,11 @@ async function settleWithGrace<T>(
   let finished = 0
 
   const tracked = tasks.map((task, index) => task.then(
-    (value) => { results[index] = { status: 'fulfilled', value }; finished += 1 },
+    (value) => {
+      results[index] = { status: 'fulfilled', value }
+      finished += 1
+      onSettled?.(value)
+    },
     (reason) => { results[index] = { status: 'rejected', reason }; finished += 1 },
   ))
 
@@ -1442,6 +1528,69 @@ async function settleWithGrace<T>(
   }
 
   return results
+}
+
+/* Сошлись ли проходы в ответе.
+
+   Раньше здесь стояло строгое равенство строк, и оно почти никогда не
+   выполнялось: «10 см» против «AB = 10 см», ответ с точкой и без. Быстрый
+   путь «оба прохода чистые и согласны» не срабатывал, и рецензента звали
+   на каждой задаче — 25–50 секунд из 43–78 в замере 31 августа на проде.
+
+   Сравнивать надо по существу. У числового ответа существо — числа с их
+   единицами, и порядок их перечисления неважен. Там, где чисел нет вовсе,
+   остаётся сравнение слов, но уже без хвостовой пунктуации и подписей вида
+   «AB =», которыми проходы отличаются чаще всего. */
+const answerUnitAliases = new Map([
+  ['сантиметр', 'см'], ['сантиметра', 'см'], ['сантиметров', 'см'],
+  ['метр', 'м'], ['метра', 'м'], ['метров', 'м'],
+  ['километр', 'км'], ['километра', 'км'], ['километров', 'км'],
+  ['грамм', 'г'], ['грамма', 'г'], ['граммов', 'г'],
+  ['килограмм', 'кг'], ['килограмма', 'кг'], ['килограммов', 'кг'],
+  ['секунда', 'с'], ['секунды', 'с'], ['секунд', 'с'],
+  ['минута', 'мин'], ['минуты', 'мин'], ['минут', 'мин'],
+  ['час', 'ч'], ['часа', 'ч'], ['часов', 'ч'],
+  ['процент', '%'], ['процента', '%'], ['процентов', '%'],
+])
+
+export function normalizeAnswerForComparison(value: string) {
+  return normalizeNotebookNotation(value, 400)
+    .toLocaleLowerCase('ru-RU')
+    .replaceAll('ё', 'е')
+    // Подпись искомой величины: «AB = 10 см» и «10 см» — один ответ.
+    .replace(/^(?:ответ\s*:?\s*)/u, '')
+    .replace(/\b[a-zа-я][a-zа-я0-9₀-₉']{0,3}\s*=\s*/gu, '')
+    .replace(/(\d),(\d)/gu, '$1.$2')
+    .replace(/[«»"'()]/gu, '')
+    .replace(/\s+/gu, ' ')
+    .replace(/[.;,\s]+$/u, '')
+    .trim()
+}
+
+function answerFacts(value: string) {
+  const normalized = normalizeAnswerForComparison(value)
+  const facts = [...normalized.matchAll(/(\d+(?:\.\d+)?)\s*([a-zа-я%°]{0,12})/gu)].map(([, number, rawUnit]) => {
+    const unit = answerUnitAliases.get(rawUnit) ?? rawUnit
+    return `${Number(number)}${unit}`
+  })
+  return { normalized, facts }
+}
+
+export function answersAgree(left: string, right: string) {
+  const first = answerFacts(left)
+  const second = answerFacts(right)
+
+  if (first.normalized === second.normalized) return true
+  // Пустой ответ бывает у построения: сравнивать нечего, но и расхождения нет.
+  if (!first.normalized || !second.normalized) return first.normalized === second.normalized
+
+  if (first.facts.length > 0 && first.facts.length === second.facts.length) {
+    const sortedFirst = [...first.facts].sort()
+    const sortedSecond = [...second.facts].sort()
+    return sortedFirst.every((fact, index) => fact === sortedSecond[index])
+  }
+
+  return false
 }
 
 const transientModelFailures = new Set([
@@ -1503,6 +1652,13 @@ export async function solveHomeworkWithReview(
     const issues = [
       ...validateSolutionQuality(asSolution),
       ...validateDecisionSummary(candidate.decisions, candidate.diagramRequired),
+      // Правила предмета — тот же рецензент, только мгновенный и одинаковый.
+      ...verifySubjectRules(asSolution),
+      // Модель сама отметила нарушенное правило и всё равно отдала решение.
+      // Спорить с ней не нужно: это признание, а не мнение.
+      ...candidate.ruleChecks
+        .filter((check) => !check.passed)
+        .map((check) => `Правило предмета не выполнено: ${check.rule}`),
     ]
     if (request.condition && conditionSimilarity(request.condition, candidate.condition) < 0.55) {
       issues.push('Условие кандидата не совпадает с приложенным заданием')
@@ -1532,11 +1688,62 @@ export async function solveHomeworkWithReview(
     return evaluate(normalizeDraft(raw, notebookLimits), model)
   })
 
+  /* Рецензент, запущенный спекулятивно.
+
+     Раньше он начинался только после того, как оба прохода дошли: сначала
+     ждём отставшего до 25 секунд, потом ещё столько же ждём рецензента.
+     Но нужен он или нет, видно уже по первому дошедшему проходу — если тот
+     нарушил правила, вторым мнением дело не спасти, и звать рецензента можно
+     сразу, пока второй проход ещё идёт.
+
+     Запускается он только на грязном проходе: у чистого есть шанс сойтись
+     со вторым и уйти без рецензента вовсе.
+
+     Цена спекуляции честная: если второй проход окажется чистым и согласным,
+     запущенный вызов не понадобится, и мы за него заплатим впустую. Это
+     примерно девять копеек против двадцати-пятидесяти секунд ожидания там,
+     где рецензент всё-таки нужен. При цене решения в пять рублей выбор
+     очевиден. */
+  const requestReview = (candidate: EngineDraft, issues: readonly string[], otherAnswer: string | null, model: string) => {
+    const reviewPrompt = [
+      'Проверь и при необходимости полностью исправь кандидат.',
+      `Автоматические замечания: ${issues.length > 0 ? issues.join('; ') : 'нет'}.`,
+      ...(otherAnswer ? [`Второй независимый проход дал другой ответ: ${otherAnswer}. Определи, какой верен.`] : []),
+      `Кандидат: ${JSON.stringify(candidate)}`,
+    ].join('\n')
+
+    return callModelWithRetry(
+      options,
+      reviewerInstructions,
+      engineMessage(request, reviewPrompt),
+      'homework_solution_review',
+      reviewSchema,
+      retryDeadline,
+      model,
+    )
+  }
+
+  let speculativeReview: SpeculativeReview | null = null
+  // Читаем через функцию: присваивание идёт из колбэка, и без этого вывод
+  // типов сузил бы переменную до `null` ещё до запуска проходов.
+  const startedReview = (): SpeculativeReview | null => speculativeReview
+
   // Второй проход не должен держать ответ. Когда одно семейство лежит,
   // ожидание его отказа было главной тратой времени: 97 секунд из 118
   // в замере 31 августа. Как только первый проход дошёл, второму даём
   // короткую отсрочку — здоровый в неё укладывается, лежащий нет.
-  const settled = await settleWithGrace(passes, passStragglerGraceMs)
+  const settled = await settleWithGrace(passes, passStragglerGraceMs, (sample) => {
+    if (speculativeReview || sample.issues.length === 0) return
+    speculativeReview = {
+      draft: sample.candidate,
+      // Отказ поймает тот, кто будет его ждать; спекуляция не должна
+      // ронять решение необработанным отклонением.
+      promise: requestReview(sample.candidate, sample.issues, null, sample.model).catch((error: unknown) => {
+        throw error
+      }),
+    }
+    speculativeReview.promise.catch(() => undefined)
+  })
   options.onStage?.('checking')
 
   // Семейства падают независимо: 30 августа Claude лежало сутки целиком.
@@ -1572,12 +1779,20 @@ export async function solveHomeworkWithReview(
     issues: [...deterministicIssues],
   })
 
-  const sameAnswer = normalizeNotebookNotation(first.candidate.answer, 80)
-    === normalizeNotebookNotation(second.candidate.answer, 80)
+  const sameAnswer = answersAgree(first.candidate.answer, second.candidate.answer)
 
-  // Оба прохода чистые и сошлись в ответе — рецензент не нужен, отдаём сразу.
-  // Это и есть основной выигрыш по времени: один вызов вместо двух подряд.
-  if (clean.length === 2 && sameAnswer) {
+  /* Отдаём без рецензента.
+
+     Условие было строже: чистыми должны быть оба прохода. Но отдаём мы один,
+     и требовать безупречности от того, который не пойдёт ученику, незачем:
+     замечания к нему формальные — формат записи, правило предмета, — а не
+     «другой ответ». Достаточно, чтобы выдаваемый проход прошёл все проверки,
+     а второй независимый сошёлся с ним в ответе. Это и есть заявленная
+     сверка: два прохода, пришедшие к одному, и запись без нарушений.
+
+     Двух проходов требуем по-прежнему: когда дошёл только один, `second`
+     совпадает с ним, и «согласие» было бы согласием с самим собой. */
+  if (samples.length >= 2 && best.issues.length === 0 && sameAnswer) {
     const agreed = toSolution(draft, request, ownerId, true)
     options.onTrace?.({ stage: 'reviewer', candidate: draft, approved: true, issues: [] })
     return {
@@ -1592,24 +1807,17 @@ export async function solveHomeworkWithReview(
     }
   }
 
-  // Проходы разошлись или один из них не прошёл проверку — зовём рецензента,
-  // и показываем ему оба варианта: расхождение само по себе подсказка.
-  const reviewPrompt = [
-    'Проверь и при необходимости полностью исправь кандидат.',
-    `Автоматические замечания: ${deterministicIssues.length > 0 ? deterministicIssues.join('; ') : 'нет'}.`,
-    ...(sameAnswer ? [] : [`Второй независимый проход дал другой ответ: ${second.candidate.answer}. Определи, какой верен.`]),
-    `Кандидат: ${JSON.stringify(draft)}`,
-  ].join('\n')
+  /* Проходы разошлись или один из них не прошёл проверку — нужен рецензент.
 
-  const rawReview = await callModelWithRetry(
-    options,
-    reviewerInstructions,
-    engineMessage(request, reviewPrompt),
-    'homework_solution_review',
-    reviewSchema,
-    retryDeadline,
-    workingModel,
-  )
+     Если его уже запустили спекулятивно по тому же кандидату, ждём тот вызов:
+     он идёт с того момента, как этот проход дошёл, и к этой строке чаще всего
+     уже закончился. Новый вызов делаем, только когда спекуляция не о том
+     кандидате — тогда ей на смену идёт разбор с подсказкой о расхождении. */
+  const speculative = startedReview()
+
+  const rawReview = await (speculative && speculative.draft === draft
+    ? speculative.promise
+    : requestReview(draft, deterministicIssues, sameAnswer ? null : second.candidate.answer, workingModel))
   if (!rawReview || typeof rawReview !== 'object' || Array.isArray(rawReview)) {
     throw new GeometrySolutionEngineError('Редактор не вернул проверенное решение')
   }
