@@ -55,3 +55,6 @@ cdz-mobile.png
 footer-light-1440.png
 photo-prod-mobile.png
 photo-prod-mobile-clean.png
+
+# Локальные прогоны против прода
+*.local.mjs
