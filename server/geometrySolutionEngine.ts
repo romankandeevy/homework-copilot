@@ -424,6 +424,19 @@ const notebookNotation = new Map([
   ['pm', '±'],
 ])
 
+/* Обрез по границе слова.
+
+   Простой slice кончался посреди слова: «…и объясн», «…приставочно-суффиксальным
+   спосо». Даже когда строка действительно не влезает, обрывать её надо там,
+   где кончилось слово. */
+export function clampNotebookLine(value: string, maxLength: number) {
+  if (value.length <= maxLength) return value
+  const cut = value.slice(0, maxLength)
+  const lastSpace = cut.lastIndexOf(' ')
+  const trimmed = (lastSpace > maxLength * 0.6 ? cut.slice(0, lastSpace) : cut).replace(/[\s,;:.—-]+$/u, '')
+  return `${trimmed}…`
+}
+
 export function normalizeNotebookNotation(value: unknown, maxLength = 5000) {
   let result = text(value, maxLength)
   result = result.replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/gu, '($1)/($2)')
@@ -715,7 +728,7 @@ function normalizeAnalysis(value: unknown): HomeworkWrittenAnalysis | undefined 
   return { version: 1, kind: kind as HomeworkAnalysisKind, ...(title ? { title } : {}), blocks }
 }
 
-function normalizeDraft(value: unknown): EngineDraft {
+function normalizeDraft(value: unknown, limits = tightNotebookLimits): EngineDraft {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new GeometrySolutionEngineError('Модель не вернула решение')
   }
@@ -735,16 +748,25 @@ function normalizeDraft(value: unknown): EngineDraft {
     decisions: normalizeDecisionSummary(candidate.decisions),
     sourceVerified: candidate.sourceVerified === true,
     given: Array.isArray(candidate.given)
-      ? candidate.given.map((entry) => normalizeNotebookNotation(entry, 80)).filter(Boolean).slice(0, 4)
+      ? candidate.given
+          .map((entry) => clampNotebookLine(normalizeNotebookNotation(entry), limits.given))
+          .filter(Boolean)
+          .slice(0, 4)
       : [],
     goal: {
       title: goalTitle,
-      text: normalizeNotebookNotation(goal.text, 80).replace(/^(?:найти|доказать|построить)\s*:?\s*/iu, ''),
+      text: clampNotebookLine(
+        normalizeNotebookNotation(goal.text).replace(/^(?:найти|доказать|построить)\s*:?\s*/iu, ''),
+        limits.goal,
+      ),
     },
     steps: Array.isArray(candidate.steps)
-      ? candidate.steps.map((entry) => normalizeNotebookNotation(entry, 120)).filter(Boolean).slice(0, 14)
+      ? candidate.steps
+          .map((entry) => clampNotebookLine(normalizeNotebookNotation(entry), limits.step))
+          .filter(Boolean)
+          .slice(0, 14)
       : [],
-    answer: normalizeNotebookNotation(candidate.answer, 80),
+    answer: clampNotebookLine(normalizeNotebookNotation(candidate.answer), limits.answer),
     diagram: normalizeDiagram(candidate.diagram),
     ...(analysis ? { analysis } : {}),
   }
@@ -1213,24 +1235,36 @@ function buildVerification(
 // В физике и химии без слов не обойтись: «по закону сохранения импульса»
 // или «реакция идёт до конца» — это часть школьной записи, а не болтовня.
 // Единые пороги отбраковывали бы верные решения по этим предметам.
+/* Сколько знаков помещается в строку тетради.
+
+   У геометрии страница — фиксированный SVG-лист с размеченными зонами, и
+   пределы под него подогнаны: длинная строка туда просто не влезет. Всем
+   остальным предметам страницу верстает HTML, она переносит строки сама.
+
+   Общие 80 знаков на цель и ответ были сняты с геометрии и уезжали в русский
+   язык: «Найти: Разобрать слово «подоконник» по составу, указать способ его
+   образования и объясн» — обрезано посреди слова, и так же обрывался ответ. */
+const tightNotebookLimits = { given: 80, goal: 80, step: 120, stepOnPage: 92, answer: 80 }
+const roomyNotebookLimits = { given: 130, goal: 190, step: 190, stepOnPage: 190, answer: 280 }
+
 function subjectProfile(subject: string) {
   const normalized = subject.toLocaleLowerCase('ru-RU')
   if (normalized.includes('геометр')) {
-    return { minimumSymbolicShare: 1, maxWordsPerStep: 8, allowsDiagram: true }
+    return { minimumSymbolicShare: 1, maxWordsPerStep: 8, allowsDiagram: true, notebook: tightNotebookLimits }
   }
   if (normalized.includes('алгебр') || normalized.includes('математ')) {
-    return { minimumSymbolicShare: 0.85, maxWordsPerStep: 10, allowsDiagram: true }
+    return { minimumSymbolicShare: 0.85, maxWordsPerStep: 10, allowsDiagram: true, notebook: roomyNotebookLimits }
   }
   if (normalized.includes('физик')) {
-    return { minimumSymbolicShare: 0.7, maxWordsPerStep: 14, allowsDiagram: true }
+    return { minimumSymbolicShare: 0.7, maxWordsPerStep: 14, allowsDiagram: true, notebook: roomyNotebookLimits }
   }
   if (normalized.includes('хими')) {
-    return { minimumSymbolicShare: 0.6, maxWordsPerStep: 14, allowsDiagram: false }
+    return { minimumSymbolicShare: 0.6, maxWordsPerStep: 14, allowsDiagram: false, notebook: roomyNotebookLimits }
   }
   // Остальные предметы: формальной записи может не быть вовсе.
   // Гуманитарные предметы: формальной записи может не быть вовсе, поэтому
   // доля математических обозначений здесь не показатель качества.
-  return { minimumSymbolicShare: 0, maxWordsPerStep: 24, allowsDiagram: false }
+  return { minimumSymbolicShare: 0, maxWordsPerStep: 24, allowsDiagram: false, notebook: roomyNotebookLimits }
 }
 
 export function validateSolutionQuality(solution: HomeworkSolution) {
@@ -1247,10 +1281,11 @@ export function validateSolutionQuality(solution: HomeworkSolution) {
   if (solution.condition.length < 8) issues.push('Условие отсутствует или слишком короткое')
   if (suspiciousCondition(solution.condition)) issues.push('В условии остались признаки ошибки распознавания')
   if (/\$|\\[A-Za-z]+|```|\*\*|<\/?[a-z][a-z0-9]*\s*\/?>/iu.test(solution.condition)) issues.push('В условии осталась техническая разметка')
-  if (solution.given.length > 4 || solution.given.some((line) => line.length > 80)) issues.push('Раздел «Дано» слишком длинный')
-  if (!solution.goal.text || solution.goal.text.length > 80) issues.push('Цель задачи не оформлена кратко')
+  const limits = profile.notebook
+  if (solution.given.length > 4 || solution.given.some((line) => line.length > limits.given)) issues.push('Раздел «Дано» слишком длинный')
+  if (!solution.goal.text || solution.goal.text.length > limits.goal) issues.push('Цель задачи не оформлена кратко')
   if (steps.length === 0 || steps.length > 14) issues.push('Неверное число строк решения')
-  if (steps.some((line) => line.length > 92 || /[\r\n]/u.test(line))) issues.push('Есть строка, не помещающаяся в тетрадь')
+  if (steps.some((line) => line.length > limits.stepOnPage || /[\r\n]/u.test(line))) issues.push('Есть строка, не помещающаяся в тетрадь')
   if (steps.some((line) => /(?:```|\*\*|\\frac|\\angle|<\/?[a-z][a-z0-9]*\s*\/?>)/iu.test(line))) issues.push('В решении есть разметка вместо школьной записи')
   if ([...solution.given, solution.goal.text, ...steps, solution.answer].some((line) => /\$|\\[A-Za-z]+|```|\*\*|<\/?[a-z][a-z0-9]*\s*\/?>/iu.test(line))) {
     issues.push('В решении осталась техническая разметка')
@@ -1459,6 +1494,10 @@ export async function solveHomeworkWithReview(
   // два вызова, — но занимает время одного. И проверка получается сильнее:
   // два независимых решения, сошедшихся в ответе, — довод весомее, чем
   // одобрение рецензента, который видел кандидата и склонен с ним соглашаться.
+  // Пределы строк тетради — по предмету задачи: у геометрии фиксированный
+  // лист, у остальных страницу верстает HTML и переносит строки сама.
+  const notebookLimits = subjectProfile(request.subject).notebook
+
   const evaluate = (candidate: EngineDraft, model: string) => {
     const asSolution = toSolution(candidate, request, ownerId, false)
     const issues = [
@@ -1490,7 +1529,7 @@ export async function solveHomeworkWithReview(
       retryDeadline,
       model,
     )
-    return evaluate(normalizeDraft(raw), model)
+    return evaluate(normalizeDraft(raw, notebookLimits), model)
   })
 
   // Второй проход не должен держать ответ. Когда одно семейство лежит,
@@ -1578,7 +1617,7 @@ export async function solveHomeworkWithReview(
   const review: ReviewResult = {
     approved: reviewCandidate.approved === true,
     issues: lines(reviewCandidate.issues, 12, 160),
-    solution: normalizeDraft(reviewCandidate.solution),
+    solution: normalizeDraft(reviewCandidate.solution, notebookLimits),
   }
   const solution = toSolution(review.solution, request, ownerId, review.approved)
   const finalIssues = [
@@ -1695,7 +1734,7 @@ export async function solveHomeworkWithReview(
     const repaired: ReviewResult = {
       approved: repairCandidate.approved === true,
       issues: lines(repairCandidate.issues, 12, 160),
-      solution: normalizeDraft(repairCandidate.solution),
+      solution: normalizeDraft(repairCandidate.solution, notebookLimits),
     }
     const repairedSolution = toSolution(repaired.solution, request, ownerId, repaired.approved)
     const repairedIssues = [

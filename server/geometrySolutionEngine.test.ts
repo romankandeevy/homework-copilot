@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { HomeworkSolution } from '../src/lib/homeworkContract.ts'
-import { isCurrentReviewedSolution, normalizeNotebookNotation, validateSolutionQuality } from './geometrySolutionEngine.ts'
+import { clampNotebookLine, isCurrentReviewedSolution, normalizeNotebookNotation, validateSolutionQuality } from './geometrySolutionEngine.ts'
 
 const taskFiveSolution: HomeworkSolution = {
   engineVersion: 2,
@@ -49,6 +49,63 @@ const taskFiveSolution: HomeworkSolution = {
   quality: { diagramRequired: true, reviewPassed: true, symbolicShare: 1 },
   createdAt: '2026-08-26T18:00:00.000Z',
 }
+
+/* Длина строки тетради — по предмету.
+
+   Пределы были сняты с геометрии, у которой лист фиксированный, и уезжали
+   в русский язык: «Найти: Разобрать слово «подоконник» по составу, указать
+   способ его образования и объясн» — обрезано посреди слова. */
+describe('пределы строки тетради', () => {
+  const morphology: HomeworkSolution = {
+    ...taskFiveSolution,
+    textbookId: 'russian',
+    subject: 'Русский язык',
+    task: 'Разберите по составу слово «подоконник»',
+    condition: 'Разберите по составу слово «подоконник» и укажите способ его образования. Объясните написание приставки.',
+    given: ['подоконник'],
+    goal: {
+      title: 'Найти',
+      text: 'Разобрать слово «подоконник» по составу, указать способ его образования и объяснить написание приставки',
+    },
+    steps: [
+      'под-окон-ник-∅',
+      'окно → подоконник',
+      'приставочно-суффиксальный способ образования',
+      'под- — неизменяемая приставка, в ней всегда пишется буква о',
+    ],
+    answer: 'Под-окон-ник-∅. Слово образовано от слова «окно» приставочно-суффиксальным способом.',
+    diagram: { kind: 'none', description: '', vertices: [] },
+    taskType: 'mixed',
+    quality: { diagramRequired: false, reviewPassed: true, symbolicShare: 0 },
+  }
+
+  it('пропускает развёрнутую цель и ответ по словесному предмету', () => {
+    expect(validateSolutionQuality(morphology)).toEqual([])
+  })
+
+  // У геометрии лист фиксированный: длинная строка туда не влезет,
+  // и ослаблять проверку под неё нельзя.
+  it('оставляет геометрии прежнюю тесноту', () => {
+    const issues = validateSolutionQuality({
+      ...taskFiveSolution,
+      goal: { title: 'Построить', text: 'Разобрать слово «подоконник» по составу, указать способ его образования и объяснить написание приставки' },
+    })
+    expect(issues).toContain('Цель задачи не оформлена кратко')
+  })
+
+  it('обрезает по границе слова, а не посреди него', () => {
+    const line = 'Разобрать слово «подоконник» по составу и объяснить написание приставки'
+    const clamped = clampNotebookLine(line, 40)
+
+    expect(clamped.endsWith('…')).toBe(true)
+    // Сохранённая часть кончается там же, где кончается слово в исходной
+    // строке: следующий знак оригинала — пробел, а не буква.
+    const kept = clamped.slice(0, -1)
+    expect(line.startsWith(kept)).toBe(true)
+    expect(line[kept.length]).toBe(' ')
+    expect(clampNotebookLine('Короткая строка', 40)).toBe('Короткая строка')
+  })
+})
 
 describe('geometry solution quality gate', () => {
   it('accepts a compact construction with a mathematically consistent drawing', () => {
