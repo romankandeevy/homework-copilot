@@ -871,6 +871,14 @@ export type Database = {
         }
         Returns: Json
       }
+      store_guest_homework_solution: {
+        Args: { p_guest_id: string; p_idempotency_key: string; p_solution: Json }
+        Returns: undefined
+      }
+      get_guest_homework_solution: {
+        Args: { p_guest_id: string; p_idempotency_key: string }
+        Returns: Json
+      }
       report_homework_job: {
         Args: {
           p_error?: string | null

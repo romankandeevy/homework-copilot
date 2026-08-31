@@ -244,6 +244,25 @@ export async function listSolutionJobs(
     .filter((entry): entry is SolutionJob => entry !== null)
 }
 
+/* Решение гостя после перезахода.
+
+   Ученику с аккаунтом решения возвращает `get_my_homework_solutions`.
+   У гостя аккаунта нет, поэтому его решение хранится по метке браузера —
+   иначе очередь доходила бы до «Решение готово», а открывать было бы нечего:
+   ответ решателя умер вместе с перезагруженной вкладкой. */
+export async function fetchGuestSolution(
+  client: SupabaseClient<Database>,
+  guestId: string,
+  idempotencyKey: string,
+): Promise<unknown> {
+  const { data, error } = await client.rpc('get_guest_homework_solution', {
+    p_guest_id: guestId,
+    p_idempotency_key: idempotencyKey,
+  })
+  if (error) return null
+  return data
+}
+
 export async function closeSolutionJob(
   client: SupabaseClient<Database>,
   idempotencyKey: string,

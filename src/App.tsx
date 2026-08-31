@@ -64,6 +64,7 @@ import {
 } from './lib/pendingSolutions'
 import {
   closeSolutionJob,
+  fetchGuestSolution,
   getDeviceId,
   isActiveJob,
   listSolutionJobs,
@@ -992,6 +993,7 @@ function HomePage() {
   const [dispatchTick, setDispatchTick] = useState(0)
   const runningJobKeysRef = useRef(new Set<string>())
   const refundedJobKeysRef = useRef(new Set<string>())
+  const restoredJobKeysRef = useRef(new Set<string>())
   const deviceIdRef = useRef('')
   if (!deviceIdRef.current) deviceIdRef.current = getDeviceId()
   const [selectedSolution, setSelectedSolution] = useState<SolutionState | null>(() => currentNavigationRoute().solution)
@@ -1549,6 +1551,52 @@ function HomePage() {
       .then(() => refreshAccount())
       .catch(() => undefined)
   }, [refreshAccount, supabaseClient, user, visibleJobs])
+
+  /* Готовая задача без решения под рукой.
+
+     Так бывает после перезахода и когда задачу решили на другом устройстве:
+     строка очереди говорит «готово», а самого решения в этой вкладке нет.
+     Без этого «Открыть решение» вело бы в пустоту. */
+  useEffect(() => {
+    if (!supabaseClient) return
+    const missing = visibleJobs.filter((job) => (
+      job.status === 'done'
+      && !restoredJobKeysRef.current.has(job.idempotencyKey)
+      && !visibleGeneratedSolutions.some(
+        (solution) => solution.textbookId === job.textbookId && solution.task === job.task,
+      )
+    ))
+    if (missing.length === 0) return
+
+    missing.forEach((job) => restoredJobKeysRef.current.add(job.idempotencyKey))
+
+    const restoreMissing = async () => {
+      if (user) {
+        await restorePurchasedSolutions()
+        return
+      }
+      if (!guestJobId) return
+
+      const restored = (await Promise.all(missing.map(
+        (job) => fetchGuestSolution(supabaseClient, guestJobId, job.idempotencyKey),
+      )))
+        .map((entry) => parseStoredHomeworkSolution(entry))
+        .filter((entry): entry is HomeworkSolution => entry !== null)
+      if (restored.length === 0) return
+
+      setGeneratedSolutions((current) => [
+        ...restored,
+        ...current.filter((local) => !restored.some(
+          (remote) => remote.textbookId === local.textbookId
+            && remote.task === local.task
+            && remote.textbookEdition === local.textbookEdition
+            && remote.conditionNormalized === local.conditionNormalized,
+        )),
+      ])
+    }
+
+    void restoreMissing().catch(() => undefined)
+  }, [guestJobId, restorePurchasedSolutions, supabaseClient, user, visibleGeneratedSolutions, visibleJobs])
 
   const markLocalJob = useCallback((job: SolutionJob, patch: Partial<SolutionJob>) => {
     setLocalJobs((current) => {

@@ -452,6 +452,55 @@ function createJobReporter(
   }
 }
 
+/* Решение гостя переживает перезаход.
+
+   У ученика с аккаунтом решение лежит в базе и возвращается само. У гостя
+   аккаунта нет, и решение жило только в ответе того запроса, который послала
+   вкладка: перезагрузка на середине убивала вкладку вместе с ответом, очередь
+   доходила до «Решение готово», а открывать было нечего.
+
+   Хранение по метке браузера чинит заодно и повтор: тот же ключ больше не
+   гоняет модель второй раз. */
+async function restoreGuestSolution(
+  guest: GuestIdentity,
+  request: SolveHomeworkRequest,
+  options: SolverOptions,
+): Promise<HomeworkSolution | null> {
+  const admin = guestAdminClient(options)
+  if (!admin) return null
+
+  try {
+    const { data, error } = await admin.rpc('get_guest_homework_solution', {
+      p_guest_id: guest.guestId,
+      p_idempotency_key: request.idempotencyKey,
+    })
+    if (error || !data || typeof data !== 'object' || Array.isArray(data)) return null
+    return data as unknown as HomeworkSolution
+  } catch {
+    return null
+  }
+}
+
+async function storeGuestSolution(
+  guest: GuestIdentity,
+  request: SolveHomeworkRequest,
+  solution: HomeworkSolution,
+  options: SolverOptions,
+): Promise<void> {
+  const admin = guestAdminClient(options)
+  if (!admin) return
+
+  try {
+    await admin.rpc('store_guest_homework_solution', {
+      p_guest_id: guest.guestId,
+      p_idempotency_key: request.idempotencyKey,
+      p_solution: solution as unknown as Json,
+    })
+  } catch {
+    // Не сохранилось — решение всё равно уходит ученику этим же ответом.
+  }
+}
+
 function guestAdminClient(options: SolverOptions): SupabaseClient<Database> | null {
   if (!options.supabaseUrl || !options.serviceRoleKey) return null
   return createClient<Database>(options.supabaseUrl, options.serviceRoleKey, {
@@ -686,7 +735,9 @@ export async function handleHomeworkSolverRequest(
     job = createJobReporter(options, task, account, guestSolving)
     job.report('reading')
     stage = 'restore'
-    const existingSolution = await completeStoredSolution(account, task)
+    const existingSolution = guestSolving
+      ? await restoreGuestSolution(guestSolving, task, options)
+      : await completeStoredSolution(account, task)
     if (existingSolution && isCurrentReviewedSolution(existingSolution)) {
       logSolverEvent('info', 'homework_solve_reused', {
         requestId: solveRequestId,
@@ -728,6 +779,9 @@ export async function handleHomeworkSolverRequest(
       if (!completedSolution || !isCurrentReviewedSolution(completedSolution)) {
         throw new HomeworkSolverError(502, 'Не получилось сохранить готовое решение')
       }
+      // Гостю сохраняем по метке браузера: иначе решение существует только
+      // в этом ответе и пропадает вместе с перезагруженной вкладкой.
+      if (guestSolving) await storeGuestSolution(guestSolving, task, completedSolution, options)
       logSolverEvent('info', 'homework_solve_completed', {
         requestId: solveRequestId,
         task: taskNumber,
