@@ -167,6 +167,63 @@ describe('Homework Copilot task flow', () => {
     expect(window.location.pathname).toBe('/app')
   })
 
+  // Подпись задачи из текста — срез условия. Сервер прогоняет её через trim,
+  // и готовое состояние должно строиться из его ответа: клиентский срез,
+  // кончавшийся пробелом, открывал заглушку вместо готового решения.
+  it('открывает готовое решение с карточки, когда срез условия кончается пробелом', async () => {
+    const condition = 'Турист прошёл в первый день 3/8 всего маршрута, а во второй — 40% оставшегося пути. Найди длину маршрута.'
+    const fetchMock = vi.fn(async (_url: string, options?: RequestInit) => {
+      const request = JSON.parse(String(options?.body)) as SolveHomeworkRequest
+      // Сервер триммит подпись задачи — повторяем это в заглушке.
+      return {
+        ok: true,
+        json: async () => ({ solution: mockGeneratedSolution({ ...request, task: request.task.trim() }) }),
+      }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(<App />)
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Условие задачи' }), { target: { value: condition } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Предмет' }), { target: { value: 'Алгебра' } })
+    fireEvent.click(screen.getByRole('button', { name: /Решить/ }))
+
+    // Решение открывается страницей, а не заглушкой «Выбери учебник».
+    expect(await screen.findByRole('heading', { name: 'Решение задачи' })).toBeInTheDocument()
+    expect(screen.getByText('Готово.')).toBeInTheDocument()
+    expect(screen.queryByText('Выбери учебник')).not.toBeInTheDocument()
+
+    // Возврат на главную и открытие с карточки «Решение готово» — тот путь,
+    // который был сломан.
+    fireEvent.click(screen.getByRole('button', { name: /На главную/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Открыть решение/ }))
+    expect(await screen.findByRole('heading', { name: 'Решение задачи' })).toBeInTheDocument()
+    expect(screen.queryByText('Выбери учебник')).not.toBeInTheDocument()
+  })
+
+  // Перезагрузка страницы текстового решения не должна уводить на главную:
+  // подпись задачи в адресе — срез условия, а не номер.
+  it('восстанавливает текстовое решение по адресу после перезагрузки', async () => {
+    const solution = mockGeneratedSolution({
+      textbookId: 'algebra',
+      task: 'Решите уравнение 5x = 20.',
+      source: 'text',
+      subject: 'Алгебра',
+      grade: '8 класс',
+      textbookTitle: 'Любой учебник',
+      authors: '—',
+      edition: 'по фото или тексту',
+      condition: 'Решите уравнение 5x = 20.',
+      idempotencyKey: 'restore-test',
+    })
+    window.localStorage.setItem('homework-copilot:generated-solutions-v1', JSON.stringify([solution]))
+    window.history.replaceState({}, '', `/solutions/algebra/${encodeURIComponent(solution.task)}`)
+    installSuccessfulSolver()
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { name: 'Решение задачи' })).toBeInTheDocument()
+    expect(screen.getByText('Готово.')).toBeInTheDocument()
+  })
+
   it('отправляет фото без распознавания в браузере', async () => {
     const fetchMock = installSuccessfulSolver()
     render(<App />)

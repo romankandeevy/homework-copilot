@@ -157,7 +157,10 @@ function currentNavigationRoute(pathname = window.location.pathname): { label: N
   const destination = applicationRoutes.find((item) => item.path === path)
   if (destination) return { label: destination.label, solution: null }
 
-  const solutionMatch = path.match(/^\/solutions\/([^/]+)\/(\d{1,4}|photo-[a-z0-9-]+)$/i)
+  // Подпись задачи — не только номер: у решения по вписанному условию это
+  // срез самого условия. Раньше такой адрес не распознавался, и перезагрузка
+  // страницы текстового решения уводила на главную.
+  const solutionMatch = path.match(/^\/solutions\/([^/]+)\/([^/]+)$/i)
   if (solutionMatch) {
     const task = decodeURIComponent(solutionMatch[2])
     return {
@@ -166,7 +169,9 @@ function currentNavigationRoute(pathname = window.location.pathname): { label: N
         mode: 'ready',
         textbookId: decodeURIComponent(solutionMatch[1]),
         task,
-        source: task.startsWith('photo-') ? 'photo' : 'number',
+        source: task.startsWith('photo-')
+          ? 'photo'
+          : /^\d{1,4}(\.\d{1,3}){0,2}$/.test(task) ? 'number' : 'text',
       },
     }
   }
@@ -547,7 +552,7 @@ function SolutionStatus({ state, textbooks: items, onOpenSolution }: { state: So
       <section className="ready-solution" aria-labelledby="ready-solution-title">
         <CheckCircle size={38} weight="duotone" aria-hidden="true" />
         <div>
-          <h2 id="ready-solution-title">{state.source === 'photo' ? 'Решение по фото готово' : `№ ${state.task} уже готова`}</h2>
+          <h2 id="ready-solution-title">{state.source === 'number' ? `№ ${state.task} уже готова` : 'Решение готово'}</h2>
           <p>{textbook.subject}. {textbook.title}. {state.source === 'photo' ? 'Модель прочитала фото, готовый ответ можно переписать.' : 'Решение найдено в общей базе, ждать не нужно.'}</p>
         </div>
         <button type="button" onClick={() => onOpenSolution(state)}>Открыть решение <ArrowRight size={18} weight="bold" aria-hidden="true" /></button>
@@ -559,7 +564,7 @@ function SolutionStatus({ state, textbooks: items, onOpenSolution }: { state: So
     <section className="active-solution" aria-labelledby="active-solution-title">
       <header className="section-heading">
         <div>
-          <h2 id="active-solution-title">{state.source === 'photo' ? 'Готовим задачу с фото' : `Готовим № ${state.task}`}</h2>
+          <h2 id="active-solution-title">{state.source === 'number' ? `Готовим № ${state.task}` : state.source === 'photo' ? 'Готовим задачу с фото' : 'Готовим решение задачи'}</h2>
           <p>{textbook.subject}. {textbook.title}. {state.source === 'photo' ? 'Читаем фото и готовим решение.' : 'Готовое решение появится автоматически.'}</p>
         </div>
         <span className="solution-eta">Обычно несколько секунд</span>
@@ -632,7 +637,7 @@ function MySolutions({ items, onOpenAll, onOpenSolution }: { items: readonly Per
           return (
             <button type="button" key={`${textbookId}-${task}-${time}`} onClick={() => onOpenSolution({ textbookId, task, mode, source })}>
               <Icon size={32} weight="duotone" aria-hidden="true" />
-              <span><small>{textbook.subject}, {textbook.title}</small><strong>№ {task}</strong></span>
+              <span><small>{textbook.subject}, {textbook.title}</small><strong>{source === 'number' ? `№ ${task}` : task}</strong></span>
               <time>{time}</time>
               <ArrowRight size={18} weight="bold" aria-hidden="true" />
             </button>
@@ -732,7 +737,7 @@ function SolutionsPage({
                 return (
                   <button type="button" key={`${textbookId}-${task}-${time}`} onClick={() => onOpenSolution({ textbookId, task, mode, source })}>
                     <Icon size={32} weight="duotone" aria-hidden="true" />
-                    <span><small>{textbook.subject}, {textbook.title}</small><strong>№ {task}</strong></span>
+                    <span><small>{textbook.subject}, {textbook.title}</small><strong>{source === 'number' ? `№ ${task}` : task}</strong></span>
                     <time>{time}</time>
                     <ArrowRight size={18} weight="bold" aria-hidden="true" />
                   </button>
@@ -874,7 +879,7 @@ function UnderstandingPage({
     return (
       <section className="route-page solution-view" aria-labelledby="understanding-page-title">
         <header className="route-page-header">
-          <h1 id="understanding-page-title">{solution?.source === 'photo' ? 'Решение по фото' : 'Решение № ' + notebookFixture.number}</h1>
+          <h1 id="understanding-page-title">{solution?.source === 'number' ? 'Решение № ' + notebookFixture.number : solution?.source === 'photo' ? 'Решение по фото' : 'Решение задачи'}</h1>
           <p>Готовый лист для тетради. Проверь условие перед тем, как переписывать ответ.</p>
         </header>
         {generatedSolution && (
@@ -896,7 +901,7 @@ function UnderstandingPage({
     return (
       <section className="route-page solution-view" aria-labelledby="understanding-page-title">
         <header className="route-page-header">
-          <h1 id="understanding-page-title">{solution?.source === 'photo' ? 'Решение по фото' : 'Решение № ' + generatedSolution.task}</h1>
+          <h1 id="understanding-page-title">{solution?.source === 'number' ? 'Решение № ' + generatedSolution.task : solution?.source === 'photo' ? 'Решение по фото' : 'Решение задачи'}</h1>
           <p>{generatedSolution.subject}. {generatedSolution.textbookTitle}.</p>
         </header>
         <article className="written-solution" aria-label="Готовое решение задачи">
@@ -1502,7 +1507,9 @@ function HomePage() {
   const submitFromForm = async (submission: TaskSubmission) => {
     const imageDataUrl = submission.photo ? await prepareTaskPhoto(submission.photo) : undefined
     return submitTask(
-      submission.condition.slice(0, 60) || 'Задача с фото',
+      // Срез обрезается по границе слова trim-ом: сервер всё равно прогоняет
+      // подпись через trim, и различие в хвостовой пробел ломало сверку.
+      submission.condition.slice(0, 60).trim() || 'Задача с фото',
       true,
       submission.source,
       submission.idempotencyKey,
@@ -1579,7 +1586,6 @@ function HomePage() {
     }
 
     const processingState: SolutionState = { mode: 'processing', textbookId, task: resolvedTask, source }
-    const readyState: SolutionState = { ...processingState, mode: 'ready' }
 
     setSolutionState(processingState)
 
@@ -1638,9 +1644,19 @@ function HomePage() {
             || entry.ownerId !== generatedSolution.ownerId,
         ),
       ])
-      setSolutionState(readyState)
+      // Подпись задачи в готовом состоянии берётся из ответа сервера, а не из
+      // клиентского среза условия: сервер прогоняет её через trim, и срез,
+      // кончавшийся пробелом, уже не совпадал с сохранённым решением —
+      // карточка «Решение готово» открывала заглушку вместо решения.
+      const deliveredState: SolutionState = {
+        mode: 'ready',
+        textbookId: generatedSolution.textbookId,
+        task: generatedSolution.task,
+        source: generatedSolution.source,
+      }
+      setSolutionState(deliveredState)
       if (supabaseClient && user) await Promise.all([refreshAccount(), refreshSharedSolutions()])
-      if (openWhenReady) openSolution(readyState)
+      if (openWhenReady) openSolution(deliveredState)
       return true
     } catch (error) {
       setSolutionState({
