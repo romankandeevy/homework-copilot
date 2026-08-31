@@ -67,11 +67,18 @@ export type GeometrySolutionTraceEvent = {
   issues: string[]
 }
 
+/* Стадия работы, о которой решателю есть что сообщить ученику. Это не
+   раскадровка прогресса, а отметки фактических переходов: проходы запущены,
+   проходы сошлись или отданы рецензенту. Ничего между ними мы не знаем и
+   изображать не будем. */
+export type HomeworkSolveStage = 'solving' | 'checking'
+
 type EngineOptions = {
   apiKey: string
   model?: string
   fetchImpl?: typeof fetch
   onTrace?: (event: GeometrySolutionTraceEvent) => void
+  onStage?: (stage: HomeworkSolveStage) => void
 }
 
 type EngineDraft = {
@@ -1471,6 +1478,8 @@ export async function solveHomeworkWithReview(
     options.model ?? defaultHomeworkModels[index % defaultHomeworkModels.length]
   ))
 
+  options.onStage?.('solving')
+
   const passes = passModels.map(async (model) => {
     const raw = await callModelWithRetry(
       options,
@@ -1489,6 +1498,7 @@ export async function solveHomeworkWithReview(
   // в замере 31 августа. Как только первый проход дошёл, второму даём
   // короткую отсрочку — здоровый в неё укладывается, лежащий нет.
   const settled = await settleWithGrace(passes, passStragglerGraceMs)
+  options.onStage?.('checking')
 
   // Семейства падают независимо: 30 августа Claude лежало сутки целиком.
   // Пока хотя бы один проход дошёл, решение выдаём — иначе теряем ответ там,

@@ -224,6 +224,63 @@ describe('Homework Copilot task flow', () => {
     expect(screen.getByText('Готово.')).toBeInTheDocument()
   })
 
+  /* Очередь.
+
+     Раньше состояние было одно на всю вкладку: вторая задача затирала первую,
+     и отправить её, пока идёт первая, было некуда. */
+  it('держит несколько задач сразу: две в работе, третья ждёт очереди', async () => {
+    // Решатель, который не отвечает: так задачи остаются в работе.
+    vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})))
+    render(<App />)
+
+    const conditions = [
+      'Решите уравнение x² − 5x + 6 = 0 и укажите больший корень.',
+      'Разберите слово «пришкольный» по составу и укажите способ образования.',
+      'В треугольнике ABC угол C равен 90°, AC = 6, BC = 8. Найдите AB.',
+    ]
+
+    for (const condition of conditions) {
+      fireEvent.change(screen.getByRole('textbox', { name: 'Условие задачи' }), { target: { value: condition } })
+      fireEvent.click(screen.getByRole('button', { name: /Решить/ }))
+      // eslint-disable-next-line no-await-in-loop
+      await waitFor(() => expect(screen.getByRole('textbox', { name: 'Условие задачи' })).toHaveValue(''))
+    }
+
+    await waitFor(() => expect(screen.getAllByRole('heading', { name: 'Решаем задачу' })).toHaveLength(2))
+    expect(await screen.findByText(/ждёт очереди/)).toBeInTheDocument()
+    // Ни одно условие не потерялось.
+    conditions.forEach((condition) => expect(screen.getByText(condition)).toBeInTheDocument())
+  })
+
+  /* Неудача.
+
+     «Не получилось решить задачу» без выхода — тупик: условие набрано, фото
+     приложено, а повторить нечем. */
+  it('после сбоя предлагает повтор и отправляет то же условие заново', async () => {
+    const fetchMock = vi.fn(async (_url: string, _options?: RequestInit) => ({
+      ok: false,
+      json: async () => ({ error: 'Модель перегружена. Попробуй ещё раз' }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<App />)
+
+    const condition = 'Найдите массовую долю кислорода в серной кислоте H2SO4.'
+    fireEvent.change(screen.getByRole('textbox', { name: 'Условие задачи' }), { target: { value: condition } })
+    fireEvent.click(screen.getByRole('button', { name: /Решить/ }))
+
+    expect(await screen.findByRole('heading', { name: 'Решение не дошло' })).toBeInTheDocument()
+    expect(screen.getByText('Модель перегружена. Попробуй ещё раз')).toBeInTheDocument()
+    expect(screen.getByText('Деньги за неготовое решение не списаны')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /Решить ещё раз/ }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+    const retried = JSON.parse(String(fetchMock.mock.calls[1][1]?.body)) as SolveHomeworkRequest
+    expect(retried.condition).toBe(condition)
+    // Ключ идемпотентности новый: повтор — это новая попытка, а не тот же запрос.
+    const first = JSON.parse(String(fetchMock.mock.calls[0][1]?.body)) as SolveHomeworkRequest
+    expect(retried.idempotencyKey).not.toBe(first.idempotencyKey)
+  })
+
   it('отправляет фото без распознавания в браузере', async () => {
     const fetchMock = installSuccessfulSolver()
     render(<App />)

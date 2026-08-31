@@ -844,6 +844,44 @@ export type Database = {
         Args: { p_guest_id: string; p_idempotency_key: string }
         Returns: boolean
       }
+      start_homework_job: {
+        Args: {
+          p_condition_preview?: string
+          p_device_id: string
+          p_grade?: string
+          p_guest_id?: string | null
+          p_idempotency_key: string
+          p_source: string
+          p_subject?: string
+          p_task: string
+          p_textbook_id: string
+        }
+        Returns: Json
+      }
+      list_homework_jobs: {
+        Args: { p_guest_id?: string | null }
+        Returns: Json[]
+      }
+      close_homework_job: {
+        Args: {
+          p_error?: string | null
+          p_guest_id?: string | null
+          p_idempotency_key: string
+          p_status: string
+        }
+        Returns: Json
+      }
+      report_homework_job: {
+        Args: {
+          p_error?: string | null
+          p_guest_id?: string | null
+          p_idempotency_key: string
+          p_stage: string
+          p_task?: string | null
+          p_user_id?: string | null
+        }
+        Returns: Json
+      }
       get_admin_context: { Args: never; Returns: Json }
       get_my_referral: { Args: never; Returns: Json }
       get_my_homework_solutions: {

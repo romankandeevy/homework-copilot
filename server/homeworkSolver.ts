@@ -15,6 +15,7 @@ import {
   solveHomeworkWithReview,
   validateSolutionQuality,
 } from './geometrySolutionEngine.ts'
+import type { HomeworkSolveStage } from './geometrySolutionEngine.ts'
 
 type SolverOptions = {
   apiKey?: string
@@ -67,6 +68,7 @@ export async function solveWithKie(
   request: SolveHomeworkRequest,
   options: SolverOptions,
   ownerId?: string,
+  onStage?: (stage: HomeworkSolveStage) => void,
 ): Promise<HomeworkSolution> {
   const verifiedTask = request.source === 'number'
     ? findVerifiedTextbookTask(request.textbookId, request.edition, request.task)
@@ -113,6 +115,7 @@ export async function solveWithKie(
       apiKey: options.apiKey,
       model: options.model,
       fetchImpl: options.fetchImpl,
+      ...(onStage ? { onStage } : {}),
     }, ownerId)
   } catch (error) {
     if (!(error instanceof GeometrySolutionEngineError)) throw error
@@ -405,6 +408,50 @@ async function releaseGuestSolution(
   }
 }
 
+/* Стадии решения в строке очереди.
+
+   Ученик видит не бегунок, изображающий занятость, а то, до чего работа
+   действительно дошла. Записи идут цепочкой и не ждутся: очередь — это
+   свидетельство о ходе работы, и задерживать ради него само решение нельзя.
+   Терминальную запись перед ответом дожидаемся — по ней остальные устройства
+   узнают, что задача закрыта. */
+type JobStage = HomeworkSolveStage | 'reading' | 'writing' | 'done' | 'failed'
+
+type JobReporter = {
+  report: (stage: JobStage, extra?: { error?: string; task?: string }) => void
+  flush: () => Promise<void>
+}
+
+function createJobReporter(
+  options: SolverOptions,
+  request: SolveHomeworkRequest,
+  account: AuthenticatedAccount | null,
+  guest: GuestIdentity | null,
+): JobReporter {
+  const admin = guestAdminClient(options)
+  if (!admin || (!account && !guest)) return { report: () => {}, flush: async () => {} }
+
+  let chain: Promise<unknown> = Promise.resolve()
+  return {
+    report(stage, extra) {
+      chain = chain
+        .then(() => admin.rpc('report_homework_job', {
+          p_idempotency_key: request.idempotencyKey,
+          p_stage: stage,
+          p_user_id: account?.userId ?? null,
+          p_guest_id: account ? null : guest?.guestId ?? null,
+          p_error: extra?.error ? extra.error.slice(0, 400) : null,
+          p_task: extra?.task ?? null,
+        }))
+        // Сорванная отметка стадии не должна ронять решение: она про показ.
+        .catch(() => undefined)
+    },
+    async flush() {
+      await chain.catch(() => undefined)
+    },
+  }
+}
+
 function guestAdminClient(options: SolverOptions): SupabaseClient<Database> | null {
   if (!options.supabaseUrl || !options.serviceRoleKey) return null
   return createClient<Database>(options.supabaseUrl, options.serviceRoleKey, {
@@ -620,6 +667,7 @@ export async function handleHomeworkSolverRequest(
   let taskNumber: string | undefined
   let source: SolveHomeworkRequest['source'] | undefined
   let stage = 'validate'
+  let job: JobReporter = { report: () => {}, flush: async () => {} }
 
   try {
     const task = await validateRequest(await readJsonBody(request), options)
@@ -635,6 +683,8 @@ export async function handleHomeworkSolverRequest(
     const guest = readGuestIdentity(request, options)
     const account = await authenticateAccount(request, options, guest)
     const guestSolving = account ? null : guest
+    job = createJobReporter(options, task, account, guestSolving)
+    job.report('reading')
     stage = 'restore'
     const existingSolution = await completeStoredSolution(account, task)
     if (existingSolution && isCurrentReviewedSolution(existingSolution)) {
@@ -644,6 +694,8 @@ export async function handleHomeworkSolverRequest(
         source,
         durationMs: Date.now() - startedAt,
       })
+      job.report('done', { task: existingSolution.task })
+      await job.flush()
       sendJson(response, 200, { solution: existingSolution })
       return
     }
@@ -667,10 +719,11 @@ export async function handleHomeworkSolverRequest(
       // это обычной неудачей: возврат отрабатывает штатно, а ответ уходит
       // с понятной причиной, пока функция ещё жива.
       const solution = await Promise.race([
-        solveWithKie(task, options, account?.userId),
+        solveWithKie(task, options, account?.userId, (modelStage) => job.report(modelStage)),
         solveDeadline(),
       ])
       stage = 'persist'
+      job.report('writing')
       const completedSolution = await completeStoredSolution(account, task, solution, options)
       if (!completedSolution || !isCurrentReviewedSolution(completedSolution)) {
         throw new HomeworkSolverError(502, 'Не получилось сохранить готовое решение')
@@ -681,6 +734,8 @@ export async function handleHomeworkSolverRequest(
         source,
         durationMs: Date.now() - startedAt,
       })
+      job.report('done', { task: completedSolution.task })
+      await job.flush()
       sendJson(response, 200, { solution: completedSolution })
     } catch (error) {
       if (reserved && guestSolving) await releaseGuestSolution(guestSolving, task, options)
@@ -689,6 +744,10 @@ export async function handleHomeworkSolverRequest(
     }
   } catch (error) {
     const status = error instanceof HomeworkSolverError ? error.status : 500
+    job.report('failed', {
+      error: error instanceof HomeworkSolverError ? error.message : 'Не получилось подготовить решение. Попробуй ещё раз',
+    })
+    await job.flush()
     logSolverEvent('error', 'homework_solve_failed', {
       requestId: solveRequestId,
       task: taskNumber,

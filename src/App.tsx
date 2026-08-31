@@ -13,7 +13,6 @@ import {
   CaretRight,
   Check,
   ChatsCircle,
-  CheckCircle,
   Dna,
   Flask,
   Function,
@@ -58,7 +57,22 @@ import {
   saveGeneratedSolutions,
 } from './lib/homeworkSolution'
 import { normalizeTaskCondition } from './textbooks/taskCatalog'
-import type { VerifiedTextbookTaskSource } from './textbooks/taskCatalog'
+import {
+  findPendingSolution,
+  forgetPendingSolution,
+  savePendingSolution,
+} from './lib/pendingSolutions'
+import {
+  closeSolutionJob,
+  getDeviceId,
+  isActiveJob,
+  listSolutionJobs,
+  mergeJobs,
+  nextRunnableJob,
+  startSolutionJob,
+} from './lib/solutionJobs'
+import type { SolutionJob } from './lib/solutionJobs'
+import { SolutionQueue } from './solution/SolutionQueue'
 import { SolutionVerificationPanel } from './solution/SolutionVerificationPanel'
 import { WrittenAnalysis } from './solution/WrittenAnalysis'
 import { SiteFooter, SupportCenter, SupportLauncher } from './support/SupportCenter'
@@ -102,12 +116,13 @@ type Textbook = {
   taskAddress?: 'number' | 'paragraph'
 }
 
+/* Открытое решение. Ход работы сюда больше не входит: он живёт строкой
+   очереди в базе, одинаковой для всех устройств ученика. */
 type SolutionState = {
-  mode: 'processing' | 'ready' | 'error'
+  mode: 'ready'
   textbookId: TextbookId
   task: string
   source: HomeworkSource
-  error?: string
 }
 
 type PersonalSolution = SolutionState & {
@@ -116,6 +131,68 @@ type PersonalSolution = SolutionState & {
 
 const themeStorageKey = 'homework-copilot:theme'
 const selectedTextbookStorageKey = 'homework-copilot:selected-textbook'
+const dismissedJobsStorageKey = 'homework-copilot:dismissed-jobs-v1'
+
+/* Сколько задач решается одновременно.
+
+   Очередь, а не залп: каждое решение — это два параллельных вызова модели, и
+   вчетвером они упираются в ограничения провайдера, из-за которых задача
+   возвращается с «модель перегружена». Две в работе, остальные ждут — так
+   три задачи расходятся быстрее, чем по одной, и ни одна не отваливается. */
+const solveConcurrency = 2
+
+// Закрытые карточки — дело вкладки, а не общей очереди: строка задачи в базе
+// остаётся, чтобы на другом устройстве результат никуда не делся.
+function loadDismissedJobs(): string[] {
+  try {
+    const stored = window.localStorage.getItem(dismissedJobsStorageKey)
+    const parsed: unknown = stored ? JSON.parse(stored) : []
+    return Array.isArray(parsed) ? parsed.filter((entry): entry is string => typeof entry === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+function saveDismissedJobs(keys: readonly string[]) {
+  try {
+    window.localStorage.setItem(dismissedJobsStorageKey, JSON.stringify(keys.slice(0, 60)))
+  } catch {
+    // Скрытая карточка вернётся после перезахода — это лучше, чем упасть.
+  }
+}
+
+// Задача, о которой знает только эта вкладка: база недоступна или ещё не
+// ответила. Форма и очередь должны работать и в этом случае.
+function localSolutionJob(input: {
+  idempotencyKey: string
+  textbookId: string
+  task: string
+  source: HomeworkSource
+  subject: string
+  grade: string
+  conditionPreview: string
+  deviceId: string
+}): SolutionJob {
+  const now = new Date().toISOString()
+  return {
+    id: `local-${input.idempotencyKey}`,
+    idempotencyKey: input.idempotencyKey,
+    deviceId: input.deviceId,
+    textbookId: input.textbookId,
+    task: input.task,
+    source: input.source,
+    subject: input.subject,
+    grade: input.grade,
+    conditionPreview: input.conditionPreview,
+    status: 'queued',
+    stage: 'queued',
+    error: '',
+    createdAt: now,
+    updatedAt: now,
+    startedAt: '',
+    finishedAt: '',
+  }
+}
 
 
 const applicationRoutes = [
@@ -527,92 +604,6 @@ function CdzComingSoon({ onGoHome }: { onGoHome: () => void }) {
   )
 }
 
-function SolutionStatus({ state, textbooks: items, onOpenSolution }: { state: SolutionState; textbooks: readonly Textbook[]; onOpenSolution: (state: SolutionState) => void }) {
-  const textbook = getTextbook(state.textbookId, items)
-
-  if (state.mode === 'error') {
-    return (
-      <section className="active-solution solution-error" role="alert" aria-labelledby="solution-error-title">
-        <header className="section-heading">
-          <div>
-            <h2 id="solution-error-title">Не получилось решить задачу</h2>
-            <p>{state.error ?? 'Попробуй отправить задачу ещё раз.'}</p>
-          </div>
-        </header>
-        <p className="solution-status-note">Деньги за неготовое решение не списаны.</p>
-      </section>
-    )
-  }
-
-  if (state.mode === 'ready') {
-    return (
-      <section className="ready-solution" aria-labelledby="ready-solution-title">
-        <CheckCircle size={38} weight="duotone" aria-hidden="true" />
-        <div>
-          <h2 id="ready-solution-title">{state.source === 'number' ? `№ ${state.task} уже готова` : 'Решение готово'}</h2>
-          <p>{textbook.subject}. {textbook.title}. {state.source === 'photo' ? 'Модель прочитала фото, готовый ответ можно переписать.' : 'Решение найдено в общей базе, ждать не нужно.'}</p>
-        </div>
-        <button type="button" onClick={() => onOpenSolution(state)}>Открыть решение <ArrowRight size={18} weight="bold" aria-hidden="true" /></button>
-      </section>
-    )
-  }
-
-  return <SolvingStatus state={state} subject={textbook.subject} />
-}
-
-/* Ожидание решения.
-
-   Показываем то, что действительно знаем: сколько идёт задача и через что
-   она проходит. Клиент видит один запрос и один ответ, промежуточных стадий
-   он не получает, поэтому изображать бегущий по шагам прогресс было бы
-   враньём — вместо этого честный секундомер и измеренный диапазон.
-
-   Диапазон из замеров 31 августа на живых задачах: 12,6 с без рецензента,
-   35,8 и 72,7 с с рецензентом. */
-function SolvingStatus({ state, subject }: { state: SolutionState; subject: string }) {
-  const [seconds, setSeconds] = useState(0)
-
-  useEffect(() => {
-    const startedAt = Date.now()
-    const timer = window.setInterval(() => {
-      setSeconds(Math.floor((Date.now() - startedAt) / 1000))
-    }, 1000)
-    return () => window.clearInterval(timer)
-  }, [])
-
-  const elapsed = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
-  // За измеренным потолком перестаём обещать «вот-вот» и говорим прямо.
-  const takingLong = seconds >= 75
-
-  return (
-    <section className="solving-status" aria-labelledby="active-solution-title" role="status" aria-live="polite" aria-busy="true">
-      <header>
-        <span className="solving-mark" aria-hidden="true">
-          <SpinnerGap className="solution-loader-orbit" size={26} weight="bold" />
-        </span>
-        <div>
-          <h2 id="active-solution-title">Решаем задачу</h2>
-          <p>{subject}{state.source === 'photo' ? ' · читаем условие с фотографии' : ''}</p>
-        </div>
-        <time className="solving-elapsed" aria-label={`Идёт ${seconds} секунд`}>{elapsed}</time>
-      </header>
-
-      <p className="solving-pipeline">
-        Задача идёт через два независимых прохода и сверку, затем ответ
-        оформляется тетрадной страницей.
-      </p>
-
-      <span className="solving-track" aria-hidden="true"><i /></span>
-
-      <p className="solving-note">
-        {takingLong
-          ? 'Задача сложная и считается дольше обычного. Если не уложимся, деньги вернутся на баланс.'
-          : 'Обычно 15–70 секунд. Страницу лучше оставить открытой.'}
-      </p>
-    </section>
-  )
-}
-
 function GuestSolutionsNote({ onOpenAccount, freeSolutionUsed = false }: { onOpenAccount: () => void; freeSolutionUsed?: boolean }) {
   return (
     <p className="home-guest-note">
@@ -989,7 +980,16 @@ function HomePage() {
   })
   const [customTextbooks] = useState<Textbook[]>([])
   const [guestFreeSolutionUsed, setGuestFreeSolutionUsed] = useState(guestSolutionUsed)
-  const [solutionState, setSolutionState] = useState<SolutionState | null>(null)
+  // Очередь задач. `remoteJobs` — строки из базы, общие для всех устройств;
+  // `localJobs` — то, о чём эта вкладка узнала раньше базы.
+  const [remoteJobs, setRemoteJobs] = useState<SolutionJob[]>([])
+  const [localJobs, setLocalJobs] = useState<SolutionJob[]>([])
+  const [dismissedJobKeys, setDismissedJobKeys] = useState<readonly string[]>(loadDismissedJobs)
+  const [dispatchTick, setDispatchTick] = useState(0)
+  const runningJobKeysRef = useRef(new Set<string>())
+  const refundedJobKeysRef = useRef(new Set<string>())
+  const deviceIdRef = useRef('')
+  if (!deviceIdRef.current) deviceIdRef.current = getDeviceId()
   const [selectedSolution, setSelectedSolution] = useState<SolutionState | null>(() => currentNavigationRoute().solution)
   const [generatedSolutions, setGeneratedSolutions] = useState<HomeworkSolution[]>(loadGeneratedSolutions)
   const [supabaseClient, setSupabaseClient] = useState<SupabaseClient<Database> | null>(null)
@@ -1050,6 +1050,24 @@ function HomePage() {
       : [],
     [user, visibleGeneratedSolutions],
   )
+
+  /* Очередь, которую видит ученик.
+
+     Готовые и сорвавшиеся карточки живут шесть часов: дольше они уже не
+     новость, а решение всё равно осталось в «Моих решениях». Скрытые вручную
+     не показываем совсем. */
+  const visibleJobs = useMemo(() => {
+    const dismissed = new Set(dismissedJobKeys)
+    const staleBefore = Date.now() - 6 * 60 * 60 * 1000
+    return mergeJobs(remoteJobs, localJobs).filter((job) => {
+      if (dismissed.has(job.idempotencyKey)) return false
+      if (isActiveJob(job)) return true
+      const finishedAt = Date.parse(job.finishedAt || job.updatedAt || job.createdAt)
+      return !Number.isFinite(finishedAt) || finishedAt > staleBefore
+    })
+  }, [dismissedJobKeys, localJobs, remoteJobs])
+
+  const hasActiveJobs = useMemo(() => visibleJobs.some(isActiveJob), [visibleJobs])
 
   useEffect(() => {
     captureReferralFromCurrentUrl()
@@ -1122,35 +1140,33 @@ function HomePage() {
     saveGeneratedSolutions(generatedSolutions)
   }, [generatedSolutions])
 
-  useEffect(() => {
+  /* Решения из базы. Зовём не только при входе, но и когда задача закрылась
+     готовой: её могли решить на другом устройстве, и тогда локально её нет. */
+  const restorePurchasedSolutions = useCallback(async () => {
     if (!supabaseClient || !user) return
-    let active = true
+    const { data, error } = await supabaseClient.rpc('get_my_homework_solutions')
+    if (error || !data) return
 
-    const restorePurchasedSolutions = async () => {
-      const { data, error } = await supabaseClient.rpc('get_my_homework_solutions')
+    const restored = data
+      .map(({ solution }) => parseStoredHomeworkSolution(solution, user.id))
+      .filter((solution): solution is HomeworkSolution => solution !== null)
 
-      if (!active || error || !data) return
-
-      const restored = data
-        .map(({ solution }) => parseStoredHomeworkSolution(solution, user.id))
-        .filter((solution): solution is HomeworkSolution => solution !== null)
-
-      setGeneratedSolutions((current) => [
-        ...restored,
-        ...current.filter((local) => !restored.some(
-          (remote) => remote.textbookId === local.textbookId
-            && remote.task === local.task
-            && remote.textbookEdition === local.textbookEdition
-            && remote.sourceUrl === local.sourceUrl
-            && remote.conditionNormalized === local.conditionNormalized
-            && remote.ownerId === local.ownerId,
-        )),
-      ])
-    }
-
-    void restorePurchasedSolutions()
-    return () => { active = false }
+    setGeneratedSolutions((current) => [
+      ...restored,
+      ...current.filter((local) => !restored.some(
+        (remote) => remote.textbookId === local.textbookId
+          && remote.task === local.task
+          && remote.textbookEdition === local.textbookEdition
+          && remote.sourceUrl === local.sourceUrl
+          && remote.conditionNormalized === local.conditionNormalized
+          && remote.ownerId === local.ownerId,
+      )),
+    ])
   }, [supabaseClient, user])
+
+  useEffect(() => {
+    void restorePurchasedSolutions()
+  }, [restorePurchasedSolutions])
 
   useEffect(() => {
     if (!supabaseClient || !user) return
@@ -1445,98 +1461,123 @@ function HomePage() {
   }
   const openSolution = (state: SolutionState) => navigate('Решения', state)
 
-  // Переходник между формой и отправителем: форма отдаёт условие и фото,
+  // Переходник между формой и очередью: форма отдаёт условие и фото,
   // остальное подставляется здесь.
   const submitFromForm = async (submission: TaskSubmission) => {
     const imageDataUrl = submission.photo ? await prepareTaskPhoto(submission.photo) : undefined
-    return submitTask(
+    return enqueueTask({
       // Срез обрезается по границе слова trim-ом: сервер всё равно прогоняет
       // подпись через trim, и различие в хвостовой пробел ломало сверку.
-      submission.condition.slice(0, 60).trim() || 'Задача с фото',
-      true,
-      submission.source,
-      submission.idempotencyKey,
-      undefined,
-      undefined,
-      submission.condition || undefined,
-      imageDataUrl,
-      selectedTextbookId,
-      true,
-      submission.subject,
-      submission.grade,
-    )
+      task: submission.condition.slice(0, 60).trim() || 'Задача с фото',
+      source: submission.source,
+      idempotencyKey: submission.idempotencyKey,
+      textbookId: selectedTextbookId,
+      ...(submission.condition ? { condition: submission.condition } : {}),
+      ...(imageDataUrl ? { imageDataUrl } : {}),
+      ...(submission.subject ? { subject: submission.subject } : {}),
+      ...(submission.grade ? { grade: submission.grade } : {}),
+    })
   }
 
-  const submitTask = async (
-    task: string,
-    _ready: boolean,
-    source: HomeworkSource,
-    idempotencyKey: string,
-    photo?: File,
-    verifiedTask?: VerifiedTextbookTaskSource,
-    confirmedCondition?: string,
-    sourceImageDataUrl?: string,
-    textbookId = selectedTextbookId,
-    openWhenReady = true,
-    // Предмет и класс приходят из формы. Если ученик их не указал, останутся
-    // пустыми — тогда модель определит их сама по условию.
-    subjectOverride?: string,
-    gradeOverride?: string,
-  ) => {
-    const textbook = getTextbook(textbookId, availableTextbooks)
-    const resolvedTask = source === 'photo'
-      ? 'photo-' + idempotencyKey.replace(/[^a-z0-9-]/gi, '').slice(-44)
-      : task
-    const solutionPrice = getSolutionPrice()
+  // Гость держит очередь на своей метке браузера: аккаунта у него нет,
+  // а видеть ход решения он должен так же, как все.
+  const guestJobId = useMemo(() => (supabaseClient && !user ? getGuestId() : null), [supabaseClient, user])
 
-    if (source === 'number' && !verifiedTask) {
-      throw new Error('Точное условие задачи в выбранном издании не найдено. Решение не запускается')
-    }
-    // Первое решение выдаётся без аккаунта. Регистрацию просим только когда
-    // бесплатный разбор уже израсходован: до этого человек не видел продукт
-    // и не понимает, за что его просят завести аккаунт.
-    const solvingAsGuest = Boolean(supabaseClient) && !user
-    if (solvingAsGuest && guestFreeSolutionUsed) {
-      rememberAccountTrigger()
-      setAccountNotice('Бесплатное решение уже использовано. Зарегистрируйся — на счёт придут 20 ₽, это ещё четыре решения')
-      setAccountOpen(true)
-      return false
-    }
+  const refreshJobs = useCallback(async () => {
+    if (!supabaseClient || !authReady) return
+    const jobs = await listSolutionJobs(supabaseClient, guestJobId)
+    if (jobs) setRemoteJobs(jobs)
+  }, [authReady, guestJobId, supabaseClient])
 
-    const previouslyGenerated = visibleGeneratedSolutions.find((solution) => (
-      isReviewedHomeworkSolution(solution)
-      &&
-      solution.textbookId === textbookId
-      && solution.task === resolvedTask
-      && solution.source === source
-      && solution.textbookEdition === textbook.edition
-      && solution.sourceUrl === (verifiedTask?.sourceUrl ?? textbook.sourceUrl ?? '')
-      && (!(verifiedTask?.condition ?? confirmedCondition) || solution.conditionNormalized === normalizeTaskCondition(verifiedTask?.condition ?? confirmedCondition ?? ''))
+  /* Опрос очереди.
+
+     Пока задача в работе — раз в две с половиной секунды: столько живёт
+     ощущение «ничего не происходит». В покое реже: там опрос нужен только
+     чтобы заметить задачу, запущенную с другого устройства. Невидимая
+     вкладка не опрашивает вовсе. */
+  useEffect(() => {
+    if (!supabaseClient || !authReady) return
+    void refreshJobs()
+
+    const interval = hasActiveJobs ? 2500 : 15_000
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void refreshJobs()
+    }, interval)
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') void refreshJobs()
+    }
+    window.addEventListener('visibilitychange', onVisibilityChange)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener('visibilitychange', onVisibilityChange)
+    }
+  }, [authReady, hasActiveJobs, refreshJobs, supabaseClient])
+
+  /* Резерв возвращается и после смерти функции.
+
+     Обычную неудачу возвращает сам решатель. Но когда процесс убит по сроку,
+     возвращать некому: списание в кошельке есть, возврата нет — ровно та
+     дыра, из-за которой ученик оставался и без решения, и без денег.
+     Поэтому о сорвавшейся задаче своего устройства просим возврат сами.
+     Вызов безопасен: база возвращает деньги только если решение не выдано. */
+  useEffect(() => {
+    if (!supabaseClient || !user) return
+    const abandoned = visibleJobs.filter((job) => (
+      job.status === 'failed'
+      && job.deviceId === deviceIdRef.current
+      && !refundedJobKeysRef.current.has(job.idempotencyKey)
     ))
-    if (previouslyGenerated) {
-      const nextState: SolutionState = { mode: 'ready', textbookId, task: resolvedTask, source }
-      setSolutionState(nextState)
-      if (openWhenReady) openSolution(nextState)
-      return true
+    if (abandoned.length === 0) return
+
+    abandoned.forEach((job) => refundedJobKeysRef.current.add(job.idempotencyKey))
+    const askRefund = async (idempotencyKey: string) => {
+      try {
+        await supabaseClient.rpc('refund_solution_credit', {
+          p_idempotency_key: idempotencyKey,
+          p_reason: 'Решение не получено',
+        })
+      } catch {
+        // Резерв разгребёт ручная сверка; ученику об этом сообщать нечего.
+      }
     }
 
-    if (supabaseClient && user && account && account.balance < solutionPrice) {
-      rememberAccountTrigger()
-      setAccountView('wallet')
-      setAccountNotice(`На балансе меньше ${formatRubles(solutionPrice)}`)
-      setAccountOpen(true)
-      return false
+    void Promise.all(abandoned.map((job) => askRefund(job.idempotencyKey)))
+      .then(() => refreshAccount())
+      .catch(() => undefined)
+  }, [refreshAccount, supabaseClient, user, visibleJobs])
+
+  const markLocalJob = useCallback((job: SolutionJob, patch: Partial<SolutionJob>) => {
+    setLocalJobs((current) => {
+      const known = current.find((entry) => entry.idempotencyKey === job.idempotencyKey) ?? job
+      const next: SolutionJob = { ...known, ...patch, updatedAt: new Date().toISOString() }
+      return [next, ...current.filter((entry) => entry.idempotencyKey !== job.idempotencyKey)]
+    })
+  }, [])
+
+  /* Отправка задачи решателю.
+
+     Здесь и только здесь идёт сам запрос: строка очереди говорит, что решать,
+     а сам запрос уходит с того устройства, где лежат фотография и сессия. */
+  const runSolutionJob = useCallback(async (job: SolutionJob): Promise<SolutionState | null> => {
+    const payload = findPendingSolution(job.idempotencyKey)
+
+    if (!payload) {
+      const reason = 'Задача не ушла в работу: страница закрылась раньше. Поставь её заново'
+      markLocalJob(job, { status: 'failed', stage: 'failed', error: reason, finishedAt: new Date().toISOString() })
+      if (supabaseClient) await closeSolutionJob(supabaseClient, job.idempotencyKey, 'failed', reason, guestJobId)
+      return null
     }
 
-    const processingState: SolutionState = { mode: 'processing', textbookId, task: resolvedTask, source }
+    markLocalJob(job, {
+      status: 'running',
+      stage: job.stage === 'queued' ? 'reading' : job.stage,
+      startedAt: job.startedAt || new Date().toISOString(),
+    })
 
-    setSolutionState(processingState)
+    const textbook = getTextbook(payload.textbookId, availableTextbooks)
+    const solvingAsGuest = Boolean(supabaseClient) && !user
 
     try {
-      const imageDataUrl = source === 'photo' && photo ? await prepareTaskPhoto(photo) : sourceImageDataUrl
-      if (source === 'photo' && !imageDataUrl) throw new Error('Добавь фотографию задачи')
-      if (source === 'number' && verifiedTask?.hasDiagram && !imageDataUrl) throw new Error('Не получилось загрузить чертёж из учебника')
-
       let accessToken: string | undefined
       if (supabaseClient && user) {
         const { data, error } = await supabaseClient.auth.getSession()
@@ -1547,27 +1588,19 @@ function HomePage() {
       const generatedSolution = await requestHomeworkSolution(
         import.meta.env.VITE_HOMEWORK_API_URL || applicationPath('/api/solve'),
         {
-          textbookId,
-          task: resolvedTask,
-          source,
-          subject: subjectOverride ?? textbook.subject,
+          textbookId: payload.textbookId,
+          task: payload.task,
+          source: payload.source,
+          subject: payload.subject || textbook.subject,
           // Пустой выбор класса передаём прямо, а не диапазоном «7-11 класс»:
           // модель должна понять, что класс не задан, и взять простейший способ.
-          grade: gradeOverride || 'не указан',
+          grade: payload.grade || 'не указан',
           textbookTitle: textbook.title,
           authors: textbook.authors,
           edition: textbook.edition,
-          idempotencyKey,
-          // Источник указываем, только если он есть. Раньше сюда подставлялась
-          // строка-заглушка «photo», и в решении оставался несуществующий адрес.
-          ...(verifiedTask?.sourceUrl ?? textbook.sourceUrl
-            ? { sourceUrl: verifiedTask?.sourceUrl ?? textbook.sourceUrl }
-            : {}),
-          ...(verifiedTask || confirmedCondition ? {
-            condition: verifiedTask?.condition ?? confirmedCondition,
-            ...(verifiedTask?.sourcePage ? { sourcePage: verifiedTask.sourcePage } : {}),
-          } : {}),
-          ...(imageDataUrl ? { imageDataUrl } : {}),
+          idempotencyKey: payload.idempotencyKey,
+          ...(payload.condition ? { condition: payload.condition } : {}),
+          ...(payload.imageDataUrl ? { imageDataUrl: payload.imageDataUrl } : {}),
         },
         accessToken,
         solvingAsGuest ? getGuestId() : null,
@@ -1581,36 +1614,224 @@ function HomePage() {
       setGeneratedSolutions((current) => [
         generatedSolution,
         ...current.filter(
-          (entry) => entry.textbookId !== textbookId
-            || entry.task !== resolvedTask
+          (entry) => entry.textbookId !== generatedSolution.textbookId
+            || entry.task !== generatedSolution.task
             || entry.source !== generatedSolution.source
             || entry.textbookEdition !== generatedSolution.textbookEdition
             || entry.conditionNormalized !== generatedSolution.conditionNormalized
             || entry.ownerId !== generatedSolution.ownerId,
         ),
       ])
-      // Подпись задачи в готовом состоянии берётся из ответа сервера, а не из
-      // клиентского среза условия: сервер прогоняет её через trim, и срез,
-      // кончавшийся пробелом, уже не совпадал с сохранённым решением —
-      // карточка «Решение готово» открывала заглушку вместо решения.
-      const deliveredState: SolutionState = {
+
+      forgetPendingSolution(job.idempotencyKey)
+      // Подпись задачи берётся из ответа сервера, а не из клиентского среза
+      // условия: сервер прогоняет её через trim, и срез, кончавшийся пробелом,
+      // уже не совпадал с сохранённым решением.
+      markLocalJob(job, {
+        status: 'done',
+        stage: 'done',
+        task: generatedSolution.task,
+        error: '',
+        finishedAt: new Date().toISOString(),
+      })
+      if (supabaseClient && user) {
+        await refreshAccount()
+        await restorePurchasedSolutions()
+      }
+      void refreshJobs()
+
+      return {
         mode: 'ready',
         textbookId: generatedSolution.textbookId,
         task: generatedSolution.task,
         source: generatedSolution.source,
       }
-      setSolutionState(deliveredState)
-      if (supabaseClient && user) await refreshAccount()
-      if (openWhenReady) openSolution(deliveredState)
-      return true
     } catch (error) {
-      setSolutionState({
-        ...processingState,
-        mode: 'error',
-        error: error instanceof Error ? error.message : 'Не получилось подготовить решение',
+      const reason = error instanceof Error ? error.message : 'Не получилось подготовить решение'
+      // Запрос остаётся в хранилище: по нему работает «Решить ещё раз», и
+      // ученику не придётся заново набирать условие или искать фотографию.
+      markLocalJob(job, { status: 'failed', stage: 'failed', error: reason, finishedAt: new Date().toISOString() })
+      if (supabaseClient) await closeSolutionJob(supabaseClient, job.idempotencyKey, 'failed', reason, guestJobId)
+      void refreshJobs()
+      return null
+    }
+  }, [
+    availableTextbooks,
+    guestJobId,
+    markLocalJob,
+    refreshAccount,
+    refreshJobs,
+    restorePurchasedSolutions,
+    supabaseClient,
+    user,
+  ])
+
+  /* Кто идёт в работу следующим.
+
+     Очередь двигается сама: как только освобождается место, берётся самая
+     ранняя задача этого устройства. Чужие задачи не трогаем — иначе одна и та
+     же задача уйдёт в модель дважды и спишется дважды. */
+  useEffect(() => {
+    const next = nextRunnableJob(visibleJobs, deviceIdRef.current, runningJobKeysRef.current, solveConcurrency)
+    if (!next) return
+
+    // Одну задачу открываем сразу, как раньше. Когда в очереди есть другие,
+    // не уводим со страницы: там ещё идёт работа, за которой человек следит.
+    const soleTask = visibleJobs.filter(isActiveJob).length === 1
+    runningJobKeysRef.current.add(next.idempotencyKey)
+
+    void runSolutionJob(next)
+      .then((delivered) => {
+        if (delivered && soleTask && currentApplicationPath() === '/app') openSolution(delivered)
       })
+      .finally(() => {
+        runningJobKeysRef.current.delete(next.idempotencyKey)
+        setDispatchTick((tick) => tick + 1)
+      })
+    // `dispatchTick` перезапускает разбор очереди, когда место освободилось,
+    // а список задач при этом не изменился.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dispatchTick, runSolutionJob, visibleJobs])
+
+  /* Постановка задачи в очередь.
+
+     Проверки цены и права на решение остаются здесь: узнать о нехватке денег
+     нужно до того, как задача встала в очередь, а не через минуту ожидания. */
+  const enqueueTask = async (submission: {
+    task: string
+    source: HomeworkSource
+    idempotencyKey: string
+    textbookId: TextbookId
+    condition?: string
+    imageDataUrl?: string
+    subject?: string
+    grade?: string
+  }) => {
+    const textbook = getTextbook(submission.textbookId, availableTextbooks)
+    const resolvedTask = submission.source === 'photo'
+      ? 'photo-' + submission.idempotencyKey.replace(/[^a-z0-9-]/gi, '').slice(-44)
+      : submission.task
+    const solutionPrice = getSolutionPrice()
+
+    // Первое решение выдаётся без аккаунта. Регистрацию просим только когда
+    // бесплатный разбор уже израсходован: до этого человек не видел продукт
+    // и не понимает, за что его просят завести аккаунт.
+    const solvingAsGuest = Boolean(supabaseClient) && !user
+    if (solvingAsGuest && guestFreeSolutionUsed) {
+      rememberAccountTrigger()
+      setAccountNotice('Бесплатное решение уже использовано. Зарегистрируйся — на счёт придут 20 ₽, это ещё четыре решения')
+      setAccountOpen(true)
       return false
     }
+
+    const previouslyGenerated = visibleGeneratedSolutions.find((solution) => (
+      isReviewedHomeworkSolution(solution)
+      && solution.textbookId === submission.textbookId
+      && solution.task === resolvedTask
+      && solution.source === submission.source
+      && solution.textbookEdition === textbook.edition
+      && solution.sourceUrl === (textbook.sourceUrl ?? '')
+      && (!submission.condition || solution.conditionNormalized === normalizeTaskCondition(submission.condition))
+    ))
+    if (previouslyGenerated) {
+      openSolution({ mode: 'ready', textbookId: submission.textbookId, task: resolvedTask, source: submission.source })
+      return true
+    }
+
+    if (supabaseClient && user && account && account.balance < solutionPrice) {
+      rememberAccountTrigger()
+      setAccountView('wallet')
+      setAccountNotice(`На балансе меньше ${formatRubles(solutionPrice)}`)
+      setAccountOpen(true)
+      return false
+    }
+
+    if (submission.source === 'photo' && !submission.imageDataUrl) {
+      throw new Error('Добавь фотографию задачи')
+    }
+
+    const conditionPreview = submission.condition?.trim()
+      || (submission.source === 'photo' ? 'Задача с фотографии' : resolvedTask)
+
+    savePendingSolution({
+      idempotencyKey: submission.idempotencyKey,
+      textbookId: submission.textbookId,
+      task: resolvedTask,
+      source: submission.source,
+      ...(submission.condition ? { condition: submission.condition } : {}),
+      ...(submission.imageDataUrl ? { imageDataUrl: submission.imageDataUrl } : {}),
+      ...(submission.subject ? { subject: submission.subject } : {}),
+      ...(submission.grade ? { grade: submission.grade } : {}),
+    })
+
+    const queued = localSolutionJob({
+      idempotencyKey: submission.idempotencyKey,
+      textbookId: submission.textbookId,
+      task: resolvedTask,
+      source: submission.source,
+      subject: submission.subject || textbook.subject,
+      grade: submission.grade ?? '',
+      conditionPreview: conditionPreview.slice(0, 400),
+      deviceId: deviceIdRef.current,
+    })
+    setLocalJobs((current) => [queued, ...current.filter((entry) => entry.idempotencyKey !== queued.idempotencyKey)])
+
+    // Строка в базе — то, из-за чего задача переживает перезаход и видна на
+    // других устройствах. Не завелась — задача всё равно решится здесь.
+    if (supabaseClient) {
+      const started = await startSolutionJob(
+        supabaseClient,
+        {
+          idempotencyKey: submission.idempotencyKey,
+          textbookId: submission.textbookId,
+          task: resolvedTask,
+          source: submission.source,
+          subject: submission.subject || textbook.subject,
+          grade: submission.grade ?? '',
+          conditionPreview,
+        },
+        guestJobId,
+      )
+      if (started) setRemoteJobs((current) => [started, ...current.filter((entry) => entry.id !== started.id)])
+    }
+
+    return true
+  }
+
+  const dismissJob = (job: SolutionJob) => {
+    if (isActiveJob(job) && supabaseClient) {
+      void closeSolutionJob(supabaseClient, job.idempotencyKey, 'canceled', 'Задача снята с очереди', guestJobId)
+    }
+    forgetPendingSolution(job.idempotencyKey)
+    setLocalJobs((current) => current.filter((entry) => entry.idempotencyKey !== job.idempotencyKey))
+    setDismissedJobKeys((current) => {
+      const next = [job.idempotencyKey, ...current.filter((key) => key !== job.idempotencyKey)]
+      saveDismissedJobs(next)
+      return next
+    })
+  }
+
+  // Повтор берёт сохранённый запрос: заново набирать условие или искать
+  // фотографию после чужого сбоя — то, за что продукт и ругают.
+  const retryJob = (job: SolutionJob) => {
+    const payload = findPendingSolution(job.idempotencyKey)
+    dismissJob(job)
+    if (!payload) return
+
+    const idempotencyKey = typeof crypto.randomUUID === 'function'
+      ? `solution-${crypto.randomUUID()}`
+      : `solution-${Date.now()}-${Math.random().toString(16).slice(2)}`
+
+    void enqueueTask({
+      task: payload.source === 'photo' ? 'Задача с фото' : payload.task,
+      source: payload.source,
+      idempotencyKey,
+      textbookId: payload.textbookId,
+      ...(payload.condition ? { condition: payload.condition } : {}),
+      ...(payload.imageDataUrl ? { imageDataUrl: payload.imageDataUrl } : {}),
+      ...(payload.subject ? { subject: payload.subject } : {}),
+      ...(payload.grade ? { grade: payload.grade } : {}),
+    })
   }
 
   if (!authReady || (user && !accountReady)) {
@@ -1641,9 +1862,19 @@ function HomePage() {
                 defaultGrade={account ? `${account.profile.grade} класс` : ''}
               />
               {!user && <GuestSolutionsNote onOpenAccount={openAccount} freeSolutionUsed={guestFreeSolutionUsed} />}
-              {(solutionState || user) && (
+              {(visibleJobs.length > 0 || user) && (
                 <div className="home-column home-column-primary">
-                  {solutionState && <SolutionStatus state={solutionState} textbooks={availableTextbooks} onOpenSolution={openSolution} />}
+                  <SolutionQueue
+                    jobs={visibleJobs}
+                    deviceId={deviceIdRef.current}
+                    subjectOf={(textbookId) => getTextbook(textbookId, availableTextbooks).subject}
+                    onOpen={(job) => openSolution({ mode: 'ready', textbookId: job.textbookId, task: job.task, source: job.source })}
+                    onRetry={retryJob}
+                    onDismiss={dismissJob}
+                    // Сорвавшееся решение — не «неверный ответ»: разбирать там
+                    // нечего, поэтому ведём в общую поддержку.
+                    onOpenSupport={() => openSupport()}
+                  />
                   {user && <MySolutions items={personalSolutions} onOpenAll={() => navigate('Решения')} onOpenSolution={openSolution} />}
                 </div>
               )}

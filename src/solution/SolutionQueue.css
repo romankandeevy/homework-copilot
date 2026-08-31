@@ -1,0 +1,361 @@
+/* Очередь решений.
+
+   Ожидание — самый долгий экран продукта: полторы минуты человек смотрит
+   только сюда. Поэтому карточка говорит три вещи и все три честно: сколько
+   идёт, на каком шаге сейчас работа и что будет, если не выйдет. */
+
+.solve-queue {
+  display: grid;
+  width: 100%;
+  gap: var(--space-4);
+}
+
+.solve-card {
+  position: relative;
+  display: grid;
+  gap: var(--space-4);
+  overflow: hidden;
+  padding: clamp(1.25rem, 3vw, 1.75rem);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-raised);
+}
+
+/* Тонкая полоса поверху вместо цветной заливки: состояние читается сразу,
+   а текст остаётся на обычной поверхности и не теряет контраст. */
+.solve-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 3px;
+  background: var(--color-border);
+}
+
+.solve-card.is-solving::before {
+  background: linear-gradient(
+    90deg,
+    var(--color-accent) 0%,
+    color-mix(in oklch, var(--color-accent) 25%, transparent) 45%,
+    var(--color-accent) 100%
+  );
+  background-size: 240% 100%;
+  animation: solve-sweep 2.4s var(--ease-standard) infinite;
+}
+
+.solve-card.is-ready::before { background: var(--color-success); }
+.solve-card.is-failed::before { background: var(--color-danger); }
+.solve-card.is-canceled::before { background: var(--color-border-strong); }
+
+@keyframes solve-sweep {
+  from { background-position: 140% 0; }
+  to { background-position: -140% 0; }
+}
+
+.solve-card-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.solve-card-mark {
+  display: grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--color-accent-soft);
+  color: var(--color-brand-accent);
+}
+
+.is-ready .solve-card-mark { background: var(--color-success-soft); color: var(--color-success-strong); }
+.is-failed .solve-card-mark { background: var(--color-danger-soft); color: var(--color-danger); }
+.is-canceled .solve-card-mark { background: var(--color-surface-sunken); color: var(--color-text-subtle); }
+
+/* Крутится сам значок, а не карточка вокруг него. Раньше анимация была
+   написана под другой родитель и не применялась вовсе: значок замирал, и
+   ожидание выглядело зависшим. */
+.solve-card.is-solving .solve-card-mark svg {
+  transform-origin: center;
+  animation: solve-spin 900ms linear infinite;
+}
+
+@keyframes solve-spin { to { transform: rotate(1turn); }}
+
+.solve-card-title { display: grid; gap: var(--space-1); }
+
+.solve-card-title h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-heading);
+  font-weight: var(--weight-display);
+  line-height: var(--leading-compact);
+}
+
+.solve-card-title p {
+  margin: 0;
+  color: var(--color-text-subtle);
+  font-size: var(--text-small);
+  line-height: var(--leading-ui);
+}
+
+/* Моноширинный секундомер с табличными цифрами: пропорциональные цифры
+   дёргают строку на каждой смене разряда. */
+.solve-card-clock {
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-lead);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Условие задачи — то, по чему ученик узнаёт свою задачу среди нескольких. */
+.solve-card-task {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-surface);
+  background: var(--color-surface-sunken);
+  color: var(--color-text);
+  font-size: var(--text-ui);
+  line-height: var(--leading-copy);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.solve-card-reason {
+  max-width: 70ch;
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--text-ui);
+  line-height: var(--leading-copy);
+}
+
+.solve-card-refund {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--color-success-soft);
+  color: var(--color-success-strong);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+}
+
+.solve-card-note {
+  max-width: 60ch;
+  margin: 0;
+  color: var(--color-text-subtle);
+  font-size: var(--text-small);
+  line-height: var(--leading-copy);
+}
+
+/* Шаги решения.
+
+   Точки соединены дорожкой, пройденная часть залита. Текущий шаг пульсирует,
+   потому что внутри шага мы действительно не знаем, сколько осталось, —
+   но знаем, что работа идёт. */
+.solve-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+  padding: 0;
+  gap: var(--space-2);
+  list-style: none;
+}
+
+.solve-step {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: var(--space-1);
+  padding-top: 1.75rem;
+  text-align: center;
+}
+
+.solve-step-dot {
+  position: absolute;
+  top: 0;
+  display: grid;
+  width: 1.125rem;
+  height: 1.125rem;
+  place-items: center;
+  border: 2px solid var(--color-border);
+  border-radius: 50%;
+  background: var(--color-surface);
+  color: var(--color-on-accent);
+  transition: background var(--motion-ui) var(--ease-standard), border-color var(--motion-ui) var(--ease-standard);
+}
+
+/* Дорожка между точками: от центра этой до центра следующей. */
+.solve-step::after {
+  content: '';
+  position: absolute;
+  top: 0.5rem;
+  right: calc(-50% + 0.75rem);
+  left: calc(50% + 0.75rem);
+  height: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--color-border);
+}
+
+.solve-step:last-child::after { content: none; }
+
+.solve-step strong {
+  color: var(--color-text-subtle);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-ui);
+}
+
+.solve-step small {
+  color: var(--color-text-subtle);
+  font-size: var(--text-micro);
+  line-height: var(--leading-ui);
+  opacity: 0.75;
+}
+
+.solve-step.is-done .solve-step-dot { border-color: var(--color-accent); background: var(--color-accent); }
+.solve-step.is-done::after { background: var(--color-accent); }
+.solve-step.is-done strong { color: var(--color-text-muted); }
+
+.solve-step.is-current .solve-step-dot {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-accent) 55%, transparent);
+  animation: solve-pulse 1.8s var(--ease-standard) infinite;
+}
+
+.solve-step.is-current strong { color: var(--color-text); }
+.solve-step.is-current small { opacity: 1; }
+
+@keyframes solve-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-accent) 55%, transparent); }
+  70% { box-shadow: 0 0 0 0.5rem color-mix(in oklch, var(--color-accent) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-accent) 0%, transparent); }
+}
+
+/* Ждущие очереди. Строка, а не карточка: они ещё ничего не делают, и вес
+   у них должен быть меньше, чем у задачи в работе. */
+.solve-queued-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  gap: var(--space-2);
+  list-style: none;
+}
+
+.solve-queued {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-surface);
+  background: var(--color-surface);
+}
+
+.solve-queued-position {
+  display: grid;
+  width: 1.75rem;
+  height: 1.75rem;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--color-surface-sunken);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-caption);
+  font-variant-numeric: tabular-nums;
+}
+
+.solve-queued-copy { display: grid; gap: 0.125rem; min-width: 0; }
+
+.solve-queued-copy strong {
+  overflow: hidden;
+  color: var(--color-text);
+  font-size: var(--text-ui);
+  font-weight: var(--weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.solve-queued-copy small { color: var(--color-text-subtle); font-size: var(--text-caption); }
+
+.solve-queued > button {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text-subtle);
+  cursor: pointer;
+}
+
+.solve-queued > button:hover { background: var(--color-surface-sunken); color: var(--color-danger); }
+
+.solve-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.solve-action-primary {
+  display: inline-flex;
+  min-height: var(--size-control);
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-5);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: var(--color-strong);
+  color: var(--color-on-strong);
+  font-family: var(--font-body);
+  font-size: var(--text-ui);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+  transition: transform var(--motion-fast) var(--ease-standard), background var(--motion-fast) var(--ease-standard);
+}
+
+.is-ready .solve-action-primary { background: var(--color-accent); color: var(--color-on-accent); }
+.solve-action-primary:hover { transform: translateY(-1px); }
+.solve-action-primary:active { transform: scale(0.98); }
+
+.solve-action-quiet {
+  display: inline-flex;
+  min-height: var(--size-control);
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-family: var(--font-body);
+  font-size: var(--text-ui);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+
+.solve-action-quiet:hover { border-color: var(--color-border-strong); color: var(--color-text); }
+
+@media (max-width: 640px) {
+  .solve-card-head { grid-template-columns: auto minmax(0, 1fr); }
+  .solve-card-clock { grid-column: 2; grid-row: 2; justify-self: start; font-size: var(--text-body); }
+  .solve-step small { display: none; }
+  .solve-step strong { font-size: var(--text-micro); }
+  .solve-card-actions > * { flex: 1 1 auto; justify-content: center; }}
+
+@media (prefers-reduced-motion: reduce) {
+  .solve-card.is-solving::before { animation: none; }
+  .solve-card.is-solving .solve-card-mark svg { animation: none; }
+  .solve-step.is-current .solve-step-dot { animation: none; }}
