@@ -266,14 +266,12 @@
   scroll-margin-top: 5.25rem;
 }
 
-.section-eyebrow {
-  margin: 0;
-  color: var(--color-brand-accent);
-  font-family: var(--font-mono);
-  font-size: var(--text-micro);
-  font-weight: var(--weight-semibold);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+.section-lead {
+  max-width: 58ch;
+  margin: var(--space-5) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-lead);
+  line-height: var(--leading-copy);
 }
 
 .section-head {
@@ -764,29 +762,78 @@
 .paper-page.is-compact .paper-body { font-size: clamp(0.72rem, 0.95vw, 0.86rem); }
 .paper-page.is-compact .paper-figure { max-width: 8.5rem; }
 
-/* ─── Проблема ─────────────────────────────────────────────────────── */
+/* ─── Сравнение с решебником ───────────────────────────────────────── */
 
-.problem-shell {
+.compare-table {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: clamp(2rem, 5vw, 5rem);
-  align-items: start;
+  border-top: 1px solid var(--color-border);
 }
 
-.landing-problem h2 { margin-top: var(--space-4); }
-
-.problem-answer p {
-  margin: 0 0 var(--space-5);
-  color: var(--color-text-muted);
-  font-size: var(--text-lead);
+.compare-head,
+.compare-row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1fr) minmax(0, 1.15fr);
+  gap: clamp(1rem, 3vw, 2.5rem);
+  align-items: baseline;
+  padding: clamp(1.1rem, 2.4vw, 1.6rem) 0;
+  border-bottom: 1px solid var(--color-border);
 }
 
-.problem-highlight {
-  margin-bottom: 0 !important;
-  padding-left: var(--space-5);
-  border-left: 2px solid var(--color-accent);
-  color: var(--color-text) !important;
+.compare-head {
+  padding-block: var(--space-3);
+  color: var(--color-text-subtle);
+  font-size: var(--text-small);
+  font-weight: var(--weight-semibold);
+}
+
+.compare-head .is-ours { color: var(--color-text); }
+
+.compare-question {
+  color: var(--color-text);
+  font-size: var(--text-ui);
+  font-weight: var(--weight-semibold);
+}
+
+.compare-gdz {
+  color: var(--color-text-subtle);
+  font-size: var(--text-ui);
+  line-height: var(--leading-copy);
+}
+
+/* Наш ответ — единственное место в таблице, где стоит акцент: под ним
+   дочерчивается кобальтовая черта, когда строка входит в кадр. */
+.compare-ours {
+  position: relative;
+  padding-bottom: var(--space-2);
+  color: var(--color-text);
+  font-size: var(--text-ui);
   font-weight: var(--weight-medium);
+  line-height: var(--leading-copy);
+}
+
+.compare-underline {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: var(--color-accent);
+  transform-origin: left;
+}
+
+/* ─── Ролик ────────────────────────────────────────────────────────── */
+
+.film-frame {
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface-raised);
+}
+
+.promo-film {
+  display: block;
+  width: 100%;
+  height: auto;
 }
 
 /* ─── Как это работает ─────────────────────────────────────────────── */
@@ -837,28 +884,43 @@
 
 /* ─── Возможности ──────────────────────────────────────────────────── */
 
-.feature-grid {
+/* Перечень, а не сетка одинаковых карточек: у этих пунктов разный вес,
+   и строка читается сверху вниз быстрее, чем шесть плиток. */
+.feature-list {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-panel);
-  background: var(--color-border);
-  overflow: hidden;
+  margin: 0;
+  border-top: 1px solid var(--color-border);
 }
 
-.feature-card {
+.feature-row {
   display: grid;
-  align-content: start;
-  gap: var(--space-3);
-  padding: clamp(1.5rem, 3vw, 2.25rem);
-  background: var(--color-canvas);
-  transition: background var(--motion-ui) var(--ease-out);
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.6fr);
+  gap: clamp(1rem, 3vw, 3rem);
+  align-items: baseline;
+  padding: clamp(1.25rem, 2.6vw, 1.9rem) 0;
+  border-bottom: 1px solid var(--color-border);
 }
 
-.feature-card:hover { background: var(--color-surface-raised); }
-.feature-card > svg { color: var(--color-brand-accent); }
-.feature-card p { margin: 0; color: var(--color-text-muted); font-size: var(--text-ui); }
+.feature-row dt {
+  font-family: var(--font-display);
+  font-size: clamp(1.05rem, 1.5vw, 1.3rem);
+  font-weight: var(--weight-display);
+  line-height: var(--leading-compact);
+}
+
+.feature-row dd {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-ui);
+  line-height: var(--leading-copy);
+}
+
+.subject-band h3 {
+  margin: 0 0 var(--space-4);
+  font-family: var(--font-display);
+  font-size: var(--text-heading);
+  font-weight: var(--weight-display);
+}
 
 .subject-band {
   margin-top: clamp(2rem, 4vw, 3.5rem);
@@ -1226,7 +1288,7 @@
   .hero-copy { max-width: 40rem; }
   .hero-preview { justify-items: stretch; }
   .how-proof { grid-template-columns: minmax(0, 1fr); }
-  .feature-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .feature-row { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
   .faq-shell { grid-template-columns: minmax(0, 1fr); }
   .landing-faq .section-head { position: static; margin-bottom: var(--space-6); }
 }
@@ -1240,7 +1302,10 @@
   .landing-brand { min-width: 0; overflow: hidden; }
   .landing-brand .brand-name { overflow: hidden; text-overflow: ellipsis; }
   .landing-header-actions .landing-ghost-action { display: none; }
-  .problem-shell { grid-template-columns: minmax(0, 1fr); }
+  .compare-head { display: none; }
+  .compare-row { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
+  .compare-gdz::before { content: 'Решебник: '; color: var(--color-text-subtle); font-weight: var(--weight-semibold); }
+  .compare-ours::before { content: 'Homework Copilot: '; font-weight: var(--weight-semibold); }
   .how-steps { grid-template-columns: minmax(0, 1fr); gap: var(--space-6); }
   .price-grid { grid-template-columns: minmax(0, 1fr); }
   .showcase-grid { grid-template-columns: minmax(0, 1fr); }
@@ -1250,7 +1315,7 @@
   .landing-header { height: 4.25rem; }
   .landing-header.is-compact { height: 3.75rem; }
   .landing-header-actions .landing-primary-action { display: none; }
-  .feature-grid { grid-template-columns: minmax(0, 1fr); }
+
   .hero-actions { flex-direction: column; align-items: stretch; }
   .hero-actions a { width: 100%; }
   .stage-controls .stage-chip.is-muted { display: none; }

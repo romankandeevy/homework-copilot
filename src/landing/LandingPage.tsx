@@ -10,6 +10,7 @@
    `src/CopyTask.tsx`. Ничего сверх этого страница не обещает. */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { AnimatePresence, LazyMotion, m, useReducedMotion } from 'motion/react'
 import {
   ArrowRight,
   ArrowsClockwise,
@@ -39,6 +40,11 @@ import {
   TaskFormPreview,
 } from './LandingPreviews'
 import './LandingPage.css'
+
+/* Набор анимаций включается через LazyMotion: разметка появляется сразу,
+   движение — когда набор готов. Пакет motion в проекте уже стоит и
+   используется в аккаунте, чате и расписании. */
+const loadMotionFeatures = () => import('motion/react').then((module) => module.domAnimation)
 
 const appPath = '/app'
 const signInPath = '/app?auth=signin'
@@ -103,55 +109,113 @@ function useLandingTheme() {
   return { theme, toggleTheme: () => setTheme((current) => (current === 'light' ? 'dark' : 'light')) }
 }
 
-/* Появление секций при прокрутке. Собственный наблюдатель вместо
-   анимационной библиотеки: витрина — первый экран сайта, и тянуть в него
-   несколько десятков килобайт ради двух переходов нельзя. */
-function useReveal<T extends HTMLElement>() {
-  const ref = useRef<T>(null)
+/* Появление секции при прокрутке.
 
-  useEffect(() => {
-    const element = ref.current
-    if (!element) return
-    if (prefersReducedMotion() || typeof IntersectionObserver === 'undefined') {
-      element.dataset.revealed = 'true'
-      return
-    }
+   Движение отдано motion: библиотека уже стоит в проекте (аккаунт, чат,
+   расписание) и считает анимации на композиторе, а не в потоке вёрстки.
+   Грузится она через LazyMotion с набором domAnimation — это заметно
+   меньше полного пакета, а больше витрине и не нужно.
 
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (!entry.isIntersecting) return
-        ;(entry.target as HTMLElement).dataset.revealed = 'true'
-        observer.unobserve(entry.target)
-      })
-    }, { rootMargin: '0px 0px -12% 0px', threshold: 0.08 })
-
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [])
-
-  return ref
-}
-
+   `whileInView` вместо своего IntersectionObserver: раньше на каждый блок
+   создавался отдельный наблюдатель, и на длинной странице их набиралось
+   больше двадцати. */
 function Reveal({
   children,
   className = '',
   delay = 0,
-  as: Element = 'div',
+  as = 'div',
 }: {
   children: React.ReactNode
   className?: string
   delay?: number
   as?: 'div' | 'li' | 'article'
 }) {
-  const ref = useReveal<HTMLElement>()
+  const reduceMotion = useReducedMotion()
+  const Element = m[as]
+
+  if (reduceMotion) {
+    const Plain = as
+    return <Plain className={className || undefined}>{children}</Plain>
+  }
+
   return (
     <Element
-      ref={ref as React.Ref<never>}
-      className={`reveal ${className}`.trim()}
-      style={delay ? { transitionDelay: `${delay}ms` } : undefined}
+      className={className || undefined}
+      initial={{ opacity: 0, y: 18 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: '0px 0px -12% 0px' }}
+      transition={{ type: 'spring', stiffness: 120, damping: 20, mass: 0.9, delay: delay / 1000 }}
     >
       {children}
     </Element>
+  )
+}
+
+function CompareRow({ row, index }: { row: (typeof comparison)[number]; index: number }) {
+  const reduceMotion = useReducedMotion()
+
+  return (
+    <m.div
+      className="compare-row"
+      role="row"
+      initial={reduceMotion ? undefined : { opacity: 0.001 }}
+      whileInView={reduceMotion ? undefined : { opacity: 1 }}
+      viewport={{ once: true, margin: '0px 0px -15% 0px' }}
+      transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1], delay: index * 0.07 }}
+    >
+      <span className="compare-question" role="cell">{row.question}</span>
+      <span className="compare-gdz" role="cell">{row.gdz}</span>
+      <span className="compare-ours" role="cell">
+        {/* Черта дорисовывается под нашим ответом: ею строка и «сходится». */}
+        <m.i
+          aria-hidden="true"
+          className="compare-underline"
+          initial={reduceMotion ? undefined : { scaleX: 0 }}
+          whileInView={reduceMotion ? undefined : { scaleX: 1 }}
+          viewport={{ once: true, margin: '0px 0px -15% 0px' }}
+          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: 0.15 + index * 0.07 }}
+        />
+        {row.ours}
+      </span>
+    </m.div>
+  )
+}
+
+/* Ролик о продукте. Файл тяжёлый, поэтому до появления в кадре грузится
+   только постер: `preload="none"` плюс запуск по пересечению. */
+function PromoFilm() {
+  const videoRef = useRef<HTMLVideoElement>(null)
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video || typeof IntersectionObserver === 'undefined') return
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) void video.play().catch(() => undefined)
+        else video.pause()
+      })
+    }, { threshold: 0.35 })
+
+    observer.observe(video)
+    return () => observer.disconnect()
+  }, [])
+
+  return (
+    <video
+      ref={videoRef}
+      className="promo-film"
+      poster="/promo-poster.jpg"
+      preload="none"
+      muted
+      loop
+      playsInline
+      // Ролик без звука и без сюжета, который можно упустить: он повторяет
+      // то, что рядом написано словами, поэтому обходится без подписей.
+      aria-label="Как выглядит решение задачи в Homework Copilot"
+    >
+      <source src="/promo.mp4" type="video/mp4" />
+    </video>
   )
 }
 
@@ -327,6 +391,32 @@ const steps = [
   },
 ]
 
+/* Сравнение с решебником. Здесь только различие форматов — то, чем ГДЗ
+   является по устройству: заранее собранный ответ под конкретное издание.
+   Никаких утверждений о чужом качестве: их нечем подтвердить. */
+const comparison = [
+  {
+    question: 'Где искать задачу',
+    gdz: 'В решебнике к своему изданию — если он есть',
+    ours: 'Нигде. Условие приносишь ты: фото или текст',
+  },
+  {
+    question: 'Задача из карточки или своего варианта',
+    gdz: 'Не найдётся: решебник собран под учебник',
+    ours: 'Решается так же, как любая другая',
+  },
+  {
+    question: 'Что получаешь',
+    gdz: 'Ответ к номеру',
+    ours: 'Дано, ход решения, чертёж и ответ',
+  },
+  {
+    question: 'В каком виде',
+    gdz: 'Как в книге',
+    ours: 'Как запись в тетради — переписывай строкой за строкой',
+  },
+] as const
+
 const features = [
   {
     icon: Notebook,
@@ -392,20 +482,69 @@ const faqs = [
   },
 ]
 
-function FaqItem({ question, answer, index }: { question: string; answer: string; index: number }) {
-  const [open, setOpen] = useState(index === 0)
+/* Аккордеон: открыт ровно один вопрос. Раскрытие и закрытие идут по высоте
+   содержимого, поэтому соседние вопросы не прыгают, а плавно смещаются. */
+function FaqItem({
+  question,
+  answer,
+  index,
+  open,
+  onToggle,
+}: {
+  question: string
+  answer: string
+  index: number
+  open: boolean
+  onToggle: () => void
+}) {
+  const reduceMotion = useReducedMotion()
 
   return (
     <div className={`faq-item${open ? ' is-open' : ''}`}>
       <h3>
-        <button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-controls={`faq-answer-${index}`}>
+        <button type="button" onClick={onToggle} aria-expanded={open} aria-controls={`faq-answer-${index}`}>
           <span>{question}</span>
           <Plus size={18} weight="bold" aria-hidden="true" />
         </button>
       </h3>
-      <div className="faq-answer" id={`faq-answer-${index}`} hidden={!open}>
-        <p>{answer}</p>
-      </div>
+      <AnimatePresence initial={false}>
+        {open && (
+          <m.div
+            className="faq-answer"
+            id={`faq-answer-${index}`}
+            initial={reduceMotion ? false : { height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={reduceMotion ? { height: 0 } : { height: 0, opacity: 0 }}
+            transition={{
+              height: { duration: 0.36, ease: [0.16, 1, 0.3, 1] },
+              opacity: { duration: open ? 0.28 : 0.16, ease: [0.16, 1, 0.3, 1] },
+            }}
+            style={{ overflow: 'hidden' }}
+          >
+            <p>{answer}</p>
+          </m.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+function FaqList() {
+  // Один открытый вопрос за раз: повторное нажатие закрывает и его.
+  const [openIndex, setOpenIndex] = useState(0)
+
+  return (
+    <div className="faq-list">
+      {faqs.map(({ question, answer }, index) => (
+        <FaqItem
+          key={question}
+          question={question}
+          answer={answer}
+          index={index}
+          open={openIndex === index}
+          onToggle={() => setOpenIndex((current) => (current === index ? -1 : index))}
+        />
+      ))}
     </div>
   )
 }
@@ -426,6 +565,7 @@ export default function LandingPage() {
   }, [])
 
   return (
+    <LazyMotion features={loadMotionFeatures} strict>
     <div className="landing">
       <a className="landing-skip" href="#hero-title">Перейти к содержанию</a>
       <LandingHeader signedIn={signedIn} theme={theme} onToggleTheme={toggleTheme} />
@@ -459,21 +599,36 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section className="landing-section landing-problem" aria-labelledby="problem-title">
-          <div className="landing-shell problem-shell">
-            <Reveal className="problem-statement">
-              <p className="section-eyebrow">Зачем это нужно</p>
-              <h2 id="problem-title">ГДЗ заканчиваются там, где начинается твоя задача</h2>
+        <section className="landing-section landing-compare" aria-labelledby="compare-title">
+          <div className="landing-shell">
+            <Reveal className="section-head">
+              <h2 id="compare-title">Решебник ищет задачу. Мы её решаем.</h2>
+              <p className="section-lead">
+                ГДЗ — это заранее собранные ответы к конкретным изданиям. Пока твоя задача оттуда,
+                всё сходится. Стоит появиться карточке от учителя или своему варианту — искать негде.
+              </p>
             </Reveal>
-            <Reveal className="problem-answer" delay={80}>
-              <p>
-                Готовые решебники собраны под конкретные издания. Карточка от учителя, свой вариант,
-                задача из рабочей тетради или новый учебник — искать бесполезно. А списать один ответ нельзя:
-                сдавать нужно запись с ходом решения.
-              </p>
-              <p className="problem-highlight">
-                Homework Copilot не ищет твою задачу в чужой базе. Он решает её по тому условию, которое ты принёс.
-              </p>
+
+            <div className="compare-table" role="table" aria-label="Решебник и Homework Copilot">
+              <div className="compare-head" role="row">
+                <span role="columnheader" />
+                <span role="columnheader">Решебник</span>
+                <span role="columnheader" className="is-ours">Homework&nbsp;Copilot</span>
+              </div>
+              {comparison.map((row, index) => (
+                <CompareRow key={row.question} row={row} index={index} />
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="landing-section landing-film" aria-labelledby="film-title">
+          <div className="landing-shell">
+            <Reveal className="section-head">
+              <h2 id="film-title">Двадцать секунд — и понятно, что это</h2>
+            </Reveal>
+            <Reveal className="film-frame" delay={80}>
+              <PromoFilm />
             </Reveal>
           </div>
         </section>
@@ -481,14 +636,12 @@ export default function LandingPage() {
         <section className="landing-section landing-how" id="how" aria-labelledby="how-title">
           <div className="landing-shell">
             <Reveal className="section-head">
-              <p className="section-eyebrow">Как это работает</p>
               <h2 id="how-title">Три шага от фотографии до тетради</h2>
             </Reveal>
 
             <ol className="how-steps">
               {steps.map(({ icon: Icon, title, text }, index) => (
                 <Reveal as="li" key={title} className="how-step" delay={index * 90}>
-                  <span className="how-step-index">0{index + 1}</span>
                   <Icon size={26} weight="duotone" aria-hidden="true" />
                   <h3>{title}</h3>
                   <p>{text}</p>
@@ -498,7 +651,6 @@ export default function LandingPage() {
 
             <Reveal className="how-proof" delay={120}>
               <div className="how-proof-copy">
-                <p className="section-eyebrow">Что получится</p>
                 <h3>Готовая страница, а не абзац текста</h3>
                 <p>
                   Так выглядит решение той самой задачи из первого экрана: условие разложено на «дано» и «найти»,
@@ -517,22 +669,20 @@ export default function LandingPage() {
         <section className="landing-section landing-features" id="features" aria-labelledby="features-title">
           <div className="landing-shell">
             <Reveal className="section-head">
-              <p className="section-eyebrow">Возможности</p>
               <h2 id="features-title">Сделано под то, как сдают домашку</h2>
             </Reveal>
 
-            <div className="feature-grid">
-              {features.map(({ icon: Icon, title, text }, index) => (
-                <Reveal as="article" key={title} className="feature-card" delay={(index % 3) * 70}>
-                  <Icon size={24} weight="duotone" aria-hidden="true" />
-                  <h3>{title}</h3>
-                  <p>{text}</p>
+            <dl className="feature-list">
+              {features.map(({ title, text }, index) => (
+                <Reveal key={title} className="feature-row" delay={index * 60}>
+                  <dt>{title}</dt>
+                  <dd>{text}</dd>
                 </Reveal>
               ))}
-            </div>
+            </dl>
 
             <Reveal className="subject-band" delay={60}>
-              <p className="section-eyebrow">14 предметов, 5–11 класс</p>
+              <h3>14 предметов, с 5 по 11 класс</h3>
               <ul>
                 {subjects.map((subject) => <li key={subject}>{subject}</li>)}
               </ul>
@@ -543,7 +693,6 @@ export default function LandingPage() {
         <section className="landing-section landing-showcase" aria-labelledby="showcase-title">
           <div className="landing-shell">
             <Reveal className="section-head">
-              <p className="section-eyebrow">Внутри продукта</p>
               <h2 id="showcase-title">Не только решение задачи</h2>
             </Reveal>
 
@@ -578,7 +727,6 @@ export default function LandingPage() {
         <section className="landing-section landing-price" id="price" aria-labelledby="price-title">
           <div className="landing-shell">
             <Reveal className="section-head">
-              <p className="section-eyebrow">Цена</p>
               <h2 id="price-title">Платишь за решение, а не за подписку</h2>
             </Reveal>
 
@@ -628,15 +776,10 @@ export default function LandingPage() {
         <section className="landing-section landing-faq" id="faq" aria-labelledby="faq-title">
           <div className="landing-shell faq-shell">
             <Reveal className="section-head">
-              <p className="section-eyebrow">Вопросы</p>
               <h2 id="faq-title">Что обычно спрашивают первым</h2>
             </Reveal>
 
-            <div className="faq-list">
-              {faqs.map(({ question, answer }, index) => (
-                <FaqItem key={question} question={question} answer={answer} index={index} />
-              ))}
-            </div>
+            <FaqList />
           </div>
         </section>
 
@@ -659,5 +802,6 @@ export default function LandingPage() {
 
       <SiteFooter />
     </div>
+    </LazyMotion>
   )
 }
