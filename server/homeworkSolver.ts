@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createClient } from '@supabase/supabase-js'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -26,6 +27,11 @@ type SolverOptions = {
   fetchImpl?: typeof fetch
   taskLookup?: (request: SolveHomeworkRequest) => Promise<VerifiedTaskRecord | null>
 }
+type GuestIdentity = {
+  guestId: string
+  ipHash: string | null
+}
+
 type VerifiedTaskRecord = {
   condition: string
   conditionNormalized: string
@@ -266,12 +272,49 @@ async function validateRequest(value: unknown, options: SolverOptions): Promise<
   return request
 }
 
-async function authenticateAccount(request: IncomingMessage, options: SolverOptions): Promise<AuthenticatedAccount | null> {
+const guestIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+
+// Гость приходит без токена, но с меткой браузера. Метка сама по себе ничего
+// не открывает: одно бесплатное решение на неё выдаёт база, и она же считает,
+// что оно уже выдано.
+function readGuestIdentity(request: IncomingMessage, options: SolverOptions): GuestIdentity | null {
+  if (!options.supabaseUrl || !options.serviceRoleKey) return null
+
+  const header = request.headers['x-guest-id']
+  const value = (Array.isArray(header) ? header[0] : header ?? '').trim().toLowerCase()
+  if (!guestIdPattern.test(value)) return null
+
+  return { guestId: value, ipHash: hashRequestAddress(request, options) }
+}
+
+// Адрес не хранится: в базу уходит только необратимый хэш, и соль для него
+// выводится из служебного ключа, а не задаётся отдельной переменной окружения.
+function hashRequestAddress(request: IncomingMessage, options: SolverOptions): string | null {
+  if (!options.serviceRoleKey) return null
+
+  const forwarded = request.headers['x-forwarded-for']
+  const raw = (Array.isArray(forwarded) ? forwarded[0] : forwarded ?? request.socket?.remoteAddress ?? '')
+    .split(',')[0]
+    .trim()
+  if (!raw) return null
+
+  return createHmac('sha256', options.serviceRoleKey).update('guest-ip:' + raw).digest('hex')
+}
+
+async function authenticateAccount(
+  request: IncomingMessage,
+  options: SolverOptions,
+  guest: GuestIdentity | null,
+): Promise<AuthenticatedAccount | null> {
   if (!options.supabaseUrl || !options.supabasePublishableKey) return null
 
   const header = request.headers.authorization
   const token = header?.startsWith('Bearer ') ? header.slice('Bearer '.length).trim() : ''
-  if (!token) throw new HomeworkSolverError(401, 'Войди в аккаунт, чтобы решить задачу')
+  // Без токена запрос ещё не отвергается: у гостя есть одно бесплатное решение.
+  if (!token) {
+    if (guest) return null
+    throw new HomeworkSolverError(401, 'Войди в аккаунт, чтобы решить задачу')
+  }
 
   const client = createClient<Database>(options.supabaseUrl, options.supabasePublishableKey, {
     global: { headers: { Authorization: 'Bearer ' + token } },
@@ -315,6 +358,58 @@ async function reserveSolutionCredit(
   }
 
   return Boolean(data && typeof data === 'object' && !Array.isArray(data) && data.reserved === true)
+}
+
+// Гостевой резерв. Денег у гостя нет, поэтому «резервируется» единственная
+// бесплатная попытка: база возвращает false, если она уже израсходована.
+async function claimGuestSolution(
+  guest: GuestIdentity,
+  request: SolveHomeworkRequest,
+  options: SolverOptions,
+): Promise<boolean> {
+  const admin = guestAdminClient(options)
+  if (!admin) return false
+
+  const { data, error } = await admin.rpc('claim_guest_solution', {
+    p_guest_id: guest.guestId,
+    p_idempotency_key: request.idempotencyKey,
+    p_ip_hash: guest.ipHash,
+  })
+
+  if (error) throw new HomeworkSolverError(502, 'Не получилось выдать бесплатное решение')
+  if (data !== true) {
+    throw new HomeworkSolverError(
+      402,
+      'Бесплатное решение уже использовано. Зарегистрируйся — на счёт придут 20 ₽, это ещё четыре решения',
+    )
+  }
+
+  return true
+}
+
+// Попытка возвращается, если решение так и не выдали: сгорать она не должна.
+async function releaseGuestSolution(
+  guest: GuestIdentity,
+  request: SolveHomeworkRequest,
+  options: SolverOptions,
+): Promise<void> {
+  const admin = guestAdminClient(options)
+  if (!admin) return
+  try {
+    await admin.rpc('release_guest_solution', {
+      p_guest_id: guest.guestId,
+      p_idempotency_key: request.idempotencyKey,
+    })
+  } catch {
+    // Исходную ошибку это скрывать не должно.
+  }
+}
+
+function guestAdminClient(options: SolverOptions): SupabaseClient<Database> | null {
+  if (!options.supabaseUrl || !options.serviceRoleKey) return null
+  return createClient<Database>(options.supabaseUrl, options.serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  })
 }
 
 // Компенсация резерва. Возврат проходит только если решение так и не выдано —
@@ -463,7 +558,7 @@ function allowProductionBrowser(request: IncomingMessage, response: ServerRespon
 
   response.setHeader('Access-Control-Allow-Origin', origin)
   response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-  response.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+  response.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Guest-Id')
   response.setHeader('Access-Control-Max-Age', '86400')
   response.setHeader('Vary', 'Origin')
   return true
@@ -520,7 +615,9 @@ export async function handleHomeworkSolverRequest(
     })
 
     stage = 'authenticate'
-    const account = await authenticateAccount(request, options)
+    const guest = readGuestIdentity(request, options)
+    const account = await authenticateAccount(request, options, guest)
+    const guestSolving = account ? null : guest
     stage = 'restore'
     const existingSolution = await completeStoredSolution(account, task)
     if (existingSolution && isCurrentReviewedSolution(existingSolution)) {
@@ -535,7 +632,11 @@ export async function handleHomeworkSolverRequest(
     }
 
     stage = 'balance'
-    const reserved = existingSolution ? false : await reserveSolutionCredit(account, task)
+    const reserved = existingSolution
+      ? false
+      : guestSolving
+        ? await claimGuestSolution(guestSolving, task, options)
+        : await reserveSolutionCredit(account, task)
     try {
       stage = 'generate'
       const solution = await solveWithKie(task, options, account?.userId)
@@ -552,7 +653,8 @@ export async function handleHomeworkSolverRequest(
       })
       sendJson(response, 200, { solution: completedSolution })
     } catch (error) {
-      if (reserved) await refundSolutionCredit(account, task, 'Решение не удалось получить')
+      if (reserved && guestSolving) await releaseGuestSolution(guestSolving, task, options)
+      else if (reserved) await refundSolutionCredit(account, task, 'Решение не удалось получить')
       throw error
     }
   } catch (error) {

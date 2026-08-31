@@ -46,6 +46,7 @@ import type { HomeworkSolution, HomeworkSource } from './lib/homeworkContract'
 import { formatRubles } from './lib/currency'
 import { recordPendingLegalAcceptance, rememberPendingLegalAcceptance } from './lib/legalConsent'
 import { bindPendingReferral, captureReferralFromCurrentUrl, preparePendingReferralClaim } from './lib/referrals'
+import { forgetGuestSolution, getGuestId, guestSolutionUsed, rememberGuestSolutionUsed } from './lib/guestSolutions'
 import { applySeoMetadata, getSeoMetadata } from './lib/siteMetadata'
 import { getSolutionPrice } from './lib/solutionPricing'
 import { catalogSolutionEntries, findAvailableNumberSolution } from './lib/solutionLibrary'
@@ -604,11 +605,13 @@ function HomeActionCard({
   )
 }
 
-function GuestSolutionsNote({ onOpenAccount }: { onOpenAccount: () => void }) {
+function GuestSolutionsNote({ onOpenAccount, freeSolutionUsed = false }: { onOpenAccount: () => void; freeSolutionUsed?: boolean }) {
   return (
     <p className="home-guest-note">
       <button type="button" onClick={onOpenAccount}>
-        Войти, чтобы сохранять решения
+        {freeSolutionUsed
+          ? 'Бесплатное решение использовано. Зарегистрируйся и получи 20 ₽'
+          : 'Войти, чтобы сохранять решения'}
         <ArrowRight size={16} weight="bold" aria-hidden="true" />
       </button>
     </p>
@@ -789,11 +792,16 @@ function UnderstandingPage({
   generatedSolution,
   onGoHome,
   onOpenSupport,
+  guestOffer,
+  onOpenAccount,
 }: {
   solution: SolutionState | null
   generatedSolution?: HomeworkSolution
   onGoHome: () => void
   onOpenSupport: (context: SupportPrefill) => void
+  /** Решение получено без аккаунта: оно лежит только в этом браузере. */
+  guestOffer: boolean
+  onOpenAccount: () => void
 }) {
   const [copied, setCopied] = useState(false)
   // Исходный чертёж из скана учебника больше не подгружается: сканов нет,
@@ -831,6 +839,20 @@ function UnderstandingPage({
     <p className="solution-disclaimer">Решение помогает разобраться. Проверь ответ перед сдачей.</p>
   )
 
+  // Гостю говорим правду о том, где лежит решение, и что он получит за вход.
+  const guestInvite = guestOffer ? (
+    <section className="solution-guest-offer" aria-labelledby="solution-guest-offer-title">
+      <div>
+        <h2 id="solution-guest-offer-title">Это решение хранится только в этом браузере</h2>
+        <p>Зарегистрируйся — оно останется в аккаунте, а на счёт придут 20 ₽. Это ещё четыре решения.</p>
+      </div>
+      <button className="route-primary-action" type="button" onClick={onOpenAccount}>
+        Сохранить решение
+        <ArrowRight size={18} weight="bold" aria-hidden="true" />
+      </button>
+    </section>
+  ) : null
+
   const actions = (
     <div className="solution-actions">
       {(notebookFixture || generatedSolution) && (
@@ -862,6 +884,8 @@ function UnderstandingPage({
           </div>
         )}
         <div className="solution-notebook-preview"><GeometryNotebookLayoutV1 spec={notebookFixture} /></div>
+        {disclaimer}
+        {guestInvite}
         {generatedSolution?.verification && <SolutionVerificationPanel verification={generatedSolution.verification} />}
         {actions}
       </section>
@@ -907,6 +931,7 @@ function UnderstandingPage({
           )}
         </article>
         {disclaimer}
+        {guestInvite}
         {generatedSolution.verification && <SolutionVerificationPanel verification={generatedSolution.verification} />}
         {actions}
       </section>
@@ -980,6 +1005,7 @@ function HomePage() {
     }
   })
   const [customTextbooks] = useState<Textbook[]>([])
+  const [guestFreeSolutionUsed, setGuestFreeSolutionUsed] = useState(guestSolutionUsed)
   const [solutionState, setSolutionState] = useState<SolutionState | null>(null)
   const [selectedSolution, setSelectedSolution] = useState<SolutionState | null>(() => currentNavigationRoute().solution)
   const [generatedSolutions, setGeneratedSolutions] = useState<HomeworkSolution[]>(loadGeneratedSolutions)
@@ -1234,6 +1260,9 @@ function HomePage() {
         setAccountOpen(true)
       }
       if (event === 'SIGNED_IN' && nextUser) {
+        // У вошедшего ученика считается баланс, а не гостевая метка.
+        forgetGuestSolution()
+        setGuestFreeSolutionUsed(false)
         sessionStorage.removeItem('homework-copilot:google-auth-pending')
         sessionStorage.removeItem('homework-copilot:google-verification-email')
         sessionStorage.removeItem('homework-copilot:verification-email')
@@ -1513,9 +1542,13 @@ function HomePage() {
     if (source === 'number' && !verifiedTask) {
       throw new Error('Точное условие задачи в выбранном издании не найдено. Решение не запускается')
     }
-    if (supabaseClient && !user) {
+    // Первое решение выдаётся без аккаунта. Регистрацию просим только когда
+    // бесплатный разбор уже израсходован: до этого человек не видел продукт
+    // и не понимает, за что его просят завести аккаунт.
+    const solvingAsGuest = Boolean(supabaseClient) && !user
+    if (solvingAsGuest && guestFreeSolutionUsed) {
       rememberAccountTrigger()
-      setAccountNotice('Войди или зарегистрируйся, чтобы сохранить решение и списать его с баланса')
+      setAccountNotice('Бесплатное решение уже использовано. Зарегистрируйся — на счёт придут 20 ₽, это ещё четыре решения')
       setAccountOpen(true)
       return false
     }
@@ -1586,7 +1619,13 @@ function HomePage() {
           ...(imageDataUrl ? { imageDataUrl } : {}),
         },
         accessToken,
+        solvingAsGuest ? getGuestId() : null,
       )
+
+      if (solvingAsGuest) {
+        rememberGuestSolutionUsed()
+        setGuestFreeSolutionUsed(true)
+      }
 
       setGeneratedSolutions((current) => [
         generatedSolution,
@@ -1652,9 +1691,10 @@ function HomePage() {
               <CopyTask
                 onSubmit={submitFromForm}
                 signedIn={Boolean(user)}
+                freeSolutionUsed={guestFreeSolutionUsed}
                 defaultGrade={account ? `${account.profile.grade} класс` : ''}
               />
-              {!user && <GuestSolutionsNote onOpenAccount={openAccount} />}
+              {!user && <GuestSolutionsNote onOpenAccount={openAccount} freeSolutionUsed={guestFreeSolutionUsed} />}
               <div className={`home-grid${solutionState || user ? '' : ' is-single'}`}>
                 {(solutionState || user) && (
                   <div className="home-column home-column-primary">
@@ -1675,6 +1715,8 @@ function HomePage() {
               )}
               onGoHome={() => navigate('Главная')}
               onOpenSupport={(context) => openSupport('wrong_solution', context)}
+              guestOffer={Boolean(supabaseClient) && !user}
+              onOpenAccount={openAccount}
             />
           ) : activeNavigation === 'ИИ-чат' ? (
             <Suspense fallback={<div className="route-loading" role="status">Загружаем чат…</div>}><ChatPage userId={user?.id ?? null} onRequireAuth={openAccount} onOpenWallet={openWallet} /></Suspense>

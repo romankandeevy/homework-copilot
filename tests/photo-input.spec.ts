@@ -3,11 +3,12 @@ import { expect, test } from '@playwright/test'
 
 const imagePath = path.resolve('public/og-card.png')
 
+// Фото прикладывается сразу при выборе файла: отдельного «Продолжить с фото»
+// в форме нет, а кнопки называются «Решить» и «Заменить фото».
 async function attachPhoto(page: import('@playwright/test').Page) {
-  await page.goto('/main')
+  await page.goto('/app')
   await page.setInputFiles('#task-photo', imagePath)
-  await page.getByRole('button', { name: 'Продолжить с фото' }).click()
-  await expect(page.getByRole('img', { name: 'Прикреплённое фото задачи' })).toBeVisible()
+  await expect(page.getByRole('img', { name: 'Приложенное фото задачи' })).toBeVisible()
 }
 
 test('передаёт модели изображение без браузерного OCR', async ({ page }) => {
@@ -47,9 +48,11 @@ test('передаёт модели изображение без браузер
   })
 
   await attachPhoto(page)
-  await expect(page.getByRole('textbox', { name: /условие/i })).toHaveCount(0)
-  await expect(page.getByText(/распознал/i)).toHaveCount(0)
-  await page.getByRole('button', { name: 'Решить по этому фото' }).click()
+  // Условие остаётся пустым: браузер не распознаёт текст с фотографии и не
+  // подставляет его за ученика — условие читает модель.
+  await expect(page.getByRole('textbox', { name: 'Условие задачи' })).toHaveValue('')
+  await expect(page.getByText(/распозна/i)).toHaveCount(0)
+  await page.locator('.copy-task-submit').click()
 
   await expect.poll(() => solveRequest).toBeTruthy()
   expect(solveRequest).not.toHaveProperty('condition')
@@ -65,6 +68,7 @@ test('показывает приложенное фото без перепол
     content: document.documentElement.scrollWidth,
   }))
   expect(widths.content).toBeLessThanOrEqual(widths.viewport)
-  await expect(page.getByRole('button', { name: 'Решить по этому фото' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Выбрать другое фото' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Решить' })).toBeVisible()
+  await expect(page.locator('.task-photo-button')).toHaveText('Заменить фото')
+  await expect(page.getByRole('button', { name: 'Убрать фото' })).toBeVisible()
 })

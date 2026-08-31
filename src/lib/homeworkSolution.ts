@@ -95,6 +95,9 @@ export async function requestHomeworkSolution(
   endpoint: string,
   request: SolveHomeworkRequest,
   accessToken?: string,
+  // Метка браузера. Нужна только гостю: по ней сервер выдаёт одно
+  // бесплатное решение до регистрации.
+  guestId?: string | null,
 ): Promise<HomeworkSolution> {
   let response: Response
 
@@ -104,6 +107,7 @@ export async function requestHomeworkSolution(
       headers: {
         'Content-Type': 'application/json',
         ...(accessToken ? { Authorization: 'Bearer ' + accessToken } : {}),
+        ...(!accessToken && guestId ? { 'X-Guest-Id': guestId } : {}),
       },
       body: JSON.stringify(request),
     })

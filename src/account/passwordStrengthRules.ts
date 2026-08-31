@@ -6,7 +6,7 @@ const SYMBOL = /[!-/:-@[-`{-~]/
 const labels = ['Пусто', 'Слабый', 'Средний', 'Хороший', 'Надёжный'] as const
 
 const passwordRules = [
-  { id: 'length', label: 'Не меньше 12 символов', test: (value: string) => value.length >= 12 },
+  { id: 'length', label: 'Не меньше 8 символов', test: (value: string) => value.length >= 8 },
   { id: 'case', label: 'Строчные и заглавные буквы', test: (value: string) => /[a-zа-яё]/u.test(value) && /[A-ZА-ЯЁ]/u.test(value) },
   { id: 'digit', label: 'Хотя бы одна цифра', test: (value: string) => /\d/u.test(value) },
   { id: 'symbol', label: 'Хотя бы один спецсимвол', test: (value: string) => SYMBOL.test(value) },

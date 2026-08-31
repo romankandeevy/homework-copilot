@@ -602,8 +602,8 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   autoComplete={screen === 'sign-in' ? 'current-password' : 'new-password'}
-                  minLength={requiresStrongPassword ? 12 : 8}
-                  placeholder={requiresStrongPassword ? 'Не меньше 12 символов' : 'Твой пароль'}
+                  minLength={8}
+                  placeholder={requiresStrongPassword ? 'Не меньше 8 символов' : 'Твой пароль'}
                   aria-describedby={requiresStrongPassword && password ? passwordStrengthId : undefined}
                   required
                   autoFocus={screen === 'reset'}
@@ -722,7 +722,7 @@ function ReferralCard() {
         <span className="account-referral-icon"><Gift size={23} weight="duotone" aria-hidden="true" /></span>
         <div>
           <h3 id="account-referral-title">Пригласи друга</h3>
-          <p>После его первого подтверждённого пополнения тебе начислят <strong>+10 ₽</strong>, а ему — <strong>+5 ₽</strong>.</p>
+          <p>Как только он подтвердит регистрацию по твоей ссылке, тебе начислят <strong>+10 ₽</strong>, а ему — <strong>+5 ₽</strong>. Пополнять ничего не нужно.</p>
         </div>
       </header>
 
@@ -743,7 +743,7 @@ function ReferralCard() {
             <p className="account-referral-joined">
               {referral.joinedRewardStatus === 'rewarded'
                 ? 'Твои +5 ₽ по приглашению уже начислены.'
-                : 'Ты зарегистрирован по приглашению: +5 ₽ начислят после первого подтверждённого пополнения.'}
+                : 'Ты зарегистрирован по приглашению: +5 ₽ придут, как только подтвердишь почту.'}
             </p>
           )}
           <small>Засчитывается только новый аккаунт, зарегистрированный по этой ссылке. Один аккаунт можно привязать один раз; повторных начислений нет.</small>

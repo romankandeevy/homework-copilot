@@ -836,6 +836,14 @@ export type Database = {
         Args: { p_solution: Json }
         Returns: string
       }
+      claim_guest_solution: {
+        Args: { p_guest_id: string; p_idempotency_key: string; p_ip_hash?: string | null }
+        Returns: boolean
+      }
+      release_guest_solution: {
+        Args: { p_guest_id: string; p_idempotency_key: string }
+        Returns: boolean
+      }
       get_admin_context: { Args: never; Returns: Json }
       get_my_referral: { Args: never; Returns: Json }
       get_my_homework_solutions: {

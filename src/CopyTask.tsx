@@ -37,11 +37,13 @@ export type TaskSubmission = {
 export default function CopyTask({
   onSubmit,
   signedIn = false,
+  freeSolutionUsed = false,
   defaultGrade = '',
 }: {
   onSubmit: (submission: TaskSubmission) => Promise<boolean>
-  /** Гостю показываем, что после регистрации на счёте уже есть деньги. */
+  /** Гостю показываем, что первое решение он получит без регистрации. */
   signedIn?: boolean
+  freeSolutionUsed?: boolean
   /** Класс из профиля: один и тот же вопрос не должен иметь двух ответов. */
   defaultGrade?: string
 }) {
@@ -158,7 +160,13 @@ export default function CopyTask({
         <p className="copy-task-price">
           <strong>{formatRubles(price)}</strong>
           <span>за решение</span>
-          {!signedIn && <em>Первые четыре — бесплатно: после регистрации на счёте 20 ₽</em>}
+          {!signedIn && (
+            <em>
+              {freeSolutionUsed
+                ? 'Зарегистрируйся: на счёт придут 20 ₽ — это ещё четыре решения'
+                : 'Первое решение — бесплатно и без регистрации'}
+            </em>
+          )}
         </p>
       </header>
 

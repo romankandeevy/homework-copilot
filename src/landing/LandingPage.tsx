@@ -372,11 +372,11 @@ const faqs = [
   },
   {
     question: 'Нужна ли регистрация?',
-    answer: 'Да: решение привязывается к аккаунту и балансу, чтобы его можно было открыть позже. Войти можно через Google или по почте с паролем. Сразу после регистрации на счёте 20 ₽.',
+    answer: 'Первое решение выдаётся без аккаунта — просто впиши условие и нажми «Решить». Аккаунт нужен со второго: решение привязывается к балансу и остаётся в истории. Войти можно через Google или по почте, и сразу после регистрации на счёте 20 ₽ — это ещё четыре решения.',
   },
   {
     question: 'Сколько это стоит?',
-    answer: 'Решение задачи — 5 ₽, одинаково для всех предметов и обоих способов ввода. Ответ в ИИ-чате — от 20 копеек. Расписание бесплатное. Стартовых 20 ₽ хватает на четыре решения.',
+    answer: 'Первое решение бесплатное и без регистрации. Дальше 5 ₽ за задачу, одинаково для всех предметов и обоих способов ввода. Ответ в ИИ-чате — от 20 копеек. Расписание бесплатное. Стартовых 20 ₽ хватает ещё на четыре решения.',
   },
   {
     question: 'А если решение окажется неверным?',
@@ -450,8 +450,8 @@ export default function LandingPage() {
                 <a className="landing-secondary-action" href="#how" onClick={scrollToHow}>Как это работает</a>
               </div>
               <ul className="hero-facts">
-                <li><Check size={15} weight="bold" aria-hidden="true" />20 ₽ на счёте после регистрации — это четыре решения</li>
-                <li><Check size={15} weight="bold" aria-hidden="true" />Не решилось — деньги остались на балансе</li>
+                <li><Check size={15} weight="bold" aria-hidden="true" />Первое решение — бесплатно и без регистрации</li>
+                <li><Check size={15} weight="bold" aria-hidden="true" />После регистрации ещё 20 ₽ на счёте — это четыре решения</li>
               </ul>
             </div>
 
@@ -588,13 +588,17 @@ export default function LandingPage() {
                 <strong className="price-value">5 ₽</strong>
                 <p>Одна цена для всех предметов и для обоих способов ввода — фото и текста. Не решилось или не прошло проверку — деньги остаются на балансе.</p>
                 <a className="landing-primary-action" href={appPath}>
-                  {signedIn ? 'Открыть приложение' : 'Начать с 20 ₽ на счёте'}
+                  {signedIn ? 'Открыть приложение' : 'Решить первую — бесплатно'}
                   <ArrowRight size={17} weight="bold" aria-hidden="true" />
                 </a>
               </Reveal>
 
               <Reveal className="price-side" delay={80}>
                 <ul className="price-list">
+                  <li>
+                    <span><strong>Первое решение</strong><small>Без аккаунта: впиши условие и нажми «Решить»</small></span>
+                    <b>бесплатно</b>
+                  </li>
                   <li>
                     <span><strong>Старт</strong><small>Начисляются сразу после регистрации</small></span>
                     <b>20 ₽</b>
@@ -608,7 +612,7 @@ export default function LandingPage() {
                     <b>бесплатно</b>
                   </li>
                   <li>
-                    <span><strong>Приглашение друга</strong><small>После его первого пополнения: ему 5 ₽, тебе 10 ₽</small></span>
+                    <span><strong>Приглашение друга</strong><small>Как только он подтвердит регистрацию: ему 5 ₽, тебе 10 ₽</small></span>
                     <b>+10 ₽</b>
                   </li>
                 </ul>
@@ -640,7 +644,7 @@ export default function LandingPage() {
           <div className="landing-shell">
             <Reveal className="final-card">
               <h2 id="final-title">Задача на завтра? Начни с фотографии.</h2>
-              <p>Регистрация занимает минуту, на счёте сразу 20 ₽ — этого хватит на четыре решения.</p>
+              <p>Первое решение — без регистрации. Понравится — заведёшь аккаунт, и на счёт придут 20 ₽ ещё на четыре задачи.</p>
               <div className="final-actions">
                 <a className="landing-primary-action" href={appPath}>
                   {signedIn ? 'Открыть приложение' : 'Решить задачу'}

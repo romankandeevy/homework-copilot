@@ -1234,6 +1234,11 @@
 @media (max-width: 960px) {
   .landing-nav { display: none; }
   .landing-burger { display: inline-grid; }
+  /* Средняя колонка пуста без меню: если оставить её гибкой, она забирает
+     ширину у кнопок, и они уезжают за край на узком экране. */
+  .landing-header { grid-template-columns: minmax(0, 1fr) auto; }
+  .landing-brand { min-width: 0; overflow: hidden; }
+  .landing-brand .brand-name { overflow: hidden; text-overflow: ellipsis; }
   .landing-header-actions .landing-ghost-action { display: none; }
   .problem-shell { grid-template-columns: minmax(0, 1fr); }
   .how-steps { grid-template-columns: minmax(0, 1fr); gap: var(--space-6); }
@@ -1263,6 +1268,11 @@
 
 @media (max-width: 380px) {
   .landing-brand .brand-mark { display: none; }
+  /* На самых узких экранах длинная надпись на кнопке не должна распирать
+     карточку: пусть переносится, а не выталкивает страницу вбок. */
+  .landing-primary-action,
+  .landing-secondary-action { white-space: normal; text-align: center; }
+  .price-card .landing-primary-action { justify-self: stretch; }
   .parse-line { line-height: 2.4; }
 }
 

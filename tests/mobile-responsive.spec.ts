@@ -123,39 +123,29 @@ test.describe('адаптация под телефон', () => {
     await expect(cards).toHaveCount(1)
     await expect(cards.getByRole('heading', { name: 'База решений' })).toBeVisible()
     await expect(page.getByRole('button', { name: /Войти, чтобы сохранять решения/ })).toBeVisible()
-  })
 
-  test.skip('карточки на главной совпадают по высоте, цвету и расположению кнопок', async ({ page }) => {
-    await page.setViewportSize({ width: 1920, height: 935 })
-    await page.goto('/app')
-
-    const cards = page.locator('.home-action-card')
-    await expect(cards).toHaveCount(2)
-
-    const [firstCard, secondCard] = await cards.evaluateAll((elements) => elements.map((element) => {
+    // Карточек было две, и тест сверял их между собой. Осталась одна, поэтому
+    // проверяем её саму: иконка нужного размера и кнопка прижата к нижнему
+    // краю карточки, а не висит сразу под текстом.
+    const card = await cards.evaluate((element) => {
       const style = getComputedStyle(element)
-      const icon = element.querySelector('.home-action-card-icon')!
-      const button = element.querySelector('button')!
-      const iconBox = icon.getBoundingClientRect()
+      const cardBox = element.getBoundingClientRect()
+      const iconBox = element.querySelector('.home-action-card-icon')!.getBoundingClientRect()
+      const buttonBox = element.querySelector('button')!.getBoundingClientRect()
 
       return {
-        height: element.getBoundingClientRect().height,
-        background: style.backgroundColor,
-        border: style.borderColor,
-        iconColor: getComputedStyle(icon).color,
+        height: cardBox.height,
+        innerBottom: cardBox.bottom - Number.parseFloat(style.borderBottomWidth) - Number.parseFloat(style.paddingBottom),
         iconWidth: iconBox.width,
         iconHeight: iconBox.height,
-        buttonTop: button.getBoundingClientRect().top,
+        buttonBottom: buttonBox.bottom,
       }
-    }))
+    })
 
-    expect(firstCard.height).toBe(secondCard.height)
-    expect(firstCard.background).toBe(secondCard.background)
-    expect(firstCard.border).toBe(secondCard.border)
-    expect(firstCard.iconColor).toBe(secondCard.iconColor)
-    expect(firstCard.iconWidth).toBe(secondCard.iconWidth)
-    expect(firstCard.iconHeight).toBe(secondCard.iconHeight)
-    expect(firstCard.buttonTop).toBe(secondCard.buttonTop)
+    expect(card.iconWidth).toBe(40)
+    expect(card.iconHeight).toBe(40)
+    expect(card.height).toBeGreaterThanOrEqual(192)
+    expect(Math.abs(card.innerBottom - card.buttonBottom)).toBeLessThan(1)
   })
 
   test('главная карточка чёрная в светлой теме и белая в тёмной', async ({ page }) => {
@@ -164,17 +154,22 @@ test.describe('адаптация под телефон', () => {
 
     const card = page.locator('.copy-task')
     const title = card.getByRole('heading', { name: 'Списать задачу' })
-    const textbook = card.getByRole('button', { name: /Учебник Геометрия/ })
+    // Выбора учебника в форме больше нет. Тот же токен текста карточки
+    // держат условие и кнопка фотографии — по ним и проверяем инверсию.
+    const condition = card.getByRole('textbox', { name: 'Условие задачи' })
+    const photoButton = card.locator('.task-photo-button')
 
     await expect(card).toHaveCSS('background-color', 'rgb(0, 0, 0)')
     await expect(title).toHaveCSS('color', 'rgb(255, 255, 255)')
-    await expect(textbook).toHaveCSS('color', 'rgb(255, 255, 255)')
+    await expect(condition).toHaveCSS('color', 'rgb(255, 255, 255)')
+    await expect(photoButton).toHaveCSS('color', 'rgb(255, 255, 255)')
 
     await page.locator('.topbar-actions').getByRole('button', { name: 'Включить тёмную тему' }).click()
 
     await expect(card).toHaveCSS('background-color', 'rgb(255, 255, 255)')
     await expect(title).toHaveCSS('color', 'rgb(0, 0, 0)')
-    await expect(textbook).toHaveCSS('color', 'rgb(0, 0, 0)')
+    await expect(condition).toHaveCSS('color', 'rgb(0, 0, 0)')
+    await expect(photoButton).toHaveCSS('color', 'rgb(0, 0, 0)')
   })
 
   for (const viewport of phoneViewports) {
@@ -216,16 +211,36 @@ test.describe('адаптация под телефон', () => {
     await page.setViewportSize({ width: 320, height: 812 })
     await page.goto('/app')
 
-    const taskField = page.locator('.task-number-field')
-    const photoField = page.locator('.photo-task-field')
-    const [taskBox, photoBox] = await Promise.all([taskField.boundingBox(), photoField.boundingBox()])
-    expect(taskBox).not.toBeNull()
+    // Условие, кнопка фотографии и «Решить» идут во всю ширину друг под
+    // другом, а два коротких селекта делят одну строку пополам.
+    const condition = page.getByRole('textbox', { name: 'Условие задачи' })
+    const photoButton = page.locator('.task-photo-button')
+    const submit = page.locator('.copy-task-submit')
+    const [conditionBox, photoBox, submitBox] = await Promise.all([
+      condition.boundingBox(),
+      photoButton.boundingBox(),
+      submit.boundingBox(),
+    ])
+    expect(conditionBox).not.toBeNull()
     expect(photoBox).not.toBeNull()
-    expect(photoBox!.y).toBeGreaterThan(taskBox!.y + taskBox!.height)
-    expect(Math.abs(photoBox!.width - taskBox!.width)).toBeLessThan(1)
+    expect(submitBox).not.toBeNull()
+    expect(photoBox!.y).toBeGreaterThan(conditionBox!.y + conditionBox!.height)
+    expect(submitBox!.y).toBeGreaterThan(photoBox!.y + photoBox!.height)
+    expect(Math.abs(photoBox!.width - conditionBox!.width)).toBeLessThan(1)
+    expect(Math.abs(submitBox!.width - conditionBox!.width)).toBeLessThan(1)
 
-    await page.getByRole('button', { name: /Учебник Геометрия/ }).click()
-    const dialog = page.getByRole('dialog', { name: 'Выбери учебник' })
+    const selects = page.locator('.task-select')
+    await expect(selects).toHaveCount(2)
+    const [subjectBox, gradeBox] = await selects.evaluateAll(
+      (elements) => elements.map((element) => element.getBoundingClientRect().toJSON()),
+    )
+    expect(Math.abs(subjectBox.y - gradeBox.y)).toBeLessThan(1)
+    expect(subjectBox.right).toBeLessThanOrEqual(gradeBox.x + 1)
+    expect(subjectBox.y).toBeGreaterThan(photoBox!.y)
+    expect(gradeBox.bottom).toBeLessThanOrEqual(submitBox!.y + 1)
+
+    await page.locator('.topbar-actions').getByRole('button', { name: 'Войти или зарегистрироваться' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Войди в аккаунт' })
     await expect(dialog).toBeVisible()
     await page.waitForTimeout(350)
     const box = await dialog.boundingBox()
@@ -233,7 +248,8 @@ test.describe('адаптация под телефон', () => {
     expect(Math.abs(box!.y - (812 - box!.height) / 2)).toBeLessThan(2)
     await expectNoPageOverflow(page)
 
-    await page.getByRole('button', { name: 'Закрыть выбор учебника' }).click()
+    await page.getByRole('button', { name: 'Закрыть окно аккаунта' }).click()
+    await expect(dialog).toBeHidden()
     const initialTheme = await page.locator('html').getAttribute('data-theme')
     await page.getByRole('button', { name: /Включить (светлую|тёмную) тему/ }).click()
     await expect(page.locator('html')).toHaveAttribute('data-theme', initialTheme === 'dark' ? 'light' : 'dark')
@@ -244,23 +260,62 @@ test.describe('адаптация под телефон', () => {
     await page.setViewportSize({ width: 390, height: 844 })
     await page.goto('/app')
 
-    await page.getByRole('button', { name: /Учебник Геометрия/ }).click()
+    // Диалог учебника удалён вместе с выбором учебника. Окно аккаунта
+    // анимируется не CSS-кадрами, а motion, поэтому «анимации нет» здесь
+    // значит: окно с первого же кадра стоит на месте и полностью видимо.
+    await page.evaluate(() => {
+      const frames: { opacity: string; transform: string }[] = []
+      Object.assign(window, { __dialogFrames: frames })
+      const readFrame = () => {
+        const element = document.querySelector('.account-dialog')
+        if (element) {
+          const style = getComputedStyle(element)
+          frames.push({ opacity: style.opacity, transform: style.transform })
+          if (frames.length >= 3) return
+        }
+        requestAnimationFrame(readFrame)
+      }
+      requestAnimationFrame(readFrame)
+    })
 
-    await expect(page.locator('.textbook-dialog-backdrop')).toHaveCSS('animation-name', 'none')
-    await expect(page.locator('.textbook-dialog')).toHaveCSS('animation-name', 'none')
+    await page.locator('.topbar-actions').getByRole('button', { name: 'Войти или зарегистрироваться' }).click()
+    await expect(page.getByRole('dialog', { name: 'Войди в аккаунт' })).toBeVisible()
+    await expect
+      .poll(() => page.evaluate(() => (window as unknown as { __dialogFrames: unknown[] }).__dialogFrames.length))
+      .toBeGreaterThanOrEqual(3)
+
+    const frames = await page.evaluate(
+      () => (window as unknown as { __dialogFrames: { opacity: string; transform: string }[] }).__dialogFrames,
+    )
+    for (const frame of frames) {
+      expect(frame.opacity).toBe('1')
+      expect(['none', 'matrix(1, 0, 0, 1, 0, 0)']).toContain(frame.transform)
+    }
+
+    // Наведения и нажатия внутри окна тоже не разъезжаются плавно: общий
+    // сброс оставляет от перехода 0,01 мс, а не полноценную длительность.
+    const durations = await page.locator('.account-dialog-close, .account-dialog .account-primary-button')
+      .evaluateAll((elements) => elements.map((element) => getComputedStyle(element).transitionDuration))
+    expect(durations).toHaveLength(2)
+    for (const duration of durations) {
+      expect(Number.parseFloat(duration)).toBeLessThan(0.05)
+    }
   })
 
-  test('диалог учебника изолирует страницу, удерживает фокус и возвращает его', async ({ page }) => {
+  test('окно аккаунта изолирует страницу, удерживает фокус и возвращает его', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await page.goto('/app')
 
-    const trigger = page.getByRole('button', { name: /Учебник Геометрия/ })
+    const trigger = page.locator('.topbar-actions').getByRole('button', { name: 'Войти или зарегистрироваться' })
     await trigger.click()
-    const dialog = page.getByRole('dialog', { name: 'Выбери учебник' })
-    const closeButton = page.getByRole('button', { name: 'Закрыть выбор учебника' })
-    const lastControl = page.getByRole('textbox', { name: 'Ссылка на учебник' })
+    const dialog = page.getByRole('dialog', { name: 'Войди в аккаунт' })
+    const closeButton = page.getByRole('button', { name: 'Закрыть окно аккаунта' })
+    const lastControl = page.getByRole('button', { name: 'Не помню пароль' })
     await expect(dialog).toBeVisible()
     await expect(page.locator('.product-shell')).toHaveAttribute('aria-hidden', 'true')
+    // Фокус ставится таймером после открытия: если начать раньше, он уедет
+    // на первое поле уже посреди проверки петли.
+    await expect(page.getByRole('textbox', { name: 'Почта' })).toBeFocused()
 
     await closeButton.focus()
     await page.keyboard.press('Shift+Tab')
