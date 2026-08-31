@@ -496,6 +496,23 @@ async function completeStoredSolution(
   return data as unknown as HomeworkSolution
 }
 
+/* Сколько ждём решение, прежде чем признать неудачу. Потолок функции —
+   300 секунд; оставляем запас на сохранение решения и возврат денег. */
+const solveTimeBudgetMs = 230_000
+
+function solveDeadline(): Promise<never> {
+  return new Promise((_, reject) => {
+    const timer = setTimeout(() => {
+      reject(new HomeworkSolverError(
+        504,
+        'Задача оказалась слишком долгой. Деньги вернулись на баланс — попробуй ещё раз или упрости условие',
+      ))
+    }, solveTimeBudgetMs)
+    // Таймер не должен держать процесс, если решение пришло раньше.
+    timer.unref?.()
+  })
+}
+
 async function readJsonBody(request: IncomingMessage): Promise<unknown> {
   const body = (request as IncomingMessage & { body?: unknown }).body
   if (body !== undefined) {
@@ -639,7 +656,20 @@ export async function handleHomeworkSolverRequest(
         : await reserveSolutionCredit(account, task)
     try {
       stage = 'generate'
-      const solution = await solveWithKie(task, options, account?.userId)
+      // Собственный срок короче потолка функции.
+      //
+      // 31 августа задача по комбинаторике шла дольше трёхсот секунд, и
+      // Vercel убил процесс. Вместе с процессом умер и `catch` ниже — тот
+      // самый, что возвращает резерв. Ученик остался без решения и без
+      // денег: списание в кошельке есть, возврата нет.
+      //
+      // Поэтому решение гоняется наперегонки со сроком. Проиграло — считаем
+      // это обычной неудачей: возврат отрабатывает штатно, а ответ уходит
+      // с понятной причиной, пока функция ещё жива.
+      const solution = await Promise.race([
+        solveWithKie(task, options, account?.userId),
+        solveDeadline(),
+      ])
       stage = 'persist'
       const completedSolution = await completeStoredSolution(account, task, solution, options)
       if (!completedSolution || !isCurrentReviewedSolution(completedSolution)) {

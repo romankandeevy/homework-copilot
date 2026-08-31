@@ -587,4 +587,29 @@ describe('homework solver', () => {
     expect(JSON.stringify(event)).not.toContain(photoTask.condition)
     errorLog.mockRestore()
   })
+
+  // Потолок функции на Vercel — 300 секунд. Если решение перевалит за него,
+  // процесс умирает вместе с возвратом резерва: у ученика списано, решения
+  // нет и денег нет. Собственный срок обязан сработать раньше и ответить,
+  // пока функция жива.
+  it('сдаётся по своему сроку раньше потолка функции, а не зависает', async () => {
+    vi.useFakeTimers()
+    try {
+      const http = createHttp('POST', photoTask)
+      // Провайдер, который не отвечает никогда.
+      const solving = handleHomeworkSolverRequest(http.request, http.response, {
+        apiKey: 'secret-test-key',
+        fetchImpl: (() => new Promise(() => {})) as unknown as typeof fetch,
+      })
+
+      await vi.advanceTimersByTimeAsync(240_000)
+      await solving
+
+      expect(http.response.statusCode).toBe(504)
+      expect(http.body().error).toContain('Деньги вернулись на баланс')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
 })
