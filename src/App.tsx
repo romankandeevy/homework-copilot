@@ -902,38 +902,53 @@ function UnderstandingPage({
       <section className="route-page solution-view" aria-labelledby="understanding-page-title">
         <header className="route-page-header">
           <h1 id="understanding-page-title">{solution?.source === 'number' ? 'Решение № ' + generatedSolution.task : solution?.source === 'photo' ? 'Решение по фото' : 'Решение задачи'}</h1>
-          <p>{generatedSolution.subject}. {generatedSolution.textbookTitle}.</p>
+          <p>{generatedSolution.subject}. Готовая запись для тетради.</p>
         </header>
-        <article className="written-solution" aria-label="Готовое решение задачи">
-          <section className="written-solution-section">
-            <h2>Условие</h2>
-            <p>{generatedSolution.condition}</p>
-          </section>
-          {generatedSolution.given.length > 0 && (
-            <section className="written-solution-section">
-              <h2>Дано</h2>
-              {generatedSolution.given.map((line, index) => <p key={line + index}>{line}</p>)}
+        <div className="solution-condition">
+          <strong>Условие</strong>
+          <p>{generatedSolution.condition}</p>
+        </div>
+        {/* Решение оформлено тетрадной страницей — той же, что обещана на
+            витрине: бумага, клетка, красное поле, рукописная гарнитура.
+            У геометрии эту роль играет GeometryNotebookLayoutV1, здесь —
+            лёгкая HTML-версия для остальных предметов. */}
+        <article className="notebook-sheet" aria-label="Готовая запись для тетради">
+          <span className="notebook-sheet-grid" aria-hidden="true" />
+          <span className="notebook-sheet-margin" aria-hidden="true" />
+          <div className="notebook-sheet-body">
+            {generatedSolution.given.length > 0 && (
+              <section className="notebook-sheet-given">
+                <h2>Дано:</h2>
+                {generatedSolution.given.map((line, index) => <p key={line + index}>{line}</p>)}
+              </section>
+            )}
+            <section className="notebook-sheet-goal">
+              <h2>{generatedSolution.goal.title}:</h2>
+              <p>{generatedSolution.goal.text}</p>
             </section>
-          )}
-          <section className="written-solution-section">
-            <h2>{generatedSolution.goal.title}</h2>
-            <p>{generatedSolution.goal.text}</p>
-          </section>
-          <section className="written-solution-section">
-            <h2>Решение</h2>
-            {generatedSolution.steps.map((step, index) => <p key={step + index}>{step}</p>)}
-          </section>
-          {generatedSolution.analysis && (
-            <section className="written-solution-section">
-              <WrittenAnalysis analysis={generatedSolution.analysis} />
+            <span className="notebook-sheet-divider" aria-hidden="true" />
+            <section className="notebook-sheet-steps">
+              <h2>Решение</h2>
+              <ol>
+                {generatedSolution.steps.map((step, index) => (
+                  // Нумерацию ставит страница, поэтому свою — из модели —
+                  // с шага снимаем, чтобы не выходило «1) 1) …».
+                  <li key={step + index}>{step.replace(/^\s*\d{1,2}[).]\s+/u, '')}</li>
+                ))}
+              </ol>
             </section>
-          )}
-          {generatedSolution.answer && (
-            <section className="written-solution-section written-solution-answer">
-              <h2>Ответ</h2>
-              <p>{generatedSolution.answer}</p>
-            </section>
-          )}
+            {generatedSolution.analysis && (
+              <section className="notebook-sheet-analysis">
+                <WrittenAnalysis analysis={generatedSolution.analysis} />
+              </section>
+            )}
+            {generatedSolution.answer && (
+              <section className="notebook-sheet-answer">
+                <h2>Ответ:</h2>
+                <p>{generatedSolution.answer}</p>
+              </section>
+            )}
+          </div>
         </article>
         {disclaimer}
         {guestInvite}

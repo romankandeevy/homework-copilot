@@ -1534,8 +1534,7 @@
   background: var(--color-surface);
 }
 
-.solution-condition strong,
-.written-solution-section h2 {
+.solution-condition strong {
   margin: 0;
   color: var(--color-text);
   font-size: var(--text-ui);
@@ -1543,34 +1542,147 @@
 }
 
 .solution-condition p,
-.written-solution-section p {
+.solution-condition p {
   margin: 0;
   color: var(--color-text);
   font-size: var(--text-small);
   line-height: var(--leading-copy);
 }
 
-.written-solution {
-  display: grid;
-  gap: var(--space-6);
-  padding: clamp(1.4rem, 4vw, 3rem);
-  border: 1px solid var(--color-border-strong);
+/* Тетрадная страница решения для всех предметов.
+   Бумага, клетка, красное поле и рукописная гарнитура — тот же язык, что
+   у геометрического листа и у превью на витрине. Бумага остаётся светлой
+   и в тёмной теме: тетрадь — это тетрадь. Токены текста переопределены
+   локально чернилами, чтобы вложенный разбор со значками читался на бумаге
+   при любой теме. */
+.notebook-sheet {
+  --paper: #fffefd;
+  --paper-ink: #14161a;
+  --paper-line: #d8e2ef;
+  --paper-rule: #e0574c;
+  --color-text: var(--paper-ink);
+  --color-text-muted: oklch(38% 0 0);
+  --color-text-subtle: oklch(48% 0 0);
+  --color-border: #d3ddea;
+  --color-surface: var(--paper);
+  --color-surface-raised: #fbfaf7;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid #d9d5cf;
   border-radius: var(--radius-panel);
-  background: var(--color-surface);
+  background: var(--paper);
+  color: var(--paper-ink);
   box-shadow: var(--shadow-raised);
 }
 
-.written-solution-section {
+.notebook-sheet-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--paper-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--paper-line) 1px, transparent 1px);
+  background-size: 1.35rem 1.35rem;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.notebook-sheet-margin {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: clamp(2rem, 5%, 3rem);
+  width: 1px;
+  background: var(--paper-rule);
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.notebook-sheet-body {
   display: grid;
-  gap: var(--space-2);
+  position: relative;
+  gap: clamp(0.9rem, 2vw, 1.35rem);
+  padding:
+    clamp(1.25rem, 3vw, 2rem)
+    clamp(1.25rem, 3.5vw, 2.5rem)
+    clamp(1.5rem, 3vw, 2.25rem)
+    clamp(3rem, 8%, 4.25rem);
+  font-family: 'Segoe Print', 'Ink Free', 'Comic Sans MS', cursive;
+  font-size: clamp(0.95rem, 1.2vw, 1.05rem);
+  line-height: 1.7;
 }
 
-.written-solution-section + .written-solution-section {
-  padding-top: var(--space-5);
-  border-top: 1px solid var(--color-border);
+.notebook-sheet-body h2 {
+  margin: 0;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: 700;
+  letter-spacing: 0;
 }
 
-.written-solution-answer p { font-weight: var(--weight-semibold); }
+.notebook-sheet-body p { margin: 0; overflow-wrap: break-word; }
+
+.notebook-sheet-given {
+  display: grid;
+  width: fit-content;
+  max-width: 100%;
+  gap: 0.15rem;
+  padding-right: clamp(1rem, 3vw, 2rem);
+  padding-bottom: clamp(0.5rem, 1.2vw, 0.8rem);
+  border-bottom: 2px solid var(--paper-ink);
+}
+
+.notebook-sheet-goal {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.5rem;
+}
+
+/* Черта между «дано» и решением — как в тетради, во всю рабочую ширину. */
+.notebook-sheet-divider {
+  display: block;
+  height: 2px;
+  background: var(--paper-ink);
+  opacity: 0.85;
+}
+
+.notebook-sheet-steps { display: grid; gap: 0.35rem; }
+
+.notebook-sheet-steps ol {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: notebook-step;
+}
+
+.notebook-sheet-steps li {
+  counter-increment: notebook-step;
+  overflow-wrap: break-word;
+}
+
+.notebook-sheet-steps li::before {
+  content: counter(notebook-step) ') ';
+  font-weight: 700;
+}
+
+.notebook-sheet-analysis { display: grid; min-width: 0; }
+
+.notebook-sheet-answer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.5rem;
+  padding-top: clamp(0.25rem, 0.8vw, 0.5rem);
+}
+
+.notebook-sheet-answer h2 { text-decoration: underline; text-underline-offset: 0.2em; }
+.notebook-sheet-answer p { font-weight: 700; }
+
+@media (max-width: 640px) {
+  .notebook-sheet-grid { background-size: 1.1rem 1.1rem; }
+  .notebook-sheet-margin { left: 1.5rem; }
+  .notebook-sheet-body { padding-left: 2.25rem; }
+}
 .solution-error .section-heading p { color: var(--color-text); }
 
 .ready-solution button:hover,
