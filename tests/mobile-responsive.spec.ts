@@ -90,62 +90,27 @@ test.describe('адаптация под телефон', () => {
     expect(topbarBox!.height).toBeLessThanOrEqual(80)
   })
 
-  test('личные решения и общая база находятся на одной странице', async ({ page }) => {
+  test('решения — личная история, общей базы больше нет', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await page.goto('/app')
     await page.getByRole('navigation', { name: 'Основная навигация' }).getByRole('link', { name: 'Решения', exact: true }).click()
 
     await expect(page).toHaveURL(/\/solutions$/)
-    const personalTab = page.getByRole('tab', { name: 'Мои решения' })
-    const sharedTab = page.getByRole('tab', { name: 'База решений' })
-    await expect(sharedTab).toHaveAttribute('aria-selected', 'true')
-    await expect(page.getByRole('heading', { name: 'База решений' })).toBeVisible()
-    await personalTab.click()
-    await expect(personalTab).toHaveAttribute('aria-selected', 'true')
     await expect(page.getByRole('heading', { name: 'Мои решения' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'База решений' })).toHaveCount(0)
-    await sharedTab.click()
-    // Пустая база — это не результат неудачного поиска: человек ничего
-    // не искал, и «Совпадений нет» читалось как «ты сделал что-то не так».
-    await expect(page.getByRole('heading', { name: 'База пополняется решёнными задачами' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Отправить свою задачу' })).toBeVisible()
-    const search = page.getByRole('textbox', { name: 'Найти решение' })
-    await search.fill('999')
-    await expect(page.getByRole('heading', { name: 'База пополняется решёнными задачами' })).toBeVisible()
+    // Каталог пополнялся только задачами по номеру из размеченного учебника,
+    // а индекс учебников удалён: раздел не мог наполниться и убран целиком.
+    await expect(page.getByRole('tab')).toHaveCount(0)
+    await expect(page.getByText('База решений')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /Войти, чтобы сохранять решения/ })).toBeVisible()
     await expectNoPageOverflow(page)
   })
 
-  test('под формой стоит одна карточка, а вход предложен строкой', async ({ page }) => {
+  test('под формой нет карточек-ярлыков, а вход предложен строкой', async ({ page }) => {
     await page.setViewportSize({ width: 1920, height: 935 })
     await page.goto('/app')
 
-    const cards = page.locator('.home-action-card')
-    await expect(cards).toHaveCount(1)
-    await expect(cards.getByRole('heading', { name: 'База решений' })).toBeVisible()
+    await expect(page.locator('.home-action-card')).toHaveCount(0)
     await expect(page.getByRole('button', { name: /Войти, чтобы сохранять решения/ })).toBeVisible()
-
-    // Карточек было две, и тест сверял их между собой. Осталась одна, поэтому
-    // проверяем её саму: иконка нужного размера и кнопка прижата к нижнему
-    // краю карточки, а не висит сразу под текстом.
-    const card = await cards.evaluate((element) => {
-      const style = getComputedStyle(element)
-      const cardBox = element.getBoundingClientRect()
-      const iconBox = element.querySelector('.home-action-card-icon')!.getBoundingClientRect()
-      const buttonBox = element.querySelector('button')!.getBoundingClientRect()
-
-      return {
-        height: cardBox.height,
-        innerBottom: cardBox.bottom - Number.parseFloat(style.borderBottomWidth) - Number.parseFloat(style.paddingBottom),
-        iconWidth: iconBox.width,
-        iconHeight: iconBox.height,
-        buttonBottom: buttonBox.bottom,
-      }
-    })
-
-    expect(card.iconWidth).toBe(40)
-    expect(card.iconHeight).toBe(40)
-    expect(card.height).toBeGreaterThanOrEqual(192)
-    expect(Math.abs(card.innerBottom - card.buttonBottom)).toBeLessThan(1)
   })
 
   test('главная карточка чёрная в светлой теме и белая в тёмной', async ({ page }) => {

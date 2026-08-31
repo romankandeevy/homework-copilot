@@ -49,7 +49,6 @@ import { bindPendingReferral, captureReferralFromCurrentUrl, preparePendingRefer
 import { forgetGuestSolution, getGuestId, guestSolutionUsed, rememberGuestSolutionUsed } from './lib/guestSolutions'
 import { applySeoMetadata, getSeoMetadata } from './lib/siteMetadata'
 import { getSolutionPrice } from './lib/solutionPricing'
-import { catalogSolutionEntries, findAvailableNumberSolution } from './lib/solutionLibrary'
 import {
   isReviewedHomeworkSolution,
   loadGeneratedSolutions,
@@ -114,8 +113,6 @@ type SolutionState = {
 type PersonalSolution = SolutionState & {
   time: string
 }
-
-type SharedHomeworkSolution = Database['public']['Tables']['homework_solution_catalog']['Row']
 
 const themeStorageKey = 'homework-copilot:theme'
 const selectedTextbookStorageKey = 'homework-copilot:selected-textbook'
@@ -616,35 +613,6 @@ function SolvingStatus({ state, subject }: { state: SolutionState; subject: stri
   )
 }
 
-function HomeActionCard({
-  className,
-  icon: Icon,
-  titleId,
-  title,
-  description,
-  actionLabel,
-  onAction,
-}: {
-  className: string
-  icon: typeof Notebook
-  titleId: string
-  title: string
-  description: string
-  actionLabel: string
-  onAction: () => void
-}) {
-  return (
-    <section className={`home-action-card ${className}`} aria-labelledby={titleId}>
-      <span className="home-action-card-icon" aria-hidden="true"><Icon size={34} weight="duotone" /></span>
-      <div>
-        <h2 id={titleId}>{title}</h2>
-        <p>{description}</p>
-      </div>
-      <button type="button" onClick={onAction}>{actionLabel} <ArrowRight size={18} weight="bold" aria-hidden="true" /></button>
-    </section>
-  )
-}
-
 function GuestSolutionsNote({ onOpenAccount, freeSolutionUsed = false }: { onOpenAccount: () => void; freeSolutionUsed?: boolean }) {
   return (
     <p className="home-guest-note">
@@ -683,129 +651,89 @@ function MySolutions({ items, onOpenAll, onOpenSolution }: { items: readonly Per
   )
 }
 
-function BaseShortcut({ onOpenBase }: { onOpenBase: () => void }) {
-  return (
-    <HomeActionCard
-      className="base-shortcut"
-      icon={Stack}
-      titleId="base-shortcut-title"
-      title="База решений"
-      description="Готовые решения, которые уже кто-то заказал. Их можно открыть сразу."
-      actionLabel="Открыть базу"
-      onAction={onOpenBase}
-    />
-  )
-}
+/* Личная история решений.
 
+   Общей базы здесь больше нет. Она пополнялась только решениями по номеру
+   из размеченного учебника, а индекс учебников удалён: в каталоге не
+   прибавилось ни одной записи с 28 августа и не могло прибавиться. Раздел
+   занимал вкладку, поиск и карточку на главной, и ничего не отдавал. */
 function SolutionsPage({
   user,
   personalSolutions,
   textbooks: items,
-  sharedSolutions,
-  sharedSolutionsStatus,
   onOpenAccount,
   onOpenSolution,
-  onOpenSharedSolution,
-  onRefreshSharedSolutions,
   onStartTask,
 }: {
   user: User | null
   personalSolutions: readonly PersonalSolution[]
   textbooks: readonly Textbook[]
-  sharedSolutions: readonly SharedHomeworkSolution[]
-  sharedSolutionsStatus: 'loading' | 'ready' | 'error'
   onOpenAccount: () => void
   onOpenSolution: (state: SolutionState) => void
-  onOpenSharedSolution: (textbookId: TextbookId, task: string) => void
-  onRefreshSharedSolutions: () => void
   onStartTask: () => void
 }) {
   const [query, setQuery] = useState('')
-  const [activeSection, setActiveSection] = useState<'personal' | 'shared'>(user ? 'personal' : 'shared')
-  const entries = useMemo(() => catalogSolutionEntries(sharedSolutions, items), [items, sharedSolutions])
   const normalizedQuery = query.trim().toLocaleLowerCase('ru')
-  const matches = (textbook: Textbook, task: string) => `${textbook.subject} ${textbook.title} ${task}`.toLocaleLowerCase('ru').includes(normalizedQuery)
-  const results = entries.filter(({ textbook, task }) => matches(textbook, task))
+  const matches = (textbook: Textbook, task: string) => `${textbook.subject} ${task}`.toLocaleLowerCase('ru').includes(normalizedQuery)
   const personalResults = personalSolutions.filter(({ textbookId, task }) => matches(getTextbook(textbookId, items), task))
+  const hasSolutions = personalSolutions.length > 0
 
   return (
     <section className="route-page solutions-page" aria-labelledby="solutions-page-title">
       <header className="route-page-header">
-        <h1 id="solutions-page-title">Решения</h1>
-        <p>Твои задачи и готовые ответы из общей базы — в одном месте.</p>
+        <h1 id="solutions-page-title">Мои решения</h1>
+        <p>Задачи, которые ты уже решил. Открыть любую можно снова и бесплатно.</p>
       </header>
-      <div
-        className="solutions-tabs"
-        role="tablist"
-        aria-label="Раздел решений"
-        onKeyDown={(event) => {
-          if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
-          event.preventDefault()
-          const nextSection = activeSection === 'personal' ? 'shared' : 'personal'
-          setActiveSection(nextSection)
-          event.currentTarget.querySelector<HTMLButtonElement>(`[data-section="${nextSection}"]`)?.focus()
-        }}
-      >
-        <button id="personal-solutions-tab" data-section="personal" type="button" role="tab" aria-label="Мои решения" aria-controls="solutions-panel" aria-selected={activeSection === 'personal'} tabIndex={activeSection === 'personal' ? 0 : -1} onClick={() => setActiveSection('personal')}>
-          <Notebook size={18} weight="duotone" aria-hidden="true" />
-          <span>Мои решения</span>
-          {user && <small aria-hidden="true">{personalResults.length}</small>}
-        </button>
-        <button id="shared-solutions-tab" data-section="shared" type="button" role="tab" aria-label="База решений" aria-controls="solutions-panel" aria-selected={activeSection === 'shared'} tabIndex={activeSection === 'shared' ? 0 : -1} onClick={() => setActiveSection('shared')}>
-          <Stack size={18} weight="duotone" aria-hidden="true" />
-          <span>База решений</span>
-          {/* Счётчик «0» на пустой базе не сообщает ничего, кроме того,
-              что смотреть нечего. */}
-          {entries.length > 0 && <small aria-hidden="true">{results.length}</small>}
-        </button>
-      </div>
-      <label className="route-search" htmlFor="solutions-search"><MagnifyingGlass size={20} weight="duotone" aria-hidden="true" /><span>Найти решение</span><input id="solutions-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Предмет или номер задачи" autoComplete="off" /></label>
 
-      <div id="solutions-panel" className="solutions-directory" role="tabpanel" aria-labelledby={activeSection === 'personal' ? 'personal-solutions-tab' : 'shared-solutions-tab'} tabIndex={0}>
-        {activeSection === 'personal' ? <section className="solutions-directory-section" aria-labelledby="personal-solutions-title">
-          <header className="solutions-directory-heading"><h2 id="personal-solutions-title">Мои решения</h2>{user && <span>{personalResults.length}</span>}</header>
-          {!user ? <GuestSolutionsNote onOpenAccount={onOpenAccount} /> : personalResults.length > 0 ? (
-            <div className="solution-list route-solution-list">
-              {personalResults.map(({ textbookId, task, time, mode, source }) => {
-                const textbook = getTextbook(textbookId, items)
-                const Icon = textbook.icon
-                return (
-                  <button type="button" key={`${textbookId}-${task}-${time}`} onClick={() => onOpenSolution({ textbookId, task, mode, source })}>
-                    <Icon size={32} weight="duotone" aria-hidden="true" />
-                    <span><small>{textbook.subject}, {textbook.title}</small><strong>{source === 'number' ? `№ ${task}` : task}</strong></span>
-                    <time>{time}</time>
-                    <ArrowRight size={18} weight="bold" aria-hidden="true" />
-                  </button>
-                )
-              })}
-            </div>
-          ) : <section className="route-empty" aria-labelledby="solutions-empty-title"><Notebook size={34} weight="duotone" aria-hidden="true" /><div><h2 id="solutions-empty-title">Решений пока нет</h2><p>Открой готовый ответ или отправь новую задачу, и она появится здесь.</p></div></section>}
-        </section> : <section className="solutions-directory-section" aria-labelledby="shared-solutions-title">
-          <header className="solutions-directory-heading"><h2 id="shared-solutions-title">База решений</h2>{sharedSolutionsStatus === 'loading' ? <span>…</span> : entries.length > 0 ? <span>{results.length}</span> : null}</header>
-          {sharedSolutionsStatus === 'loading' ? <div className="route-loading" role="status">Загружаем базу решений…</div>
-            : sharedSolutionsStatus === 'error' ? <section className="route-empty" aria-labelledby="base-error-title"><WarningCircle size={34} weight="duotone" aria-hidden="true" /><div><h2 id="base-error-title">База временно недоступна</h2><p>Повтори загрузку. Сохранённые решения не потеряны.</p><button className="route-secondary-action" type="button" onClick={onRefreshSharedSolutions}>Повторить</button></div></section>
-            : results.length > 0 ? <div className="solution-list route-solution-list">
-            {results.map(({ textbook, task }) => {
+      {/* Поиск появляется, когда есть в чём искать. */}
+      {user && hasSolutions && (
+        <label className="route-search" htmlFor="solutions-search">
+          <MagnifyingGlass size={20} weight="duotone" aria-hidden="true" />
+          <span>Найти решение</span>
+          <input
+            id="solutions-search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Предмет или слово из условия"
+            autoComplete="off"
+          />
+        </label>
+      )}
+
+      {!user ? <GuestSolutionsNote onOpenAccount={onOpenAccount} />
+        : personalResults.length > 0 ? (
+          <div className="solution-list route-solution-list">
+            {personalResults.map(({ textbookId, task, time, mode, source }) => {
+              const textbook = getTextbook(textbookId, items)
               const Icon = textbook.icon
               return (
-                <button type="button" key={`${textbook.id}-${task}`} onClick={() => onOpenSharedSolution(textbook.id, task)}>
+                <button type="button" key={`${textbookId}-${task}-${time}`} onClick={() => onOpenSolution({ textbookId, task, mode, source })}>
                   <Icon size={32} weight="duotone" aria-hidden="true" />
-                  <span><strong>{textbook.subject} · {textbook.grade}</strong><small>Задача № {task}</small></span>
-                  <span className="solution-base-open">Открыть решение</span>
+                  <span><small>{textbook.subject}</small><strong>{source === 'number' ? `№ ${task}` : task}</strong></span>
+                  <time>{time}</time>
                   <ArrowRight size={18} weight="bold" aria-hidden="true" />
                 </button>
               )
             })}
-          </div> : entries.length === 0 ? (
-            /* База ещё пуста — это не результат неудачного поиска.
-               Человек ничего не искал, и «Совпадений нет» читается как
-               «ты сделал что-то не так». */
-            <section className="route-empty" aria-labelledby="base-empty-title"><Stack size={34} weight="duotone" aria-hidden="true" /><div><h2 id="base-empty-title">База пополняется решёнными задачами</h2><p>Здесь появятся ответы, которые уже кто-то заказал. Их можно будет открыть сразу.</p><button className="route-secondary-action" type="button" onClick={onStartTask}>Отправить свою задачу</button></div></section>
-          ) : (
-            <section className="route-empty" aria-labelledby="base-empty-title"><MagnifyingGlass size={34} weight="duotone" aria-hidden="true" /><div><h2 id="base-empty-title">По запросу «{query.trim()}» ничего нет</h2><p>Попробуй другой номер или предмет.</p><button className="route-secondary-action" type="button" onClick={onStartTask}>Отправить свою задачу</button></div></section>
-          )}
-        </section>}
-      </div>
+          </div>
+        ) : hasSolutions ? (
+          <section className="route-empty" aria-labelledby="solutions-empty-title">
+            <MagnifyingGlass size={34} weight="duotone" aria-hidden="true" />
+            <div>
+              <h2 id="solutions-empty-title">По запросу «{query.trim()}» ничего нет</h2>
+              <p>Попробуй другой предмет или слово из условия.</p>
+            </div>
+          </section>
+        ) : (
+          <section className="route-empty" aria-labelledby="solutions-empty-title">
+            <Notebook size={34} weight="duotone" aria-hidden="true" />
+            <div>
+              <h2 id="solutions-empty-title">Решений пока нет</h2>
+              <p>Отправь задачу с главной — она появится здесь и останется в истории.</p>
+              <button className="route-secondary-action" type="button" onClick={onStartTask}>Решить задачу</button>
+            </div>
+          </section>
+        )}
     </section>
   )
 }
@@ -1064,8 +992,6 @@ function HomePage() {
   const [solutionState, setSolutionState] = useState<SolutionState | null>(null)
   const [selectedSolution, setSelectedSolution] = useState<SolutionState | null>(() => currentNavigationRoute().solution)
   const [generatedSolutions, setGeneratedSolutions] = useState<HomeworkSolution[]>(loadGeneratedSolutions)
-  const [sharedSolutions, setSharedSolutions] = useState<SharedHomeworkSolution[]>([])
-  const [sharedSolutionsStatus, setSharedSolutionsStatus] = useState<'loading' | 'ready' | 'error'>(authIsConfigured ? 'loading' : 'ready')
   const [supabaseClient, setSupabaseClient] = useState<SupabaseClient<Database> | null>(null)
   const [user, setUser] = useState<User | null>(null)
   const [account, setAccount] = useState<AccountData | null>(null)
@@ -1101,21 +1027,16 @@ function HomePage() {
       if (Boolean(left.indexed) !== Boolean(right.indexed)) return left.indexed ? -1 : 1
       return left.subject.localeCompare(right.subject, 'ru-RU')
     }).map((textbook) => {
-      const sharedTasks = sharedSolutions
-        .filter((solution) => solution.textbook_id === textbook.id
-          && solution.textbook_edition === textbook.edition
-          && solution.source_url === textbook.sourceUrl)
-        .map((solution) => solution.task)
       const generatedTasks = visibleGeneratedSolutions
         .filter((solution) => solution.textbookId === textbook.id && solution.source === 'number')
         .map((solution) => solution.task)
-      if (generatedTasks.length === 0 && sharedTasks.length === 0) return textbook
+      if (generatedTasks.length === 0) return textbook
       return {
         ...textbook,
-        solvedTasks: [...new Set([...textbook.solvedTasks, ...sharedTasks, ...generatedTasks])],
+        solvedTasks: [...new Set([...textbook.solvedTasks, ...generatedTasks])],
       }
     }),
-    [customTextbooks, sharedSolutions, visibleGeneratedSolutions],
+    [customTextbooks, visibleGeneratedSolutions],
   )
   const personalSolutions = useMemo<PersonalSolution[]>(
     () => user
@@ -1200,34 +1121,6 @@ function HomePage() {
   useEffect(() => {
     saveGeneratedSolutions(generatedSolutions)
   }, [generatedSolutions])
-
-  const refreshSharedSolutions = useCallback(async () => {
-    if (!supabaseClient) return
-    setSharedSolutionsStatus((current) => current === 'ready' ? current : 'loading')
-
-    const { data, error } = await supabaseClient
-      .from('homework_solution_catalog')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(500)
-
-    if (error || !data) {
-      setSharedSolutionsStatus('error')
-      return
-    }
-
-    setSharedSolutions(data)
-    setSharedSolutionsStatus('ready')
-  }, [supabaseClient])
-
-  useEffect(() => {
-    if (!supabaseClient) return
-
-    void refreshSharedSolutions()
-    const onFocus = () => { void refreshSharedSolutions() }
-    window.addEventListener('focus', onFocus)
-    return () => window.removeEventListener('focus', onFocus)
-  }, [refreshSharedSolutions, supabaseClient])
 
   useEffect(() => {
     if (!supabaseClient || !user) return
@@ -1707,7 +1600,7 @@ function HomePage() {
         source: generatedSolution.source,
       }
       setSolutionState(deliveredState)
-      if (supabaseClient && user) await Promise.all([refreshAccount(), refreshSharedSolutions()])
+      if (supabaseClient && user) await refreshAccount()
       if (openWhenReady) openSolution(deliveredState)
       return true
     } catch (error) {
@@ -1718,21 +1611,6 @@ function HomePage() {
       })
       return false
     }
-  }
-
-  // Открыть форму с уже выбранным предметом. Номер задачи больше не поле
-  // поиска, поэтому переносим только предмет.
-  const checkTextbookTask = (textbookId: TextbookId) => {
-    setSelectedTextbookId(textbookId)
-    navigate('Главная')
-  }
-  const openSharedSolution = (textbookId: TextbookId, task: string) => {
-    const availableSolution = findAvailableNumberSolution(visibleGeneratedSolutions, textbookId, task)
-    if (availableSolution) {
-      openSolution({ mode: 'ready', textbookId, task, source: 'number' })
-      return
-    }
-    checkTextbookTask(textbookId)
   }
 
   if (!authReady || (user && !accountReady)) {
@@ -1763,17 +1641,12 @@ function HomePage() {
                 defaultGrade={account ? `${account.profile.grade} класс` : ''}
               />
               {!user && <GuestSolutionsNote onOpenAccount={openAccount} freeSolutionUsed={guestFreeSolutionUsed} />}
-              <div className={`home-grid${solutionState || user ? '' : ' is-single'}`}>
-                {(solutionState || user) && (
-                  <div className="home-column home-column-primary">
-                    {solutionState && <SolutionStatus state={solutionState} textbooks={availableTextbooks} onOpenSolution={openSolution} />}
-                    {user && <MySolutions items={personalSolutions} onOpenAll={() => navigate('Решения')} onOpenSolution={openSolution} />}
-                  </div>
-                )}
-                <div className="home-column home-column-secondary">
-                  <BaseShortcut onOpenBase={() => navigate('Решения')} />
+              {(solutionState || user) && (
+                <div className="home-column home-column-primary">
+                  {solutionState && <SolutionStatus state={solutionState} textbooks={availableTextbooks} onOpenSolution={openSolution} />}
+                  {user && <MySolutions items={personalSolutions} onOpenAll={() => navigate('Решения')} onOpenSolution={openSolution} />}
                 </div>
-              </div>
+              )}
             </div>
           ) : selectedSolution ? (
             <UnderstandingPage
@@ -1795,12 +1668,8 @@ function HomePage() {
               user={user}
               personalSolutions={personalSolutions}
               textbooks={availableTextbooks}
-              sharedSolutions={sharedSolutions}
-              sharedSolutionsStatus={sharedSolutionsStatus}
               onOpenAccount={openAccount}
               onOpenSolution={openSolution}
-              onOpenSharedSolution={openSharedSolution}
-              onRefreshSharedSolutions={() => { void refreshSharedSolutions() }}
               onStartTask={() => navigate('Главная')}
             />
           ) : (
