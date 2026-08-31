@@ -1343,6 +1343,42 @@ export function isCurrentReviewedSolution(solution: HomeworkSolution) {
 // решения — это подтвердилось прогоном на живых задачах. Ошибка транзиентная:
 // тот же запрос со второй попытки проходит. Повторяем ограниченно и только
 // пока укладываемся в бюджет времени функции (maxDuration 180 с).
+// Сколько ждать отставший проход после того, как первый уже дошёл.
+// Разброс между здоровыми проходами укладывается в этот срок, а ответ
+// лежащей модели — нет.
+const passStragglerGraceMs = 25_000
+
+/* Ждёт все проходы, но не дольше отсрочки после первого завершившегося.
+   Не дождавшиеся считаются несостоявшимися: их результат в этом решении
+   уже не участвует. Сам вызов при этом не обрывается — он просто перестаёт
+   держать ответ, и если успеет, его результат достанется следующему запросу
+   через идемпотентность, а не пропадёт на середине генерации. */
+async function settleWithGrace<T>(
+  tasks: Promise<T>[],
+  graceMs: number,
+): Promise<PromiseSettledResult<T>[]> {
+  const results: PromiseSettledResult<T>[] = tasks.map(() => ({
+    status: 'rejected',
+    reason: new GeometrySolutionEngineError('Проход не успел закончиться'),
+  }))
+  let finished = 0
+
+  const tracked = tasks.map((task, index) => task.then(
+    (value) => { results[index] = { status: 'fulfilled', value }; finished += 1 },
+    (reason) => { results[index] = { status: 'rejected', reason }; finished += 1 },
+  ))
+
+  await Promise.race(tracked)
+  if (finished < tasks.length) {
+    await Promise.race([
+      Promise.all(tracked),
+      new Promise((resolve) => { setTimeout(resolve, graceMs).unref?.() }),
+    ])
+  }
+
+  return results
+}
+
 const transientModelFailures = new Set([
   'Модель вернула некорректный JSON',
   'Модель не вернула решение',
@@ -1411,7 +1447,7 @@ export async function solveHomeworkWithReview(
     ? [options.model, options.model]
     : [...defaultHomeworkModels]
 
-  const settled = await Promise.allSettled(passModels.map(async (model) => {
+  const passes = passModels.map(async (model) => {
     const raw = await callModelWithRetry(
       options,
       authorInstructions,
@@ -1422,7 +1458,13 @@ export async function solveHomeworkWithReview(
       model,
     )
     return evaluate(normalizeDraft(raw), model)
-  }))
+  })
+
+  // Второй проход не должен держать ответ. Когда одно семейство лежит,
+  // ожидание его отказа было главной тратой времени: 97 секунд из 118
+  // в замере 31 августа. Как только первый проход дошёл, второму даём
+  // короткую отсрочку — здоровый в неё укладывается, лежащий нет.
+  const settled = await settleWithGrace(passes, passStragglerGraceMs)
 
   // Семейства падают независимо: 30 августа Claude лежало сутки целиком.
   // Пока хотя бы один проход дошёл, решение выдаём — иначе теряем ответ там,
