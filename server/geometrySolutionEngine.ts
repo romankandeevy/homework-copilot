@@ -37,9 +37,26 @@ export { homeworkSolutionEngineVersion }
 // провайдера: 30 августа семейство Claude лежало сутки целиком, и один
 // упавший проход не должен уносить с собой второй.
 //
-// Замер 30 августа: gemini-3-pro отвечала 39 с, gpt-5-6-luna — 2,7 с,
-// gemini-2.5-flash — 2,2 с, при одинаковой цене 0,01 кредита.
-export const defaultHomeworkModels = ['gpt-5-6-luna', 'gemini-2.5-flash'] as const
+// Замер 31 августа: семейство Gemini через KIE не принимает строгую схему
+// решателя. Тот же запрос без `strict: true` проходит за 72 с, простая схема
+// с тем же промптом — за 2,8 с, а полный запрос решателя отвечает отказом
+// «сервер на обслуживании» через 106–183 с. Так же ведёт себя gemini-3-pro,
+// поэтому дело не в конкретной модели, а в поддержке строгой схемы у шлюза.
+//
+// Пока это так, в пуле остаётся одно пригодное семейство, и оба прохода идут
+// им. Проверка слабее, чем у двух разных семейств: одинаковая модель может
+// повторить и свою ошибку. Но она по-прежнему ловит то, ради чего заведена, —
+// стохастические сбои вроде забытого чертежа или битого JSON, и это лучше
+// прохода, который гарантированно не дойдёт.
+//
+// Вернуть второе семейство — снять `strict` нельзя (схема держит формат),
+// значит нужен провайдер или модель со строгой схемой. Тогда достаточно
+// добавить её сюда: раскладка проходов по пулу ниже сама всё подхватит.
+export const defaultHomeworkModels = ['gpt-5-6-luna'] as const
+
+// Сколько независимых проходов делаем. Их всегда два: два сошедшихся решения
+// — это и есть проверка, из-за которой рецензент чаще всего не нужен.
+const authorPassCount = 2
 // Одиночные вызовы — рецензент, починка чертежа, ответ GET /api/solve.
 export const defaultHomeworkModel = defaultHomeworkModels[0]
 
@@ -1441,11 +1458,12 @@ export async function solveHomeworkWithReview(
     return { candidate, issues, model }
   }
 
-  // Проходы идут разными моделями из разных семейств — см. defaultHomeworkModels.
-  // Если модель задана явно через KIE_MODEL, уважаем её и берём одну на оба.
-  const passModels = options.model
-    ? [options.model, options.model]
-    : [...defaultHomeworkModels]
+  // Проходы раскладываются по пулу пригодных семейств — см.
+  // defaultHomeworkModels. Пул короче числа проходов — модели повторяются.
+  // Если модель задана явно через KIE_MODEL, уважаем её и берём на все проходы.
+  const passModels = Array.from({ length: authorPassCount }, (_, index) => (
+    options.model ?? defaultHomeworkModels[index % defaultHomeworkModels.length]
+  ))
 
   const passes = passModels.map(async (model) => {
     const raw = await callModelWithRetry(

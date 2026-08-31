@@ -110,33 +110,45 @@ function stubProvider(handler: (url: string, stage: Stage) => unknown) {
   return { urls, fetchImpl }
 }
 
-describe('два прохода разными моделями', () => {
-  it('обращается к обоим семействам по их собственным протоколам', async () => {
-    const { urls, fetchImpl } = stubProvider((url) => (url.includes('/codex/')
-      ? responsesPayload(draft)
-      : geminiPayload(draft)))
+describe('два независимых прохода', () => {
+  it('делает два прохода моделями из пула пригодных семейств', async () => {
+    const { urls, fetchImpl } = stubProvider(() => responsesPayload(draft))
 
     const solution = await solveHomeworkWithReview(request, { apiKey: 'test-key', fetchImpl })
 
-    expect(defaultHomeworkModels).toEqual(['gpt-5-6-luna', 'gemini-2.5-flash'])
+    // Gemini через KIE не принимает строгую схему решателя, поэтому в пуле
+    // осталось одно пригодное семейство и оба прохода идут им.
+    expect(defaultHomeworkModels).toEqual(['gpt-5-6-luna'])
     expect(urls).toHaveLength(2)
-    expect(urls).toContain('https://api.kie.ai/codex/v1/responses')
-    expect(urls).toContain('https://api.kie.ai/gemini-2.5-flash/v1/chat/completions')
+    expect(urls.every((url) => url === 'https://api.kie.ai/codex/v1/responses')).toBe(true)
     // Оба прохода чистые и сошлись в ответе — рецензент не нужен.
     expect(solution.quality?.reviewPassed).toBe(true)
   })
 
-  it('выдаёт решение, когда одно семейство лежит целиком', async () => {
-    const { urls, fetchImpl } = stubProvider((url, stage) => {
-      if (url.includes('/codex/')) return { code: 524, msg: 'no user can use' }
-      return geminiPayload(stage === 'review' ? reviewOf(draft) : draft)
+  it('ходит по протоколу того семейства, которое задано моделью', async () => {
+    const { urls, fetchImpl } = stubProvider(() => geminiPayload(draft))
+
+    await solveHomeworkWithReview(request, { apiKey: 'test-key', fetchImpl, model: 'gemini-2.5-flash' })
+
+    // Маршрутизация по семействам остаётся рабочей: как только у шлюза
+    // появится второе семейство со строгой схемой, его хватит добавить в пул.
+    expect(urls.every((url) => url === 'https://api.kie.ai/gemini-2.5-flash/v1/chat/completions')).toBe(true)
+  })
+
+  it('выдаёт решение, когда один проход упал целиком', async () => {
+    let draftCalls = 0
+    const { urls, fetchImpl } = stubProvider((_url, stage) => {
+      if (stage === 'review') return responsesPayload(reviewOf(draft))
+      draftCalls += 1
+      // Первый проход упирается в отказ шлюза, второй доходит.
+      return draftCalls <= 2 ? { code: 524, msg: 'no user can use' } : responsesPayload(draft)
     })
 
     const solution = await solveHomeworkWithReview(request, { apiKey: 'test-key', fetchImpl })
 
     expect(solution.answer).toBe('Подлежащее — ветер, сказуемое — гонит.')
-    // Упавшее семейство пробуется дважды — сбой провайдера транзиентный.
-    expect(urls.filter((url) => url.includes('/codex/'))).toHaveLength(2)
+    // Упавший проход пробуется дважды — сбой провайдера транзиентный.
+    expect(urls.length).toBeGreaterThanOrEqual(3)
   })
 
   it('уважает модель, заданную через KIE_MODEL, и берёт её на оба прохода', async () => {

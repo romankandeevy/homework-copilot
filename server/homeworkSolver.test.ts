@@ -265,7 +265,24 @@ describe('homework solver', () => {
       },
     })
     // Строгая схема нужна обоим семействам, но называется в них по-разному.
-    const gemini = callTo(fetchMock, 'gemini') as { tools?: unknown; response_format?: { type: string } }
+    // Пул пригодных семейств сейчас один, поэтому второе адресуется явно —
+    // маршрутизация должна остаться рабочей до его возвращения.
+    const geminiMock = reviewedResponses(taskThreeDraft)
+    const geminiHttp = createHttp('POST', taskThree)
+    await handleHomeworkSolverRequest(geminiHttp.request, geminiHttp.response, {
+      apiKey: 'test-key',
+      model: 'gemini-2.5-flash',
+      fetchImpl: geminiMock,
+      taskLookup: async () => ({
+        condition: taskThreeCondition,
+        conditionNormalized: normalizeTaskCondition(taskThreeCondition),
+        sourceUrl: verifiedTask.sourceUrl,
+        sourcePage: 9,
+        hasDiagram: false,
+      }),
+    })
+
+    const gemini = callTo(geminiMock, 'gemini') as { tools?: unknown; response_format?: { type: string } }
     const codex = callTo(fetchMock, 'codex') as { tools?: unknown; text?: { format?: { type: string } } }
     expect(gemini.tools).toBeUndefined()
     expect(gemini.response_format?.type).toBe('json_schema')
@@ -297,7 +314,12 @@ describe('homework solver', () => {
   it('sends the photo itself to the multimodal provider without an OCR condition', async () => {
     const fetchMock = reviewedResponses(photoDraft)
     await solveWithKie(photoTask, { apiKey: 'secret-test-key', fetchImpl: fetchMock })
-    const gemini = callTo(fetchMock, 'gemini') as {
+    // Второе семейство адресуется явно: в пуле его сейчас нет, но кодировка
+    // картинки у него своя, и сломать её незаметно нельзя.
+    const geminiMock = reviewedResponses(photoDraft)
+    await solveWithKie(photoTask, { apiKey: 'secret-test-key', model: 'gemini-2.5-flash', fetchImpl: geminiMock })
+
+    const gemini = callTo(geminiMock, 'gemini') as {
       messages: { content: unknown }[]
       response_format?: { type: string }
       tools?: unknown
