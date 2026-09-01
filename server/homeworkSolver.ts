@@ -363,6 +363,11 @@ async function reserveSolutionCredit(
     if (error.message.includes('account is blocked')) {
       throw new HomeworkSolverError(403, 'Аккаунт заблокирован')
     }
+    // Деньги по этому ключу уже вернулись ученику, и повторно снимать их молча
+    // нельзя. Задача ставится заново — у неё будет свой ключ и своя оплата.
+    if (error.message.includes('reservation refunded')) {
+      throw new HomeworkSolverError(409, 'Оплата за эту задачу уже вернулась на баланс. Поставь её заново')
+    }
     throw new HomeworkSolverError(502, 'Не получилось зарезервировать оплату')
   }
 
@@ -582,12 +587,15 @@ async function completeStoredSolution(
   })
 
   if (error) {
-    throw new HomeworkSolverError(
-      error.message.includes('insufficient balance') ? 402 : 502,
-      error.message.includes('insufficient balance')
-        ? 'На балансе меньше ' + formatRubles(price)
-        : 'Не получилось безопасно сохранить готовое решение',
-    )
+    if (error.message.includes('insufficient balance')) {
+      throw new HomeworkSolverError(402, 'На балансе меньше ' + formatRubles(price))
+    }
+    // Резерв вернулся раньше, чем решение дошло: выдать его сейчас — значит
+    // отдать даром. Ученик остаётся при деньгах и ставит задачу заново.
+    if (error.message.includes('reservation refunded')) {
+      throw new HomeworkSolverError(409, 'Оплата за эту задачу уже вернулась на баланс. Поставь её заново')
+    }
+    throw new HomeworkSolverError(502, 'Не получилось безопасно сохранить готовое решение')
   }
 
   if (!data) return null
