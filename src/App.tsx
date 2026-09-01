@@ -34,7 +34,7 @@ import {
 } from '@phosphor-icons/react'
 import CopyTask from './CopyTask'
 import type { TaskSubmission } from './CopyTask'
-import LandingPage from './landing/LandingPage'
+import { applicationPath, currentApplicationPath } from './lib/appPath'
 import { keyed } from './lib/listKeys'
 import LegalPage from './LegalPage'
 import PrivacyNotice from './PrivacyNotice'
@@ -213,16 +213,6 @@ const applicationRoutes = [
 const navigation = applicationRoutes.filter(({ label }) => label !== 'Задачи' && label !== 'ЦДЗ')
 
 type NavigationLabel = (typeof applicationRoutes)[number]['label']
-
-function applicationPath(path: string) {
-  return `${import.meta.env.BASE_URL.replace(/\/$/, '')}${path}`
-}
-
-function currentApplicationPath(pathname = window.location.pathname) {
-  const basePath = import.meta.env.BASE_URL.replace(/\/$/, '')
-  const relativePath = basePath && pathname.startsWith(`${basePath}/`) ? pathname.slice(basePath.length) : pathname
-  return relativePath.replace(/\/+$/, '') || '/'
-}
 
 function currentNavigationRoute(pathname = window.location.pathname): { label: NavigationLabel; solution: SolutionState | null } {
   const path = currentApplicationPath(pathname)
@@ -2021,8 +2011,6 @@ function App() {
     }
   }
 
-  // `/` — публичная витрина, рабочая главная переехала на `/app`.
-  if (pathname === '/') return <><LandingPage /><PrivacyNotice /></>
   if (pathname === '/privacy') return <><LegalPage kind="privacy" /><PrivacyNotice /></>
   if (pathname === '/terms' || pathname === '/agreement') return <><LegalPage kind="terms" /><PrivacyNotice /></>
   if (pathname === '/consent') return <><LegalPage kind="consent" /><PrivacyNotice /></>

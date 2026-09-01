@@ -88,18 +88,31 @@ async function fontPreloadLinks() {
     .join('\n')
 }
 
+/* Оболочка приложения лежит отдельным чанком: витрине она не нужна (src/Root.tsx).
+   Для адресов приложения он всё равно понадобится сразу, поэтому здесь ставится
+   modulepreload — запрос уходит вместе с входным чанком, а не после него. */
+async function appPreloadLink() {
+  const assets = await readdir(resolve(outputDirectory, 'assets'))
+  const chunk = assets.find((file) => /^App-[\w-]+\.js$/.test(file))
+  return chunk ? `    <link rel="modulepreload" href="/assets/${chunk}" crossorigin />` : ''
+}
+
 const preloadLinks = await fontPreloadLinks()
+const appLink = await appPreloadLink()
 
 const baseHtml = (await readFile(resolve(outputDirectory, 'index.html'), 'utf8')).replace(
   '<link rel="icon"',
   preloadLinks ? `${preloadLinks}\n    <link rel="icon"` : '<link rel="icon"',
 )
+// Витрина остаётся без ссылки на оболочку: там её незачем греть.
 await writeFile(resolve(outputDirectory, 'index.html'), renderMetadata(baseHtml, homepage), 'utf8')
+
+const appHtml = appLink ? baseHtml.replace('<link rel="icon"', `${appLink}\n    <link rel="icon"`) : baseHtml
 
 for (const [route, metadata] of routeMetadata) {
   const routeDirectory = resolve(outputDirectory, route)
   await mkdir(routeDirectory, { recursive: true })
-  await writeFile(resolve(routeDirectory, 'index.html'), renderMetadata(baseHtml, metadata), 'utf8')
+  await writeFile(resolve(routeDirectory, 'index.html'), renderMetadata(appHtml, metadata), 'utf8')
 }
 
 for (const [textbookId, taskCount] of Object.entries(numberedSolutionRoutes)) {
@@ -107,7 +120,7 @@ for (const [textbookId, taskCount] of Object.entries(numberedSolutionRoutes)) {
     const route = `solutions/${textbookId}/${task}`
     const routeDirectory = resolve(outputDirectory, route)
     await mkdir(routeDirectory, { recursive: true })
-    await writeFile(resolve(routeDirectory, 'index.html'), renderMetadata(baseHtml, {
+    await writeFile(resolve(routeDirectory, 'index.html'), renderMetadata(appHtml, {
       title: `Решение задачи № ${task} — Homework Copilot`,
       description: 'Личное решение задачи в Homework Copilot.',
       canonicalPath: `/${route}`,

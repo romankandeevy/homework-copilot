@@ -2,6 +2,7 @@ import '@testing-library/jest-dom/vitest'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import App from './App'
+import { Root } from './Root'
 import type { HomeworkSolution, SolveHomeworkRequest } from './lib/homeworkContract'
 import { normalizeTaskCondition } from './textbooks/taskCatalog'
 
@@ -174,13 +175,23 @@ describe('Homework Copilot task flow', () => {
 
   // Витрина и приложение — разные адреса. `/` встречает нового посетителя,
   // рабочая главная живёт на `/app`, а старый `/main` продолжает работать.
+  // Развилку держит Root: витрина в него входит напрямую, приложение —
+  // отдельным чанком, поэтому проверяется именно он.
   it('показывает витрину на корне и уводит в приложение по `/app`', () => {
     window.history.replaceState({}, '', '/')
-    render(<App />)
+    render(<Root />)
 
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Сфоткал.')
     expect(screen.queryByRole('heading', { name: 'Списать задачу' })).not.toBeInTheDocument()
     expect(screen.getAllByRole('link', { name: /Решить задачу/ })[0]).toHaveAttribute('href', '/app')
+  })
+
+  it('подгружает оболочку приложения на адресах приложения', async () => {
+    window.history.replaceState({}, '', '/app')
+    render(<Root />)
+
+    expect(await screen.findByRole('heading', { name: 'Списать задачу' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { level: 1, name: /Сфоткал/ })).not.toBeInTheDocument()
   })
 
   it('оставляет прежний адрес `/main` рабочим', () => {

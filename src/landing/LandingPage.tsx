@@ -10,7 +10,6 @@
    `src/CopyTask.tsx`. Ничего сверх этого страница не обещает. */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import {
   ArrowRight,
   ArrowsClockwise,
@@ -106,38 +105,74 @@ function useLandingTheme() {
 
 /* Появление секции при прокрутке.
 
-   Движение отдано motion: библиотека уже стоит в проекте (аккаунт, чат,
-   расписание) и считает анимации на композиторе, а не в потоке вёрстки.
+   Наблюдатель один на всю страницу (по одному на каждое поле обзора), а не
+   свой на каждый блок: на длинной витрине их набиралось больше двадцати.
+   Само движение отдано CSS-переходам — оно считается на композиторе и не
+   требует библиотеки анимаций в первом чанке. */
+const revealMargin = '0px 0px -12% 0px'
+const compareMargin = '0px 0px -15% 0px'
 
-   `whileInView` вместо своего IntersectionObserver: раньше на каждый блок
-   создавался отдельный наблюдатель, и на длинной странице их набиралось
-   больше двадцати. */
+const inViewObservers = new Map<string, IntersectionObserver>()
+const inViewCallbacks = new WeakMap<Element, () => void>()
+
+function observeOnce(element: Element, margin: string, onEnter: () => void) {
+  let observer = inViewObservers.get(margin)
+  if (!observer) {
+    observer = new IntersectionObserver((entries, self) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue
+        inViewCallbacks.get(entry.target)?.()
+        inViewCallbacks.delete(entry.target)
+        self.unobserve(entry.target)
+      }
+    }, { rootMargin: margin })
+    inViewObservers.set(margin, observer)
+  }
+  inViewCallbacks.set(element, onEnter)
+  observer.observe(element)
+  const active = observer
+  return () => {
+    inViewCallbacks.delete(element)
+    active.unobserve(element)
+  }
+}
+
+function useInView(margin: string) {
+  const [element, setElement] = useState<HTMLElement | null>(null)
+  const [inView, setInView] = useState(false)
+
+  useEffect(() => {
+    if (!element || inView) return
+    // Без наблюдателя блок обязан остаться видимым, а не пропасть навсегда.
+    if (typeof IntersectionObserver === 'undefined') {
+      setInView(true)
+      return
+    }
+    return observeOnce(element, margin, () => setInView(true))
+  }, [element, inView, margin])
+
+  return { ref: setElement, inView }
+}
+
 function Reveal({
   children,
   className = '',
   delay = 0,
-  as = 'div',
+  as: Element = 'div',
 }: {
   children: React.ReactNode
   className?: string
   delay?: number
   as?: 'div' | 'li' | 'article'
 }) {
-  const reduceMotion = useReducedMotion()
-  const Element = motion[as]
-
-  if (reduceMotion) {
-    const Plain = as
-    return <Plain className={className || undefined}>{children}</Plain>
-  }
+  const { ref, inView } = useInView(revealMargin)
 
   return (
     <Element
-      className={className || undefined}
-      initial={{ opacity: 0, y: 18 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: '0px 0px -12% 0px' }}
-      transition={{ type: 'spring', stiffness: 120, damping: 20, mass: 0.9, delay: delay / 1000 }}
+      ref={ref}
+      className={className ? `reveal ${className}` : 'reveal'}
+      data-revealed={inView ? 'true' : 'false'}
+      style={delay ? { transitionDelay: `${delay}ms` } : undefined}
     >
       {children}
     </Element>
@@ -145,32 +180,24 @@ function Reveal({
 }
 
 function CompareRow({ row, index }: { row: (typeof comparison)[number]; index: number }) {
-  const reduceMotion = useReducedMotion()
+  const { ref, inView } = useInView(compareMargin)
 
   return (
-    <motion.div
+    <div
+      ref={ref}
       className="compare-row"
       role="row"
-      initial={reduceMotion ? undefined : { opacity: 0.001 }}
-      whileInView={reduceMotion ? undefined : { opacity: 1 }}
-      viewport={{ once: true, margin: '0px 0px -15% 0px' }}
-      transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1], delay: index * 0.07 }}
+      data-revealed={inView ? 'true' : 'false'}
+      style={{ '--row-delay': `${index * 0.07}s` } as React.CSSProperties}
     >
       <span className="compare-question" role="cell">{row.question}</span>
       <span className="compare-gdz" role="cell">{row.gdz}</span>
       <span className="compare-ours" role="cell">
         {/* Черта дорисовывается под нашим ответом: ею строка и «сходится». */}
-        <motion.i
-          aria-hidden="true"
-          className="compare-underline"
-          initial={reduceMotion ? undefined : { scaleX: 0 }}
-          whileInView={reduceMotion ? undefined : { scaleX: 1 }}
-          viewport={{ once: true, margin: '0px 0px -15% 0px' }}
-          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: 0.15 + index * 0.07 }}
-        />
+        <i aria-hidden="true" className="compare-underline" />
         {row.ours}
       </span>
-    </motion.div>
+    </div>
   )
 }
 
@@ -490,8 +517,6 @@ function FaqItem({
   open: boolean
   onToggle: () => void
 }) {
-  const reduceMotion = useReducedMotion()
-
   return (
     <div className={`faq-item${open ? ' is-open' : ''}`}>
       <h3>
@@ -500,24 +525,13 @@ function FaqItem({
           <Plus size={18} weight="bold" aria-hidden="true" />
         </button>
       </h3>
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div
-            className="faq-answer"
-            id={`faq-answer-${index}`}
-            initial={reduceMotion ? false : { height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={reduceMotion ? { height: 0 } : { height: 0, opacity: 0 }}
-            transition={{
-              height: { duration: 0.36, ease: [0.16, 1, 0.3, 1] },
-              opacity: { duration: open ? 0.28 : 0.16, ease: [0.16, 1, 0.3, 1] },
-            }}
-            style={{ overflow: 'hidden' }}
-          >
-            <p>{answer}</p>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Ответ не снимается с разметки, а сворачивается строкой сетки: так
+          раскрытие считает CSS, а порядок фокуса и разметка не прыгают. */}
+      <div className="faq-answer" id={`faq-answer-${index}`}>
+        <div className="faq-answer-inner">
+          <p>{answer}</p>
+        </div>
+      </div>
     </div>
   )
 }

@@ -66,6 +66,31 @@ a {
   box-shadow: var(--focus-ring);
 }
 
+/* Знак и написание имени продукта. Витрина и приложение — разные чанки, но
+   логотип у них один, поэтому его правила лежат здесь, а не в App.css. */
+.brand-mark {
+  display: flex;
+  width: 3.1rem;
+  height: 2.5rem;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  color: transparent;
+  font-family: var(--font-display);
+  font-size: var(--text-brand-large);
+  font-weight: var(--weight-bold);
+  line-height: 0.78;
+  letter-spacing: -0.18em;
+  -webkit-text-stroke: 1px var(--color-brand-accent);
+  text-stroke: 1px var(--color-brand-accent);
+}
+
+.brand-mark > span:last-child {
+  -webkit-text-stroke-color: var(--color-text);
+  text-stroke-color: var(--color-text);
+}
+.brand-name-accent { color: var(--color-brand-accent); }
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;

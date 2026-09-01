@@ -1,7 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
-import App from './App.tsx'
+import { Root } from './Root.tsx'
 import { ErrorBoundary } from './ErrorBoundary.tsx'
 
 const staleChunkReloadKey = 'homework-copilot:stale-chunk-reload'
@@ -27,7 +27,7 @@ if (currentUrl.searchParams.has('__app_reload')) {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
-      <App />
+      <Root />
     </ErrorBoundary>
   </StrictMode>,
 )
