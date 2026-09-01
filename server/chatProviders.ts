@@ -182,7 +182,9 @@ export async function streamModelAnswer(args: StreamArgs): Promise<StreamResult>
   }
 
   try {
+    // Поток читается кадр за кадром — следующий кусок приходит только после разбора текущего.
     for (;;) {
+      // eslint-disable-next-line no-await-in-loop
       const { done, value } = await reader.read()
       if (done) break
 

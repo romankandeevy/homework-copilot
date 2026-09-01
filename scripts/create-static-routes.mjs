@@ -1,3 +1,5 @@
+/* Маршруты пишутся по очереди: 1791 параллельная запись упёрлась бы в лимит дескрипторов. */
+/* eslint-disable no-await-in-loop */
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 

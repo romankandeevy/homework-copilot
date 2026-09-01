@@ -1,3 +1,5 @@
+/* Обход дерева по очереди: параллельное чтение всего репозитория ради доли секунды не нужно. */
+/* eslint-disable no-await-in-loop */
 import { readFile, readdir } from 'node:fs/promises'
 import { extname, join, relative } from 'node:path'
 

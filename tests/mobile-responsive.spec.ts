@@ -1,3 +1,5 @@
+/* Сценарий ведёт страницу шаг за шагом: каждое действие зависит от состояния после предыдущего. */
+/* eslint-disable no-await-in-loop */
 import { expect, test } from '@playwright/test'
 
 const phoneViewports = [

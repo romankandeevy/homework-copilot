@@ -35,6 +35,7 @@ import {
 import CopyTask from './CopyTask'
 import type { TaskSubmission } from './CopyTask'
 import LandingPage from './landing/LandingPage'
+import { keyed } from './lib/listKeys'
 import LegalPage from './LegalPage'
 import PrivacyNotice from './PrivacyNotice'
 import { GeometryNotebookLayoutV1 } from './notebook/GeometryNotebookLayoutV1'
@@ -879,7 +880,7 @@ function UnderstandingPage({
             {generatedSolution.given.length > 0 && (
               <section className="notebook-sheet-given">
                 <h2>Дано:</h2>
-                {generatedSolution.given.map((line, index) => <p key={line + index}>{line}</p>)}
+                {keyed(generatedSolution.given, (line) => line).map(({ key, item: line }) => <p key={key}>{line}</p>)}
               </section>
             )}
             <section className="notebook-sheet-goal">
@@ -890,10 +891,10 @@ function UnderstandingPage({
             <section className="notebook-sheet-steps">
               <h2>Решение</h2>
               <ol>
-                {generatedSolution.steps.map((step, index) => (
+                {keyed(generatedSolution.steps, (step) => step).map(({ key, item: step }) => (
                   // Нумерацию ставит страница, поэтому свою — из модели —
                   // с шага снимаем, чтобы не выходило «1) 1) …».
-                  <li key={step + index}>{step.replace(/^\s*\d{1,2}[).]\s+/u, '')}</li>
+                  <li key={key}>{step.replace(/^\s*\d{1,2}[).]\s+/u, '')}</li>
                 ))}
               </ol>
             </section>
@@ -1030,19 +1031,24 @@ function HomePage() {
   // не получит решение, и держать его вперемешку с рабочими — вводить в
   // заблуждение. Свои загруженные книги — в конце, они всегда неразмечены.
   const availableTextbooks = useMemo(
-    () => [...textbooks, ...customTextbooks].sort((left, right) => {
-      if (Boolean(left.indexed) !== Boolean(right.indexed)) return left.indexed ? -1 : 1
-      return left.subject.localeCompare(right.subject, 'ru-RU')
-    }).map((textbook) => {
-      const generatedTasks = visibleGeneratedSolutions
-        .filter((solution) => solution.textbookId === textbook.id && solution.source === 'number')
-        .map((solution) => solution.task)
-      if (generatedTasks.length === 0) return textbook
-      return {
-        ...textbook,
-        solvedTasks: [...new Set([...textbook.solvedTasks, ...generatedTasks])],
-      }
-    }),
+    () => {
+      const sorted = [...textbooks, ...customTextbooks].sort((left, right) => {
+        if (Boolean(left.indexed) !== Boolean(right.indexed)) return left.indexed ? -1 : 1
+        return left.subject.localeCompare(right.subject, 'ru-RU')
+      })
+      // Учебник пришёл из состояния — правка на месте испортила бы его источник.
+      // eslint-disable-next-line no-map-spread
+      return sorted.map((textbook) => {
+        const generatedTasks = visibleGeneratedSolutions
+          .filter((solution) => solution.textbookId === textbook.id && solution.source === 'number')
+          .map((solution) => solution.task)
+        if (generatedTasks.length === 0) return textbook
+        return {
+          ...textbook,
+          solvedTasks: [...new Set([...textbook.solvedTasks, ...generatedTasks])],
+        }
+      })
+    },
     [customTextbooks, visibleGeneratedSolutions],
   )
   const personalSolutions = useMemo<PersonalSolution[]>(
@@ -1288,12 +1294,15 @@ function HomePage() {
 
     const requestGoogleCode = async () => {
       let session = null
+      // Опрос сессии: следующая попытка нужна только если предыдущая не дала почту.
       // active снимает очистка эффекта, а не тело цикла — линтер этого не видит.
       // eslint-disable-next-line no-unmodified-loop-condition
       for (let attempt = 0; attempt < 20 && active; attempt += 1) {
+        // eslint-disable-next-line no-await-in-loop
         const { data } = await authClient.auth.getSession()
         session = data.session
         if (session?.user.email) break
+        // eslint-disable-next-line no-await-in-loop
         await new Promise((resolve) => window.setTimeout(resolve, 100))
       }
       const googleEmail = session?.user.email?.trim()

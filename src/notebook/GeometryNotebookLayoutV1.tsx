@@ -1,6 +1,7 @@
 import { assertGeometryNotebookLayoutV1, geometryNotebookLayoutV1 as layout } from './layouts/geometryNotebookLayoutV1'
 import { GeometryScene } from './geometry/GeometryScene'
 import type { GeometryDiagramSpec, GeometryNotebookPageSpec } from './geometry/types'
+import { keyed } from '../lib/listKeys'
 
 assertGeometryNotebookLayoutV1()
 
@@ -256,10 +257,10 @@ function NotebookSheet({ spec, segment }: { spec: GeometryNotebookPageSpec; segm
           <>
             {spec.number && <text className="notebook-number" x={zones.number.x} y={zones.number.y}>№ {spec.number}</text>}
             <text className="notebook-title" x={zones.given.x} y={zones.given.titleY}>Дано:</text>
-            {givenLines.map((line, index) => (
+            {keyed(givenLines, (line) => line).map(({ key, item: line }, index) => (
               <text
                 className={`notebook-body${usesDenseGiven ? ' notebook-body-dense' : usesCompactGiven ? ' notebook-body-compact' : ''}`}
-                key={`${line}-${index}`}
+                key={key}
                 x={zones.given.x}
                 y={givenFirstLineY + index * givenLineStep}
                 style={usesDenseGiven ? { fontSize: denseGivenLayout.fontSize } : undefined}
@@ -267,10 +268,10 @@ function NotebookSheet({ spec, segment }: { spec: GeometryNotebookPageSpec; segm
             ))}
             <line className="notebook-divider" x1={zones.divider.horizontal.startX} x2={zones.divider.horizontal.endX} y1={zones.divider.horizontal.y} y2={zones.divider.horizontal.y} />
             <line className="notebook-divider" x1={zones.divider.vertical.x} x2={zones.divider.vertical.x} y1={zones.divider.vertical.startY} y2={zones.divider.vertical.endY} />
-            {goalLines.map((line, index) => (
+            {keyed(goalLines, (line) => line).map(({ key, item: line }, index) => (
               <text
                 className={`notebook-goal${usesCompactGoal ? ' notebook-goal-compact' : ''}`}
-                key={`${line}-${index}`}
+                key={key}
                 x={zones.goal.x}
                 y={zones.goal.y + index * compactGoalLayout.lineStep}
                 style={usesCompactGoal ? { fontSize: compactGoalLayout.fontSize } : undefined}
@@ -293,11 +294,11 @@ function NotebookSheet({ spec, segment }: { spec: GeometryNotebookPageSpec; segm
         )}
 
         <text className="notebook-title" x={zones.solution.x} y={solutionTitleY}>{isContinuation ? 'Решение. (продолжение)' : 'Решение.'}</text>
-        {segment.lines.map((line, index) => (
-          <text className="notebook-solution" key={`${line}-${index}`} x={zones.solution.x} y={solutionFirstLineY + index * zones.solution.lineStep}>{line}</text>
+        {keyed(segment.lines, (line) => line).map(({ key, item: line }, index) => (
+          <text className="notebook-solution" key={key} x={zones.solution.x} y={solutionFirstLineY + index * zones.solution.lineStep}>{line}</text>
         ))}
-        {segment.answerLines?.map((line, index) => (
-          <text className="notebook-answer" key={`${line}-${index}`} x={zones.solution.x} y={solutionFirstLineY + Math.max(0, segment.lines.length - 1) * zones.solution.lineStep + zones.solution.answerGap + index * zones.solution.lineStep}>{line}</text>
+        {keyed(segment.answerLines ?? [], (line) => line).map(({ key, item: line }, index) => (
+          <text className="notebook-answer" key={key} x={zones.solution.x} y={solutionFirstLineY + Math.max(0, segment.lines.length - 1) * zones.solution.lineStep + zones.solution.answerGap + index * zones.solution.lineStep}>{line}</text>
         ))}
         <style>{`
           .notebook-number,.notebook-title,.notebook-body,.notebook-goal,.notebook-solution,.notebook-answer,.diagram-vertex,.diagram-angle-label,.diagram-caption { fill: ${colors.ink}; font-family: ${typography.family}; font-weight: ${typography.weight}; letter-spacing: .25px; }
@@ -327,8 +328,8 @@ function NotebookSheet({ spec, segment }: { spec: GeometryNotebookPageSpec; segm
 export function GeometryNotebookLayoutV1({ spec }: { spec: GeometryNotebookPageSpec }) {
   return (
     <section className="geometry-notebook-document" aria-label={spec.number ? `Решение задачи ${spec.number}` : 'Решение задачи'}>
-      {paginateSolution(spec).map((segment, index) => (
-        <NotebookSheet key={`${spec.id}-${index}`} spec={spec} segment={segment} />
+      {keyed(paginateSolution(spec), (segment) => `${spec.id}-${segment.lines.join('|')}`).map(({ key, item: segment }) => (
+        <NotebookSheet key={key} spec={spec} segment={segment} />
       ))}
     </section>
   )

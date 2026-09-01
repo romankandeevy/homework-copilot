@@ -1,3 +1,5 @@
+/* Страницы PDF разбираются по очереди: разбор держит общий документ. */
+/* eslint-disable no-await-in-loop */
 import { readdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { createWorker, PSM } from 'tesseract.js'

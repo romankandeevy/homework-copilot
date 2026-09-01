@@ -1,6 +1,7 @@
 import { useId } from 'react'
 import type { HomeworkDiagramScene } from '../../lib/homeworkContract'
 import { geometryNotebookLayoutV1 as layout } from '../layouts/geometryNotebookLayoutV1'
+import { keyed } from '../../lib/listKeys'
 
 type Point = {
   id: string
@@ -115,7 +116,7 @@ function EqualSegmentMark({ points, label }: { points: readonly Point[]; label: 
   })
   const labelPoint = points.length > 0 ? average(points) : null
   return <>
-    {paths.map((path, index) => <path className="diagram-mark" d={path} key={`${path}-${index}`} />)}
+    {keyed(paths, (path) => path).map(({ key, item: path }) => <path className="diagram-mark" d={path} key={key} />)}
     {label && labelPoint && <text className="diagram-angle-label" x={labelPoint.x + sceneLayout.labelOffsetX} y={labelPoint.y + sceneLayout.labelOffsetY}>{label}</text>}
   </>
 }
@@ -137,7 +138,7 @@ function ParallelMark({ points, label }: { points: readonly Point[]; label: stri
   const paths = pairs.map(([start, end]) => start && end ? parallelChevron(start, end) : '').filter(Boolean)
   const labelPoint = points.length > 0 ? average(points) : null
   return <>
-    {paths.map((path, index) => <path className="diagram-mark" d={path} key={`${path}-${index}`} />)}
+    {keyed(paths, (path) => path).map(({ key, item: path }) => <path className="diagram-mark" d={path} key={key} />)}
     {label && labelPoint && <text className="diagram-angle-label" x={labelPoint.x} y={labelPoint.y + sceneLayout.objectLabelOffsetY}>{label}</text>}
   </>
 }

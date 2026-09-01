@@ -5,6 +5,7 @@ import type {
   HomeworkWrittenAnalysis,
 } from '../lib/homeworkContract'
 import { analysisLegend, markTitles } from './analysisLegend'
+import { keyed } from '../lib/listKeys'
 import './WrittenAnalysis.css'
 
 /* Размеченная запись — то, что школьник перечерчивает в тетрадь один в один:
@@ -67,8 +68,8 @@ function AnnotatedLineRow({ line }: { line: HomeworkAnnotatedLine }) {
     <div className={`analysis-line analysis-line-${kind}`}>
       {line.lead && <span className="analysis-line-lead">{line.lead}</span>}
       <span className="analysis-line-tokens">
-        {line.tokens.map((token, index) => (
-          <AnnotatedToken key={`${index}-${token.text}`} token={token} />
+        {keyed(line.tokens, (token) => token.text).map(({ key, item: token }) => (
+          <AnnotatedToken key={key} token={token} />
         ))}
       </span>
       {line.caption && <span className="analysis-line-caption">{line.caption}</span>}
@@ -84,11 +85,11 @@ export function WrittenAnalysis({ analysis }: { analysis: HomeworkWrittenAnalysi
   return (
     <figure className="written-analysis" aria-label={title}>
       <figcaption className="written-analysis-title">{title}</figcaption>
-      {analysis.blocks.map((block, blockIndex) => (
-        <section className="written-analysis-block" key={(block.title ?? '') + blockIndex}>
+      {keyed(analysis.blocks, (block) => block.title ?? '').map(({ key, item: block }) => (
+        <section className="written-analysis-block" key={key}>
           {block.title && <h3 className="written-analysis-block-title">{block.title}</h3>}
-          {block.lines.map((line, lineIndex) => (
-            <AnnotatedLineRow key={`${lineIndex}-${line.tokens[0]?.text ?? ''}`} line={line} />
+          {keyed(block.lines, (line) => line.tokens.map((token) => token.text).join(' ')).map(({ key: lineKey, item: line }) => (
+            <AnnotatedLineRow key={lineKey} line={line} />
           ))}
         </section>
       ))}

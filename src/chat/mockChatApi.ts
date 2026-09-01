@@ -227,7 +227,9 @@ export async function mockStreamChatMessage(
 
   const chunks = mockAnswer(request).match(/\S+\s*|\s+/g) ?? []
 
+  // Пауза между кусками изображает поток ответа — она и есть смысл цикла.
   for (const chunk of chunks) {
+    // eslint-disable-next-line no-await-in-loop
     await delay(18, signal)
     if (signal.aborted) {
       assistant.status = 'cancelled'

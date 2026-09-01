@@ -131,6 +131,8 @@ const tasks = scan.pages
     const diagramRegions = requestedFigures
       .map((figure) => figures.get(figure))
       .filter(Boolean)
+      // Форма region задана внешним JSON: перечислять поля — терять неизвестные.
+      // eslint-disable-next-line no-map-spread
       .map((figure) => ({ figure: figure.figure, ...figure.region }))
     const missingFigures = requestedFigures.filter((figure) => !figures.has(figure))
     if (missingFigures.length > 0) unresolvedFigures.push({ task: task.task, figures: missingFigures })

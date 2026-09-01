@@ -108,6 +108,8 @@ function parseScheduleEntries(value: unknown, fallback: ScheduleEntry[]) {
       && 'time' in entry
       && typeof entry.time === 'string',
     ))
+    // Копия: разобранные записи не должны делить объект с сохранённым слепком.
+    // eslint-disable-next-line no-map-spread
     .map((entry, index) => ({ ...entry, time: migrateLessonTime(entry.time, index) }))
 }
 
@@ -399,9 +401,11 @@ function SchedulePage({ userId = null, grade = 8 }: { userId?: string | null; gr
           await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_BLOCK })
           parsed = []
 
+          // Воркер OCR один: клетки распознаются по очереди, и отмена проверяется между ними.
           for (const cell of tableCells) {
             if (ocrRunRef.current !== runId) return
             const detailRectangle = scaleRectangle(cell.rectangle, detailRatio)
+            // eslint-disable-next-line no-await-in-loop
             const { data: cellData } = await worker.recognize(detailImage, { rectangle: detailRectangle }, { text: true })
             const detail = parseScheduleCellText(cellData.text)
             rawTextByCell.set(`${cell.day}:${cell.time}`, cellData.text)
@@ -427,6 +431,7 @@ function SchedulePage({ userId = null, grade = 8 }: { userId?: string | null; gr
             const sourceCell = tableCells.find((cell) => cell.day === entry.day && cell.time === entry.time)
             if (!sourceCell) continue
             const detailRectangle = scaleRectangle(sourceCell.rectangle, detailRatio)
+            // eslint-disable-next-line no-await-in-loop
             const { data: retryData } = await worker.recognize(detailImage, { rectangle: detailRectangle }, { text: true })
             const retry = parseScheduleCellText(retryData.text)
             if (retry.subject) entry.subject = retry.subject
@@ -452,6 +457,7 @@ function SchedulePage({ userId = null, grade = 8 }: { userId?: string | null; gr
               top: Math.round(detailRectangle.top + detailRectangle.height * 0.44),
               height: Math.max(1, Math.round(detailRectangle.height * 0.56)),
             }
+            // eslint-disable-next-line no-await-in-loop
             const { data: roomData } = await worker.recognize(detailImage, { rectangle: lowerHalf }, { text: true })
             const room = parseScheduleRoomDigits(roomData.text)
             if (room) entry.room = room
@@ -557,6 +563,8 @@ function SchedulePage({ userId = null, grade = 8 }: { userId?: string | null; gr
     const scannedTimes = sortTimes(ocrRows.map(({ time }) => time))
     setEntries((current) => [
       ...current.filter((entry) => !scannedDays.has(entry.day)),
+      // Копия: записи уходят в состояние React, править их на месте нельзя.
+      // eslint-disable-next-line no-map-spread
       ...ocrRows.filter((entry) => entry.subject.trim()).map((entry) => ({ ...entry, subject: entry.subject.trim(), room: entry.room.trim() })),
     ])
     if (scannedTimes.length > 0) setTimeSlots(scannedTimes.slice(0, MAX_TIME_SLOTS))

@@ -1,3 +1,5 @@
+/* Страницы PDF разбираются по очереди: разбор держит общий документ. */
+/* eslint-disable no-await-in-loop */
 import { access, readFile, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'

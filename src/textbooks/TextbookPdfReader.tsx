@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { CaretLeft, CaretRight, FileText, ImageSquare, MagnifyingGlassMinus, MagnifyingGlassPlus } from '@phosphor-icons/react'
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from 'pdfjs-dist'
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+import { keyed } from '../lib/listKeys'
 import { getCachedTextbookPage, recognizeTextbookPage, type TextbookOcrPage } from './textbookOcr'
 import { getTextbookScanManifest } from './textbookScanManifest'
 
@@ -249,9 +250,9 @@ export default function TextbookPdfReader({ sourceUrl, title }: { sourceUrl: str
             ) : recognizedPage ? (
               recognizedPage.blocks.length > 0 ? (
                 <div className="textbook-ocr-content">
-                  {recognizedPage.blocks.map((block, index) => block.heading
-                    ? <h3 key={`${pageNumber}-${index}`}>{block.text}</h3>
-                    : <p key={`${pageNumber}-${index}`}>{block.text}</p>)}
+                  {keyed(recognizedPage.blocks, (block) => `${pageNumber}-${block.text}`).map(({ key, item: block }) => block.heading
+                    ? <h3 key={key}>{block.text}</h3>
+                    : <p key={key}>{block.text}</p>)}
                 </div>
               ) : (
                 <p className="textbook-ocr-empty">На этой странице нет текста. Иллюстрации и формулы доступны в оригинале.</p>

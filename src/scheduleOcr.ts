@@ -304,6 +304,8 @@ function getScheduleTableGeometry(tsv: string) {
   if (rows.length < 2) return null
 
   const averageRowStep = median(rows.slice(1).map((row, index) => row.centerY - rows[index].centerY)) || 48
+  // Копия, а не правка на месте: rows и rowBounds не должны стать одним объектом.
+  // eslint-disable-next-line no-map-spread
   const rowBounds = rows.map((row, rowIndex) => ({
     ...row,
     top: rowIndex === 0 ? row.centerY - averageRowStep / 2 : (rows[rowIndex - 1].centerY + row.centerY) / 2,

@@ -193,6 +193,8 @@ describe('geometry solution quality gate', () => {
         ...taskFiveSolution.diagram,
         scene: {
           ...scene,
+          // Копия: scene — общая фикстура, правка на месте протекла бы в соседние тесты.
+          // eslint-disable-next-line no-map-spread
           points: scene.points.map((point) => point.id === 'R' ? { ...point, y: 55 } : point),
         },
       },
@@ -208,6 +210,8 @@ describe('geometry solution quality gate', () => {
         ...taskFiveSolution.diagram,
         scene: {
           ...scene,
+          // Копия: scene — общая фикстура, правка на месте протекла бы в соседние тесты.
+          // eslint-disable-next-line no-map-spread
           points: scene.points.map((point) => point.id === 'P' ? { ...point, x: 50 } : point),
         },
       },

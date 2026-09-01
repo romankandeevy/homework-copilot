@@ -765,7 +765,7 @@ function normalizeAnalysis(value: unknown): HomeworkWrittenAnalysis | undefined 
         : []
       if (blockLines.length === 0) return null
       const title = text(block.title, 60)
-      return { ...(title ? { title } : {}), lines: blockLines }
+      return title ? { title, lines: blockLines } : { lines: blockLines }
     })
     .filter((block): block is { title?: string; lines: HomeworkAnnotatedLine[] } => block !== null)
     .slice(0, 4)
@@ -1659,8 +1659,10 @@ async function callModelWithRetry(
   modelOverride?: string,
 ) {
   let lastError: unknown
+  // Вторая попытка нужна только после провала первой.
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
+      // eslint-disable-next-line no-await-in-loop
       const payload = await callModel(options, system, message, schemaName, schema, modelOverride)
       if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
         throw new GeometrySolutionEngineError('Модель не вернула решение')

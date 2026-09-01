@@ -1,3 +1,5 @@
+/* Проверка ведёт браузер шаг за шагом: каждое действие зависит от состояния после предыдущего. */
+/* eslint-disable no-await-in-loop */
 import { spawn } from 'node:child_process'
 import { mkdir } from 'node:fs/promises'
 import { resolve } from 'node:path'

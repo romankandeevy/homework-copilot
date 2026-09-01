@@ -436,7 +436,9 @@ export async function streamChatMessage(
   let buffer = ''
 
   try {
+    // Поток читается кадр за кадром — следующий кусок приходит только после разбора текущего.
     for (;;) {
+      // eslint-disable-next-line no-await-in-loop
       const { value, done } = await reader.read()
       if (done) break
       buffer += decoder.decode(value, { stream: true })

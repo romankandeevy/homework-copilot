@@ -541,10 +541,13 @@ describe('homework solver', () => {
         ...photoDraft.diagram,
         scene: {
           ...scene,
+          /* Копии: scene — общая фикстура, правка на месте протекла бы в соседние тесты. */
+          /* eslint-disable no-map-spread */
           points: scene.points.map((point) => ({ ...point, id: point.id.toLocaleLowerCase('ru-RU') })),
           objects: scene.objects.map((object) => ({ ...object, points: object.points.map((id) => id.toLocaleLowerCase('ru-RU')) })),
           marks: scene.marks.map((mark) => ({ ...mark, points: mark.points.map((id) => id.toLocaleLowerCase('ru-RU')) })),
           constraints: scene.constraints.map((constraint) => ({ ...constraint, points: constraint.points.map((id) => id.toLocaleLowerCase('ru-RU')) })),
+          /* eslint-enable no-map-spread */
         },
       },
     }

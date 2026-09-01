@@ -379,6 +379,8 @@ async function notifyOwner(
         { action: 'reject' as const, token: randomBytes(18).toString('base64url') },
       ]
       : []
+    // Куски уходят по порядку: в Telegram они должны встать в том же виде,
+    // а запись в базу привязана к id только что отправленного сообщения.
     for (const [index, chunk] of chunks.entries()) {
       const isDecisionMessage = includeIdeaDecision && index === chunks.length - 1
       const replyMarkup = isDecisionMessage
@@ -389,7 +391,9 @@ async function notifyOwner(
           ]],
         }
         : undefined
+      // eslint-disable-next-line no-await-in-loop
       const sent = await telegramMessage(config, chunk, replyMarkup)
+      // eslint-disable-next-line no-await-in-loop
       const { error } = await adminClient.from('support_telegram_message_map').insert({
         telegram_chat_id: Number(sent.chatId),
         telegram_message_id: sent.messageId,
@@ -398,6 +402,7 @@ async function notifyOwner(
       })
       if (error) throw error
       if (isDecisionMessage) {
+        // eslint-disable-next-line no-await-in-loop
         const { error: actionError } = await adminClient.from('support_telegram_callback_actions').insert(ideaActions.map((ideaAction) => ({
           token_hash: callbackTokenHash(ideaAction.token),
           conversation_id: conversation.id,
