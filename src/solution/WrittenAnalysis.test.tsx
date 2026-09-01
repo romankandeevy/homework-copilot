@@ -1,7 +1,8 @@
 import '@testing-library/jest-dom/vitest'
 import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { WrittenAnalysis, analysisLegend } from './WrittenAnalysis'
+import { WrittenAnalysis } from './WrittenAnalysis'
+import { analysisLegend } from './analysisLegend'
 import type { HomeworkWrittenAnalysis } from '../lib/homeworkContract'
 
 const sentenceParse: HomeworkWrittenAnalysis = {
