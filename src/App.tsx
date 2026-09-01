@@ -56,6 +56,7 @@ import {
   parseStoredHomeworkSolution,
   prepareTaskPhoto,
   requestHomeworkSolution,
+  SolutionConnectionLostError,
   saveGeneratedSolutions,
 } from './lib/homeworkSolution'
 import { normalizeTaskCondition } from './textbooks/taskCatalog'
@@ -197,6 +198,11 @@ function localSolutionJob(input: {
   }
 }
 
+
+/* Сколько ждём молчащего решателя, прежде чем признать задачу сорванной.
+   Его собственный бюджет — 230 секунд (server/homeworkSolver.ts), здесь запас
+   поверх него на сохранение решения и ответ. */
+const silentSolverLimitMs = 300_000
 
 const applicationRoutes = [
   { label: 'Главная', path: '/app', icon: House },
@@ -1613,6 +1619,36 @@ function HomePage() {
     })
   }, [])
 
+  /* Задача, о которой сервер молчит дольше своего срока.
+
+     Обрыв связи задачу больше не хоронит — исход отмечает сам решатель. Но
+     если функцию убили на полпути, отмечать некому: в кошельке останется
+     списание, а в очереди — вечное «решается». Бюджет решателя 230 секунд,
+     поэтому с запасом поверх него задачу своего устройства закрываем здесь,
+     а деньги вернёт эффект возврата резерва. */
+  useEffect(() => {
+    if (!supabaseClient) return
+    const silent = visibleJobs.filter((job) => {
+      if (job.status !== 'running' || job.deviceId !== deviceIdRef.current) return false
+      const startedAt = Date.parse(job.startedAt || job.createdAt)
+      return Number.isFinite(startedAt) && Date.now() - startedAt > silentSolverLimitMs
+    })
+    if (silent.length === 0) return
+
+    const reason = 'Решатель не ответил в срок. Деньги вернулись на баланс — попробуй ещё раз'
+    silent.forEach((job) => markLocalJob(job, {
+      status: 'failed',
+      stage: 'failed',
+      error: reason,
+      finishedAt: new Date().toISOString(),
+    }))
+    void Promise.all(silent.map(
+      (job) => closeSolutionJob(supabaseClient, job.idempotencyKey, 'failed', reason, guestJobId),
+    ))
+      .then(() => refreshJobs())
+      .catch(() => undefined)
+  }, [guestJobId, markLocalJob, refreshJobs, supabaseClient, visibleJobs])
+
   /* Отправка задачи решателю.
 
      Здесь и только здесь идёт сам запрос: строка очереди говорит, что решать,
@@ -1706,6 +1742,21 @@ function HomePage() {
         source: generatedSolution.source,
       }
     } catch (error) {
+      /* Оборванная связь не отменяет решение.
+
+         Мобильная сеть роняет долгий запрос, а решатель об этом не знает:
+         он доводит задачу до конца и сохраняет ответ. Раньше вкладка на
+         обрыве объявляла провал и закрывала задачу в базе — и решение,
+         пришедшее двумя минутами позже, уже некуда было положить: ученик
+         видел «Решение не дошло» на задаче, которая решена и оплачена.
+         Теперь задача остаётся в работе, очередь опрашивает сервер, а
+         готовый ответ подхватывает восстановление ниже. */
+      if (error instanceof SolutionConnectionLostError) {
+        markLocalJob(job, { status: 'running', error: '' })
+        void refreshJobs()
+        return null
+      }
+
       const reason = error instanceof Error ? error.message : 'Не получилось подготовить решение'
       // Запрос остаётся в хранилище: по нему работает «Решить ещё раз», и
       // ученику не придётся заново набирать условие или искать фотографию.

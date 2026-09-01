@@ -91,6 +91,19 @@ export async function prepareTaskPhoto(file: File): Promise<string> {
   return readFileAsDataUrl(compressed)
 }
 
+/* Обрыв связи — не отказ решателя.
+
+   Мобильная сеть роняет долгий запрос сама по себе, а решатель об этом не
+   знает: он доводит задачу до конца и сохраняет решение. Поэтому обрыв
+   отличается от настоящей ошибки отдельным типом — по нему очередь ждёт
+   сервер дальше, вместо того чтобы хоронить задачу, которая ещё решается. */
+export class SolutionConnectionLostError extends Error {
+  constructor() {
+    super('Связь оборвалась, но решение продолжает готовиться')
+    this.name = 'SolutionConnectionLostError'
+  }
+}
+
 export async function requestHomeworkSolution(
   endpoint: string,
   request: SolveHomeworkRequest,
@@ -112,7 +125,7 @@ export async function requestHomeworkSolution(
       body: JSON.stringify(request),
     })
   } catch {
-    throw new Error('Не получилось связаться с сервером решений. Проверь интернет и попробуй ещё раз')
+    throw new SolutionConnectionLostError()
   }
 
   let payload: unknown

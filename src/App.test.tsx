@@ -288,6 +288,29 @@ describe('Homework Copilot task flow', () => {
     conditions.forEach(([condition]) => expect(screen.getByText(condition)).toBeInTheDocument())
   })
 
+  /* Обрыв связи.
+
+     На проде мобильная сеть уронила запрос на 25-й секунде, а решатель довёл
+     задачу до конца и сохранил ответ ещё через две минуты. Вкладка к тому
+     времени успела объявить провал и закрыть задачу — решение, за которое
+     ученик заплатил, показать было уже негде. Обрыв связи держит задачу в
+     работе: исход отмечает сервер. */
+  it('на обрыве связи оставляет задачу в работе, а не объявляет провал', async () => {
+    const fetchMock = vi.fn(async () => { throw new TypeError('Failed to fetch') })
+    vi.stubGlobal('fetch', fetchMock)
+    render(<App />)
+
+    const condition = 'Из цифр 0, 1, 2, …, 9 составьте шестизначные числа без повторов.'
+    fireEvent.change(screen.getByRole('textbox', { name: 'Условие задачи' }), { target: { value: condition } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Предмет' }), { target: { value: 'Математика' } })
+    fireEvent.click(screen.getByRole('button', { name: /Решить/ }))
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    expect(await screen.findByRole('heading', { name: 'Решаем задачу' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Решение не дошло' })).not.toBeInTheDocument()
+    expect(screen.getByText(condition)).toBeInTheDocument()
+  })
+
   /* Неудача.
 
      «Не получилось решить задачу» без выхода — тупик: условие набрано, фото
