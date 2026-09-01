@@ -10,7 +10,7 @@
    `src/CopyTask.tsx`. Ничего сверх этого страница не обещает. */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AnimatePresence, LazyMotion, m, useReducedMotion } from 'motion/react'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import {
   ArrowRight,
   ArrowsClockwise,
@@ -40,11 +40,6 @@ import {
   TaskFormPreview,
 } from './LandingPreviews'
 import './LandingPage.css'
-
-/* Набор анимаций включается через LazyMotion: разметка появляется сразу,
-   движение — когда набор готов. Пакет motion в проекте уже стоит и
-   используется в аккаунте, чате и расписании. */
-const loadMotionFeatures = () => import('motion/react').then((module) => module.domAnimation)
 
 const appPath = '/app'
 const signInPath = '/app?auth=signin'
@@ -113,8 +108,6 @@ function useLandingTheme() {
 
    Движение отдано motion: библиотека уже стоит в проекте (аккаунт, чат,
    расписание) и считает анимации на композиторе, а не в потоке вёрстки.
-   Грузится она через LazyMotion с набором domAnimation — это заметно
-   меньше полного пакета, а больше витрине и не нужно.
 
    `whileInView` вместо своего IntersectionObserver: раньше на каждый блок
    создавался отдельный наблюдатель, и на длинной странице их набиралось
@@ -131,7 +124,7 @@ function Reveal({
   as?: 'div' | 'li' | 'article'
 }) {
   const reduceMotion = useReducedMotion()
-  const Element = m[as]
+  const Element = motion[as]
 
   if (reduceMotion) {
     const Plain = as
@@ -155,7 +148,7 @@ function CompareRow({ row, index }: { row: (typeof comparison)[number]; index: n
   const reduceMotion = useReducedMotion()
 
   return (
-    <m.div
+    <motion.div
       className="compare-row"
       role="row"
       initial={reduceMotion ? undefined : { opacity: 0.001 }}
@@ -167,7 +160,7 @@ function CompareRow({ row, index }: { row: (typeof comparison)[number]; index: n
       <span className="compare-gdz" role="cell">{row.gdz}</span>
       <span className="compare-ours" role="cell">
         {/* Черта дорисовывается под нашим ответом: ею строка и «сходится». */}
-        <m.i
+        <motion.i
           aria-hidden="true"
           className="compare-underline"
           initial={reduceMotion ? undefined : { scaleX: 0 }}
@@ -177,7 +170,7 @@ function CompareRow({ row, index }: { row: (typeof comparison)[number]; index: n
         />
         {row.ours}
       </span>
-    </m.div>
+    </motion.div>
   )
 }
 
@@ -509,7 +502,7 @@ function FaqItem({
       </h3>
       <AnimatePresence initial={false}>
         {open && (
-          <m.div
+          <motion.div
             className="faq-answer"
             id={`faq-answer-${index}`}
             initial={reduceMotion ? false : { height: 0, opacity: 0 }}
@@ -522,7 +515,7 @@ function FaqItem({
             style={{ overflow: 'hidden' }}
           >
             <p>{answer}</p>
-          </m.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>
@@ -565,7 +558,6 @@ export default function LandingPage() {
   }, [])
 
   return (
-    <LazyMotion features={loadMotionFeatures} strict>
     <div className="landing">
       <a className="landing-skip" href="#hero-title">Перейти к содержанию</a>
       <LandingHeader signedIn={signedIn} theme={theme} onToggleTheme={toggleTheme} />
@@ -802,6 +794,5 @@ export default function LandingPage() {
 
       <SiteFooter />
     </div>
-    </LazyMotion>
   )
 }
