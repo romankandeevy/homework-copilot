@@ -1096,11 +1096,11 @@ function HomePage() {
 
     const restoreNavigation = () => {
       const route = currentNavigationRoute()
-      const currentPath = currentApplicationPath()
-      const normalizedPath = normalizeNavigationPath(currentPath)
-      if (currentPath !== normalizedPath) {
+      const restoredPath = currentApplicationPath()
+      const restoredNormalizedPath = normalizeNavigationPath(restoredPath)
+      if (restoredPath !== restoredNormalizedPath) {
         const currentUrl = new URL(window.location.href)
-        currentUrl.pathname = applicationPath(normalizedPath)
+        currentUrl.pathname = applicationPath(restoredNormalizedPath)
         window.history.replaceState(window.history.state, '', `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`)
       }
       setActiveNavigation(route.label)
@@ -1288,6 +1288,8 @@ function HomePage() {
 
     const requestGoogleCode = async () => {
       let session = null
+      // active снимает очистка эффекта, а не тело цикла — линтер этого не видит.
+      // eslint-disable-next-line no-unmodified-loop-condition
       for (let attempt = 0; attempt < 20 && active; attempt += 1) {
         const { data } = await authClient.auth.getSession()
         session = data.session

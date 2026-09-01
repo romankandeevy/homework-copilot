@@ -103,9 +103,9 @@ function sanitizeWrongSolution(value: unknown) {
   }
 }
 
-function sanitizeClientContext(category: SupportCategory, value: unknown): SupportContext {
+function sanitizeClientContext(kind: SupportCategory, value: unknown): SupportContext {
   const source = jsonObject(value)
-  if (category !== 'wrong_solution') return {}
+  if (kind !== 'wrong_solution') return {}
   return { wrongSolution: sanitizeWrongSolution(source.wrongSolution) as unknown as Json }
 }
 

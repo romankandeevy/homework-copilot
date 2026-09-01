@@ -121,13 +121,13 @@ function parseDetail(value: Json | null): SupportDetail | null {
   const rawApprovalStatus = asString(approvalSource.status, 'pending')
   return {
     conversation: { ...item, grade: asNullableNumber(conversationSource.grade), balance: asNullableNumber(conversationSource.balance), resolvedAt: asNullableString(conversationSource.resolvedAt) },
-    messages: asArray(source.messages).flatMap((value) => {
-      const row = isRecord(value) ? value : {}
+    messages: asArray(source.messages).flatMap((entry) => {
+      const row = isRecord(entry) ? entry : {}
       const authorType = asString(row.authorType) === 'owner' ? 'owner' : 'user'
       return [{ id: asString(row.id), authorType, body: asString(row.body), createdAt: asString(row.createdAt) }]
     }),
-    walletEntries: asArray(source.walletEntries).flatMap((value) => {
-      const row = isRecord(value) ? value : {}
+    walletEntries: asArray(source.walletEntries).flatMap((entry) => {
+      const row = isRecord(entry) ? entry : {}
       return [{ id: asString(row.id), amount: asNumber(row.amount), kind: asString(row.kind), description: asString(row.description), createdAt: asString(row.createdAt) }]
     }),
     ideaApproval: {

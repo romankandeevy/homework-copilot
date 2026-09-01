@@ -230,7 +230,7 @@ test.describe('адаптация под телефон', () => {
     // значит: окно с первого же кадра стоит на месте и полностью видимо.
     await page.evaluate(() => {
       const frames: { opacity: string; transform: string }[] = []
-      Object.assign(window, { __dialogFrames: frames })
+      Object.assign(window, { dialogFramesProbe: frames })
       const readFrame = () => {
         const element = document.querySelector('.account-dialog')
         if (element) {
@@ -246,11 +246,11 @@ test.describe('адаптация под телефон', () => {
     await page.locator('.topbar-actions').getByRole('button', { name: 'Войти или зарегистрироваться' }).click()
     await expect(page.getByRole('dialog', { name: 'Войди в аккаунт' })).toBeVisible()
     await expect
-      .poll(() => page.evaluate(() => (window as unknown as { __dialogFrames: unknown[] }).__dialogFrames.length))
+      .poll(() => page.evaluate(() => (window as unknown as { dialogFramesProbe: unknown[] }).dialogFramesProbe.length))
       .toBeGreaterThanOrEqual(3)
 
     const frames = await page.evaluate(
-      () => (window as unknown as { __dialogFrames: { opacity: string; transform: string }[] }).__dialogFrames,
+      () => (window as unknown as { dialogFramesProbe: { opacity: string; transform: string }[] }).dialogFramesProbe,
     )
     for (const frame of frames) {
       expect(frame.opacity).toBe('1')

@@ -610,7 +610,7 @@ function normalizeScene(value: unknown): HomeworkDiagramScene {
       visible: point.visible !== false,
     }]
   }).slice(0, 18)
-  const references = (value: unknown, limit: number) => lines(value, limit, 24).map((id) => (
+  const references = (raw: unknown, limit: number) => lines(raw, limit, 24).map((id) => (
     idMap.get(id) ?? idMap.get(id.toLocaleUpperCase('ru-RU')) ?? id.toLocaleUpperCase('ru-RU')
   ))
 
@@ -760,12 +760,12 @@ function normalizeAnalysis(value: unknown): HomeworkWrittenAnalysis | undefined 
     .map((entry) => {
       if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null
       const block = entry as Record<string, unknown>
-      const lines = Array.isArray(block.lines)
+      const blockLines = Array.isArray(block.lines)
         ? block.lines.map(normalizeAnnotatedLine).filter((line): line is HomeworkAnnotatedLine => line !== null).slice(0, 12)
         : []
-      if (lines.length === 0) return null
+      if (blockLines.length === 0) return null
       const title = text(block.title, 60)
-      return { ...(title ? { title } : {}), lines }
+      return { ...(title ? { title } : {}), lines: blockLines }
     })
     .filter((block): block is { title?: string; lines: HomeworkAnnotatedLine[] } => block !== null)
     .slice(0, 4)
@@ -1592,9 +1592,9 @@ function answerFacts(value: string) {
   const labelled: string[] = []
 
   for (const match of normalized.matchAll(/(?:([a-zа-я][a-zа-я0-9₀-₉']{0,3})\s*=\s*)?(\d+(?:\.\d+)?)\s*([a-zа-я%°]{0,12})/gu)) {
-    const [, label, number, rawUnit] = match
+    const [, label, amount, rawUnit] = match
     const unit = answerUnitAliases.get(rawUnit) ?? rawUnit
-    const fact = `${Number(number)}${unit}`
+    const fact = `${Number(amount)}${unit}`
     bare.push(fact)
     if (label) labelled.push(`${label}=${fact}`)
   }

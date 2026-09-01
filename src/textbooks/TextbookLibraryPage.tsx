@@ -212,15 +212,15 @@ export default function TextbookLibraryPage({
 
   const removeCartItem = (textbookId: string, task: number) => {
     setProgressByBook((current) => {
-      const progress = current[textbookId]
-      if (!progress) return current
-      return { ...current, [textbookId]: { ...progress, selectedTasks: progress.selectedTasks.filter((item) => item !== task) } }
+      const bookProgress = current[textbookId]
+      if (!bookProgress) return current
+      return { ...current, [textbookId]: { ...bookProgress, selectedTasks: bookProgress.selectedTasks.filter((item) => item !== task) } }
     })
   }
 
   const clearCart = () => {
     setProgressByBook((current) => Object.fromEntries(
-      Object.entries(current).map(([textbookId, progress]) => [textbookId, { ...progress, selectedTasks: [] }]),
+      Object.entries(current).map(([textbookId, bookProgress]) => [textbookId, { ...bookProgress, selectedTasks: [] }]),
     ))
   }
 
