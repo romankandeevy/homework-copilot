@@ -1739,8 +1739,16 @@ async function callModelWithRetry(
 ) {
   const candidates = candidateModels(options, modelOverride)
   let lastError: unknown = new GeometrySolutionEngineError('Модель не вернула решение')
+  let calls = 0
 
-  for (const model of candidates) {
+  for (const [index, model] of candidates.entries()) {
+    // Список составлен на старте, а семья могла лечь уже после: соседний
+    // проход узнаёт об этом раньше нас. Пропускаем — но не все сразу:
+    // последний кандидат вызывается даже остывающим, иначе можно вернуть
+    // отказ, не сделав ни одного запроса.
+    if (modelIsCoolingDown(model) && !(index === candidates.length - 1 && calls === 0)) continue
+    calls += 1
+
     // Повтор той же моделью нужен после стохастического сбоя — битого JSON
     // или пустого ответа. После отказа шлюза он бессмыслен: там лежит не
     // ответ, а сам путь, и следующая попытка идёт уже другой моделью.

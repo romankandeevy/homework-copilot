@@ -141,11 +141,16 @@ describe('два независимых прохода', () => {
 
   it('выдаёт решение, когда один проход упал целиком', async () => {
     let draftCalls = 0
-    const { urls, fetchImpl } = stubProvider((_url, stage) => {
-      if (stage === 'review') return responsesPayload(reviewOf(draft))
+    // Форма ответа зависит от семейства: перебор уводит вызов на другой
+    // протокол, и заглушка обязана отвечать по адресу, а не одинаково.
+    const payloadFor = (url: string, body: unknown) => (
+      url.includes('/codex/') ? responsesPayload(body) : geminiPayload(body)
+    )
+    const { urls, fetchImpl } = stubProvider((url, stage) => {
+      if (stage === 'review') return payloadFor(url, reviewOf(draft))
       draftCalls += 1
-      // Первый проход упирается в отказ шлюза, второй доходит.
-      return draftCalls <= 2 ? { code: 524, msg: 'no user can use' } : responsesPayload(draft)
+      // Первые вызовы упираются в отказ шлюза, следующая модель доходит.
+      return draftCalls <= 2 ? { code: 524, msg: 'no user can use' } : payloadFor(url, draft)
     })
 
     const solution = await solveHomeworkWithReview(request, { apiKey: 'test-key', fetchImpl })

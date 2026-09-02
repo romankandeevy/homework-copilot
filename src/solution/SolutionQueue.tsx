@@ -86,10 +86,11 @@ function SolvingCard({ job, subject, now, mine }: { job: SolutionJob; subject: s
   )
 }
 
-function QueuedRow({ job, subject, position, onDismiss }: {
+function QueuedRow({ job, subject, position, mine, onDismiss }: {
   job: SolutionJob
   subject: string
   position: number
+  mine: boolean
   onDismiss: (job: SolutionJob) => void
 }) {
   return (
@@ -97,7 +98,10 @@ function QueuedRow({ job, subject, position, onDismiss }: {
       <span className="solve-queued-position" aria-hidden="true">{position}</span>
       <span className="solve-queued-copy">
         <strong>{taskLabel(job)}</strong>
-        <small>{subjectLabel(job, subject)} · ждёт очереди</small>
+        {/* Задачу решает то устройство, которое её завело: только у него есть
+            фотография и сессия. Пока строка не говорила об этом, задача с
+            закрытого телефона выглядела здесь просто зависшей. */}
+        <small>{subjectLabel(job, subject)} · {mine ? 'ждёт очереди' : 'ждёт другое устройство'}</small>
       </span>
       <button type="button" onClick={() => onDismiss(job)} aria-label="Убрать задачу из очереди">
         <Trash size={16} weight="duotone" aria-hidden="true" />
@@ -237,6 +241,7 @@ export function SolutionQueue({
               job={job}
               subject={subjectOf(job.textbookId)}
               position={running.length + waiting.indexOf(job) + 1}
+              mine={!job.deviceId || job.deviceId === deviceId}
               onDismiss={onDismiss}
             />
           ))}
