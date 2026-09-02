@@ -118,10 +118,10 @@ describe('два независимых прохода', () => {
 
     const solution = await solveHomeworkWithReview(request, { apiKey: 'test-key', fetchImpl })
 
-    // 2 сентября путь /codex лежал целиком. Второе семейство в пуле — страховка
-    // от такого дня: проходы расходятся по разным протоколам шлюза, и отказ
-    // одного не уносит решение.
-    expect(defaultHomeworkModels).toEqual(['gpt-5-6-luna', 'gemini-3-5-flash-openai'])
+    // 2 сентября путь /codex лежал целиком. Первые две модели пула берут
+    // проходы и расходятся по разным протоколам шлюза, остальные ждут
+    // запасными: отказ одного семейства решение больше не уносит.
+    expect(defaultHomeworkModels.slice(0, 2)).toEqual(['gpt-5-6-luna', 'gemini-3-5-flash-openai'])
     expect(urls).toHaveLength(2)
     expect(urls).toContain('https://api.kie.ai/codex/v1/responses')
     expect(urls).toContain('https://api.kie.ai/gemini-3-5-flash-openai/v1/chat/completions')

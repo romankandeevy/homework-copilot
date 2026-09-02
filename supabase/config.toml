@@ -164,8 +164,6 @@ additional_redirect_urls = [
   "https://homework-copilot-taupe.vercel.app/**",
   "https://www.homeworkcopilot.ru/**",
   "https://homeworkcopilot.ru/**",
-  "http://localhost:5173/**",
-  "http://127.0.0.1:4173/**",
 ]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
@@ -256,6 +254,12 @@ content_path = "./supabase/templates/confirmation.html"
 [auth.email.template.magic_link]
 subject = "Код входа в Homework Copilot"
 content_path = "./supabase/templates/magic-link.html"
+
+# Без своего шаблона Supabase шлёт английское письмо «Reset Password» —
+# единственное нерусское письмо продукта.
+[auth.email.template.recovery]
+subject = "Смена пароля в Homework Copilot"
+content_path = "./supabase/templates/recovery.html"
 
 # Uncomment to customize notification email template
 # [auth.email.notification.password_changed]

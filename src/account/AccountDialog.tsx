@@ -27,6 +27,7 @@ import {
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import type { AccountData } from '../lib/supabase'
 import { supabase } from '../lib/supabase'
+import { applicationPath } from '../lib/appPath'
 import { formatRubles } from '../lib/currency'
 import { forgetPendingLegalAcceptance, rememberPendingLegalAcceptance } from '../lib/legalConsent'
 import { loadReferralStatus, preparePendingReferralClaim } from '../lib/referrals'
@@ -47,8 +48,17 @@ const verificationEmailKey = 'homework-copilot:verification-email'
 const verificationKindKey = 'homework-copilot:verification-kind'
 const verificationSentAtKey = 'homework-copilot:verification-sent-at'
 
+/* Возврат авторизации ведёт в приложение, а не на витрину.
+
+   На `/` живёт витрина: клиента Supabase она не создаёт и обработчиков
+   подтверждения не имеет. Пока ссылки вели туда, кнопка из письма, вход
+   через Google и смена пароля обрывались на полпути. */
+function authReturnUrl(marker: string) {
+  return `${window.location.origin}${applicationPath('/app')}?auth=${marker}`
+}
+
 function verificationRedirectUrl() {
-  return `${window.location.origin}/?auth=verified`
+  return authReturnUrl('verified')
 }
 
 function readPendingVerification(): { email: string; kind: VerificationKind } | null {
@@ -331,7 +341,7 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/?auth=google-code`,
+        redirectTo: authReturnUrl('google-code'),
         queryParams: { prompt: 'select_account' },
       },
     })
@@ -441,7 +451,7 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
 
       if (screen === 'forgot') {
         const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-          redirectTo: `${window.location.origin}/?auth=reset`,
+          redirectTo: authReturnUrl('reset'),
         })
         if (resetError) throw resetError
         setStatus('Если аккаунт существует, ссылка для смены пароля уже отправлена')

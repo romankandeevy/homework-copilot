@@ -55,9 +55,14 @@ export { homeworkSolutionEngineVersion }
 // -openai строгую схему решателя принимают. Тот же запрос решателя целиком:
 // gemini-3-5-flash-openai — 22 с, чисто; gemini-3-6-flash-openai — 45 с
 // с одним повтором после 524; gemini-3-pro — 71 с. gemini-2.5-flash по-прежнему
-// «на обслуживании». Поэтому второй проход идёт другой семьёй: лежит одна —
-// решение приносит вторая, и это ровно та страховка, ради которой пул заведён.
-export const defaultHomeworkModels = ['gpt-5-6-luna', 'gemini-3-5-flash-openai'] as const
+// «на обслуживании».
+//
+// Пул устроен так: первые две модели берут на себя два независимых прохода,
+// остальные — запасные. Любой вызов, упёршийся в отказ шлюза, идёт дальше по
+// пулу (candidateModels ниже), поэтому упавшая семья решение больше не уносит.
+// Порядок — от дешёвого к дорогому: luna 0,01–0,02 кредита, flash-варианты
+// дешевле pro впятеро.
+export const defaultHomeworkModels = ['gpt-5-6-luna', 'gemini-3-5-flash-openai', 'gemini-3-6-flash-openai', 'gemini-3-pro'] as const
 
 // Сколько независимых проходов делаем. Их всегда два: два сошедшихся решения
 // — это и есть проверка, из-за которой рецензент чаще всего не нужен.
@@ -1666,12 +1671,62 @@ const transientModelFailures = new Set([
   'Модель вернула некорректный JSON',
   'Модель не вернула решение',
   'Не получилось подключиться к модели решения',
+  'Модель временно перегружена',
   providerUnavailableMessage,
 ])
 
-// Пауза перед повтором отказа шлюза: мгновенный повтор бьёт в тот же
-// упавший инстанс. Секунда почти ничего не стоит на фоне бюджета в 230.
+function isTransientModelFailure(error: unknown) {
+  return error instanceof GeometrySolutionEngineError && transientModelFailures.has(error.message)
+}
+
+/* Отказ самого шлюза, а не модели: HTTP 5xx или конверт с чужим кодом.
+   Повторять его той же моделью бесполезно — 2 сентября весь путь /codex
+   отвечал 500 несколько часов подряд. */
+function isProviderOutage(error: unknown) {
+  return error instanceof GeometrySolutionEngineError
+    && (error.message === providerUnavailableMessage || error.message === 'Не получилось подключиться к модели решения')
+}
+
+// Пауза перед повтором той же модели: мгновенный повтор бьёт в тот же
+// инстанс. Секунда почти ничего не стоит на фоне бюджета в 230.
 const transientRetryDelayMs = 1_000
+
+/* Упавшее семейство не дёргаем две минуты.
+
+   Функции на Vercel переиспользуются, поэтому память между запросами живёт.
+   Пока `/codex` лежал, каждая задача начинала с двух его вызовов и теряла
+   на них пять секунд — при живой второй семье. Отметка снимается сама:
+   и по сроку, и первым успешным ответом. */
+const modelCooldownMs = 120_000
+const modelCooldownUntil = new Map<string, number>()
+
+function modelIsCoolingDown(model: string) {
+  const until = modelCooldownUntil.get(model)
+  if (until === undefined) return false
+  if (until > Date.now()) return true
+  modelCooldownUntil.delete(model)
+  return false
+}
+
+function reportModelFailure(model: string, error: unknown) {
+  const message = error instanceof Error ? error.message : 'неизвестная ошибка'
+  if (isProviderOutage(error)) modelCooldownUntil.set(model, Date.now() + modelCooldownMs)
+  console.warn(JSON.stringify({ level: 'warn', event: 'homework_model_failed', model, error: message }))
+}
+
+/* Порядок перебора моделей для одного вызова.
+
+   Проход начинает со своей модели, а дальше идёт по остальному пулу: одна
+   упавшая семья не должна уносить решение целиком. Явно заданную `KIE_MODEL`
+   не перебираем — это воля владельца, а не запасной вариант. */
+function candidateModels(options: EngineOptions, assigned?: string): string[] {
+  if (options.model) return [options.model]
+  const first = assigned || defaultHomeworkModel
+  const ordered = [first, ...defaultHomeworkModels.filter((model) => model !== first)]
+  const ready = ordered.filter((model) => !modelIsCoolingDown(model))
+  // Все на отдыхе — значит отдых кончился: лучше попробовать, чем не решить.
+  return ready.length > 0 ? ready : ordered
+}
 
 async function callModelWithRetry(
   options: EngineOptions,
@@ -1682,29 +1737,34 @@ async function callModelWithRetry(
   deadline: number,
   modelOverride?: string,
 ) {
-  let lastError: unknown
-  // Вторая попытка нужна только после провала первой.
-  for (let attempt = 1; attempt <= 2; attempt += 1) {
-    try {
-      // eslint-disable-next-line no-await-in-loop
-      const payload = await callModel(options, system, message, schemaName, schema, modelOverride)
-      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-        throw new GeometrySolutionEngineError('Модель не вернула решение')
-      }
-      return payload
-    } catch (error) {
-      lastError = error
-      const retryable = error instanceof GeometrySolutionEngineError
-        && transientModelFailures.has(error.message)
-      // Вторая попытка занимает столько же, сколько первая: если времени
-      // до дедлайна не осталось, честнее вернуть ошибку сразу.
-      if (!retryable || attempt === 2 || Date.now() > deadline) throw error
-      if (error.message === providerUnavailableMessage) {
+  const candidates = candidateModels(options, modelOverride)
+  let lastError: unknown = new GeometrySolutionEngineError('Модель не вернула решение')
+
+  for (const model of candidates) {
+    // Повтор той же моделью нужен после стохастического сбоя — битого JSON
+    // или пустого ответа. После отказа шлюза он бессмыслен: там лежит не
+    // ответ, а сам путь, и следующая попытка идёт уже другой моделью.
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      try {
         // eslint-disable-next-line no-await-in-loop
-        await new Promise((resolve) => setTimeout(resolve, transientRetryDelayMs))
+        const payload = await callModel(options, system, message, schemaName, schema, model)
+        if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+          throw new GeometrySolutionEngineError('Модель не вернула решение')
+        }
+        modelCooldownUntil.delete(model)
+        return payload
+      } catch (error) {
+        lastError = error
+        reportModelFailure(model, error)
+        // Отклонённый ключ или отказ по существу перебором не лечится.
+        if (!isTransientModelFailure(error) || Date.now() > deadline) throw error
+        if (attempt === 2 || isProviderOutage(error)) break
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise((resolve) => { setTimeout(resolve, transientRetryDelayMs).unref?.() })
       }
     }
   }
+
   throw lastError
 }
 
@@ -1833,10 +1893,17 @@ export async function solveHomeworkWithReview(
     .filter((entry): entry is PromiseFulfilledResult<ReturnType<typeof evaluate>> => entry.status === 'fulfilled')
     .map((entry) => entry.value)
   if (samples.length === 0) {
-    const failure = settled.find((entry) => entry.status === 'rejected')
-    throw failure && failure.status === 'rejected'
-      ? failure.reason
-      : new GeometrySolutionEngineError('Модель не вернула решение')
+    const reasons = settled
+      .filter((entry): entry is PromiseRejectedResult => entry.status === 'rejected')
+      .map((entry) => entry.reason as unknown)
+    // Когда весь пул отвечает отказом шлюза, ученику нужен именно этот ответ:
+    // дело не в его задаче, деньги остаются на балансе, помогает повтор через
+    // минуту. Содержательную ошибку — «модель не вернула решение» — показываем
+    // только если она действительно была.
+    const meaningful = reasons.find((reason) => !isProviderOutage(reason))
+    throw meaningful
+      ?? reasons[0]
+      ?? new GeometrySolutionEngineError('Модель не вернула решение')
   }
 
   const [first, second = first] = samples

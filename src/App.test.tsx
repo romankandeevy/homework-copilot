@@ -194,6 +194,24 @@ describe('Homework Copilot task flow', () => {
     expect(screen.queryByRole('heading', { level: 1, name: /Сфоткал/ })).not.toBeInTheDocument()
   })
 
+  /* Витрина не создаёт клиента Supabase и не знает про подтверждение почты,
+     поэтому возврат авторизации на корень обязан открывать приложение.
+     Пока он открывал витрину, вход через Google, кнопка из письма и смена
+     пароля не доходили до конца. */
+  it.each([
+    ['?auth=verified', ''],
+    ['?auth=confirm&token_hash=abc', ''],
+    ['?auth=google-code', ''],
+    ['?code=exchange-me', ''],
+    ['', '#access_token=abc&type=recovery'],
+  ])('открывает приложение на возврате авторизации %s%s', async (search, hash) => {
+    window.history.replaceState({}, '', `/${search}${hash}`)
+    render(<Root />)
+
+    expect(await screen.findByRole('heading', { name: 'Списать задачу' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { level: 1, name: /Сфоткал/ })).not.toBeInTheDocument()
+  })
+
   it('оставляет прежний адрес `/main` рабочим', () => {
     window.history.replaceState({}, '', '/main')
     render(<App />)

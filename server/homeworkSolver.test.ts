@@ -552,8 +552,9 @@ describe('homework solver', () => {
     const solution = await solveWithKie(photoTask, { apiKey: 'secret-test-key', fetchImpl: fetchMock })
 
     expect(solution.answer).toBe(providerSolution.answer)
-    // Отказ шлюза повторён ровно один раз, решение принёс второй проход другой семьи.
-    expect(codexCalls).toBe(2)
+    // Отказ шлюза повторять той же моделью бесполезно: проход сразу уходит
+    // к следующей семье пула, поэтому вызов /codex ровно один.
+    expect(codexCalls).toBe(1)
     expect(fetchMock.mock.calls.some(([input]) => !String(input).includes('/codex/'))).toBe(true)
   })
 
