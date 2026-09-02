@@ -8,7 +8,6 @@ const standaloneFiles = ['index.html', 'README.md', 'PRODUCT.md']
 const extensions = new Set(['.ts', '.tsx', '.css', '.html', '.md', '.json', '.xml', '.txt', '.svg'])
 const excluded = new Set([
   'src/textbooks/taskCatalog.ts',
-  'src/textbooks/textbookScanManifest.ts',
 ])
 const intentionalRegexTokens = new Map([
   ['src/account/passwordStrengthRules.ts', new Set(['zа', 'ZА'])],

@@ -24,7 +24,6 @@ import {
   MagnifyingGlass,
   Moon,
   Notebook,
-  ShoppingCartSimple,
   SpinnerGap,
   Stack,
   Sun,
@@ -209,14 +208,13 @@ const applicationRoutes = [
   { label: 'Решения', path: '/solutions', icon: Notebook },
   { label: 'ЦДЗ', path: '/cdz', icon: Stack },
   { label: 'ИИ-чат', path: '/chat', icon: ChatsCircle },
-  { label: 'Задачи', path: '/tasks', icon: ShoppingCartSimple },
   { label: 'Расписание', path: '/schedule', icon: CalendarDots },
 ] as const
 
 // В основном меню только то, что уже работает. «ЦДЗ» пока закрыт: пункт
 // занимал место, забирал клик и ничего не отдавал. Маршрут остаётся рабочим
 // и доступен из подвала, поэтому мёртвых ссылок не появляется.
-const navigation = applicationRoutes.filter(({ label }) => label !== 'Задачи' && label !== 'ЦДЗ')
+const navigation = applicationRoutes.filter(({ label }) => label !== 'ЦДЗ')
 
 type NavigationLabel = (typeof applicationRoutes)[number]['label']
 
@@ -558,23 +556,14 @@ function ProductTopbar({
 
       <div className="topbar-actions">
         <ThemeToggle theme={theme} onToggle={onToggleTheme} />
-        {user && <BalanceControl user={user} balance={account?.balance ?? null} onOpenWallet={onOpenWallet} />}
+        {user && <BalanceControl balance={account?.balance ?? null} onOpenWallet={onOpenWallet} />}
         <ProfileButton user={user} account={account} onClick={onOpenAccount} />
       </div>
     </header>
   )
 }
 
-function BalanceControl({ user, balance, onOpenWallet }: { user: User | null; balance: number | null; onOpenWallet: () => void }) {
-  if (!user) {
-    return (
-      <button className="header-sign-in" type="button" onClick={onOpenWallet}>
-        <UserCircle size={20} weight="duotone" aria-hidden="true" />
-        Войти
-      </button>
-    )
-  }
-
+function BalanceControl({ balance, onOpenWallet }: { balance: number | null; onOpenWallet: () => void }) {
   return (
     <button className="balance-control" type="button" aria-label={`Открыть баланс: ${formatRubles(balance ?? 0)}`} onClick={onOpenWallet}>
       <span><small>Баланс</small><strong>{formatRubles(balance ?? 0)}</strong></span>

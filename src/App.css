@@ -45,7 +45,6 @@
   white-space: nowrap;
 }
 
-
 .product-navigation {
   display: flex;
   min-width: 0;
@@ -155,11 +154,6 @@
   margin-inline: auto;
   border-bottom: 1px solid var(--color-border);
 }
-
-.mobile-brand { display: none; }
-.mobile-theme-toggle { display: none; }
-.mobile-profile-button { display: none; }
-.internal-utility-header { display: none; }
 
 .page-heading {
   display: grid;
@@ -678,8 +672,6 @@
   padding: var(--space-2) 0;
 }
 
-.mobile-navigation { display: none; }
-
 .geometry-notebook-document {
   display: grid;
   width: 100%;
@@ -718,20 +710,9 @@
     padding-left: max(var(--space-6), env(safe-area-inset-left));
   }
   .page-header { min-height: 5.5rem; }
-  .mobile-brand { display: block; }
   .page-heading { margin-right: auto; }
   .page-heading span { display: none; }
   .page-greeting { font-size: var(--text-subtitle); }
-  .mobile-theme-toggle { display: inline-flex; }
-  .mobile-profile-button { display: inline-flex; }
-  .internal-utility-header {
-    display: flex;
-    min-height: 5.5rem;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-4);
-    border-bottom: 1px solid var(--color-border);
-  }
   .copy-task { grid-template-columns: 1fr; }
   .copy-task h1 { max-width: none; }
   .copy-task-footer { grid-column: auto; }
@@ -740,45 +721,12 @@
   .recent-section { order: 3; }
   .destination-section { order: 4; }
 
-  .mobile-navigation {
-    display: grid;
-    position: fixed;
-    z-index: 30;
-    right: max(var(--space-3), env(safe-area-inset-right));
-    bottom: max(var(--space-3), env(safe-area-inset-bottom));
-    left: max(var(--space-3), env(safe-area-inset-left));
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    padding: var(--space-2);
-    border-radius: var(--radius-panel);
-    background: color-mix(in oklch, var(--color-canvas) 92%, transparent);
-    box-shadow: var(--shadow-overlay);
-    backdrop-filter: blur(1rem);
-  }
-
-  .mobile-navigation button {
-    display: grid;
-    min-width: 0;
-    min-height: 3.25rem;
-    place-items: center;
-    gap: 0.18rem;
-    padding: var(--space-1);
-    border: 0;
-    border-radius: var(--radius-control);
-    background: transparent;
-    color: var(--color-text-subtle);
-    cursor: pointer;
-  }
-
-  .mobile-navigation button.is-active { background: var(--color-accent); color: var(--color-on-accent); }
-  .mobile-navigation span { width: 100%; font-size: 0.55rem; font-weight: var(--weight-semibold); line-height: 1.05; text-align: center; white-space: normal; }}
-
 @media (max-width: 640px) {
   .product-content {
     padding-right: max(var(--space-4), env(safe-area-inset-right));
     padding-left: max(var(--space-4), env(safe-area-inset-left));
   }
   .page-header { gap: var(--space-3); }
-  .mobile-brand .brand-name { display: none; }
   .page-heading { display: none; }
   .header-actions { margin-left: auto; }
   .balance-control small { display: none; }
@@ -803,12 +751,6 @@
   .catalog-pick-icon svg,
 .recent-icon svg,
 .destination-icon svg { width: 28px; height: 28px; }
-  .mobile-navigation {
-    right: max(var(--space-2), env(safe-area-inset-right));
-    bottom: max(var(--space-2), env(safe-area-inset-bottom));
-    left: max(var(--space-2), env(safe-area-inset-left));
-  }
-
   .section-action,
 .section-link { min-height: 2.75rem; }}
 
@@ -816,12 +758,7 @@
   .page-header { gap: var(--space-2); }
   .header-actions { gap: var(--space-2); }
   .balance-control { gap: var(--space-1); }
-  .mobile-navigation { padding-inline: var(--space-1); }
-  .mobile-navigation button { padding-inline: 0.15rem; }
-  .mobile-navigation span { font-size: 0.55rem; letter-spacing: 0; }}
-
-@media (prefers-reduced-transparency: reduce) {
-  .mobile-navigation { background: var(--color-canvas); backdrop-filter: none; }}
+}}
 
 @media (prefers-reduced-motion: reduce) {
   .navigation-item,
@@ -1608,7 +1545,6 @@
   .my-solutions { order: 3; }}
 
 @media (max-width: 640px) {
-  .mobile-theme-toggle .utility-button { width: 2.75rem; height: 2.75rem; }
   /* Первый экран телефона должен доходить до кнопки: заголовок на кегль
      меньше и в одну строку, отступы плотнее. */
 .copy-task { gap: var(--space-5); }
@@ -1747,20 +1683,6 @@
 
   .product-route { min-height: 100%; }
 
-  .mobile-navigation {
-    position: relative;
-    z-index: 30;
-    inset: auto;
-    border-top: 1px solid var(--color-border);
-    border-radius: 0;
-    background: var(--color-canvas);
-    box-shadow: 0 -0.35rem 1rem color-mix(in oklch, var(--color-strong) 9%, transparent);
-    padding: var(--space-2) max(var(--space-3), env(safe-area-inset-right)) max(var(--space-2), env(safe-area-inset-bottom)) max(var(--space-3), env(safe-area-inset-left));
-    backdrop-filter: none;
-  }
-
-  .mobile-navigation button { min-height: 3.5rem; }
-  .mobile-navigation span { font-size: 0.6875rem; letter-spacing: 0; }
   .my-solutions { order: 2; }}
 
 @media (max-width: 640px) {

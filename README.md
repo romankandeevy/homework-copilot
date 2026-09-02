@@ -1,23 +1,34 @@
-# Geometry Notebook Engine
+# Homework Copilot
 
-Mobile GitHub Pages preview for the Phase 0 notebook renderer.
+Ученик приносит условие задачи фотографией или текстом и получает готовую
+запись для тетради: дано, ход решения, чертёж, ответ. 14 предметов, 5-11 класс.
 
-## Local development
+Прод: [www.homeworkcopilot.ru](https://www.homeworkcopilot.ru).
+
+## Разработка
 
 ```bash
 npm install
 npm run dev
 ```
 
-## Checks
+## Проверки
 
 ```bash
 npm run lint
 npm run test
+npm run test:e2e
 npm run build
-npm run test:visual
 ```
 
-No AI provider or client-side secret is included. The preview renders only local fixtures.
+`npm run test:visual` дополнительно прогоняет снимки тетрадного листа. Эталоны
+сняты на Windows, поэтому в CI они не участвуют.
 
-The approved geometry-page contract and visual reference are in `docs/GEOMETRY_NOTEBOOK_LAYOUT_V1.md`.
+## Устройство
+
+Фронт раздаёт GitHub Pages, serverless-функции живут на Vercel, база и
+авторизация — Supabase. Почему именно так и что нельзя менять — в `AGENTS.md`.
+Карта файлов — в `TREE.md`, команды и правила — в `CLAUDE.md`.
+
+Ключи и адреса функций задаются переменными окружения, см. `.env.example`.
+Ни одного секрета в клиентском коде нет.
