@@ -50,10 +50,14 @@ export { homeworkSolutionEngineVersion }
 // стохастические сбои вроде забытого чертежа или битого JSON, и это лучше
 // прохода, который гарантированно не дойдёт.
 //
-// Вернуть второе семейство — снять `strict` нельзя (схема держит формат),
-// значит нужен провайдер или модель со строгой схемой. Тогда достаточно
-// добавить её сюда: раскладка проходов по пулу ниже сама всё подхватит.
-export const defaultHomeworkModels = ['gpt-5-6-luna'] as const
+// Замер 2 сентября, когда лёг весь путь /codex (GPT-5.6 luna, sol, terra
+// отвечали 500 «Server exception» за две секунды): варианты Gemini с суффиксом
+// -openai строгую схему решателя принимают. Тот же запрос решателя целиком:
+// gemini-3-5-flash-openai — 22 с, чисто; gemini-3-6-flash-openai — 45 с
+// с одним повтором после 524; gemini-3-pro — 71 с. gemini-2.5-flash по-прежнему
+// «на обслуживании». Поэтому второй проход идёт другой семьёй: лежит одна —
+// решение приносит вторая, и это ровно та страховка, ради которой пул заведён.
+export const defaultHomeworkModels = ['gpt-5-6-luna', 'gemini-3-5-flash-openai'] as const
 
 // Сколько независимых проходов делаем. Их всегда два: два сошедшихся решения
 // — это и есть проверка, из-за которой рецензент чаще всего не нужен.
@@ -976,6 +980,10 @@ async function callModel(
       throw new GeometrySolutionEngineError('Провайдер отклонил ключ API')
     }
     if (response.status === 429) throw new GeometrySolutionEngineError('Модель временно перегружена')
+    // 2 сентября шлюз отвечал 500 «Server exception» на единственную модель
+    // пула, и оба прохода падали за три секунды как «модель не смогла».
+    // Отказ самого шлюза — не вердикт модели: его повторяем и переживаем.
+    if (response.status >= 500) throw new GeometrySolutionEngineError(providerUnavailableMessage)
     throw new GeometrySolutionEngineError('Модель не смогла подготовить решение')
   }
 
@@ -1523,20 +1531,29 @@ async function settleWithGrace<T>(
     reason: new GeometrySolutionEngineError('Проход не успел закончиться'),
   }))
   let finished = 0
+  let markFirstSuccess: () => void = () => undefined
+  const firstSuccess = new Promise<void>((resolve) => { markFirstSuccess = resolve })
 
   const tracked = tasks.map((task, index) => task.then(
     (value) => {
       results[index] = { status: 'fulfilled', value }
       finished += 1
       onSettled?.(value)
+      markFirstSuccess()
     },
     (reason) => { results[index] = { status: 'rejected', reason }; finished += 1 },
   ))
+  const allSettled = Promise.all(tracked)
 
-  await Promise.race(tracked)
+  // Отсрочка отсчитывается от первого ДОШЕДШЕГО прохода, а не от первого
+  // завершившегося. Отказ лежащего семейства приходит за секунды, и раньше
+  // он же запускал отсчёт: здоровому проходу оставалось 25 секунд, которых
+  // на медленный день не хватало, — и решение пропадало при живой модели.
+  // Отказ ничего не защищает, после него честнее дождаться остальных.
+  await Promise.race([allSettled, firstSuccess])
   if (finished < tasks.length) {
     await Promise.race([
-      Promise.all(tracked),
+      allSettled,
       new Promise((resolve) => { setTimeout(resolve, graceMs).unref?.() }),
     ])
   }
@@ -1643,11 +1660,18 @@ export function answersAgree(left: string, right: string) {
   return sameList(answerWords(first.normalized), answerWords(second.normalized))
 }
 
+export const providerUnavailableMessage = 'Провайдер модели временно недоступен'
+
 const transientModelFailures = new Set([
   'Модель вернула некорректный JSON',
   'Модель не вернула решение',
   'Не получилось подключиться к модели решения',
+  providerUnavailableMessage,
 ])
+
+// Пауза перед повтором отказа шлюза: мгновенный повтор бьёт в тот же
+// упавший инстанс. Секунда почти ничего не стоит на фоне бюджета в 230.
+const transientRetryDelayMs = 1_000
 
 async function callModelWithRetry(
   options: EngineOptions,
@@ -1675,6 +1699,10 @@ async function callModelWithRetry(
       // Вторая попытка занимает столько же, сколько первая: если времени
       // до дедлайна не осталось, честнее вернуть ошибку сразу.
       if (!retryable || attempt === 2 || Date.now() > deadline) throw error
+      if (error.message === providerUnavailableMessage) {
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise((resolve) => setTimeout(resolve, transientRetryDelayMs))
+      }
     }
   }
   throw lastError

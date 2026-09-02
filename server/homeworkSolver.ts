@@ -13,6 +13,7 @@ import {
   defaultHomeworkModel,
   GeometrySolutionEngineError,
   isCurrentReviewedSolution,
+  providerUnavailableMessage,
   solveHomeworkWithReview,
   validateSolutionQuality,
 } from './geometrySolutionEngine.ts'
@@ -122,6 +123,9 @@ export async function solveWithKie(
     if (!(error instanceof GeometrySolutionEngineError)) throw error
     if (/перегружена/u.test(error.message)) throw new HomeworkSolverError(429, error.message)
     if (/не успела/u.test(error.message)) throw new HomeworkSolverError(504, error.message)
+    if (error.message === providerUnavailableMessage) {
+      throw new HomeworkSolverError(503, `${providerUnavailableMessage}. Деньги остались на балансе — попробуй через минуту`)
+    }
     throw new HomeworkSolverError(502, error.message)
   }
 }

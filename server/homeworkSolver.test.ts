@@ -533,6 +533,37 @@ describe('homework solver', () => {
     expect(signals.every((signal) => signal === undefined)).toBe(true)
   })
 
+  /* 2 сентября шлюз отвечал 500 «Server exception» на весь путь /codex,
+     и при пуле из одного семейства оба прохода падали за три секунды. */
+  it('переживает отказ шлюза: 5xx повторяется, а лежащее семейство не уносит решение', async () => {
+    let codexCalls = 0
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('/codex/')) {
+        codexCalls += 1
+        return { ok: false, status: 500, json: async () => ({ error: { type: 'server_error' } }) } as Response
+      }
+      const body = typeof init?.body === 'string' ? init.body : ''
+      return providerResponse(body.includes('homework_solution_review')
+        ? { approved: true, issues: [], solution: photoDraft }
+        : photoDraft, url)
+    })
+
+    const solution = await solveWithKie(photoTask, { apiKey: 'secret-test-key', fetchImpl: fetchMock })
+
+    expect(solution.answer).toBe(providerSolution.answer)
+    // Отказ шлюза повторён ровно один раз, решение принёс второй проход другой семьи.
+    expect(codexCalls).toBe(2)
+    expect(fetchMock.mock.calls.some(([input]) => !String(input).includes('/codex/'))).toBe(true)
+  })
+
+  it('отдаёт 503 и понятный текст, когда лежат все семейства', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue({ ok: false, status: 502, json: async () => ({}) } as Response)
+
+    await expect(solveWithKie(photoTask, { apiKey: 'secret-test-key', fetchImpl: fetchMock }))
+      .rejects.toMatchObject({ status: 503, message: expect.stringContaining('временно недоступен') })
+  })
+
   it('normalizes provider point identifiers together with every reference', async () => {
     const scene = photoDraft.diagram.scene
     const lowercase = {

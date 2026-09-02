@@ -64,6 +64,7 @@ import {
   findPendingSolution,
   forgetPendingSolution,
   savePendingSolution,
+  type PendingSolution,
 } from './lib/pendingSolutions'
 import {
   closeSolutionJob,
@@ -994,6 +995,10 @@ function HomePage() {
   const restoredJobKeysRef = useRef(new Set<string>())
   const deviceIdRef = useRef('')
   if (!deviceIdRef.current) deviceIdRef.current = getDeviceId()
+  /* Запрос этой вкладки держим ещё и в памяти. localStorage бывает полон или
+     закрыт — фотография весит мегабайты, — и тогда задача, поставленная
+     только что здесь же, падала как «страница закрылась раньше». */
+  const pendingPayloadsRef = useRef(new Map<string, PendingSolution>())
   const [selectedSolution, setSelectedSolution] = useState<SolutionState | null>(() => currentNavigationRoute().solution)
   const [generatedSolutions, setGeneratedSolutions] = useState<HomeworkSolution[]>(loadGeneratedSolutions)
   const [supabaseClient, setSupabaseClient] = useState<SupabaseClient<Database> | null>(null)
@@ -1654,7 +1659,7 @@ function HomePage() {
      Здесь и только здесь идёт сам запрос: строка очереди говорит, что решать,
      а сам запрос уходит с того устройства, где лежат фотография и сессия. */
   const runSolutionJob = useCallback(async (job: SolutionJob): Promise<SolutionState | null> => {
-    const payload = findPendingSolution(job.idempotencyKey)
+    const payload = findPendingSolution(job.idempotencyKey) ?? pendingPayloadsRef.current.get(job.idempotencyKey) ?? null
 
     if (!payload) {
       const reason = 'Задача не ушла в работу: страница закрылась раньше. Поставь её заново'
@@ -1719,6 +1724,7 @@ function HomePage() {
       ])
 
       forgetPendingSolution(job.idempotencyKey)
+      pendingPayloadsRef.current.delete(job.idempotencyKey)
       // Подпись задачи берётся из ответа сервера, а не из клиентского среза
       // условия: сервер прогоняет её через trim, и срез, кончавшийся пробелом,
       // уже не совпадал с сохранённым решением.
@@ -1863,7 +1869,7 @@ function HomePage() {
     const conditionPreview = submission.condition?.trim()
       || (submission.source === 'photo' ? 'Задача с фотографии' : resolvedTask)
 
-    savePendingSolution({
+    const pendingPayload: PendingSolution = {
       idempotencyKey: submission.idempotencyKey,
       textbookId: submission.textbookId,
       task: resolvedTask,
@@ -1872,7 +1878,9 @@ function HomePage() {
       ...(submission.imageDataUrl ? { imageDataUrl: submission.imageDataUrl } : {}),
       ...(submission.subject ? { subject: submission.subject } : {}),
       ...(submission.grade ? { grade: submission.grade } : {}),
-    })
+    }
+    pendingPayloadsRef.current.set(submission.idempotencyKey, pendingPayload)
+    savePendingSolution(pendingPayload)
 
     const queued = localSolutionJob({
       idempotencyKey: submission.idempotencyKey,
@@ -1913,6 +1921,7 @@ function HomePage() {
       void closeSolutionJob(supabaseClient, job.idempotencyKey, 'canceled', 'Задача снята с очереди', guestJobId)
     }
     forgetPendingSolution(job.idempotencyKey)
+    pendingPayloadsRef.current.delete(job.idempotencyKey)
     setLocalJobs((current) => current.filter((entry) => entry.idempotencyKey !== job.idempotencyKey))
     setDismissedJobKeys((current) => {
       const next = [job.idempotencyKey, ...current.filter((key) => key !== job.idempotencyKey)]
@@ -1924,7 +1933,7 @@ function HomePage() {
   // Повтор берёт сохранённый запрос: заново набирать условие или искать
   // фотографию после чужого сбоя — то, за что продукт и ругают.
   const retryJob = (job: SolutionJob) => {
-    const payload = findPendingSolution(job.idempotencyKey)
+    const payload = findPendingSolution(job.idempotencyKey) ?? pendingPayloadsRef.current.get(job.idempotencyKey) ?? null
     dismissJob(job)
     if (!payload) return
 

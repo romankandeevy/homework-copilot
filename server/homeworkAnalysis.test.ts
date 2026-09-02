@@ -111,16 +111,20 @@ function stubProvider(handler: (url: string, stage: Stage) => unknown) {
 }
 
 describe('два независимых прохода', () => {
-  it('делает два прохода моделями из пула пригодных семейств', async () => {
-    const { urls, fetchImpl } = stubProvider(() => responsesPayload(draft))
+  it('делает два прохода моделями из разных семейств пула', async () => {
+    const { urls, fetchImpl } = stubProvider((url) => (
+      url.includes('/codex/') ? responsesPayload(draft) : geminiPayload(draft)
+    ))
 
     const solution = await solveHomeworkWithReview(request, { apiKey: 'test-key', fetchImpl })
 
-    // Gemini через KIE не принимает строгую схему решателя, поэтому в пуле
-    // осталось одно пригодное семейство и оба прохода идут им.
-    expect(defaultHomeworkModels).toEqual(['gpt-5-6-luna'])
+    // 2 сентября путь /codex лежал целиком. Второе семейство в пуле — страховка
+    // от такого дня: проходы расходятся по разным протоколам шлюза, и отказ
+    // одного не уносит решение.
+    expect(defaultHomeworkModels).toEqual(['gpt-5-6-luna', 'gemini-3-5-flash-openai'])
     expect(urls).toHaveLength(2)
-    expect(urls.every((url) => url === 'https://api.kie.ai/codex/v1/responses')).toBe(true)
+    expect(urls).toContain('https://api.kie.ai/codex/v1/responses')
+    expect(urls).toContain('https://api.kie.ai/gemini-3-5-flash-openai/v1/chat/completions')
     // Оба прохода чистые и сошлись в ответе — рецензент не нужен.
     expect(solution.quality?.reviewPassed).toBe(true)
   })
