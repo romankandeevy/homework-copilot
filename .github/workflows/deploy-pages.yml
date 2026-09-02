@@ -32,26 +32,15 @@ jobs:
       # шрифты рисуются иначе. Их прогоняют локально — `npm run test:visual`.
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
-        id: e2e
         env:
           # Без ключей базы клиент Supabase не создаётся, приложение остаётся
           # на экране загрузки, и падают все тесты подряд, а не один.
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
-      # Разовая диагностика: если браузерные тесты упали, сохраняем то, что
-      # реально отдал dev-сервер, — иначе причина видна только по симптому.
-      - if: failure() && steps.e2e.outcome == 'failure'
-        run: |
-          npx vite --host 127.0.0.1 --port 4173 &
-          npx wait-on http://127.0.0.1:4173 -t 60000 || true
-          echo '--- / ---'; curl -s http://127.0.0.1:4173/ | head -c 1500
-          echo; echo '--- /app ---'; curl -s http://127.0.0.1:4173/app | head -c 800
-          echo; echo '--- main.tsx ---'; curl -s -o /dev/null -w '%{http_code}
-' http://127.0.0.1:4173/src/main.tsx
-        env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
-      - if: failure() && steps.e2e.outcome == 'failure'
+      # Если браузерные проверки упали, отчёт нужен целиком: в нём лежит
+      # снимок страницы на момент падения, а по одному симптому причину
+      # на другой системе не восстановить.
+      - if: ${{ failure() }}
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
@@ -59,6 +48,7 @@ jobs:
             playwright-report/
             test-results/
           retention-days: 3
+          if-no-files-found: ignore
       - run: npm run build
         env:
           GITHUB_PAGES_CUSTOM_DOMAIN: www.homeworkcopilot.ru
