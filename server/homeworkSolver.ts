@@ -820,7 +820,13 @@ export async function handleHomeworkSolverRequest(
       error: error instanceof HomeworkSolverError ? error.message : 'Не получилось подготовить решение. Попробуй ещё раз',
     })
     await job.flush()
-    logSolverEvent('error', 'homework_solve_failed', {
+    /* Ожидаемый исход — не поломка.
+
+       «Бесплатное решение уже использовано» и «на балансе недостаточно» — это
+       нормальный ответ продукта, а не сбой. В журнале ошибок они лежали рядом
+       с настоящими отказами и превращали разбор простоя в перебор шума. */
+    const expectedOutcome = status === 402 || status === 400 || status === 422
+    logSolverEvent(expectedOutcome ? 'info' : 'error', 'homework_solve_failed', {
       requestId: solveRequestId,
       task: taskNumber,
       source,

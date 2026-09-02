@@ -13,6 +13,11 @@ test.describe('GeometryNotebookLayoutV1 visual regression', () => {
       await page.setViewportSize(viewport)
       await page.goto('/?canvas=1')
 
+      // Лист грузится отдельным чанком: без ожидания снимок делался с пустой
+      // страницы и расходился с эталоном на каждой второй прогонке.
+      await expect(page.getByTestId('geometry-notebook-page')).toBeVisible()
+      await page.evaluate(() => document.fonts.ready)
+
       await expect(page).toHaveScreenshot(`geometry-notebook-layout-v1-${viewport.width}x${viewport.height}.png`, { fullPage: true })
     })
   }

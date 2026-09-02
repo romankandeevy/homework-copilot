@@ -363,3 +363,6 @@
   .site-footer-column button { min-height: 2.75rem; font-size: var(--text-small); }
   .site-footer-meta { align-items: flex-start; flex-direction: column; gap: var(--space-2); padding: var(--space-5) var(--space-5) 5.5rem; font-size: var(--text-caption); }
 }
+
+/* Запасной канал для гостя: тише кнопки входа, но на виду. */
+.support-auth-gate-email { margin: var(--space-3) 0 0; color: var(--color-text-subtle); font-size: var(--text-small); line-height: var(--leading-copy); }

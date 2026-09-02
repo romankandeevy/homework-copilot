@@ -13,7 +13,7 @@ import {
   X,
 } from '@phosphor-icons/react'
 import { keyed } from './lib/listKeys'
-import { formatRubles } from './lib/currency'
+import { formatRubles, rublesToKopecks } from './lib/currency'
 import type { Json } from './lib/database.types'
 import { supabase } from './lib/supabase'
 import './SupportAdminPanel.css'
@@ -248,6 +248,8 @@ export default function SupportAdminPanel({ preview = false }: { preview?: boole
       return
     }
     if (!supabase) return
+    // Поле рублёвое, а база с 30 августа считает в копейках: без перевода
+    // «10 ₽» начисляли как 10 копеек, а уведомление говорило про рубли.
     const amount = Number(creditAmount)
     if (!Number.isInteger(amount) || amount < 1 || amount > 10000 || creditReason.trim().length < 3) {
       setError('Укажи целую сумму от 1 до 10 000 ₽ и причину от 3 символов.')
@@ -255,7 +257,7 @@ export default function SupportAdminPanel({ preview = false }: { preview?: boole
     }
     setActionLoading(true)
     setError('')
-    const { data, error: creditError } = await supabase.rpc('admin_credit_feature_balance', { p_conversation_id: detail.conversation.id, p_amount: amount, p_reason: creditReason.trim() })
+    const { data, error: creditError } = await supabase.rpc('admin_credit_feature_balance', { p_conversation_id: detail.conversation.id, p_amount: rublesToKopecks(amount), p_reason: creditReason.trim() })
     if (creditError) {
       const approvalMissing = /owner approval required|idea was rejected/i.test(creditError.message)
       setError(approvalMissing ? 'Начисление не разрешено: нужно одобрение владельца в этом диалоге.' : 'Не получилось начислить баланс.')

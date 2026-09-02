@@ -16,7 +16,8 @@
     "test:referral-browser": "node scripts/verify-referral-browser.mjs",
     "test:admin-browser": "node scripts/verify-admin-browser.mjs",
     "test:visual": "playwright test",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:e2e": "playwright test --grep-invert \"visual regression\""
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",

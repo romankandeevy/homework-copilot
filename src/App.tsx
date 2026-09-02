@@ -780,6 +780,7 @@ function UnderstandingPage({
   onOpenAccount: () => void
 }) {
   const [copied, setCopied] = useState(false)
+  const [copyFailed, setCopyFailed] = useState(false)
   // Исходный чертёж из скана учебника больше не подгружается: сканов нет,
   // а чертёж строится движком по условию.
 
@@ -806,10 +807,28 @@ function UnderstandingPage({
       ...(source.answer ? ['Ответ: ' + source.answer] : []),
     ].join('\n')
 
-    if (!navigator.clipboard?.writeText) return
-    await navigator.clipboard.writeText(value)
-    setCopied(true)
+    /* Clipboard API есть не везде: он требует защищённого соединения и
+       разрешения. Раньше кнопка в таком случае молчала — человек жал и не
+       понимал, скопировалось ли. Запасной путь — скрытое поле и execCommand,
+       а если и он не сработал, говорим прямо. */
+    try {
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(value)
+      else if (!copyThroughSelection(value)) throw new Error('clipboard unavailable')
+      setCopied(true)
+      setCopyFailed(false)
+    } catch {
+      setCopied(false)
+      setCopyFailed(true)
+    }
   }
+
+  /* Подпись «Скопировано» сбрасывается сама: раньше она оставалась навсегда,
+     и следующее нажатие выглядело так, будто ничего не произошло. */
+  useEffect(() => {
+    if (!copied) return
+    const timer = window.setTimeout(() => setCopied(false), 2000)
+    return () => window.clearTimeout(timer)
+  }, [copied])
 
   const disclaimer = (
     <p className="solution-disclaimer">Решение помогает разобраться. Проверь ответ перед сдачей.</p>
@@ -833,7 +852,7 @@ function UnderstandingPage({
     <div className="solution-actions">
       {(notebookFixture || generatedSolution) && (
         <button className="route-primary-action" type="button" onClick={() => { void copySolution() }}>
-          {copied ? 'Скопировано' : 'Скопировать решение'}
+          {copied ? 'Скопировано' : copyFailed ? 'Не скопировалось — выдели и скопируй сам' : 'Скопировать решение'}
           <Check size={18} weight="bold" aria-hidden="true" />
         </button>
       )}
@@ -952,6 +971,26 @@ function UnderstandingPage({
    Раньше любой такой путь молча показывал главную и оставлял мусорный адрес
    в строке браузера: опечатка в ссылке выглядела как рабочая страница, а её
    потом ещё и пересылали. */
+/* Копирование там, где Clipboard API недоступен: временное поле, выделение,
+   execCommand. Способ устаревший, но он работает и на HTTP, и в старых
+   браузерах телефона. */
+function copyThroughSelection(value: string) {
+  try {
+    const field = document.createElement('textarea')
+    field.value = value
+    field.setAttribute('readonly', '')
+    field.style.position = 'fixed'
+    field.style.opacity = '0'
+    document.body.append(field)
+    field.select()
+    const copied = document.execCommand('copy')
+    field.remove()
+    return copied
+  } catch {
+    return false
+  }
+}
+
 function NotFoundScreen({ onGoHome }: { onGoHome: () => void }) {
   return (
     <section className="route-empty" aria-labelledby="not-found-title">
@@ -1048,6 +1087,8 @@ function HomePage() {
   const [passwordRecovery, setPasswordRecovery] = useState(() => new URLSearchParams(window.location.search).get('auth') === 'reset')
   const [pendingVerificationEmail, setPendingVerificationEmail] = useState(() => sessionStorage.getItem('homework-copilot:google-verification-email') ?? '')
   const [accountNotice, setAccountNotice] = useState('')
+  // Сообщение над очередью: то, что случилось с задачей, а не с аккаунтом.
+  const [queueNotice, setQueueNotice] = useState('')
   const [supportOpen, setSupportOpen] = useState(() => currentApplicationPath() === '/support')
   const [supportCategory, setSupportCategory] = useState<SupportCategory>('general')
   const [supportContext, setSupportContext] = useState<SupportPrefill | undefined>(undefined)
@@ -1904,6 +1945,7 @@ function HomePage() {
     const conditionPreview = submission.condition?.trim()
       || (submission.source === 'photo' ? 'Задача с фотографии' : resolvedTask)
 
+    setQueueNotice('')
     const pendingPayload: PendingSolution = {
       idempotencyKey: submission.idempotencyKey,
       textbookId: submission.textbookId,
@@ -1970,7 +2012,13 @@ function HomePage() {
   const retryJob = (job: SolutionJob) => {
     const payload = findPendingSolution(job.idempotencyKey) ?? pendingPayloadsRef.current.get(job.idempotencyKey) ?? null
     dismissJob(job)
-    if (!payload) return
+    if (!payload) {
+      // Запрос мог не пережить перезаход: хранилище держит шесть последних,
+      // и фотографии вытесняют старые. Молча убирать карточку нельзя —
+      // человек жмёт «Решить ещё раз» и не понимает, куда всё делось.
+      setQueueNotice('Условие этой задачи не сохранилось. Впиши его заново — это займёт минуту')
+      return
+    }
 
     const idempotencyKey = typeof crypto.randomUUID === 'function'
       ? `solution-${crypto.randomUUID()}`
@@ -2020,6 +2068,7 @@ function HomePage() {
               {!user && <GuestSolutionsNote onOpenAccount={openAccount} freeSolutionUsed={guestFreeSolutionUsed} />}
               {(visibleJobs.length > 0 || user) && (
                 <div className="home-column home-column-primary">
+                  {queueNotice && <p className="solve-queue-notice" role="status">{queueNotice}</p>}
                   <SolutionQueue
                     jobs={visibleJobs}
                     deviceId={deviceIdRef.current}

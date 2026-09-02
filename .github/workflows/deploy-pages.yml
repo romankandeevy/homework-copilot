@@ -26,6 +26,12 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run test
+      # Браузерные проверки не гонялись в CI вовсе: к 2 сентября из 45 тестов
+      # падали 12, и половина — под давно удалённый раздел. Снимки тетради
+      # сюда не входят: эталоны сняты на Windows, а сборка идёт на Linux, где
+      # шрифты рисуются иначе. Их прогоняют локально — `npm run test:visual`.
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
       - run: npm run build
         env:
           GITHUB_PAGES_CUSTOM_DOMAIN: www.homeworkcopilot.ru

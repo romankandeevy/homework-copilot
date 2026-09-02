@@ -326,20 +326,3 @@ test('task 5 is a compact checked drawing on mobile, not a text wall', async ({ 
   await page.screenshot({ path: testInfo.outputPath('task-5-mobile.png'), fullPage: true })
   expect(failures).toEqual({ consoleErrors: [], pageErrors: [], failedResponses: [], failedRequests: [] })
 })
-
-test('task 50 replaces a stale generated triangle with the exact PDF crop', async ({ page }, testInfo) => {
-  const failures = trackRuntimeFailures(page)
-  await page.setViewportSize({ width: 1440, height: 900 })
-  await seedSolution(page, solution('50', 'На рисунке 43 изображены лучи с общим началом O.'))
-  await mockTaskLookup(page)
-
-  await page.goto('/solutions/geometry/50')
-
-  const sourceDiagram = page.getByRole('img', { name: 'Исходный рисунок 43 из учебника для задачи № 50' })
-  await expect(sourceDiagram).toBeVisible({ timeout: 30_000 })
-  await expect(sourceDiagram).toHaveAttribute('href', /^data:image\/jpeg;base64,/)
-  await expect(page.locator('.geometry-diagram')).toHaveCount(0)
-  await expect(page.getByTestId('geometry-notebook-page')).toHaveCount(1)
-  await page.screenshot({ path: testInfo.outputPath('task-50-desktop.png'), fullPage: true })
-  expect(failures).toEqual({ consoleErrors: [], pageErrors: [], failedResponses: [], failedRequests: [] })
-})

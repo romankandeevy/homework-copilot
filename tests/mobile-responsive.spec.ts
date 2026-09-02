@@ -335,6 +335,11 @@ test.describe('адаптация под телефон', () => {
     await expect(createAccount).toBeDisabled()
     await personalData.check({ force: true })
     await expect(personalData).toBeChecked()
+    await expect(createAccount).toBeDisabled()
+    // Третья отметка: часть аудитории младше четырнадцати лет и принимает
+    // документы через законного представителя.
+    const age = page.getByRole('checkbox', { name: /14 лет/ })
+    await age.check({ force: true })
     await expect(createAccount).toBeEnabled()
     await expect(page.getByRole('meter', { name: 'Надёжность пароля' })).toHaveAttribute('aria-valuetext', 'Надёжный')
     await expect(page.getByRole('textbox', { name: 'Имя' })).toHaveCSS('box-shadow', 'none')
@@ -369,7 +374,12 @@ test.describe('адаптация под телефон', () => {
       await expect(page.getByRole('tab', { name: /Пн|Понедельник/ })).toHaveAttribute('aria-selected', 'true')
       await page.getByRole('tab', { name: /Вт|Вторник/ }).click()
       await expect(page.getByRole('tab', { name: /Вт|Вторник/ })).toHaveAttribute('aria-selected', 'true')
-      await expect(page.getByLabel('Предмет, вторник, урок 1', { exact: true })).toHaveValue('Геометрия')
+      // Сетка нового ученика пуста: чужой восьмой класс больше не выдаётся
+      // за своё расписание. Проверяем, что поле выбранного дня открылось и
+      // принимает ввод — второй проход идёт по уже сохранённому расписанию.
+      const lesson = page.getByLabel('Предмет, вторник, урок 1', { exact: true })
+      await lesson.fill('Геометрия')
+      await expect(lesson).toHaveValue('Геометрия')
     }
   })
 })

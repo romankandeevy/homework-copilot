@@ -52,6 +52,9 @@ test('передаёт модели изображение без браузер
   // подставляет его за ученика — условие читает модель.
   await expect(page.getByRole('textbox', { name: 'Условие задачи' })).toHaveValue('')
   await expect(page.getByText(/распозна/i)).toHaveCount(0)
+  // Предмет обязателен с 31 августа: по нему решение проверяется правилами.
+  // Без него форма отвечает ошибкой и запрос не уходит.
+  await page.getByRole('combobox', { name: 'Предмет' }).selectOption('Геометрия')
   await page.locator('.copy-task-submit').click()
 
   await expect.poll(() => solveRequest).toBeTruthy()

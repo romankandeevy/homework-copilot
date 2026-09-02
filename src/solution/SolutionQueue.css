@@ -359,3 +359,16 @@
   .solve-card.is-solving::before { animation: none; }
   .solve-card.is-solving .solve-card-mark svg { animation: none; }
   .solve-step.is-current .solve-step-dot { animation: none; }}
+
+/* Сообщение над очередью: почему задача не поехала. Тише карточки неудачи —
+   это подсказка, а не сама неудача. */
+.solve-queue-notice {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: var(--text-small);
+  line-height: var(--leading-copy);
+}

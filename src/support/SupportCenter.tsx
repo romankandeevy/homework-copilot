@@ -22,6 +22,9 @@ import './SupportCenter.css'
 
 export type SupportCategory = 'general' | 'payment' | 'feature' | 'wrong_solution'
 
+// Тот же адрес, что в юридических документах (src/LegalPage.tsx).
+const supportEmail = 'roman.kandeevy@gmail.com'
+
 export type SupportPrefill = {
   wrongSolution?: {
     textbookId: string
@@ -285,7 +288,8 @@ export function SupportCenter({ user, supabaseClient, initialCategory, initialCo
 
         <div className="support-center-body">
           {!user ? (
-            <section className="support-auth-gate"><ShieldCheck size={34} weight="duotone" aria-hidden="true" /><div><h2>Поддержка в аккаунте</h2><p>Войди, чтобы отправить обращение и увидеть ответ владельца в этой переписке.</p><button className="support-primary-button" type="button" onClick={onRequireAuth}>Войти в аккаунт <ArrowRight size={17} weight="bold" aria-hidden="true" /></button></div></section>
+            <section className="support-auth-gate"><ShieldCheck size={34} weight="duotone" aria-hidden="true" /><div><h2>Поддержка в аккаунте</h2><p>Войди, чтобы отправить обращение и увидеть ответ владельца в этой переписке.</p><button className="support-primary-button" type="button" onClick={onRequireAuth}>Войти в аккаунт <ArrowRight size={17} weight="bold" aria-hidden="true" /></button>{/* Гость с бесплатным решением аккаунта не имеет, и без этой строки
+                пожаловаться на своё решение ему было некуда. */}<p className="support-auth-gate-email">Без аккаунта напиши на <a href={`mailto:${supportEmail}`}>{supportEmail}</a> — приложи условие и полученное решение.</p></div></section>
           ) : (
             <>
               <div className="support-center-intro"><div><span className="support-kicker">Личные обращения</span><h2>{selectedConversation && !showNew ? selectedConversation.subject : 'Чем помочь?'}</h2><p>{selectedConversation && !showNew ? 'Ответ владельца появится здесь и продублируется в статусе обращения.' : 'Выбери тему, опиши ситуацию — мы сохраним переписку в твоём аккаунте.'}</p></div>{selectedConversation && !showNew && <button className="support-back-button" type="button" onClick={() => { setShowNew(true); setSelectedId(null); setNotice(''); setError('') }}><ArrowLeft size={16} weight="bold" aria-hidden="true" /> Все обращения</button>}</div>

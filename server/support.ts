@@ -3,6 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createClient } from '@supabase/supabase-js'
 import type { SupabaseClient, User } from '@supabase/supabase-js'
 import type { Database, Json } from '../src/lib/database.types.ts'
+import { formatRubles } from '../src/lib/currency.ts'
 
 export type SupportCategory = 'general' | 'payment' | 'feature' | 'wrong_solution'
 
@@ -358,7 +359,7 @@ async function notifyOwner(
   const notification = [
     `Homework Copilot · ${categoryLabels[conversation.category as SupportCategory]}`,
     `Пользователь: ${account.fullName || 'Ученик'} · ${user.email ?? 'без почты'}`,
-    `Класс: ${account.grade ?? '—'} · баланс ${account.balance ?? '—'} ₽`,
+    `Класс: ${account.grade ?? '—'} · баланс ${account.balance === null || account.balance === undefined ? '—' : formatRubles(account.balance)}`,
     `Статус: ${conversation.status}`,
     '',
     `Сообщение пользователя:\n${message.body}`,

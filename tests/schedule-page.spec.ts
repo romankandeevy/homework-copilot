@@ -51,7 +51,11 @@ test.describe('недельное расписание', () => {
     await expect(page.getByRole('tab', { name: 'Пн' })).toHaveAttribute('aria-selected', 'true')
     await page.getByRole('tab', { name: 'Пт' }).click()
     await expect(page.getByRole('tab', { name: 'Пт' })).toHaveAttribute('aria-selected', 'true')
-    await expect(page.getByLabel('Предмет, пятница, урок 1', { exact: true })).toHaveValue('Химия')
+    // Расписание нового ученика пустое: демо-класс больше не подставляется.
+    const friday = page.getByLabel('Предмет, пятница, урок 1', { exact: true })
+    await expect(friday).toHaveValue('')
+    await friday.fill('Химия')
+    await expect(friday).toHaveValue('Химия')
     const widths = await page.evaluate(() => ({ documentWidth: document.documentElement.scrollWidth, viewportWidth: window.innerWidth }))
     expect(widths.documentWidth).toBeLessThanOrEqual(widths.viewportWidth)
     await expect(page.getByText('Сохраняется в этом браузере')).toBeVisible()
