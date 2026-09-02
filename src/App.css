@@ -1185,6 +1185,12 @@
   min-height: 13rem;
   padding: var(--space-6);
 }
+
+/* Одна карточка вместо трёх: сетка на три колонки оставила бы её жаться
+   к левому краю под двумя пустыми третями. */
+.understanding-flow.is-single {
+  grid-template-columns: minmax(0, 1fr);
+}
 .understanding-flow section + section { border-left: 1px solid var(--color-border); }
 .understanding-flow svg { color: var(--color-brand-accent); }
 

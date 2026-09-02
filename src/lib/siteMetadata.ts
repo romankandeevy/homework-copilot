@@ -5,9 +5,17 @@ export type SeoMetadata = {
   description: string
   path: string
   robots: 'index, follow' | 'noindex, follow' | 'noindex, nofollow'
+  /** У несуществующей страницы канонического адреса нет. По умолчанию — есть. */
+  canonical?: boolean
 }
 
-const metadataByPath: Record<string, SeoMetadata> = {
+/* Один список маршрутов на клиент и на сборку статики.
+
+   Раньше он был записан дважды — здесь и в scripts/create-static-routes.mjs, —
+   и копии разошлись: статика звала «найти условие по номеру в учебнике» из
+   удалённого раздела и открывала ЦДЗ поисковикам, пока клиент закрывал его
+   noindex. */
+export const metadataByPath: Record<string, SeoMetadata> = {
   '/': {
     title: 'Homework Copilot — решение задачи по фото за одну минуту',
     description: 'Сфотографируй задачу или впиши условие. Получишь готовую запись для тетради: дано, ход решения, чертёж и ответ. Любой предмет с 5 по 11 класс.',
@@ -22,7 +30,7 @@ const metadataByPath: Record<string, SeoMetadata> = {
   },
   '/solutions': {
     title: 'Решения задач — Homework Copilot',
-    description: 'Личные и готовые решения задач по выбранным школьным учебникам.',
+    description: 'Личная история решённых задач: открыть любую снова можно бесплатно.',
     path: '/solutions',
     robots: 'index, follow',
   },
@@ -107,7 +115,17 @@ export function getSeoMetadata(pathname: string, task?: string): SeoMetadata {
       robots: 'noindex, nofollow',
     }
   }
-  return metadataByPath[path] ?? metadataByPath['/']
+  /* Неизвестный адрес — это не главная. Раньше он получал её заголовок и её
+     же canonical, то есть опечатка в ссылке объявляла себя главной страницей
+     сайта. Теперь у него собственный заголовок и noindex, а canonical не
+     ставится вовсе: у страницы, которой нет, канонического адреса нет тоже. */
+  return metadataByPath[path] ?? {
+    title: 'Страница не найдена — Homework Copilot',
+    description: 'Такой страницы в Homework Copilot нет.',
+    path,
+    robots: 'noindex, nofollow',
+    canonical: false,
+  }
 }
 
 function upsertMeta(selector: string, attributes: Record<string, string>) {
@@ -130,11 +148,17 @@ export function applySeoMetadata(metadata: SeoMetadata) {
   upsertMeta('meta[name="twitter:title"]', { name: 'twitter:title', content: metadata.title })
   upsertMeta('meta[name="twitter:description"]', { name: 'twitter:description', content: metadata.description })
 
-  let canonical = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]')
-  if (!canonical) {
-    canonical = document.createElement('link')
-    canonical.rel = 'canonical'
-    document.head.append(canonical)
+  const canonical = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]')
+  if (metadata.canonical === false) {
+    canonical?.remove()
+    return
   }
-  canonical.href = canonicalUrl
+  if (canonical) {
+    canonical.href = canonicalUrl
+    return
+  }
+  const created = document.createElement('link')
+  created.rel = 'canonical'
+  created.href = canonicalUrl
+  document.head.append(created)
 }

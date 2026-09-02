@@ -212,6 +212,18 @@ describe('Homework Copilot task flow', () => {
     expect(screen.queryByRole('heading', { level: 1, name: /Сфоткал/ })).not.toBeInTheDocument()
   })
 
+  /* Неизвестный адрес раньше молча показывал главную и оставлял в строке
+     браузера мусорный путь — вместе с canonical главной страницы. */
+  it('на неизвестном адресе показывает 404, а не главную', () => {
+    window.history.replaceState({}, '', '/opechatka')
+    render(<App />)
+
+    expect(screen.getByRole('heading', { name: 'Страница не найдена' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Списать задачу' })).not.toBeInTheDocument()
+    expect(document.head.querySelector('link[rel="canonical"]')).toBeNull()
+    expect(document.head.querySelector('meta[name="robots"]')).toHaveAttribute('content', 'noindex, nofollow')
+  })
+
   it('оставляет прежний адрес `/main` рабочим', () => {
     window.history.replaceState({}, '', '/main')
     render(<App />)

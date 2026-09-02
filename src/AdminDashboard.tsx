@@ -796,7 +796,7 @@ export default function AdminDashboard() {
       setTopUpReference('')
       setNotice(applied
         ? referralRewarded
-          ? 'Пополнение подтверждено. Пригласившему начислено +10 ₽, приглашённому +5 ₽.'
+          ? 'Пополнение подтверждено и записано в историю баланса.'
           : `Пополнение ${userName(detail.user)} подтверждено.`
         : 'Это пополнение уже было подтверждено; повторных начислений нет.')
       await Promise.all([loadDashboard(periodDays), loadUsers(search), loadUserDetail(detail.user.id)])
@@ -1045,7 +1045,7 @@ export default function AdminDashboard() {
           <section className="admin-drawer-balance"><div><span>Текущий баланс</span><strong>{formatRubles(detail.user.balance)}</strong></div><dl><div><dt>Последний визит</dt><dd>{formatDate(detail.user.lastSeenAt)}</dd></div><div><dt>Статус</dt><dd>{detail.user.isBanned ? 'Заблокирован' : 'Активен'}</dd></div></dl></section>
 
           <form className="admin-action-form is-verified-top-up" onSubmit={recordVerifiedTopUp}>
-            <header><CurrencyRub size={19} weight="duotone" aria-hidden="true" /><div><h3>Подтвердить пополнение</h3><p>Первое подтверждённое пополнение запускает реферальные +10 ₽ и +5 ₽.</p></div></header>
+            <header><CurrencyRub size={19} weight="duotone" aria-hidden="true" /><div><h3>Подтвердить пополнение</h3><p>Ручная запись оплаты, которую подтвердил банк. Реферальные +10 ₽ и +5 ₽ приходят сами при подтверждении почты и от пополнения не зависят.</p></div></header>
             <label><span>Сумма, ₽</span><input type="number" value={topUpAmount} onChange={(event) => setTopUpAmount(event.target.value)} min={1} max={1000000} step="1" inputMode="numeric" placeholder="Например, 100" /></label>
             <label><span>Идентификатор транзакции</span><input value={topUpReference} onChange={(event) => setTopUpReference(event.target.value)} minLength={6} maxLength={160} autoComplete="off" placeholder="Например, bank-20260828-001" /></label>
             <button className="admin-primary-action" type="submit" disabled={actionLoading !== null}>{actionLoading === 'top-up' ? 'Подтверждаем…' : 'Подтвердить пополнение'}</button>

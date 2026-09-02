@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="Сфотографируй задачу или впиши условие. Получишь готовую запись для тетради: дано, ход решения, чертёж и ответ. Любой предмет с 5 по 11 класс." />
     <meta name="robots" content="index, follow" />
+    <!-- Заголовки из vercel.json на GitHub Pages не действуют: Pages их не
+         ставит, а фронт раздаёт именно он. Политику держим в разметке —
+         `frame-ancestors` в meta не работает, от кликджекинга защищает
+         `X-Frame-Options` на стороне Vercel. `cdn.jsdelivr.net` нужен
+         распознаванию расписания: tesseract.js берёт оттуда языковые данные. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://homework-copilot-taupe.vercel.app https://cdn.jsdelivr.net; font-src 'self' data:; form-action 'self'; frame-src https://accounts.google.com https://*.supabase.co; img-src 'self' data: blob: https://*.supabase.co; manifest-src 'self'; media-src 'self'; object-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:" />
     <meta name="application-name" content="Homework Copilot" />
     <meta name="apple-mobile-web-app-title" content="Homework Copilot" />
     <meta property="og:type" content="website" />
@@ -25,6 +31,8 @@
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a0a0a" />
     <link rel="canonical" href="https://www.homeworkcopilot.ru/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- iOS не читает manifest: домашний экран берёт только эту иконку. -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
     <title>Homework Copilot — решение задачи по фото за одну минуту</title>
     <script type="application/ld+json">

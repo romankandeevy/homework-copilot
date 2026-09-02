@@ -64,24 +64,13 @@ const weekdays: ReadonlyArray<{ id: WeekdayId; label: string; short: string }> =
   { id: 'saturday', label: 'Суббота', short: 'Сб' },
 ]
 
-const starterSchedule: ScheduleEntry[] = [
-  { id: 'monday-1', day: 'monday', time: defaultLessonTimes[0], subject: 'Алгебра', room: '312' },
-  { id: 'monday-2', day: 'monday', time: defaultLessonTimes[1], subject: 'Русский язык', room: '218' },
-  { id: 'monday-3', day: 'monday', time: defaultLessonTimes[2], subject: 'Физика', room: '406' },
-  { id: 'monday-4', day: 'monday', time: defaultLessonTimes[3], subject: 'История', room: '205' },
-  { id: 'tuesday-1', day: 'tuesday', time: defaultLessonTimes[0], subject: 'Геометрия', room: '312' },
-  { id: 'tuesday-2', day: 'tuesday', time: defaultLessonTimes[1], subject: 'Литература', room: '218' },
-  { id: 'tuesday-3', day: 'tuesday', time: defaultLessonTimes[2], subject: 'Английский язык', room: '314' },
-  { id: 'wednesday-1', day: 'wednesday', time: defaultLessonTimes[0], subject: 'Биология', room: '303' },
-  { id: 'wednesday-2', day: 'wednesday', time: defaultLessonTimes[1], subject: 'Алгебра', room: '312' },
-  { id: 'wednesday-3', day: 'wednesday', time: defaultLessonTimes[2], subject: 'Информатика', room: '401' },
-  { id: 'thursday-1', day: 'thursday', time: defaultLessonTimes[0], subject: 'Русский язык', room: '218' },
-  { id: 'thursday-2', day: 'thursday', time: defaultLessonTimes[1], subject: 'География', room: '307' },
-  { id: 'thursday-3', day: 'thursday', time: defaultLessonTimes[2], subject: 'Физкультура', room: 'Зал' },
-  { id: 'friday-1', day: 'friday', time: defaultLessonTimes[0], subject: 'Химия', room: '408' },
-  { id: 'friday-2', day: 'friday', time: defaultLessonTimes[1], subject: 'Геометрия', room: '312' },
-  { id: 'friday-3', day: 'friday', time: defaultLessonTimes[2], subject: 'Обществознание', room: '205' },
-]
+/* Новый ученик начинает с пустой сетки.
+
+   Раньше здесь лежало расписание восьмого класса — Алгебра/312, Физика/406 и
+   так далее. Оно показывалось как своё и при первом входе уходило в аккаунт,
+   хотя человек не ввёл ни строки. Пустая таблица честнее: время уроков
+   подставляется типовое, предметы вписывает сам ученик или распознавание. */
+const starterSchedule: ScheduleEntry[] = []
 
 function loadSchedule() {
   try {
@@ -617,7 +606,7 @@ function SchedulePage({ userId = null, grade = 8 }: { userId?: string | null; gr
               {saveState === 'loading' ? 'Загружаем расписание из аккаунта' : saveState === 'saving' ? 'Сохраняем в аккаунте' : saveState === 'saved' ? 'Сохранено в аккаунте' : saveState === 'error' ? 'Не получилось сохранить в аккаунте' : 'Сохраняется в этом браузере'}
             </span>
           </div>
-          <span className="schedule-toolbar-meta">{timeSlots.length} уроков · {weekdays.length} дней</span>
+          <span className="schedule-toolbar-meta">{timeSlots.length} {lessonWord(timeSlots.length)} · {weekdays.length} дней</span>
         </header>
 
         <div className="schedule-table-scroll" tabIndex={0} aria-label="Таблица расписания, на узком экране листается по горизонтали">

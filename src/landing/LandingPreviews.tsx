@@ -159,8 +159,8 @@ export function TaskFormPreview({ typed, submitted }: { typed: string; submitted
       </div>
       <div className="stage-controls">
         <span className="stage-chip"><ImageSquare size={17} weight="duotone" aria-hidden="true" />Добавить фото</span>
-        <span className="stage-chip is-muted">Предмет — определим сами</span>
-        <span className="stage-chip is-muted">Класс — определим сами</span>
+        <span className="stage-chip is-muted">Предмет: геометрия</span>
+        <span className="stage-chip is-muted">Класс: 8</span>
         <span className={`stage-submit${submitted ? ' is-pressed' : ''}`}>
           Решить
           <ArrowRight size={18} weight="bold" aria-hidden="true" />

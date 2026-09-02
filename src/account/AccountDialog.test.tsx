@@ -36,7 +36,10 @@ describe('AccountDialog profile', () => {
 
     expect(screen.getByRole('navigation', { name: 'Раздел аккаунта' })).toBeInTheDocument()
     expect(screen.getByRole('region', { name: '20 ₽' })).toBeInTheDocument()
-    expect(screen.getByText('одно решение, зависит от сложности')).toBeInTheDocument()
+    // Цена одна и берётся из solutionPricing: лестница 5/10/15 ₽ снята вместе
+    // с номерами задач, а кошелёк ещё год назад обещал «зависит от сложности».
+    expect(screen.getByText('одно решение, любой предмет')).toBeInTheDocument()
+    expect(screen.getByText('5 ₽')).toBeInTheDocument()
     expect(screen.queryByText('Журнал нельзя изменить')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Профиль' }))

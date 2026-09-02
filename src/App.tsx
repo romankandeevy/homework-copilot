@@ -17,7 +17,6 @@ import {
   Flask,
   Function,
   Globe,
-  Hash,
   Planet,
   Scroll,
   TextAa,
@@ -253,6 +252,20 @@ function currentNavigationRoute(pathname = window.location.pathname): { label: N
   return { label: 'Главная', solution: null }
 }
 
+/* Адреса, которые приложение действительно обслуживает. Всё остальное —
+   404, а не тихая главная. Легальные страницы и витрина разбираются выше,
+   в `App`, поэтому в списке их нет. */
+const knownApplicationPaths = new Set([
+  // `/` попадает сюда с возврата авторизации: витрина отдаёт его приложению,
+  // а `normalizeNavigationPath` переписывает на `/app`.
+  '/', '/app', '/main', '/solutions', '/base', '/cdz', '/tasks', '/textbooks',
+  '/chat', '/schedule', '/support',
+])
+
+function isKnownApplicationPath(pathname: string) {
+  return knownApplicationPaths.has(pathname) || /^\/solutions\/[^/]+\/[^/]+$/i.test(pathname)
+}
+
 function normalizeNavigationPath(pathname: string) {
   const path = currentApplicationPath(pathname)
   if (path === '/textbooks' || path === '/tasks') return '/cdz'
@@ -275,7 +288,7 @@ const textbooks: readonly Textbook[] = [
   {
     id: 'mathematics',
     subject: 'Математика',
-    grade: '7-11 класс',
+    grade: '5–11 класс',
     title: 'Любой учебник',
     authors: 'Сфотографируй задачу или впиши условие',
     edition: 'по фото или тексту',
@@ -287,7 +300,7 @@ const textbooks: readonly Textbook[] = [
   {
     id: 'algebra',
     subject: 'Алгебра',
-    grade: '7-11 класс',
+    grade: '5–11 класс',
     title: 'Любой учебник',
     authors: 'Сфотографируй задачу или впиши условие',
     edition: 'по фото или тексту',
@@ -299,7 +312,7 @@ const textbooks: readonly Textbook[] = [
   {
     id: 'geometry',
     subject: 'Геометрия',
-    grade: '7-11 класс',
+    grade: '5–11 класс',
     title: 'Любой учебник',
     authors: 'Сфотографируй задачу или впиши условие',
     edition: 'по фото или тексту',
@@ -311,7 +324,7 @@ const textbooks: readonly Textbook[] = [
   {
     id: 'physics',
     subject: 'Физика',
-    grade: '7-11 класс',
+    grade: '5–11 класс',
     title: 'Любой учебник',
     authors: 'Сфотографируй задачу или впиши условие',
     edition: 'по фото или тексту',
@@ -323,7 +336,7 @@ const textbooks: readonly Textbook[] = [
   {
     id: 'chemistry',
     subject: 'Химия',
-    grade: '7-11 класс',
+    grade: '5–11 класс',
     title: 'Любой учебник',
     authors: 'Сфотографируй задачу или впиши условие',
     edition: 'по фото или тексту',
@@ -335,7 +348,7 @@ const textbooks: readonly Textbook[] = [
   {
     id: 'biology',
     subject: 'Биология',
-    grade: '7-11 класс',
+    grade: '5–11 класс',
     title: 'Любой учебник',
     authors: 'Сфотографируй задачу или впиши условие',
     edition: 'по фото или тексту',
@@ -347,7 +360,7 @@ const textbooks: readonly Textbook[] = [
   {
     id: 'informatics',
     subject: 'Информатика',
-    grade: '7-11 класс',
+    grade: '5–11 класс',
     title: 'Любой учебник',
     authors: 'Сфотографируй задачу или впиши условие',
     edition: 'по фото или тексту',
@@ -359,7 +372,7 @@ const textbooks: readonly Textbook[] = [
   {
     id: 'russian',
     subject: 'Русский язык',
-    grade: '7-11 класс',
+    grade: '5–11 класс',
     title: 'Любой учебник',
     authors: 'Сфотографируй задачу или впиши условие',
     edition: 'по фото или тексту',
@@ -371,7 +384,7 @@ const textbooks: readonly Textbook[] = [
   {
     id: 'literature',
     subject: 'Литература',
-    grade: '7-11 класс',
+    grade: '5–11 класс',
     title: 'Любой учебник',
     authors: 'Сфотографируй задачу или впиши условие',
     edition: 'по фото или тексту',
@@ -383,7 +396,7 @@ const textbooks: readonly Textbook[] = [
   {
     id: 'english',
     subject: 'Английский язык',
-    grade: '7-11 класс',
+    grade: '5–11 класс',
     title: 'Любой учебник',
     authors: 'Сфотографируй задачу или впиши условие',
     edition: 'по фото или тексту',
@@ -395,7 +408,7 @@ const textbooks: readonly Textbook[] = [
   {
     id: 'history',
     subject: 'История',
-    grade: '7-11 класс',
+    grade: '5–11 класс',
     title: 'Любой учебник',
     authors: 'Сфотографируй задачу или впиши условие',
     edition: 'по фото или тексту',
@@ -407,7 +420,7 @@ const textbooks: readonly Textbook[] = [
   {
     id: 'social',
     subject: 'Обществознание',
-    grade: '7-11 класс',
+    grade: '5–11 класс',
     title: 'Любой учебник',
     authors: 'Сфотографируй задачу или впиши условие',
     edition: 'по фото или тексту',
@@ -419,7 +432,7 @@ const textbooks: readonly Textbook[] = [
   {
     id: 'geography',
     subject: 'География',
-    grade: '7-11 класс',
+    grade: '5–11 класс',
     title: 'Любой учебник',
     authors: 'Сфотографируй задачу или впиши условие',
     edition: 'по фото или тексту',
@@ -431,7 +444,7 @@ const textbooks: readonly Textbook[] = [
   {
     id: 'astronomy',
     subject: 'Астрономия',
-    grade: '7-11 класс',
+    grade: '5–11 класс',
     title: 'Любой учебник',
     authors: 'Сфотографируй задачу или впиши условие',
     edition: 'по фото или тексту',
@@ -919,15 +932,37 @@ function UnderstandingPage({
   return (
     <section className="route-page" aria-labelledby="understanding-page-title">
       <header className="route-page-header">
-        <h1 id="understanding-page-title">Решение</h1>
-        <p>Открой готовый ответ, чтобы увидеть условие, ход решения и ответ в одном месте.</p>
+        <h1 id="understanding-page-title">Решение не открылось</h1>
+        <p>По этому адресу решения нет — оно не сохранено в этом браузере и не привязано к твоему аккаунту.</p>
       </header>
-      <div className="understanding-flow">
-        <section><BookOpenText size={30} weight="duotone" aria-hidden="true" /><h2>Выбери учебник</h2><p>Номер задачи проверяется только внутри конкретного учебника.</p></section>
-        <section><Hash size={30} weight="duotone" aria-hidden="true" /><h2>Укажи задачу</h2><p>Если ответ уже есть в базе, его можно открыть без ожидания.</p></section>
-        <section><Notebook size={30} weight="duotone" aria-hidden="true" /><h2>Проверь ответ</h2><p>Готовое решение оформлено так, чтобы его было удобно переписать в тетрадь.</p></section>
+      {/* Сюда попадают по прямой ссылке на решение, которого нет ни в этом
+          браузере, ни в аккаунте: чужая ссылка, очищенное хранилище, решение
+          гостя старше недели. Прежний текст звал выбрать учебник и обещал
+          общую базу — обеих функций в продукте давно нет. */}
+      <div className="understanding-flow is-single">
+        <section><Notebook size={30} weight="duotone" aria-hidden="true" /><h2>Решение не нашлось</h2><p>Оно хранится в аккаунте того, кто его запросил. Если это твоя задача — войди тем же аккаунтом; если нет — реши её заново, это займёт около минуты.</p></section>
       </div>
       <button className="route-primary-action" type="button" onClick={onGoHome}>← На главную <House size={18} weight="bold" aria-hidden="true" /></button>
+    </section>
+  )
+}
+
+/* Адрес, которого в приложении нет.
+
+   Раньше любой такой путь молча показывал главную и оставлял мусорный адрес
+   в строке браузера: опечатка в ссылке выглядела как рабочая страница, а её
+   потом ещё и пересылали. */
+function NotFoundScreen({ onGoHome }: { onGoHome: () => void }) {
+  return (
+    <section className="route-empty" aria-labelledby="not-found-title">
+      <header className="route-page-header">
+        <h1 id="not-found-title">Страница не найдена</h1>
+        <p>Такого адреса в Homework Copilot нет. Возможно, ссылка устарела или в ней опечатка.</p>
+      </header>
+      <button className="route-primary-action" type="button" onClick={onGoHome}>
+        <House size={18} weight="duotone" aria-hidden="true" />
+        На главную
+      </button>
     </section>
   )
 }
@@ -2079,6 +2114,11 @@ function App() {
 
   if (pathname === '/admin') {
     return <Suspense fallback={null}><AdminDashboard /></Suspense>
+  }
+
+  if (!isKnownApplicationPath(pathname)) {
+    applySeoMetadata(getSeoMetadata(pathname))
+    return <><NotFoundScreen onGoHome={() => window.location.assign(applicationPath('/app'))} /><PrivacyNotice /></>
   }
 
   return <><HomePage /><PrivacyNotice /></>

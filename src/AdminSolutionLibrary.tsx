@@ -205,7 +205,7 @@ export default function AdminSolutionLibrary({ preview = false }: { preview?: bo
       <header className="admin-solution-library-heading">
         <div>
           <h2 id="admin-solution-library-title">База решений</h2>
-          <p>Опубликованные ответы, которые видны ученикам в общей базе.</p>
+          <p>Решения, выданные ученикам. Удаление закрывает доступ к решению у всех, кто его открывал.</p>
         </div>
         <dl aria-label="Статистика базы решений">
           <div><dt>Решений</dt><dd>{data.total.toLocaleString('ru-RU')}</dd></div>
@@ -246,11 +246,11 @@ export default function AdminSolutionLibrary({ preview = false }: { preview?: bo
                   <WarningCircle size={22} weight="duotone" aria-hidden="true" />
                   <div>
                     <strong>Удалить решение № {item.task}?</strong>
-                    <p>Оно исчезнет из общей базы и у {selectedImpact.toLocaleString('ru-RU')} пользователей, которые его открывали. Баланс автоматически не возвращается.</p>
+                    <p>Оно исчезнет у {selectedImpact.toLocaleString('ru-RU')} пользователей, которые его открывали. Баланс автоматически не возвращается.</p>
                     <label><span>Причина удаления</span><input autoFocus value={deleteReason} onChange={(event) => setDeleteReason(event.target.value)} minLength={3} maxLength={160} placeholder="Например, неверное решение" /></label>
                     <div className="admin-solution-confirm-actions">
                       <button type="button" onClick={() => { setDeleteCandidate(null); setDeleteReason('') }} disabled={actionLoading}>Отмена</button>
-                      <button className="is-danger" type="submit" disabled={actionLoading}>{actionLoading ? 'Удаляем…' : 'Удалить из базы'}</button>
+                      <button className="is-danger" type="submit" disabled={actionLoading}>{actionLoading ? 'Удаляем…' : 'Удалить решение'}</button>
                     </div>
                   </div>
                 </form>
@@ -259,7 +259,7 @@ export default function AdminSolutionLibrary({ preview = false }: { preview?: bo
           ))}
         </ol>
       ) : (
-        <div className="admin-solution-state"><BookOpenText size={24} weight="duotone" aria-hidden="true" /> {search ? 'По этому запросу решений нет.' : 'В общей базе пока нет решений.'}</div>
+        <div className="admin-solution-state"><BookOpenText size={24} weight="duotone" aria-hidden="true" /> {search ? 'По этому запросу решений нет.' : 'Выданных решений пока нет.'}</div>
       )}
 
       {(notice || error) && <p className={`admin-solution-feedback${error ? ' is-error' : ''}`} role={error ? 'alert' : 'status'}>{error || notice}</p>}
