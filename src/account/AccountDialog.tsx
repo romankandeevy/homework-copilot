@@ -19,6 +19,7 @@ import {
   Moon,
   ShieldCheck,
   SignOut,
+  Trash,
   Sun,
   UserCircle,
   UsersThree,
@@ -30,6 +31,7 @@ import { supabase } from '../lib/supabase'
 import { applicationPath } from '../lib/appPath'
 import { formatRubles } from '../lib/currency'
 import { solutionPriceKopecks } from '../lib/solutionPricing'
+import { deleteMyAccount } from '../lib/accountDeletion'
 import { forgetPendingLegalAcceptance, rememberPendingLegalAcceptance } from '../lib/legalConsent'
 import { loadReferralStatus, preparePendingReferralClaim } from '../lib/referrals'
 import type { ReferralStatus } from '../lib/referrals'
@@ -123,7 +125,7 @@ function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
 }
 
-const consentErrorMessage = 'Прими соглашение и отдельное согласие на обработку данных'
+const consentErrorMessage = 'Прими соглашение, согласие на обработку данных и подтверди возраст'
 
 const gradeOptions = Array.from({ length: 11 }, (_, index) => index + 1)
 
@@ -263,6 +265,11 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
   const [passwordVisible, setPasswordVisible] = useState(false)
   const [agreementAccepted, setAgreementAccepted] = useState(false)
   const [personalDataAccepted, setPersonalDataAccepted] = useState(false)
+  /* Аудитория сервиса — школьники, и часть из них младше четырнадцати лет:
+     самостоятельно принять документы они не могут. Отметка не проверяет
+     возраст, но фиксирует, на каком основании документы приняты, — так же,
+     как это записано в соглашении и в согласии. */
+  const [ageConfirmed, setAgeConfirmed] = useState(false)
   const passwordStrengthId = useId()
   const requiresStrongPassword = screen === 'sign-up' || screen === 'reset'
   const passwordIsValid = requiresStrongPassword ? isStrongPassword(password) : password.length >= 8
@@ -270,7 +277,7 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
   const expiresIn = verificationSecondsLeft(sentAt, emailCodeLifetime, now)
 
   const formIsValid = screen === 'sign-up'
-    ? fullName.trim().length >= 2 && Boolean(grade) && isValidEmail(email) && passwordIsValid && agreementAccepted && personalDataAccepted
+    ? fullName.trim().length >= 2 && Boolean(grade) && isValidEmail(email) && passwordIsValid && agreementAccepted && personalDataAccepted && ageConfirmed
     : screen === 'sign-in'
       ? isValidEmail(email) && password.length >= 8
       : screen === 'forgot'
@@ -311,15 +318,15 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
   // Причина ушла — уходит и сообщение: иначе ошибка висит над формой,
   // в которой уже всё исправлено.
   useEffect(() => {
-    if (!agreementAccepted || !personalDataAccepted) return
+    if (!agreementAccepted || !personalDataAccepted || !ageConfirmed) return
     setError((current) => (current === consentErrorMessage ? '' : current))
-  }, [agreementAccepted, personalDataAccepted])
+  }, [ageConfirmed, agreementAccepted, personalDataAccepted])
 
   const continueWithGoogle = async () => {
     if (loading) return
     // Причина отказа проверяется до всего остального: кнопка больше
     // не гаснет, поэтому объяснение должно приходить всегда.
-    if (screen === 'sign-up' && (!agreementAccepted || !personalDataAccepted)) {
+    if (screen === 'sign-up' && (!agreementAccepted || !personalDataAccepted || !ageConfirmed)) {
       setError(consentErrorMessage)
       return
     }
@@ -422,7 +429,7 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
       if (screen === 'sign-up') {
         if (fullName.trim().length < 2) throw new Error('name')
         if (!isStrongPassword(password)) throw new Error('weak password')
-        if (!agreementAccepted || !personalDataAccepted) throw new Error('legal consent')
+        if (!agreementAccepted || !personalDataAccepted || !ageConfirmed) throw new Error('legal consent')
         rememberPendingLegalAcceptance('email', email)
         const referralClaimToken = await preparePendingReferralClaim(supabase)
         const { data, error: signUpError } = await supabase.auth.signUp({
@@ -430,6 +437,10 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
           password,
           options: {
             data: {
+              // Отметку о согласии ставит триггер базы при создании
+              // учётной записи: клиентская запись терялась, если почту
+              // подтверждали в другом браузере или на телефоне.
+              legal_source: 'email',
               full_name: fullName.trim(),
               grade,
               ...(referralClaimToken ? { referral_claim_token: referralClaimToken } : {}),
@@ -650,6 +661,11 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
               <span aria-hidden="true"><Check size={14} weight="bold" /></span>
               <em>Я отдельно даю <a href="/consent" target="_blank" rel="noreferrer">согласие на обработку персональных данных</a> и прочитал <a href="/privacy" target="_blank" rel="noreferrer">политику данных</a></em>
             </label>
+            <label className="account-consent">
+              <input type="checkbox" checked={ageConfirmed} onChange={(event) => setAgeConfirmed(event.target.checked)} required />
+              <span aria-hidden="true"><Check size={14} weight="bold" /></span>
+              <em>Мне есть 14 лет или я регистрируюсь с согласия родителя</em>
+            </label>
           </div>
         )}
 
@@ -798,6 +814,9 @@ function ProfileView({ user, account, notice, initialView, theme, onToggleTheme,
     setLoading(false)
   }
 
+  const [deletionOpen, setDeletionOpen] = useState(false)
+  const [deletionWord, setDeletionWord] = useState('')
+
   const signOut = async () => {
     if (!supabase || loading) return
     setLoading(true)
@@ -805,6 +824,29 @@ function ProfileView({ user, account, notice, initialView, theme, onToggleTheme,
     if (signOutError) {
       setError('Не получилось выйти из аккаунта')
       setLoading(false)
+    }
+  }
+
+  /* Удаление аккаунта.
+
+     Право на удаление записано в политике, а способом был адрес почты,
+     которого у домена нет. Подтверждение — не «вы уверены?», а ввод слова:
+     кнопка стоит рядом с выходом, и промахнуться по ней слишком легко. */
+  const deleteAccount = async () => {
+    if (!supabase || loading) return
+    setLoading(true)
+    setError('')
+    try {
+      await deleteMyAccount(supabase, user.id)
+      await supabase.auth.signOut({ scope: 'local' })
+      window.location.assign(applicationPath('/'))
+    } catch (deletionError) {
+      const message = deletionError instanceof Error ? deletionError.message : ''
+      setError(message.includes('admin account')
+        ? 'Аккаунт владельца из приложения не удаляется'
+        : 'Не получилось удалить аккаунт. Попробуй ещё раз или напиши в поддержку')
+      setLoading(false)
+      setDeletionOpen(false)
     }
   }
 
@@ -886,9 +928,46 @@ function ProfileView({ user, account, notice, initialView, theme, onToggleTheme,
       )}
 
       <footer className="account-profile-footer">
-        <nav aria-label="Документы"><a href="/privacy" target="_blank" rel="noreferrer">Конфиденциальность</a><a href="/terms" target="_blank" rel="noreferrer">Правила сервиса</a></nav>
-        <button type="button" onClick={() => { void signOut() }} disabled={loading}><SignOut size={18} weight="duotone" aria-hidden="true" /> Выйти</button>
+        {/* Названия те же, что в подвале сайта: два документа с тремя именами
+            читались как три разных документа. */}
+        <nav aria-label="Документы"><a href="/privacy" target="_blank" rel="noreferrer">Политика данных</a><a href="/terms" target="_blank" rel="noreferrer">Пользовательское соглашение</a></nav>
+        <div className="account-profile-footer-actions">
+          <button type="button" className="account-delete-open" onClick={() => setDeletionOpen(true)} disabled={loading}>
+            <Trash size={17} weight="duotone" aria-hidden="true" /> Удалить аккаунт
+          </button>
+          <button type="button" onClick={() => { void signOut() }} disabled={loading}><SignOut size={18} weight="duotone" aria-hidden="true" /> Выйти</button>
+        </div>
       </footer>
+
+      {deletionOpen && (
+        <form
+          className="account-delete-confirm"
+          aria-label="Удаление аккаунта"
+          onSubmit={(event) => { event.preventDefault(); void deleteAccount() }}
+        >
+          <h3>Удалить аккаунт навсегда?</h3>
+          <p>
+            Уйдут профиль, баланс и его история, решения задач, диалоги чата с фотографиями,
+            расписание и обращения в поддержку. Восстановить это нельзя, и вернуть баланс — тоже.
+          </p>
+          <label>
+            <span>Впиши «удалить», чтобы подтвердить</span>
+            <input
+              autoFocus
+              value={deletionWord}
+              onChange={(event) => setDeletionWord(event.target.value)}
+              autoComplete="off"
+              placeholder="удалить"
+            />
+          </label>
+          <div className="account-delete-actions">
+            <button type="button" onClick={() => { setDeletionOpen(false); setDeletionWord('') }} disabled={loading}>Отмена</button>
+            <button type="submit" className="is-danger" disabled={loading || deletionWord.trim().toLocaleLowerCase('ru') !== 'удалить'}>
+              {loading ? 'Удаляем…' : 'Удалить аккаунт'}
+            </button>
+          </div>
+        </form>
+      )}
     </div>
   )
 }

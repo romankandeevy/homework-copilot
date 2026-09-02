@@ -699,7 +699,13 @@ export type Database = {
       }
       delete_chat_conversation: {
         Args: { p_conversation_id: string }
-        Returns: { deleted: boolean; messages: number }
+        // `attachments` — пути удалённых файлов: их снимает клиент, потому что
+        // объекты хранилища живут вне транзакции базы.
+        Returns: { deleted: boolean; messages: number; attachments: string[] }
+      }
+      delete_my_account: {
+        Args: never
+        Returns: { deleted: boolean; solutions: number }
       }
       list_chat_models: {
         Args: never

@@ -16,6 +16,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '../src/lib/database.types.ts'
 import { ChatApiError } from './chatErrors.ts'
 import { streamModelAnswer } from './chatProviders.ts'
+import type { ChatContentPart, ChatMessageInput } from './chatProviders.ts'
 
 export { ChatApiError } from './chatErrors.ts'
 
@@ -62,6 +63,10 @@ const generationTimeoutMs = 120_000
 const maxAnswerCharacters = 20_000
 const maxPromptCharacters = 16_000
 const maxContextMessages = 20
+// Бакет и предел размера повторяют то, что разрешает загрузка на клиенте
+// (src/lib/chatClient.ts) и политика хранилища.
+const chatAttachmentsBucket = 'chat-attachments'
+const maxAttachmentBytes = 10 * 1024 * 1024
 
 function textValue(value: unknown, limit: number): string {
   return typeof value === 'string' ? value.slice(0, limit).trim() : ''
@@ -137,6 +142,35 @@ function validateBody(value: unknown): ChatRequestBody {
     useWebSearch: raw.useWebSearch === true,
     idempotencyKey,
   }
+}
+
+/* Вложения сообщения как части запроса к модели.
+
+   Файлы лежат в приватном бакете, поэтому ссылка модели не поможет: читаем
+   служебным ключом и передаём содержимым. Путь начинается с идентификатора
+   владельца — проверяем это до чтения, иначе чужую папку можно было бы
+   назвать своей в теле запроса. Нечитаемое вложение молча пропускаем:
+   ответ без картинки лучше, чем отказ на всё сообщение. */
+async function loadAttachments(
+  service: SupabaseClient<Database>,
+  userId: string,
+  paths: readonly string[],
+): Promise<ChatContentPart[]> {
+  const parts: ChatContentPart[] = []
+
+  for (const path of paths) {
+    if (!path.startsWith(`${userId}/`)) continue
+    // eslint-disable-next-line no-await-in-loop
+    const { data, error } = await service.storage.from(chatAttachmentsBucket).download(path)
+    if (error || !data) continue
+    // eslint-disable-next-line no-await-in-loop
+    const buffer = Buffer.from(await data.arrayBuffer())
+    if (buffer.byteLength > maxAttachmentBytes) continue
+    const mimeType = data.type && data.type.startsWith('image/') ? data.type : 'image/jpeg'
+    parts.push({ type: 'image', dataUrl: `data:${mimeType};base64,${buffer.toString('base64')}` })
+  }
+
+  return parts
 }
 
 async function authenticate(request: IncomingMessage, options: ChatOptions): Promise<ChatAccount> {
@@ -309,16 +343,32 @@ export async function handleChatRequest(
     // пока провайдер не отдаёт токенизатор.
     const { data: history } = await service
       .from('chat_messages')
-      .select('role, content')
+      .select('id, role, content, attachments')
       .eq('conversation_id', body.conversationId)
       .eq('user_id', account.userId)
       .order('created_at', { ascending: false })
       .limit(maxContextMessages)
 
-    const messages = (history ?? [])
+    /* Фотографии доезжают до модели.
+
+       Раньше вложения только загружались, тарифицировались и сохранялись
+       рядом с сообщением, а в запрос уходил один текст: школьник прикладывал
+       снимок задачи и получал ответ на пустой вопрос. Теперь картинки
+       текущего сообщения читаются служебным ключом и уходят вместе с ним.
+
+       Берём только вложения последнего сообщения: прошлые снимки утяжелили
+       бы каждый следующий запрос и оплачивались бы заново. */
+    const attachmentParts = await loadAttachments(service, account.userId, body.attachments)
+
+    const messages: ChatMessageInput[] = (history ?? [])
       .reverse()
-      .map((entry) => ({ role: entry.role, content: entry.content }))
-      .filter((entry) => entry.content)
+      .map((entry) => {
+        const parts: ChatContentPart[] = []
+        if (entry.content) parts.push({ type: 'text', text: entry.content })
+        if (entry.id === userMessage.id) parts.push(...attachmentParts)
+        return { role: entry.role, content: parts.length === 1 && parts[0].type === 'text' ? parts[0].text : parts }
+      })
+      .filter((entry) => (typeof entry.content === 'string' ? entry.content : entry.content.length > 0))
 
     const answer = await streamModelAnswer({
       apiKey: options.apiKey,

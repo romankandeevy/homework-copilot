@@ -1,7 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from './database.types'
 
-export const legalDocumentVersion = '2026-08-28'
+/* Дата действующей редакции. В базе она живёт в `private.current_legal_version()`
+   и проставляется сервером — здесь копия только для показа на странице. */
+export const legalDocumentVersion = '2026-09-02'
 const pendingAcceptanceKey = 'homework-copilot:legal-acceptance-pending'
 
 type AcceptanceSource = 'email' | 'google'

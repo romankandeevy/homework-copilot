@@ -445,6 +445,22 @@
 .account-profile-footer a { color: var(--color-text-subtle); font-size: var(--text-caption); text-underline-offset: 0.2em; }
 .account-profile-footer a:hover { color: var(--color-text); }
 .account-profile-footer button { display: inline-flex; min-height: 2.75rem; align-items: center; gap: var(--space-2); padding: 0 var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-control); background: transparent; color: var(--color-text); font-weight: var(--weight-semibold); cursor: pointer; }
+.account-profile-footer-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+/* Удаление стоит рядом с выходом, поэтому оно тише выхода: приглушённая
+   надпись без рамки, а красным становится только кнопка в подтверждении. */
+.account-profile-footer .account-delete-open { border-color: transparent; color: var(--color-text-subtle); font-weight: var(--weight-regular); }
+.account-profile-footer .account-delete-open:hover:not(:disabled) { border-color: var(--color-border); color: var(--color-danger, #c0362c); }
+
+.account-delete-confirm { display: grid; gap: var(--space-3); padding: var(--space-5) var(--space-6) var(--space-6); border-top: 1px solid var(--color-border); background: var(--color-surface-sunken, var(--color-surface)); }
+.account-delete-confirm h3 { margin: 0; font-size: var(--text-body); font-weight: var(--weight-semibold); }
+.account-delete-confirm p { margin: 0; color: var(--color-text-muted); font-size: var(--text-small); line-height: var(--leading-copy); }
+.account-delete-confirm label { display: grid; gap: var(--space-2); }
+.account-delete-confirm label span { color: var(--color-text-subtle); font-size: var(--text-caption); }
+.account-delete-confirm input { min-height: 2.75rem; padding: 0 var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-surface); color: var(--color-text); }
+.account-delete-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); }
+.account-delete-actions button { min-height: 2.75rem; padding: 0 var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-control); background: transparent; color: var(--color-text); font-weight: var(--weight-semibold); cursor: pointer; }
+.account-delete-actions .is-danger { border-color: transparent; background: var(--color-danger, #c0362c); color: #fff; }
+.account-delete-actions .is-danger:disabled { opacity: 0.55; cursor: not-allowed; }
 
 /* Невысокие экраны (1440×900 и ниже): регистрация должна помещаться в диалог целиком,
    иначе «Создать аккаунт» обрезается нижней кромкой. */

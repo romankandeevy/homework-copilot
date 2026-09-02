@@ -29,6 +29,7 @@ import {
   CHAT_ATTACHMENT_MIME_TYPES,
   ChatError,
   createIdempotencyKey,
+  signChatAttachments,
   sortConversations,
 } from '../lib/chatClient'
 import type {
@@ -546,6 +547,19 @@ export default function ChatPage({ userId = null, onRequireAuth, onOpenWallet }:
       const list = await loadChatMessages(conversationId)
       setMessages(list)
       setMessagesStatus('ready')
+      // Ссылки на вложения живут только в текущей вкладке: после перезахода
+      // их нужно взять заново, иначе от фотографии остаётся один счётчик.
+      const stored = list.filter((message) => message.attachments.length > 0)
+      if (stored.length > 0) {
+        const signed = await signChatAttachments(stored.flatMap((message) => message.attachments))
+        setPreviews((current) => ({
+          ...Object.fromEntries(stored.map((message) => [
+            message.id,
+            message.attachments.map((path) => signed[path]).filter(Boolean),
+          ])),
+          ...current,
+        }))
+      }
     } catch (error) {
       setMessagesStatus('error')
       setFailure(failureFrom(error, 'Не получилось открыть диалог'))

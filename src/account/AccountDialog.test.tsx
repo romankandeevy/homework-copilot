@@ -56,8 +56,12 @@ describe('AccountDialog profile', () => {
     expect(screen.getByRole('button', { name: 'Тёмная' })).toHaveAttribute('aria-pressed', 'true')
     fireEvent.click(screen.getByRole('button', { name: 'Светлая' }))
     expect(toggleTheme).toHaveBeenCalledOnce()
-    expect(screen.getByRole('link', { name: 'Конфиденциальность' })).toHaveAttribute('href', '/privacy')
-    expect(screen.getByRole('link', { name: 'Правила сервиса' })).toHaveAttribute('href', '/terms')
+    // Названия документов те же, что в подвале сайта: два документа с тремя
+    // именами читались как три разных.
+    expect(screen.getByRole('link', { name: 'Политика данных' })).toHaveAttribute('href', '/privacy')
+    expect(screen.getByRole('link', { name: 'Пользовательское соглашение' })).toHaveAttribute('href', '/terms')
+    // Удаление аккаунта доступно из профиля и требует подтверждения словом.
+    expect(screen.getByRole('button', { name: /Удалить аккаунт/ })).toBeEnabled()
   })
 
   // Согласия стоят под формой, вплотную к кнопке, которую они защищают,
@@ -68,6 +72,9 @@ describe('AccountDialog profile', () => {
 
     const agreement = screen.getByRole('checkbox', { name: /пользовательское соглашение/ })
     const personalData = screen.getByRole('checkbox', { name: /отдельно даю/ })
+    // Аудитория — школьники, часть младше четырнадцати: документы за них
+    // принимает законный представитель, и это фиксируется отметкой.
+    const age = screen.getByRole('checkbox', { name: /14 лет/ })
     const google = screen.getByRole('button', { name: 'Продолжить с Google' })
     const submit = screen.getByRole('button', { name: /Создать аккаунт/ })
 
@@ -78,6 +85,9 @@ describe('AccountDialog profile', () => {
 
     fireEvent.click(agreement)
     fireEvent.click(personalData)
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+
+    fireEvent.click(age)
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'согласие на обработку персональных данных' })).toHaveAttribute('href', '/consent')
   })

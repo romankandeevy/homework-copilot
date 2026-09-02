@@ -250,10 +250,44 @@ export async function renameChatConversation(conversationId: string, title: stri
   return { id: data?.id ?? conversationId, title: data?.title ?? title }
 }
 
+/* Удаление диалога уносит и вложения.
+
+   Политика обещает, что удаление стирает сообщения и вложения, но файлы
+   оставались в хранилище навсегда: RPC чистила только строки. Теперь она
+   возвращает пути удалённых файлов, и хранилище чистится следом — правило
+   доступа пускает владельца ровно в свою папку. */
 export async function deleteChatConversation(conversationId: string) {
-  const { data, error } = await requireClient().rpc('delete_chat_conversation', { p_conversation_id: conversationId })
+  const client = requireClient()
+  const { data, error } = await client.rpc('delete_chat_conversation', { p_conversation_id: conversationId })
   if (error) throw toChatError(error)
-  return { deleted: Boolean(data?.deleted), messages: data?.messages ?? 0 }
+
+  const attachments = Array.isArray(data?.attachments)
+    ? data.attachments.filter((path): path is string => typeof path === 'string')
+    : []
+  if (attachments.length > 0) {
+    // Файл мог исчезнуть раньше строки — на исход удаления диалога это не влияет.
+    await client.storage.from(CHAT_ATTACHMENTS_BUCKET).remove(attachments).catch(() => undefined)
+  }
+
+  return { deleted: Boolean(data?.deleted), messages: data?.messages ?? 0, attachments: attachments.length }
+}
+
+/* Ссылки на вложения для показа в истории.
+
+   Бакет приватный, поэтому прямой адрес не работает: на каждый файл берётся
+   подписанная ссылка на час. Без этого после перезагрузки от фотографии
+   оставался только счётчик «2 фото». */
+export async function signChatAttachments(paths: readonly string[]): Promise<Record<string, string>> {
+  if (paths.length === 0) return {}
+  const { data, error } = await requireClient().storage
+    .from(CHAT_ATTACHMENTS_BUCKET)
+    .createSignedUrls([...paths], 60 * 60)
+  if (error || !data) return {}
+  const pairs: Array<[string, string]> = []
+  for (const item of data) {
+    if (typeof item.path === 'string' && typeof item.signedUrl === 'string') pairs.push([item.path, item.signedUrl])
+  }
+  return Object.fromEntries(pairs)
 }
 
 export const CHAT_ATTACHMENTS_BUCKET = 'chat-attachments'
