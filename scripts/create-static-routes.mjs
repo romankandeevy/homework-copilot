@@ -9,6 +9,8 @@
    список был записан дважды, и копии разошлись: статика открывала ЦДЗ
    поисковикам и звала «найти условие по номеру в учебнике» из раздела,
    которого в продукте больше нет. */
+/* Маршруты пишутся по очереди: их два десятка, параллелить нечего. */
+/* eslint-disable no-await-in-loop */
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { getSeoMetadata, metadataByPath, siteOrigin } from '../src/lib/siteMetadata.ts'

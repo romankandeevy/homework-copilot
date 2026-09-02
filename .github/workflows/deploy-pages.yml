@@ -33,8 +33,11 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
         env:
-          # Без ключей базы клиент Supabase не создаётся, приложение остаётся
-          # на экране загрузки, и падают все тесты подряд, а не один.
+          # Тот же адрес, что и у сборки. Без него vite.config видит GITHUB_ACTIONS
+          # без домена и поднимает dev-сервер с базой `/homework-copilot/`:
+          # переход на `/app` упирается в подсказку «did you mean /homework-copilot/app»,
+          # и падают все тесты подряд, а не один. Первый прогон в CI на это и налетел.
+          GITHUB_PAGES_CUSTOM_DOMAIN: www.homeworkcopilot.ru
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
       # Если браузерные проверки упали, отчёт нужен целиком: в нём лежит
