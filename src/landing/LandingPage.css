@@ -411,6 +411,33 @@
   color: var(--color-brand-accent);
 }
 
+/* Числа под кнопками: раньше между ними и следующей секцией был пустой
+   экран. Колонки сами перестраиваются в две на узком экране. */
+.hero-marks {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(1.25rem, 3vw, 2.5rem);
+  max-width: 60rem;
+  margin: clamp(2.5rem, 5vw, 3.5rem) 0 0;
+  padding-top: clamp(1.75rem, 3vw, 2.25rem);
+  border-top: 1px solid var(--color-border);
+}
+
+.hero-marks dt {
+  font-family: var(--font-display);
+  font-size: clamp(1.75rem, 3vw, 2.5rem);
+  font-weight: var(--weight-display);
+  line-height: 1;
+  color: var(--color-text);
+}
+
+.hero-marks dd {
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-subtle);
+  font-size: var(--text-small);
+  line-height: var(--leading-ui);
+}
+
 /* ─── Карточки сценария (тёмная панель, как в приложении) ──────────── */
 
 .stage-card {
@@ -1328,6 +1355,7 @@
   .landing-header-actions .landing-primary-action { display: none; }
 
   .hero-media { aspect-ratio: 4 / 5; }
+  .hero-marks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .hero-actions { flex-direction: column; align-items: stretch; }
   .hero-actions a { width: 100%; }
   .stage-controls .stage-chip.is-muted { display: none; }

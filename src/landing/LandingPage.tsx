@@ -344,6 +344,16 @@ function LandingHeader({ signedIn, theme, onToggleTheme }: { signedIn: boolean; 
   )
 }
 
+/* Числа первого экрана. Цена - `src/lib/solutionPricing.ts`, предметы и
+   классы - `src/CopyTask.tsx`, срок - карточка ожидания в `SolutionQueue`,
+   два прохода - `server/geometrySolutionEngine.ts`. */
+const heroMarks = [
+  { value: '5 ₽', note: 'за решение, любой предмет' },
+  { value: '14', note: 'предметов, 5-11 класс' },
+  { value: '15-70 с', note: 'обычно занимает разбор' },
+  { value: '2', note: 'независимых прохода и сверка' },
+]
+
 const steps = [
   {
     icon: CameraPlus,
@@ -547,10 +557,22 @@ export default function LandingPage() {
                 <a className="landing-secondary-action" href="#how" onClick={scrollToHow}>Как это работает</a>
               </div>
               <ul className="hero-facts">
-                <li><Check size={15} weight="bold" aria-hidden="true" />Первое решение - бесплатно и без регистрации</li>
-                <li><Check size={15} weight="bold" aria-hidden="true" />После регистрации ещё 20 ₽ на счёте - это четыре решения</li>
+                <li><Check size={15} weight="bold" aria-hidden="true" />После регистрации 20 ₽ на счёте - это четыре решения</li>
+                <li><Check size={15} weight="bold" aria-hidden="true" />Не решилась - деньги остаются на балансе</li>
               </ul>
             </div>
+
+            {/* Под кнопками было пусто до самой следующей секции. Здесь то,
+                что человек всё равно ищет глазами первым: цена, охват,
+                сколько ждать. Все четыре числа проверяются по коду. */}
+            <dl className="hero-marks">
+              {heroMarks.map(({ value, note }) => (
+                <div key={note}>
+                  <dt>{value}</dt>
+                  <dd>{note}</dd>
+                </div>
+              ))}
+            </dl>
           </div>
         </section>
 
