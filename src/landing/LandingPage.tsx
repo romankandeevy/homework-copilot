@@ -233,9 +233,10 @@ function PromoFilm() {
   )
 }
 
-/* Фоновый ролик первого экрана. Файл лёгкий (веб-версия ~1.4 МБ), поэтому
-   грузится сразу и запускается сам — приглушённый и зациклённый, как
-   фон, а не как проигрыватель. При включённом «уменьшении движения»
+/* Ролик первого экрана — отдельным блоком над заголовком, не подложкой под
+   текст: сам по себе он полон интерфейса и надписей, поверх него читать
+   ничего нельзя. Файл лёгкий (веб-версия ~1.4 МБ), грузится сразу и
+   запускается сам, приглушённый и зациклённый. При «уменьшении движения»
    остаётся неподвижный постер. */
 function HeroFilm() {
   const reduce = prefersReducedMotion()
@@ -543,7 +544,7 @@ export default function LandingPage() {
                   {signedIn ? 'Открыть приложение' : 'Решить задачу'}
                   <ArrowRight size={18} weight="bold" aria-hidden="true" />
                 </a>
-                <a className="hero-ghost-action" href="#how" onClick={scrollToHow}>Как это работает</a>
+                <a className="landing-secondary-action" href="#how" onClick={scrollToHow}>Как это работает</a>
               </div>
               <ul className="hero-facts">
                 <li><Check size={15} weight="bold" aria-hidden="true" />Первое решение - бесплатно и без регистрации</li>

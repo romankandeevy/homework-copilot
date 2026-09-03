@@ -146,34 +146,13 @@
   height: var(--header-h);
   padding-inline: clamp(1.25rem, 4vw, 3.5rem);
   border-bottom: 1px solid transparent;
-  background: transparent;
-  transition:
-    height var(--motion-panel) var(--ease-out),
-    background var(--motion-ui) var(--ease-out),
-    border-color var(--motion-ui) var(--ease-out);
+  background: var(--color-canvas);
+  transition: height var(--motion-panel) var(--ease-out), border-color var(--motion-ui) var(--ease-out);
 }
 
 .landing-header.is-compact {
   height: 4rem;
-  background: var(--color-canvas);
   border-bottom-color: var(--color-border);
-}
-
-/* Пока шапка стоит над роликом (страница не прокручена), надписи и значки
-   идут светлыми - тёмный текст на видео не прочитать. Как только шапка
-   становится плотной, цвета возвращаются к токенам темы. */
-.landing-header:not(.is-compact) .landing-brand,
-.landing-header:not(.is-compact) .brand-name-accent,
-.landing-header:not(.is-compact) .landing-nav a,
-.landing-header:not(.is-compact) .landing-icon-button,
-.landing-header:not(.is-compact) .landing-ghost-action {
-  color: oklch(98% 0 0);
-}
-
-.landing-header:not(.is-compact) .landing-nav a:hover,
-.landing-header:not(.is-compact) .landing-icon-button:hover {
-  background: oklch(100% 0 0 / 0.14);
-  color: oklch(100% 0 0);
 }
 
 .landing-brand {
@@ -333,26 +312,20 @@
 /* ─── Первый экран ─────────────────────────────────────────────────── */
 
 .landing-hero {
-  --hero-ink: oklch(99% 0 0);
-  --hero-ink-soft: oklch(87% 0 0);
-  position: relative;
   display: flex;
-  align-items: center;
-  min-height: min(100svh, 48rem);
-  /* Ролик уходит под липкую шапку и начинается от самого верха страницы;
-     содержимое отодвинуто вниз на её высоту. */
-  margin-top: calc(-1 * var(--header-h));
-  padding-block: calc(var(--header-h) + clamp(2.5rem, 8vh, 5rem)) clamp(3.5rem, 9vh, 7rem);
-  overflow: clip;
-  isolation: isolate;
-  color: var(--hero-ink);
+  flex-direction: column;
+  padding-bottom: clamp(3.5rem, 8vh, 6rem);
 }
 
+/* Ролик идёт своим блоком во всю ширину, без текста поверх - показываем
+   его открыто, а не гасим под подпись. Заголовок и кнопки идут ниже,
+   на обычном фоне страницы. */
 .hero-media {
-  position: absolute;
-  z-index: -1;
-  inset: 0;
+  position: relative;
   overflow: hidden;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  max-height: min(72svh, 40rem);
   background: oklch(12% 0 0);
 }
 
@@ -365,28 +338,20 @@
 .hero-scrim {
   position: absolute;
   inset: 0;
-  /* Три слоя: низ гасим в цвет страницы для мягкого стыка со следующей
-     секцией, слева затемняем сильнее - под текст, сверху общий контраст. */
-  background:
-    linear-gradient(180deg, transparent 78%, var(--color-canvas) 100%),
-    linear-gradient(90deg, oklch(0% 0 0 / 0.64) 0%, oklch(0% 0 0 / 0.2) 52%, oklch(0% 0 0 / 0) 100%),
-    linear-gradient(180deg, oklch(0% 0 0 / 0.5) 0%, oklch(0% 0 0 / 0.26) 34%, oklch(0% 0 0 / 0.42) 72%, oklch(0% 0 0 / 0.8) 100%);
+  /* Только нижняя кромка гаснет в цвет страницы - плавный стык с текстом,
+     который идёт следом, а не подложка под надпись. */
+  background: linear-gradient(180deg, transparent 82%, var(--color-canvas) 100%);
 }
 
 .hero-shell {
-  position: relative;
-  z-index: 1;
-  width: 100%;
+  padding-top: clamp(2.5rem, 6vw, 4rem);
 }
 
-.hero-copy {
-  max-width: 40rem;
-  text-shadow: 0 1px 30px oklch(0% 0 0 / 0.35);
-}
+.hero-copy { max-width: 40rem; }
 
 .hero-eyebrow {
   margin: 0 0 var(--space-5);
-  color: var(--hero-ink-soft);
+  color: var(--color-text-subtle);
   font-family: var(--font-mono);
   font-size: var(--text-micro);
   font-weight: var(--weight-semibold);
@@ -396,18 +361,17 @@
 
 .landing-hero h1 {
   margin: 0;
-  color: var(--hero-ink);
   font-family: var(--font-display);
-  font-size: clamp(3rem, 8vw, 6.5rem);
+  font-size: clamp(2.75rem, 7vw, 5.5rem);
   font-weight: var(--weight-display);
-  line-height: 0.9;
+  line-height: 0.94;
   letter-spacing: -0.01em;
 }
 
 .hero-lead {
   max-width: 34rem;
   margin: clamp(1.25rem, 2.5vw, 1.75rem) 0 0;
-  color: var(--hero-ink-soft);
+  color: var(--color-text-muted);
   font-size: var(--text-lead);
   line-height: var(--leading-copy);
 }
@@ -417,33 +381,6 @@
   flex-wrap: wrap;
   gap: var(--space-3);
   margin-top: clamp(1.75rem, 3vw, 2.25rem);
-}
-
-.hero-ghost-action {
-  display: inline-flex;
-  min-height: 3.25rem;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  padding: 0 var(--space-6);
-  border: 1px solid oklch(100% 0 0 / 0.5);
-  border-radius: var(--radius-control);
-  background: oklch(100% 0 0 / 0.08);
-  color: var(--hero-ink);
-  font-size: var(--text-ui);
-  font-weight: var(--weight-semibold);
-  white-space: nowrap;
-  text-decoration: none;
-  cursor: pointer;
-  backdrop-filter: blur(6px);
-  transition:
-    background var(--motion-fast) var(--ease-out),
-    border-color var(--motion-fast) var(--ease-out);
-}
-
-.hero-ghost-action:hover {
-  background: oklch(100% 0 0 / 0.16);
-  border-color: oklch(100% 0 0 / 0.8);
 }
 
 .hero-facts {
@@ -458,14 +395,14 @@
   display: flex;
   align-items: flex-start;
   gap: var(--space-2);
-  color: var(--hero-ink-soft);
+  color: var(--color-text-subtle);
   font-size: var(--text-small);
 }
 
 .hero-facts svg {
   flex: 0 0 auto;
   margin-top: 0.2em;
-  color: oklch(84% 0.14 155);
+  color: var(--color-brand-accent);
 }
 
 /* ─── Карточки сценария (тёмная панель, как в приложении) ──────────── */
@@ -1384,7 +1321,7 @@
   .landing-header.is-compact { height: 3.75rem; }
   .landing-header-actions .landing-primary-action { display: none; }
 
-  .landing-hero { min-height: min(92svh, 44rem); }
+  .hero-media { aspect-ratio: 4 / 5; max-height: 60svh; }
   .hero-actions { flex-direction: column; align-items: stretch; }
   .hero-actions a { width: 100%; }
   .stage-controls .stage-chip.is-muted { display: none; }
