@@ -138,13 +138,15 @@
   z-index: 40;
   top: 0;
   width: 100%;
-  max-width: 84rem;
-  margin-inline: auto;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-4);
   height: var(--header-h);
-  padding-inline: clamp(1.25rem, 4vw, 3.5rem);
+  /* Полоса шапки идёт во всю ширину экрана, а её содержимое остаётся в той
+     же колонке, что и текст секций: боковой отступ добирает до края. Пока
+     шапка была шириной с колонку, развёрнутый во всю ширину ролик было
+     видно по бокам от неё, стоило странице прокрутиться. */
+  padding-inline: calc(max(0px, (100% - 84rem) / 2) + clamp(1.25rem, 4vw, 3.5rem));
   border-bottom: 1px solid transparent;
   background: var(--color-canvas);
   transition: height var(--motion-panel) var(--ease-out), border-color var(--motion-ui) var(--ease-out);
