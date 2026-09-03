@@ -63,28 +63,6 @@
       "permanent": true
     },
     {
-      "source": "/",
-      "has": [
-        {
-          "type": "host",
-          "value": "homework-copilot-taupe.vercel.app"
-        }
-      ],
-      "destination": "https://www.homeworkcopilot.ru/",
-      "permanent": false
-    },
-    {
-      "source": "/:path((?!api/).*)",
-      "has": [
-        {
-          "type": "host",
-          "value": "homework-copilot-taupe.vercel.app"
-        }
-      ],
-      "destination": "https://www.homeworkcopilot.ru/:path",
-      "permanent": false
-    },
-    {
       "source": "/main",
       "destination": "/app",
       "permanent": true
@@ -111,6 +89,21 @@
     }
   ],
   "headers": [
+    {
+      "source": "/(.*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "homework-copilot-taupe.vercel.app"
+        }
+      ],
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow, noarchive"
+        }
+      ]
+    },
     {
       "source": "/(.*)",
       "headers": [

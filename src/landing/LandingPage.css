@@ -5,6 +5,7 @@
    больше воздуха, длинные секции вместо плотного рабочего экрана. */
 
 .landing {
+  --header-h: 5rem;
   display: flex;
   min-height: 100dvh;
   flex-direction: column;
@@ -142,16 +143,37 @@
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-4);
-  height: 5rem;
+  height: var(--header-h);
   padding-inline: clamp(1.25rem, 4vw, 3.5rem);
   border-bottom: 1px solid transparent;
-  background: var(--color-canvas);
-  transition: height var(--motion-panel) var(--ease-out), border-color var(--motion-ui) var(--ease-out);
+  background: transparent;
+  transition:
+    height var(--motion-panel) var(--ease-out),
+    background var(--motion-ui) var(--ease-out),
+    border-color var(--motion-ui) var(--ease-out);
 }
 
 .landing-header.is-compact {
   height: 4rem;
+  background: var(--color-canvas);
   border-bottom-color: var(--color-border);
+}
+
+/* Пока шапка стоит над роликом (страница не прокручена), надписи и значки
+   идут светлыми - тёмный текст на видео не прочитать. Как только шапка
+   становится плотной, цвета возвращаются к токенам темы. */
+.landing-header:not(.is-compact) .landing-brand,
+.landing-header:not(.is-compact) .brand-name-accent,
+.landing-header:not(.is-compact) .landing-nav a,
+.landing-header:not(.is-compact) .landing-icon-button,
+.landing-header:not(.is-compact) .landing-ghost-action {
+  color: oklch(98% 0 0);
+}
+
+.landing-header:not(.is-compact) .landing-nav a:hover,
+.landing-header:not(.is-compact) .landing-icon-button:hover {
+  background: oklch(100% 0 0 / 0.14);
+  color: oklch(100% 0 0);
 }
 
 .landing-brand {
@@ -311,71 +333,123 @@
 /* ─── Первый экран ─────────────────────────────────────────────────── */
 
 .landing-hero {
+  --hero-ink: oklch(99% 0 0);
+  --hero-ink-soft: oklch(87% 0 0);
   position: relative;
+  display: flex;
+  align-items: center;
+  min-height: min(100svh, 48rem);
+  /* Ролик уходит под липкую шапку и начинается от самого верха страницы;
+     содержимое отодвинуто вниз на её высоту. */
+  margin-top: calc(-1 * var(--header-h));
+  padding-block: calc(var(--header-h) + clamp(2.5rem, 8vh, 5rem)) clamp(3.5rem, 9vh, 7rem);
   overflow: clip;
-  padding-block: clamp(2.5rem, 6vw, 5.5rem) clamp(4rem, 8vw, 7rem);
+  isolation: isolate;
+  color: var(--hero-ink);
 }
 
-.hero-grid-field {
+.hero-media {
   position: absolute;
-  z-index: 0;
-  inset: -20% -10% auto -10%;
-  height: 130%;
-  background-image:
-    linear-gradient(color-mix(in oklch, var(--color-border) 85%, transparent) 1px, transparent 1px),
-    linear-gradient(90deg, color-mix(in oklch, var(--color-border) 85%, transparent) 1px, transparent 1px);
-  background-size: 2.75rem 2.75rem;
-  mask-image: radial-gradient(78% 60% at 70% 4%, #000 0%, transparent 74%);
-  pointer-events: none;
+  z-index: -1;
+  inset: 0;
+  overflow: hidden;
+  background: oklch(12% 0 0);
+}
+
+.hero-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.hero-scrim {
+  position: absolute;
+  inset: 0;
+  /* Три слоя: низ гасим в цвет страницы для мягкого стыка со следующей
+     секцией, слева затемняем сильнее - под текст, сверху общий контраст. */
+  background:
+    linear-gradient(180deg, transparent 78%, var(--color-canvas) 100%),
+    linear-gradient(90deg, oklch(0% 0 0 / 0.64) 0%, oklch(0% 0 0 / 0.2) 52%, oklch(0% 0 0 / 0) 100%),
+    linear-gradient(180deg, oklch(0% 0 0 / 0.5) 0%, oklch(0% 0 0 / 0.26) 34%, oklch(0% 0 0 / 0.42) 72%, oklch(0% 0 0 / 0.8) 100%);
 }
 
 .hero-shell {
-  display: grid;
   position: relative;
   z-index: 1;
-  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
-  align-items: center;
-  gap: clamp(2.5rem, 5vw, 5rem);
+  width: 100%;
 }
 
-.hero-copy { max-width: 34rem; }
+.hero-copy {
+  max-width: 40rem;
+  text-shadow: 0 1px 30px oklch(0% 0 0 / 0.35);
+}
 
 .hero-eyebrow {
   margin: 0 0 var(--space-5);
-  color: var(--color-text-subtle);
+  color: var(--hero-ink-soft);
   font-family: var(--font-mono);
   font-size: var(--text-micro);
   font-weight: var(--weight-semibold);
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .landing-hero h1 {
   margin: 0;
+  color: var(--hero-ink);
   font-family: var(--font-display);
-  font-size: clamp(3rem, 6.6vw, 6rem);
+  font-size: clamp(3rem, 8vw, 6.5rem);
   font-weight: var(--weight-display);
-  line-height: 0.94;
+  line-height: 0.9;
+  letter-spacing: -0.01em;
 }
 
 .hero-lead {
-  max-width: 33rem;
-  margin: clamp(1.25rem, 2.5vw, 2rem) 0 0;
-  color: var(--color-text-muted);
+  max-width: 34rem;
+  margin: clamp(1.25rem, 2.5vw, 1.75rem) 0 0;
+  color: var(--hero-ink-soft);
   font-size: var(--text-lead);
+  line-height: var(--leading-copy);
 }
 
 .hero-actions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3);
-  margin-top: clamp(1.75rem, 3vw, 2.5rem);
+  margin-top: clamp(1.75rem, 3vw, 2.25rem);
+}
+
+.hero-ghost-action {
+  display: inline-flex;
+  min-height: 3.25rem;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-6);
+  border: 1px solid oklch(100% 0 0 / 0.5);
+  border-radius: var(--radius-control);
+  background: oklch(100% 0 0 / 0.08);
+  color: var(--hero-ink);
+  font-size: var(--text-ui);
+  font-weight: var(--weight-semibold);
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition:
+    background var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out);
+}
+
+.hero-ghost-action:hover {
+  background: oklch(100% 0 0 / 0.16);
+  border-color: oklch(100% 0 0 / 0.8);
 }
 
 .hero-facts {
   display: grid;
   gap: var(--space-2);
-  margin: clamp(1.75rem, 3vw, 2.5rem) 0 0;
+  margin: clamp(1.75rem, 3vw, 2.25rem) 0 0;
   padding: 0;
   list-style: none;
 }
@@ -384,64 +458,15 @@
   display: flex;
   align-items: flex-start;
   gap: var(--space-2);
-  color: var(--color-text-subtle);
+  color: var(--hero-ink-soft);
   font-size: var(--text-small);
 }
 
 .hero-facts svg {
   flex: 0 0 auto;
   margin-top: 0.2em;
-  color: var(--color-brand-accent);
+  color: oklch(84% 0.14 155);
 }
-
-.hero-preview {
-  display: grid;
-  min-width: 0;
-  gap: var(--space-3);
-  justify-items: end;
-}
-
-.hero-stage {
-  display: grid;
-  width: 100%;
-}
-
-.hero-stage-slot {
-  grid-area: 1 / 1;
-  min-width: 0;
-  align-self: center;
-  opacity: 0;
-  transform: translateY(10px) scale(0.995);
-  pointer-events: none;
-  transition:
-    opacity var(--motion-panel) var(--ease-out),
-    transform var(--motion-panel) var(--ease-out);
-}
-
-.hero-stage-slot[data-active='true'] {
-  opacity: 1;
-  transform: none;
-  pointer-events: auto;
-}
-
-.hero-replay {
-  display: inline-flex;
-  justify-self: end;
-  min-height: 2.25rem;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 0 var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-control);
-  background: transparent;
-  color: var(--color-text-subtle);
-  font-size: var(--text-caption);
-  font-weight: var(--weight-medium);
-  cursor: pointer;
-  transition: color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out);
-}
-
-.hero-replay:hover { border-color: var(--color-border-strong); color: var(--color-text); }
 
 /* ─── Карточки сценария (тёмная панель, как в приложении) ──────────── */
 
@@ -1329,9 +1354,6 @@
 /* ─── Адаптив ──────────────────────────────────────────────────────── */
 
 @media (max-width: 1180px) {
-  .hero-shell { grid-template-columns: minmax(0, 1fr); }
-  .hero-copy { max-width: 40rem; }
-  .hero-preview { justify-items: stretch; }
   .how-proof { grid-template-columns: minmax(0, 1fr); }
   .feature-row { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
   .faq-shell { grid-template-columns: minmax(0, 1fr); }
@@ -1357,10 +1379,12 @@
 }
 
 @media (max-width: 640px) {
-  .landing-header { height: 4.25rem; }
+  .landing { --header-h: 4.25rem; }
+  .landing-header { height: var(--header-h); }
   .landing-header.is-compact { height: 3.75rem; }
   .landing-header-actions .landing-primary-action { display: none; }
 
+  .landing-hero { min-height: min(92svh, 44rem); }
   .hero-actions { flex-direction: column; align-items: stretch; }
   .hero-actions a { width: 100%; }
   .stage-controls .stage-chip.is-muted { display: none; }
@@ -1393,6 +1417,5 @@
   .stage-caret,
   .stage-spinner,
   .stage-track i { animation: none; }
-  .hero-stage-slot { transition: none; }
   .landing-menu { animation: none; }
 }

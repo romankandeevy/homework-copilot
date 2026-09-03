@@ -12,7 +12,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ArrowRight,
-  ArrowsClockwise,
   CameraPlus,
   ChatsCircle,
   Check,
@@ -33,20 +32,15 @@ import {
   AnalysisPreview,
   ChatPreview,
   NotebookPreview,
-  ResultPreview,
   SchedulePreview,
-  SolvingPreview,
-  TaskFormPreview,
 } from './LandingPreviews'
 import './LandingPage.css'
 
 const appPath = '/app'
 const signInPath = '/app?auth=signin'
 const themeStorageKey = 'homework-copilot:theme'
-const demoCondition = 'Диагонали ромба равны 10 см и 24 см. Найдите сторону ромба.'
 
 type Theme = 'light' | 'dark'
-type Stage = 'typing' | 'solving' | 'result'
 
 const sections = [
   { id: 'how', label: 'Как это работает' },
@@ -239,71 +233,27 @@ function PromoFilm() {
   )
 }
 
-/* Сценарий первого экрана: условие печатается, задача уходит на два
-   независимых прохода, открывается тетрадная страница. Проигрывается
-   один раз — витрина не должна мельтешить, пока человек читает. */
-function useHeroSequence() {
-  const [stage, setStage] = useState<Stage>(() => (prefersReducedMotion() ? 'result' : 'typing'))
-  const [typed, setTyped] = useState(() => (prefersReducedMotion() ? demoCondition : ''))
-  const [passes, setPasses] = useState(0)
-  const [run, setRun] = useState(0)
-  const timers = useRef<number[]>([])
-
-  useEffect(() => {
-    timers.current.forEach(window.clearTimeout)
-    timers.current = []
-    if (prefersReducedMotion()) return
-
-    const wait = (delay: number, action: () => void) => {
-      timers.current.push(window.setTimeout(action, delay))
-    }
-
-    setStage('typing')
-    setTyped('')
-    setPasses(0)
-
-    const typingStep = 26
-    for (let index = 1; index <= demoCondition.length; index += 1) {
-      wait(280 + index * typingStep, () => setTyped(demoCondition.slice(0, index)))
-    }
-
-    const typingEnd = 280 + demoCondition.length * typingStep
-    wait(typingEnd + 520, () => setStage('solving'))
-    wait(typingEnd + 1000, () => setPasses(1))
-    wait(typingEnd + 1500, () => setPasses(2))
-    wait(typingEnd + 2050, () => setPasses(3))
-    wait(typingEnd + 2600, () => setStage('result'))
-
-    return () => {
-      timers.current.forEach(window.clearTimeout)
-      timers.current = []
-    }
-  }, [run])
-
-  return { stage, typed, passes, replay: () => setRun((value) => value + 1) }
-}
-
-function HeroPreview() {
-  const { stage, typed, passes, replay } = useHeroSequence()
+/* Фоновый ролик первого экрана. Файл лёгкий (веб-версия ~1.4 МБ), поэтому
+   грузится сразу и запускается сам — приглушённый и зациклённый, как
+   фон, а не как проигрыватель. При включённом «уменьшении движения»
+   остаётся неподвижный постер. */
+function HeroFilm() {
+  const reduce = prefersReducedMotion()
 
   return (
-    <div className="hero-preview">
-      <div className="hero-stage" data-stage={stage}>
-        <div className="hero-stage-slot" data-active={stage === 'typing'} aria-hidden={stage !== 'typing'}>
-          <TaskFormPreview typed={typed} submitted={typed.length >= demoCondition.length} />
-        </div>
-        <div className="hero-stage-slot" data-active={stage === 'solving'} aria-hidden={stage !== 'solving'}>
-          <SolvingPreview passes={passes} />
-        </div>
-        <div className="hero-stage-slot" data-active={stage === 'result'} aria-hidden={stage !== 'result'}>
-          <ResultPreview />
-        </div>
-      </div>
-
-      <button className="hero-replay" type="button" onClick={replay}>
-        <ArrowsClockwise size={15} weight="bold" aria-hidden="true" />
-        Показать сначала
-      </button>
+    <div className="hero-media" aria-hidden="true">
+      <video
+        className="hero-video"
+        poster="/hero-poster.jpg"
+        autoPlay={!reduce}
+        muted
+        loop
+        playsInline
+        preload="auto"
+      >
+        <source src="/hero.mp4" type="video/mp4" />
+      </video>
+      <span className="hero-scrim" />
     </div>
   )
 }
@@ -578,30 +528,28 @@ export default function LandingPage() {
 
       <main className="landing-main">
         <section className="landing-hero" aria-labelledby="hero-title">
-          <span className="hero-grid-field" aria-hidden="true" />
+          <HeroFilm />
           <div className="landing-shell hero-shell">
             <div className="hero-copy">
               <p className="hero-eyebrow">Домашняя работа по фотографии</p>
-              <h1 id="hero-title">Сфоткал. <br />Списал.</h1>
+              <h1 id="hero-title">Сфоткал.<br />Списал.</h1>
               <p className="hero-lead">
-                Homework Copilot решает задачу с фотографии или текста и возвращает её так, как её нужно сдать:
-                дано, ход решения, чертёж, ответ. Любой предмет с 5 по 11 класс — учебник неважен,
-                условие приносишь ты.
+                Приноси условие фотографией или текстом - получаешь готовую запись
+                для тетради: дано, ход решения, чертёж, ответ. Любой предмет
+                с 5 по 11 класс, учебник неважен.
               </p>
               <div className="hero-actions">
                 <a className="landing-primary-action" href={appPath}>
                   {signedIn ? 'Открыть приложение' : 'Решить задачу'}
                   <ArrowRight size={18} weight="bold" aria-hidden="true" />
                 </a>
-                <a className="landing-secondary-action" href="#how" onClick={scrollToHow}>Как это работает</a>
+                <a className="hero-ghost-action" href="#how" onClick={scrollToHow}>Как это работает</a>
               </div>
               <ul className="hero-facts">
-                <li><Check size={15} weight="bold" aria-hidden="true" />Первое решение — бесплатно и без регистрации</li>
-                <li><Check size={15} weight="bold" aria-hidden="true" />После регистрации ещё 20 ₽ на счёте — это четыре решения</li>
+                <li><Check size={15} weight="bold" aria-hidden="true" />Первое решение - бесплатно и без регистрации</li>
+                <li><Check size={15} weight="bold" aria-hidden="true" />После регистрации ещё 20 ₽ на счёте - это четыре решения</li>
               </ul>
             </div>
-
-            <HeroPreview />
           </div>
         </section>
 
