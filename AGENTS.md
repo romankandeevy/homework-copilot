@@ -295,6 +295,17 @@
 
 Если однажды душить начнут и `*.vercel.app` — переносить функции, а не фронт.
 
+## Выкатка: сначала превью, прод — вручную
+
+`homework-copilot-taupe.vercel.app` служит превью: Vercel собирает и
+выкатывает его на каждый push в `main` сам, без участия воркфлоу. Смотреть
+изменения сначала там.
+
+Прод (`www.homeworkcopilot.ru`, GitHub Pages) `.github/workflows/deploy-pages.yml`
+не запускается на push — только вручную: Actions → Deploy GitHub Pages →
+Run workflow, или `gh workflow run deploy-pages.yml`. Гонять его стоит
+после того, как превью проверено — глазами или скриншотом.
+
 
 # Возврат авторизации открывает приложение, а не витрину
 

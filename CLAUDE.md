@@ -22,6 +22,11 @@ node scripts/render-app-icons.mjs   # перерисовать иконки пр
 
 Проверка перед пушем: `npm run lint && npm run test && npm run test:e2e && npm run build`.
 
+Push в `main` выкатывает только превью: Vercel обновляет
+[homework-copilot-taupe.vercel.app](https://homework-copilot-taupe.vercel.app)
+сам. Прод (`www.homeworkcopilot.ru`, GitHub Pages) — вручную, после проверки
+на превью: `gh workflow run deploy-pages.yml`. Подробнее — «Выкатка» в AGENTS.md.
+
 ## Стек
 
 React 19, TypeScript, Vite 8, motion. Serverless-функции на Vercel (Node),

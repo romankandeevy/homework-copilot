@@ -1,8 +1,9 @@
 name: Deploy GitHub Pages
 
 on:
-  push:
-    branches: [main]
+  # Прод выкатывается только вручную: Actions → Deploy GitHub Pages → Run
+  # workflow. Vercel обновляет превью (homework-copilot-taupe.vercel.app)
+  # сам на каждый push в main — там и проверяем перед этой командой.
   workflow_dispatch:
 
 permissions:
