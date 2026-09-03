@@ -887,12 +887,12 @@ function UnderstandingPage({
           <strong>Условие</strong>
           <p>{generatedSolution.condition}</p>
         </div>
-        {/* Решение оформлено тетрадной страницей — той же, что обещана на
-            витрине: бумага, клетка, красное поле, рукописная гарнитура.
-            У геометрии эту роль играет GeometryNotebookLayoutV1, здесь —
-            лёгкая HTML-версия для остальных предметов. */}
+        {/* Решение оформлено тетрадной страницей — бумага и красное поле,
+            обычный читаемый шрифт (не рукописный: для длинного текста
+            курсив плохо читается). У геометрии эту роль играет
+            GeometryNotebookLayoutV1, здесь — лёгкая HTML-версия для
+            остальных предметов. */}
         <article className="notebook-sheet" aria-label="Готовая запись для тетради">
-          <span className="notebook-sheet-grid" aria-hidden="true" />
           <span className="notebook-sheet-margin" aria-hidden="true" />
           <div className="notebook-sheet-body">
             {generatedSolution.given.length > 0 && (
@@ -911,8 +911,10 @@ function UnderstandingPage({
               <ol>
                 {keyed(generatedSolution.steps, (step) => step).map(({ key, item: step }) => (
                   // Нумерацию ставит страница, поэтому свою — из модели —
-                  // с шага снимаем, чтобы не выходило «1) 1) …».
-                  <li key={key}>{step.replace(/^\s*\d{1,2}[).]\s+/u, '')}</li>
+                  // с шага снимаем, чтобы не выходило «1) 1) …». Слово
+                  // «Ответ» в начале шага снимаем тоже: итог и так придёт
+                  // отдельным блоком ниже, повторять его подпись не нужно.
+                  <li key={key}>{step.replace(/^\s*\d{1,2}[).]\s+/u, '').replace(/^\s*Ответ\s*[:.]?\s*/iu, '')}</li>
                 ))}
               </ol>
             </section>

@@ -1283,16 +1283,16 @@
   line-height: var(--leading-copy);
 }
 
-/* Тетрадная страница решения для всех предметов.
-   Бумага, клетка, красное поле и рукописная гарнитура — тот же язык, что
-   у геометрического листа и у превью на витрине. Бумага остаётся светлой
-   и в тёмной теме: тетрадь — это тетрадь. Токены текста переопределены
-   локально чернилами, чтобы вложенный разбор со значками читался на бумаге
-   при любой теме. */
+/* Тетрадная страница решения для всех предметов, кроме геометрии.
+   Бумага и красное поле — тот же язык, что у геометрического листа и
+   у превью на витрине, но без клетки и без рукописного шрифта: текста
+   здесь много (разбор, формулы, разметка), и на курсиве это плохо
+   читается. Бумага остаётся светлой и в тёмной теме: тетрадь — это
+   тетрадь. Токены текста переопределены локально чернилами, чтобы
+   вложенный разбор со значками читался на бумаге при любой теме. */
 .notebook-sheet {
   --paper: #fffefd;
   --paper-ink: #14161a;
-  --paper-line: #d8e2ef;
   --paper-rule: #e0574c;
   --color-text: var(--paper-ink);
   --color-text-muted: oklch(38% 0 0);
@@ -1307,17 +1307,6 @@
   background: var(--paper);
   color: var(--paper-ink);
   box-shadow: var(--shadow-raised);
-}
-
-.notebook-sheet-grid {
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(var(--paper-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--paper-line) 1px, transparent 1px);
-  background-size: 1.35rem 1.35rem;
-  opacity: 0.6;
-  pointer-events: none;
 }
 
 .notebook-sheet-margin {
@@ -1340,9 +1329,9 @@
     clamp(1.25rem, 3.5vw, 2.5rem)
     clamp(1.5rem, 3vw, 2.25rem)
     clamp(3rem, 8%, 4.25rem);
-  font-family: 'Segoe Print', 'Ink Free', 'Comic Sans MS', cursive;
+  font-family: var(--font-body);
   font-size: clamp(0.95rem, 1.2vw, 1.05rem);
-  line-height: 1.7;
+  line-height: 1.55;
 }
 
 .notebook-sheet-body h2 {
@@ -1413,9 +1402,9 @@
 .notebook-sheet-answer p { font-weight: 700; }
 
 @media (max-width: 640px) {
-  .notebook-sheet-grid { background-size: 1.1rem 1.1rem; }
   .notebook-sheet-margin { left: 1.5rem; }
-  .notebook-sheet-body { padding-left: 2.25rem; }}
+  .notebook-sheet-body { padding-left: 2.25rem; }
+}
 .section-action,
 .section-link {
   display: inline-flex;
