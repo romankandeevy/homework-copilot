@@ -17,8 +17,13 @@ npm run test:e2e       # playwright без снимков тетради — т�
 npm run test:visual    # весь playwright, включая снимки тетради (только локально)
 npm run build          # tsc + vite + статические маршруты
 npm run assets:og      # перерисовать карточку для соцсетей
+npm run promo:render   # отрендерить ролик первого экрана в public/hero.mp4 (1080p60)
 node scripts/render-app-icons.mjs   # перерисовать иконки приложения
 ```
+
+Ролик первого экрана собран кодом: `src/promo/` - сцены как функция времени T,
+без CSS-анимаций. Студия с таймлайном - `http://localhost:5173/?promo=1`
+(только в разработке). Менять текст и тайминги - там, потом `npm run promo:render`.
 
 Проверка перед пушем: `npm run lint && npm run test && npm run test:e2e && npm run build`.
 

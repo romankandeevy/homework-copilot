@@ -12,10 +12,18 @@ import { currentApplicationPath, opensAccountFlow } from './lib/appPath'
    поэтому лишнего ожидания на `/app` не возникает. */
 const App = lazy(() => import('./App'))
 
+/* Студия ролика первого экрана живёт только в разработке (`?promo=1`):
+   в сборке ветка мертва, и чанк в неё не попадает. */
+const PromoStudio = import.meta.env.DEV ? lazy(() => import('./promo/PromoStudio')) : null
+
 export function Root() {
   const params = new URLSearchParams(window.location.search)
   const opensDevTool = import.meta.env.DEV
     && (params.get('canvas') === '1' || params.get('design-system') === '1')
+
+  if (PromoStudio && params.get('promo') === '1') {
+    return <Suspense fallback={null}><PromoStudio /></Suspense>
+  }
 
   if (!opensDevTool && currentApplicationPath() === '/' && !opensAccountFlow()) {
     return <><LandingPage /><PrivacyNotice /></>
