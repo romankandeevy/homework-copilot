@@ -349,11 +349,38 @@
   background: linear-gradient(180deg, transparent 82%, var(--color-canvas) 100%);
 }
 
+/* Текст слева, страница тетради справа. На узком экране колонка одна:
+   лист уходит, потому что ниже он всё равно показан крупно. */
 .hero-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 22rem);
+  align-items: center;
+  gap: clamp(2rem, 5vw, 4.5rem);
   padding-top: clamp(2.5rem, 6vw, 4rem);
 }
 
 .hero-copy { max-width: 40rem; }
+
+.hero-aside {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-4);
+}
+
+.hero-aside .paper-page {
+  width: 100%;
+  transform: rotate(-2deg);
+  box-shadow: var(--shadow-overlay);
+}
+
+.hero-aside-note {
+  margin: 0;
+  color: var(--color-text-subtle);
+  font-family: var(--font-mono);
+  font-size: var(--text-caption);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
 
 .hero-eyebrow {
   margin: 0 0 var(--space-5);
@@ -1324,6 +1351,8 @@
 /* ─── Адаптив ──────────────────────────────────────────────────────── */
 
 @media (max-width: 1180px) {
+  .hero-shell { grid-template-columns: minmax(0, 1fr); }
+  .hero-aside { display: none; }
   .how-proof { grid-template-columns: minmax(0, 1fr); }
   .feature-row { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
   .faq-shell { grid-template-columns: minmax(0, 1fr); }

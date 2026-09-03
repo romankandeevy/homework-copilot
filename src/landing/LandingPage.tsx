@@ -541,6 +541,7 @@ export default function LandingPage() {
         <section className="landing-hero" aria-labelledby="hero-title">
           <HeroFilm />
           <div className="landing-shell hero-shell">
+            <div className="hero-column">
             <div className="hero-copy">
               <p className="hero-eyebrow">Домашняя работа по фотографии</p>
               <h1 id="hero-title">Сфоткал.<br />Списал.</h1>
@@ -573,6 +574,15 @@ export default function LandingPage() {
                 </div>
               ))}
             </dl>
+            </div>
+
+            {/* Справа от текста пустовало полэкрана. Здесь лежит то, о чём
+                обещает заголовок, - сама страница тетради. Ниже, в разделе
+                «Как это работает», она же показана крупно и с разбором. */}
+            <aside className="hero-aside" aria-hidden="true">
+              <NotebookPreview compact />
+              <p className="hero-aside-note">Так приходит решение</p>
+            </aside>
           </div>
         </section>
 
