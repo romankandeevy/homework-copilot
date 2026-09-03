@@ -81,14 +81,6 @@ export function shake(t: number, start: number, duration = 0.32, amplitude = 10)
   }
 }
 
-/* Вспышка на монтажном стыке: вспыхивает в start и гаснет за duration.
-   До самой метки её нет вовсе - иначе будущие склейки светили бы поверх
-   всего ролика с первого кадра. */
-export function flash(t: number, start: number, duration = 0.22) {
-  if (t < start) return 0
-  return 1 - ramp(t, start, duration, linear)
-}
-
 /* Жёсткая склейка: до start - ноль, после - единица, без перехода. */
 export function cut(t: number, start: number) {
   return t >= start ? 1 : 0

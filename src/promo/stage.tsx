@@ -5,7 +5,7 @@
    (realUi.tsx) - наоборот, красятся токенами, как на сайте. */
 
 import type { CSSProperties, ReactNode } from 'react'
-import { flash, shake } from './motion'
+import { shake } from './motion'
 
 export const stageWidth = 1920
 export const stageHeight = 1080
@@ -83,31 +83,6 @@ export function Ambient({ T, intensity = 1 }: { T: number; intensity?: number })
   )
 }
 
-/* Вспышка на монтажном стыке: белая на ударе, синяя на смене темы. */
-export function Cuts({ T, marks }: { T: number; marks: readonly { at: number; tone?: 'white' | 'accent'; power?: number }[] }) {
-  return (
-    <>
-      {marks.map((mark) => {
-        const value = flash(T, mark.at, 0.2) * (mark.power ?? 0.5)
-        if (value <= 0.001) return null
-        return (
-          <div
-            key={`${mark.at}-${mark.tone ?? 'white'}`}
-            style={at(0, 0, {
-              width: stageWidth,
-              height: stageHeight,
-              background: mark.tone === 'accent' ? color.accent : '#fff',
-              opacity: value,
-              mixBlendMode: 'screen',
-              pointerEvents: 'none',
-            })}
-          />
-        )
-      })}
-    </>
-  )
-}
-
 /* Тряска всего кадра после удара: сцена смещается целиком. */
 export function useCameraShake(T: number, marks: readonly { at: number; amplitude?: number }[]) {
   let x = 0
@@ -122,11 +97,10 @@ export function useCameraShake(T: number, marks: readonly { at: number; amplitud
 
 const noMarks: readonly never[] = []
 
-export function Stage({ T, children, shakeMarks = noMarks, cutMarks = noMarks, glow = 1 }: {
+export function Stage({ T, children, shakeMarks = noMarks, glow = 1 }: {
   T: number
   children: ReactNode
   shakeMarks?: readonly { at: number; amplitude?: number }[]
-  cutMarks?: readonly { at: number; tone?: 'white' | 'accent'; power?: number }[]
   glow?: number
 }) {
   const camera = useCameraShake(T, shakeMarks)
@@ -147,7 +121,6 @@ export function Stage({ T, children, shakeMarks = noMarks, cutMarks = noMarks, g
         <Ambient T={T} intensity={glow} />
         {children}
       </div>
-      <Cuts T={T} marks={cutMarks} />
     </div>
   )
 }

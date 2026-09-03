@@ -468,20 +468,6 @@ export function HeroFilm({ T }: { T: number }) {
         { at: starts.launch + 0.55, amplitude: 14 },
         { at: starts.checked + 0.05, amplitude: 12 },
       ]}
-      cutMarks={[
-        { at: starts.problem, power: 0.4 },
-        { at: starts.form, power: 0.4 },
-        { at: starts.photo, power: 0.35 },
-        { at: starts.launch, tone: 'accent', power: 0.4 },
-        { at: starts.solving, power: 0.4 },
-        { at: starts.checked, tone: 'accent', power: 0.5 },
-        { at: starts.sheet, power: 0.4 },
-        { at: starts.rewrite, power: 0.35 },
-        { at: starts.subjects, power: 0.45 },
-        { at: starts.more, power: 0.35 },
-        { at: starts.price, power: 0.4 },
-        { at: starts.outro, tone: 'accent', power: 0.45 },
-      ]}
     >
       <Scene t={local} duration={beat.duration} />
     </Stage>

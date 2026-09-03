@@ -9,14 +9,7 @@
 import { hold, pop, ramp, rise, typed } from './motion'
 import { AppScreen, NotebookPage, SolveCard, TaskFormCard, taskCondition } from './realUi'
 import { Eyebrow, Stage, at, color, font, stageHeight, stageWidth } from './stage'
-import { beatAt, solveBeats, startOf } from './timelines'
-
-const starts = {
-  task: startOf(solveBeats, 'task'),
-  solving: startOf(solveBeats, 'solving'),
-  sheet: startOf(solveBeats, 'sheet'),
-  done: startOf(solveBeats, 'done'),
-}
+import { beatAt, solveBeats } from './timelines'
 
 function Caption({ t, start, children }: { t: number; start: number; children: string }) {
   return (
@@ -100,11 +93,7 @@ export function SolveFilm({ T }: { T: number }) {
   const { beat, local } = beatAt(solveBeats, T)
   const Scene = scenes[beat.id as keyof typeof scenes]
   return (
-    <Stage
-      T={T}
-      glow={0.8}
-      cutMarks={[{ at: starts.solving, power: 0.35 }, { at: starts.sheet, power: 0.35 }, { at: starts.done, tone: 'accent', power: 0.3 }]}
-    >
+    <Stage T={T} glow={0.8}>
       <Scene t={local} duration={beat.duration} />
     </Stage>
   )
