@@ -160,7 +160,9 @@
 .landing-brand {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-3);
+  /* Тот же зазор, что и в шапке приложения: знак не должен читаться первой
+     буквой названия. */
+  gap: var(--space-4);
   color: var(--color-text);
   font-family: var(--font-display);
   font-size: clamp(1rem, 1.1vw, 1.15rem);

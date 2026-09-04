@@ -81,6 +81,10 @@ a {
   font-weight: var(--weight-bold);
   line-height: 0.78;
   letter-spacing: -0.18em;
+  /* Отрицательный трекинг вычитается и после последней буквы, поэтому пара
+     стояла в коробке не по центру, а вправо: «C» выходила за край знака и
+     слипалась с «Homework». Компенсируем ровно на величину трекинга. */
+  padding-right: 0.18em;
   -webkit-text-stroke: 1px var(--color-brand-accent);
   text-stroke: 1px var(--color-brand-accent);
 }
