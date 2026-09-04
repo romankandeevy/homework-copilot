@@ -13,14 +13,64 @@ type Point = {
 
 const sceneLayout = layout.zones.diagram.scene
 
-function mapPoint(point: HomeworkDiagramScene['points'][number]): Point {
-  const localSpan = sceneLayout.localMax - sceneLayout.localMin
-  const drawableWidth = sceneLayout.width - sceneLayout.padding * 2
-  const drawableHeight = sceneLayout.height - sceneLayout.padding * 2
+/* Проекция сцены на лист.
+
+   Прежде координаты 0..100 растягивались по осям независимо: поле чертежа
+   575x455, и одна и та же единица по горизонтали была длиннее, чем по
+   вертикали. Квадрат выходил прямоугольником, окружность - овалом, а прямой
+   угол переставал быть прямым - при том что сама сцена была построена верно.
+
+   Теперь масштаб один на обе оси, а сцена вписывается в поле по своим
+   границам: фигура занимает лист целиком, а не жмётся в угол, если модель
+   разложила точки в диапазоне 30..60. Минимальный размах не даёт вырожденной
+   сцене (все точки на одной прямой) растянуться до бесконечного масштаба. */
+const minimumLocalSpan = 24
+
+/* Место под подписи вершин.
+
+   Вписывать сцену впритык нельзя: крайние точки садятся на границу поля,
+   и подпись за ней обрезается клипом - на чертеже остаётся «C» без верхушки
+   и «A», уехавшая за край. Поле под букву отводится заранее, а не
+   отодвигается потом: сдвигать подпись внутрь фигуры значит класть её на
+   линию. */
+const labelMargin = 34
+
+function sceneProjection(points: readonly HomeworkDiagramScene['points'][number][]) {
+  const drawableWidth = sceneLayout.width - (sceneLayout.padding + labelMargin) * 2
+  const drawableHeight = sceneLayout.height - (sceneLayout.padding + labelMargin) * 2
+  const centerX = sceneLayout.x + sceneLayout.width / 2
+  const centerY = sceneLayout.y + sceneLayout.height / 2
+
+  if (points.length === 0) {
+    const scale = Math.min(drawableWidth, drawableHeight) / (sceneLayout.localMax - sceneLayout.localMin)
+    return { scale, localCenterX: 50, localCenterY: 50, centerX, centerY }
+  }
+
+  const xs = points.map((point) => point.x)
+  const ys = points.map((point) => point.y)
+  const minX = Math.min(...xs)
+  const maxX = Math.max(...xs)
+  const minY = Math.min(...ys)
+  const maxY = Math.max(...ys)
+  const spanX = Math.max(maxX - minX, minimumLocalSpan)
+  const spanY = Math.max(maxY - minY, minimumLocalSpan)
+
+  return {
+    scale: Math.min(drawableWidth / spanX, drawableHeight / spanY),
+    localCenterX: (minX + maxX) / 2,
+    localCenterY: (minY + maxY) / 2,
+    centerX,
+    centerY,
+  }
+}
+
+type SceneProjection = ReturnType<typeof sceneProjection>
+
+function mapPoint(point: HomeworkDiagramScene['points'][number], projection: SceneProjection): Point {
   return {
     ...point,
-    x: sceneLayout.x + sceneLayout.padding + ((point.x - sceneLayout.localMin) / localSpan) * drawableWidth,
-    y: sceneLayout.y + sceneLayout.padding + ((point.y - sceneLayout.localMin) / localSpan) * drawableHeight,
+    x: projection.centerX + (point.x - projection.localCenterX) * projection.scale,
+    y: projection.centerY + (point.y - projection.localCenterY) * projection.scale,
   }
 }
 
@@ -143,25 +193,144 @@ function ParallelMark({ points, label }: { points: readonly Point[]; label: stri
   </>
 }
 
-/* Подпись вершины уводится наружу от середины чертежа: иначе буква A
-   ложится внутрь фигуры поверх диагонали и прямого угла, а D наезжает
-   на сторону. Величина отступа остаётся утверждённой, меняется только
-   сторона, в которую он отложен. */
-function labelPlacement(point: Point, center: { x: number; y: number }) {
-  const toLeft = point.x < center.x - sceneLayout.pointRadius
-  const below = point.y > center.y + sceneLayout.pointRadius
-  return {
-    x: point.x + (toLeft ? -sceneLayout.labelOffsetX : sceneLayout.labelOffsetX),
-    y: point.y + (below ? -sceneLayout.labelOffsetY : sceneLayout.labelOffsetY),
-    anchor: toLeft ? 'end' as const : 'start' as const,
+/* Куда поставить подпись вершины.
+
+   Прежде выбиралось одно из четырёх направлений - «наружу от середины
+   чертежа». На треугольнике это работало, на ромбе с диагоналями уже нет:
+   буква ложилась на диагональ, подпись центра пересечения садилась на две
+   линии сразу, а соседние вершины подписывались в одну точку.
+
+   Теперь подпись примеряется по восьми направлениям вокруг точки, и берётся
+   то, где она дальше всего от линий чертежа, от других вершин и от уже
+   поставленных подписей. Направление наружу остаётся предпочтительным: при
+   равном счёте выигрывает оно, поэтому обычный треугольник подписывается
+   так же, как раньше. */
+const labelDirections = [
+  { x: 1, y: -1 }, { x: -1, y: -1 }, { x: -1, y: 1 }, { x: 1, y: 1 },
+  { x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: -1 }, { x: 0, y: 1 },
+]
+
+const labelClearance = 26
+
+function segmentDistance(point: { x: number; y: number }, start: Point, end: Point) {
+  const length = Math.hypot(end.x - start.x, end.y - start.y)
+  if (length === 0) return Math.hypot(point.x - start.x, point.y - start.y)
+  const t = Math.max(0, Math.min(1, ((point.x - start.x) * (end.x - start.x) + (point.y - start.y) * (end.y - start.y)) / (length * length)))
+  return Math.hypot(point.x - (start.x + (end.x - start.x) * t), point.y - (start.y + (end.y - start.y) * t))
+}
+
+function labelPlacement(
+  point: Point,
+  center: { x: number; y: number },
+  points: readonly Point[],
+  edges: readonly (readonly [Point, Point])[],
+  taken: readonly { x: number; y: number }[],
+) {
+  const outward = {
+    x: point.x >= center.x ? 1 : -1,
+    y: point.y >= center.y ? 1 : -1,
   }
+  const offsetX = Math.abs(sceneLayout.labelOffsetX)
+  const offsetY = Math.abs(sceneLayout.labelOffsetY)
+
+  let best = {
+    x: point.x + offsetX,
+    y: point.y - offsetY,
+    anchor: 'start' as 'start' | 'end',
+    score: -Infinity,
+  }
+
+  for (const direction of labelDirections) {
+    const spot = {
+      x: point.x + direction.x * offsetX * 1.6,
+      y: point.y + direction.y * offsetY * 1.6,
+    }
+    const fromPoints = points
+      .filter((other) => other.id !== point.id)
+      .reduce((closest, other) => Math.min(closest, Math.hypot(spot.x - other.x, spot.y - other.y)), Infinity)
+    const fromEdges = edges.reduce((closest, [start, end]) => Math.min(closest, segmentDistance(spot, start, end)), Infinity)
+    const fromLabels = taken.reduce((closest, other) => Math.min(closest, Math.hypot(spot.x - other.x, spot.y - other.y)), Infinity)
+    const outwardBonus = (direction.x === outward.x ? labelClearance / 2 : 0) + (direction.y === outward.y ? labelClearance / 2 : 0)
+    const score = Math.min(fromPoints, labelClearance * 2)
+      + Math.min(fromEdges, labelClearance)
+      + Math.min(fromLabels, labelClearance * 2)
+      + outwardBonus
+
+    if (score > best.score) {
+      best = {
+        x: spot.x,
+        y: spot.y + (direction.y >= 0 ? offsetY * 0.7 : 0),
+        anchor: direction.x < 0 ? 'end' : 'start',
+        score,
+      }
+    }
+  }
+
+  return best
+}
+
+/* Где написать имя линии или фигуры.
+
+   Кандидаты - несколько точек вдоль объекта, сдвинутых в обе стороны от
+   него. Побеждает та, что дальше от вершин, от других линий и от уже
+   поставленных подписей. */
+function objectLabelPlacement(
+  objectPoints: readonly Point[],
+  points: readonly Point[],
+  edges: readonly (readonly [Point, Point])[],
+  taken: readonly { x: number; y: number }[],
+) {
+  const [start, end] = objectPoints
+  const fallback = objectPoints.length > 0
+    ? { x: average(objectPoints).x, y: average(objectPoints).y + sceneLayout.objectLabelOffsetY }
+    : { x: 0, y: 0 }
+  if (!start || !end) return fallback
+
+  const direction = unit(start, end)
+  if (!direction) return fallback
+  const normal = { x: -direction.y, y: direction.x }
+  const offset = Math.abs(sceneLayout.lineLabelOffsetY)
+
+  let best = { ...fallback, score: -Infinity }
+  for (const along of [0.18, 0.34, 0.66, 0.82]) {
+    for (const side of [1, -1]) {
+      const spot = {
+        x: start.x + (end.x - start.x) * along + normal.x * offset * side,
+        y: start.y + (end.y - start.y) * along + normal.y * offset * side,
+      }
+      const fromPoints = points.reduce((closest, point) => Math.min(closest, Math.hypot(spot.x - point.x, spot.y - point.y)), Infinity)
+      const fromEdges = edges.reduce((closest, [from, to]) => Math.min(closest, segmentDistance(spot, from, to)), Infinity)
+      const fromLabels = taken.reduce((closest, other) => Math.min(closest, Math.hypot(spot.x - other.x, spot.y - other.y)), Infinity)
+      const score = Math.min(fromPoints, labelClearance * 2)
+        + Math.min(fromEdges, labelClearance)
+        + Math.min(fromLabels, labelClearance * 2)
+      if (score > best.score) best = { x: spot.x, y: spot.y, score }
+    }
+  }
+  return { x: best.x, y: best.y }
 }
 
 export function GeometryScene({ scene, description }: { scene: HomeworkDiagramScene; description: string }) {
   const clipId = `geometry-scene-${useId().replace(/:/gu, '')}`
-  const points = scene.points.map(mapPoint)
+  const projection = sceneProjection(scene.points)
+  const points = scene.points.map((point) => mapPoint(point, projection))
   const pointMap = new Map(points.map((point) => [point.id, point]))
   const center = points.length > 0 ? average(points) : { x: 0, y: 0 }
+
+  /* Отрезки чертежа нужны подписям: буква не должна ложиться на линию.
+     Окружности сюда не идут - подпись на дуге читается, а хорда между
+     центром и точкой окружности линией не является. */
+  const edges = scene.objects.flatMap((object) => {
+    if (object.kind === 'circle') return []
+    const objectPoints = object.points.map((id) => pointMap.get(id)).filter((point): point is Point => Boolean(point))
+    return objectPoints
+      .slice(0, -1)
+      .map((start, index) => [start, objectPoints[index + 1]] as const)
+      .concat(object.kind === 'polygon' && objectPoints.length > 2
+        ? [[objectPoints[objectPoints.length - 1], objectPoints[0]] as const]
+        : [])
+  })
+  const placedLabels: { x: number; y: number }[] = []
 
   return (
     <g className="geometry-diagram geometry-scene" data-testid="geometry-scene" role="img" aria-label={description}>
@@ -182,11 +351,16 @@ export function GeometryScene({ scene, description }: { scene: HomeworkDiagramSc
               : object.kind === 'polyline' || object.kind === 'polygon'
                 ? <path className={className} d={chainPath(objectPoints, object.kind === 'polygon')} />
                 : <path className={className} d={segmentPath(objectPoints, object.kind as 'line' | 'segment' | 'ray')} />}
-            {object.label && labelPoint && <text
-              className="diagram-angle-label"
-              x={labelPoint.x + (object.kind === 'line' || object.kind === 'ray' ? sceneLayout.lineLabelOffsetX : 0)}
-              y={labelPoint.y + (object.kind === 'line' || object.kind === 'ray' ? sceneLayout.lineLabelOffsetY : sceneLayout.objectLabelOffsetY)}
-            >{object.label}</text>}
+            {object.label && labelPoint && (() => {
+              /* Подпись линии раньше вставала в её середину, а середина
+                 отрезка - это чаще всего точка пересечения с другой линией
+                 или вершина: на чертеже выходило слипшееся «aB». Теперь
+                 подпись примеряется вдоль линии и отодвигается от неё вбок,
+                 по тем же правилам, что и подпись вершины. */
+              const place = objectLabelPlacement(objectPoints, points, edges, placedLabels)
+              placedLabels.push(place)
+              return <text className="diagram-angle-label" textAnchor="middle" x={place.x} y={place.y}>{object.label}</text>
+            })()}
           </g>
         })}
         {scene.marks.map((mark, index) => {
@@ -198,7 +372,8 @@ export function GeometryScene({ scene, description }: { scene: HomeworkDiagramSc
           return <ParallelMark points={markPoints} label={mark.label} key={key} />
         })}
         {points.filter((point) => point.visible).map((point) => {
-          const place = labelPlacement(point, center)
+          const place = labelPlacement(point, center, points, edges, placedLabels)
+          placedLabels.push({ x: place.x, y: place.y })
           return (
             <g key={point.id}>
               <circle className="diagram-point" cx={point.x} cy={point.y} r={sceneLayout.pointRadius} />

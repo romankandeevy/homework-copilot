@@ -22,6 +22,10 @@ function solution(overrides: Partial<HomeworkSolution>): HomeworkSolution {
     condition: 'Найдите длину маршрута, если турист прошёл 12 км.',
     given: ['12 км'],
     goal: { title: 'Найти', text: 'длину маршрута' },
+    explanation: [
+      'Задача на части: известна часть пути и её доля от целого маршрута.',
+      'Целое находят делением известной части на её долю, а не умножением.',
+    ],
     steps: ['12 : 1/4 = 48 км.'],
     answer: '48 км',
     diagram: { kind: 'none', description: '', vertices: [] },
@@ -107,6 +111,6 @@ describe('правила предмета', () => {
   })
 
   it('у незнакомого предмета остаются только общие правила', () => {
-    expect(subjectRuleQuestions('Танцы').map((rule) => rule.id)).toEqual(['answer-answers-question'])
+    expect(subjectRuleQuestions('Танцы').map((rule) => rule.id)).toEqual(['explanation-explains', 'answer-answers-question'])
   })
 })

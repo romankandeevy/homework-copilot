@@ -1152,6 +1152,41 @@
   line-height: var(--leading-copy);
 }
 
+/* Разбор перед листом.
+
+   Он идёт до тетрадной страницы, а не после: продукт объясняет, а потом
+   показывает запись. Оформление намеренно не тетрадное - это разговор
+   учителя, а не то, что переписывают в тетрадь. */
+.solution-explanation {
+  width: min(100%, 60rem);
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface-raised);
+}
+
+.solution-explanation h2 {
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: var(--weight-display);
+  letter-spacing: var(--tracking-snug);
+}
+
+.solution-explanation ol {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding-left: 1.35rem;
+}
+
+.solution-explanation li {
+  max-width: 68ch;
+  color: var(--color-text-muted);
+  font-size: var(--text-ui);
+  line-height: var(--leading-copy);
+}
+
 /* Дисклеймер стоит под решением, где он и работает. */
 .solution-disclaimer {
   width: min(100%, 60rem);
@@ -1409,7 +1444,10 @@
     clamp(1.25rem, 3.5vw, 2.5rem)
     clamp(1.5rem, 3vw, 2.25rem)
     clamp(3rem, 8%, 4.25rem);
-  font-family: 'Segoe Print', 'Ink Free', 'Comic Sans MS', cursive;
+  /* Тетрадный лист набран Onest, а не рукописной гарнитурой: рукописный
+     шрифт читается хуже, съезжает по строке и на снимке экрана выглядит
+     дешевле, чем запись, которую ученик переписывает. */
+  font-family: var(--font-body);
   font-size: clamp(0.95rem, 1.2vw, 1.05rem);
   line-height: 1.7;
 }

@@ -88,7 +88,26 @@ const formulaBeforeNumbers: SubjectRule = {
   applies: (solution) => solution.taskType === 'calculation',
 }
 
+/* Разбор перед решением.
+
+   Это не украшение записи, а то, чем продукт отличается от списывания:
+   сначала объясняем способ, потом показываем готовый лист. Проверяем то,
+   что проверяемо кодом, - что разбор есть и что он не копия шагов. */
+const explanationExplains: SubjectRule = {
+  id: 'explanation-explains',
+  question: 'Объяснение перед решением говорит, каким правилом задача решается и почему именно им?',
+  verify: (solution) => {
+    const explanation = solution.explanation ?? []
+    if (explanation.length < 2) return 'Нет объяснения перед решением'
+    const steps = new Set(solution.steps.map((line) => line.trim()))
+    return explanation.some((line) => steps.has(line.trim()))
+      ? 'Объяснение повторяет строки решения вместо разбора'
+      : null
+  },
+}
+
 const commonRules: readonly SubjectRule[] = [
+  explanationExplains,
   {
     id: 'answer-answers-question',
     question: 'Ответ отвечает на вопрос задачи, а не пересказывает условие?',
@@ -111,6 +130,13 @@ const rulesBySubject: Record<string, readonly SubjectRule[]> = {
   algebra: [numericAnswer, answerUnits, stepsShowWork, {
     id: 'roots-checked',
     question: 'Все корни найдены и посторонние отброшены с указанием причины?',
+  }, {
+    id: 'domain-checked',
+    question: 'Область допустимых значений выписана, если есть дробь, корень или логарифм?',
+    applies: (solution) => conditionMentions(solution, /\/|дроб|корен|корн|логарифм|√/u),
+  }, {
+    id: 'identity-named',
+    question: 'Названо преобразование или формула, по которой сделан каждый переход?',
   }],
   geometry: [answerUnits, latinPointLabels, {
     id: 'theorem-named',
@@ -118,11 +144,22 @@ const rulesBySubject: Record<string, readonly SubjectRule[]> = {
   }, {
     id: 'drawing-matches-condition',
     question: 'На чертеже есть все объекты и подписи из условия?',
+  }, {
+    id: 'drawing-upright',
+    question: 'Фигура стоит прямо - основание горизонтально, ось симметрии вертикальна - и занимает всё поле чертежа?',
+    applies: (solution) => solution.diagram.kind !== 'none',
+  }, {
+    id: 'numbers-on-drawing',
+    question: 'Числа из условия подписаны у нужных отрезков и углов чертежа?',
+    applies: (solution) => solution.diagram.kind !== 'none' && /\d/u.test(solution.condition),
   }],
   physics: [numericAnswer, answerUnits, formulaBeforeNumbers, {
     id: 'si-units',
     question: 'Все величины в «Дано» переведены в СИ?',
     verify: (solution) => (solution.given.length > 0 ? null : 'Раздел «Дано» пуст'),
+  }, {
+    id: 'answer-plausible',
+    question: 'Порядок величины в ответе разумен для школьной задачи?',
   }],
   chemistry: [{
     id: 'equation-balanced',

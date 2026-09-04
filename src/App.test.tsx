@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import App from './App'
 import { Root } from './Root'
+import { homeworkSolutionEngineVersion } from './lib/homeworkContract'
 import type { HomeworkSolution, SolveHomeworkRequest } from './lib/homeworkContract'
 import { normalizeTaskCondition } from './textbooks/taskCatalog'
 
@@ -10,7 +11,7 @@ import { normalizeTaskCondition } from './textbooks/taskCatalog'
 function mockGeneratedSolution(request: SolveHomeworkRequest): HomeworkSolution {
   const condition = request.condition ?? 'По фотографии найдите угол треугольника.'
   return {
-    engineVersion: 2,
+    engineVersion: homeworkSolutionEngineVersion,
     textbookId: request.textbookId,
     task: request.task,
     source: request.source,
@@ -23,6 +24,10 @@ function mockGeneratedSolution(request: SolveHomeworkRequest): HomeworkSolution 
     condition,
     given: ['A, B, C — точки задачи.'],
     goal: { title: 'Найти', text: 'ответ.' },
+    explanation: [
+      'Сначала разбираемся, что дано и что требуется найти в этой задаче.',
+      'Дальше применяем подходящее правило и доводим вычисление до ответа.',
+    ],
     steps: ['Выполняем построение по условию.', 'Получаем ответ.'],
     answer: 'Готово.',
     diagram: { kind: 'three-point-lines', description: 'Точки A, B и C соединены прямыми.', vertices: ['A', 'B', 'C'] },

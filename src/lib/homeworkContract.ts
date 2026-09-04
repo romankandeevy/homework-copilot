@@ -34,7 +34,11 @@ export type HomeworkSource = 'number' | 'photo' | 'text'
    форма не даёт набрать больше, сервер не берёт в работу больше. */
 export const maxConditionLength = 1500
 
-export const homeworkSolutionEngineVersion = 2
+/* Версия решателя. Поднимается, когда меняется состав готового решения:
+   по ней отличается запись, собранная нынешним движком, от сохранённой
+   прежним. Версия 3 - один проход умной моделью и объяснение перед
+   решением. */
+export const homeworkSolutionEngineVersion = 3
 
 export const homeworkTaskTypes = ['construction', 'calculation', 'proof', 'mixed'] as const
 export type HomeworkTaskType = typeof homeworkTaskTypes[number]
@@ -121,8 +125,8 @@ export type HomeworkSolutionVerification = {
   checks: HomeworkVerificationCheck[]
   /* Сошлись ли независимые проходы в ответе и был ли у них для этого краткий
      ключ сверки. Ученику не показывается: это след того, как решение
-     проверялось. Без него причину вызова рецензента приходится угадывать
-     по длительности стадий. */
+     проверялось. Осталось от двух проходов: с 4 сентября проход один,
+     и поле заполняется только у решений, сохранённых до этого. */
   agreement?: {
     sameAnswer: boolean
     answerKeysPresent: boolean
@@ -146,6 +150,14 @@ export type HomeworkSolution = {
     title: 'Найти' | 'Доказать' | 'Построить'
     text: string
   }
+  /* Объяснение перед решением: почему задача решается именно так.
+
+     Продукт — «сфоткал и понял», а не «сфоткал и списал»: сначала разбор
+     обычными словами, потом готовая запись. Без объяснения сервис читается
+     как списывание, и на этом основании его отказываются подключать
+     платёжные системы. Необязательно: решения, сохранённые до появления
+     объяснения, остаются читаемыми. */
+  explanation?: string[]
   steps: string[]
   answer: string
   diagram: HomeworkDiagram

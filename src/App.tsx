@@ -633,7 +633,7 @@ function MySolutions({ items, onOpenAll, onOpenSolution }: { items: readonly Per
           return (
             <button type="button" key={`${textbookId}-${task}-${time}`} onClick={() => onOpenSolution({ textbookId, task, mode, source })}>
               <Icon size={32} weight="duotone" aria-hidden="true" />
-              <span><small>{textbook.subject}, {textbook.title}</small><strong>{source === 'number' ? `№ ${task}` : task}</strong></span>
+              <span><small>{textbook.subject}</small><strong>{source === 'number' ? `№ ${task}` : task}</strong></span>
               <time>{time}</time>
               <ArrowRight size={18} weight="bold" aria-hidden="true" />
             </button>
@@ -789,6 +789,7 @@ function UnderstandingPage({
 
     const value = [
       'Условие: ' + source.condition,
+      ...(explanationLines.length > 0 ? ['Как это решается:', ...explanationLines.map((line) => '- ' + line)] : []),
       ...(source.given.length > 0 ? ['Дано:', ...source.given] : []),
       source.goal.title + ': ' + source.goal.text,
       'Решение:',
@@ -824,6 +825,22 @@ function UnderstandingPage({
   const disclaimer = (
     <p className="solution-disclaimer">Решение помогает разобраться. Проверь ответ перед сдачей.</p>
   )
+
+  /* Разбор идёт до готовой записи, а не после неё.
+
+     Мы продаём «сфоткал и понял», а не «сфоткал и списал»: сервис, который
+     выдаёт только готовый лист, платёжные системы отказываются подключать,
+     и по делу — списывание это и есть. Поэтому первым на странице стоит
+     объяснение обычными словами, и только под ним лист для тетради. */
+  const explanationLines = generatedSolution?.explanation ?? []
+  const explanation = explanationLines.length > 0 ? (
+    <section className="solution-explanation" aria-labelledby="solution-explanation-title">
+      <h2 id="solution-explanation-title">Как это решается</h2>
+      <ol>
+        {keyed(explanationLines, (line) => line).map(({ key, item: line }) => <li key={key}>{line}</li>)}
+      </ol>
+    </section>
+  ) : null
 
   // Гостю говорим правду о том, где лежит решение, и что он получит за вход.
   const guestInvite = guestOffer ? (
@@ -869,6 +886,7 @@ function UnderstandingPage({
             <p>{generatedSolution.condition}</p>
           </div>
         )}
+        {explanation}
         <div className="solution-notebook-preview"><GeometryNotebookLayoutV1 spec={notebookFixture} /></div>
         {disclaimer}
         {guestInvite}
@@ -889,6 +907,7 @@ function UnderstandingPage({
           <strong>Условие</strong>
           <p>{generatedSolution.condition}</p>
         </div>
+        {explanation}
         {/* Решение оформлено тетрадной страницей — той же, что обещана на
             витрине: бумага, клетка, красное поле, рукописная гарнитура.
             У геометрии эту роль играет GeometryNotebookLayoutV1, здесь —
@@ -909,7 +928,9 @@ function UnderstandingPage({
             </section>
             <span className="notebook-sheet-divider" aria-hidden="true" />
             <section className="notebook-sheet-steps">
-              <h2>Решение</h2>
+              {/* У доказательства в тетради пишут «Доказательство»: по
+                  заголовку видно, что от записи требуется. */}
+              <h2>{generatedSolution.goal.title === 'Доказать' ? 'Доказательство' : 'Решение'}</h2>
               <ol>
                 {keyed(generatedSolution.steps, (step) => step).map(({ key, item: step }) => (
                   // Нумерацию ставит страница, поэтому свою — из модели —

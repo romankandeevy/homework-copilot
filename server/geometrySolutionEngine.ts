@@ -31,42 +31,41 @@ import { subjectRuleQuestions, verifySubjectRules } from './subjectRules.ts'
 
 export { homeworkSolutionEngineVersion }
 
-// Два независимых прохода идут РАЗНЫМИ моделями из разных семейств.
+// Один проход умной моделью вместо двух дешёвых и рецензента.
 //
-// Два решения, сошедшихся в ответе, — довод весомее, когда они получены
-// не одной моделью дважды, а двумя независимыми. Плюс страховка от сбоя
-// провайдера: 30 августа семейство Claude лежало сутки целиком, и один
-// упавший проход не должен уносить с собой второй.
+// Прежнее устройство: два независимых прохода дешёвыми моделями, сверка их
+// ответов, а на расхождении — третий вызов, рецензент. Замер 4 сентября:
+// геометрия 2,5 минуты, алгебра не уложилась и в три. Платили мы при этом
+// за три-четыре вызова, а качество давала не сверка, а модель: два прохода
+// слабой модели чаще сходились в одной и той же ошибке, чем ловили её.
 //
-// Замер 31 августа: семейство Gemini через KIE не принимает строгую схему
-// решателя. Тот же запрос без `strict: true` проходит за 72 с, простая схема
-// с тем же промптом — за 2,8 с, а полный запрос решателя отвечает отказом
-// «сервер на обслуживании» через 106–183 с. Так же ведёт себя gemini-3-pro,
-// поэтому дело не в конкретной модели, а в поддержке строгой схемы у шлюза.
+// Теперь проход один и идёт самой сильной моделью пула. Освободившийся
+// бюджет — и по деньгам, и по времени — уходит в неё же: подробный промпт,
+// объяснение перед решением, разбор оформления. Проверка осталась там, где
+// она объективна и мгновенна: правила предмета и разбор записи кодом
+// (validateSolutionQuality, verifySubjectRules). Нарушенное чинится одним
+// адресным повтором, а не разговором с ещё одной моделью.
 //
-// Пока это так, в пуле остаётся одно пригодное семейство, и оба прохода идут
-// им. Проверка слабее, чем у двух разных семейств: одинаковая модель может
-// повторить и свою ошибку. Но она по-прежнему ловит то, ради чего заведена, —
-// стохастические сбои вроде забытого чертежа или битого JSON, и это лучше
-// прохода, который гарантированно не дойдёт.
+// Порядок пула снят с живого замера 4 сентября, а не с прайса. Один и тот
+// же полный запрос решателя (шестизначные числа без повторов, делящиеся
+// на 15; верный ответ 9744 и 29/405 проверен перебором):
 //
-// Замер 2 сентября, когда лёг весь путь /codex (GPT-5.6 luna, sol, terra
-// отвечали 500 «Server exception» за две секунды): варианты Gemini с суффиксом
-// -openai строгую схему решателя принимают. Тот же запрос решателя целиком:
-// gemini-3-5-flash-openai — 22 с, чисто; gemini-3-6-flash-openai — 45 с
-// с одним повтором после 524; gemini-3-pro — 71 с. gemini-2.5-flash по-прежнему
-// «на обслуживании».
+//   gemini-3-6-flash-openai   79 с   верно, одна починка
+//   gemini-3-5-flash-openai   39 с   верно, чисто
+//   gemini-3-pro              83 с   отказ, до модели не достучались
+//   gpt-5-6-luna             107 с   6864 и 143/2835 — неверно
 //
-// Пул устроен так: первые две модели берут на себя два независимых прохода,
-// остальные — запасные. Любой вызов, упёршийся в отказ шлюза, идёт дальше по
-// пулу (candidateModels ниже), поэтому упавшая семья решение больше не уносит.
-// Порядок — от дешёвого к дорогому: luna 0,01–0,02 кредита, flash-варианты
-// дешевле pro впятеро.
-export const defaultHomeworkModels = ['gpt-5-6-luna', 'gemini-3-5-flash-openai', 'gemini-3-6-flash-openai', 'gemini-3-pro'] as const
+// Отсюда порядок: первым идёт тот, кто отвечает верно, дальше — быстрый
+// запасной. gemini-3-pro оставлен третьим: он не «плох», а недоступен, и
+// вернётся вместе с доступом. gpt-5-6-luna последний — он отвечает, но
+// ошибается, и брать его стоит только когда не отвечает никто.
+//
+// Семейство Gemini без суффикса -openai строгую схему решателя через KIE
+// не принимает: gemini-2.5-flash отвечает «сервер на обслуживании».
+// Проверять пул заново — `probe-models.local.mjs` (локальный, в индексе
+// не держится).
+export const defaultHomeworkModels = ['gemini-3-6-flash-openai', 'gemini-3-5-flash-openai', 'gemini-3-pro', 'gpt-5-6-luna'] as const
 
-// Сколько независимых проходов делаем. Их всегда два: два сошедшихся решения
-// — это и есть проверка, из-за которой рецензент чаще всего не нужен.
-const authorPassCount = 2
 // Одиночные вызовы — рецензент, починка чертежа, ответ GET /api/solve.
 export const defaultHomeworkModel = defaultHomeworkModels[0]
 
@@ -97,11 +96,6 @@ type RuleCheck = {
   evidence: string
 }
 
-type SpeculativeReview = {
-  draft: EngineDraft
-  promise: Promise<unknown>
-}
-
 type EngineDraft = {
   ruleChecks: readonly RuleCheck[]
   condition: string
@@ -111,6 +105,7 @@ type EngineDraft = {
   sourceVerified: boolean
   given: string[]
   goal: HomeworkSolution['goal']
+  explanation: string[]
   steps: string[]
   answer: string
   /* Ответ в краткой проверяемой форме — только для сверки проходов между
@@ -241,7 +236,11 @@ const decisionSchema = {
       maxItems: 10,
       items: { type: 'string', description: 'Обязательный объект, подпись или связь.' },
     },
-    notebookFormat: { type: 'string', description: 'Краткий вид готовой записи в тетради.' },
+    notebookFormat: {
+      type: 'string',
+      description: 'Каким из школьных видов оформлена запись: «дано-найти-чертёж-решение», '
+        + '«дано-доказать-чертёж-доказательство», «построение», «только решение и ответ», «разбор».',
+    },
     selfChecks: {
       type: 'array',
       minItems: 3,
@@ -339,7 +338,7 @@ const ruleCheckSchema = {
 const draftSchema = {
   type: 'object',
   additionalProperties: false,
-  required: ['condition', 'taskType', 'diagramRequired', 'decisions', 'sourceVerified', 'given', 'goal', 'steps', 'answer', 'answerKey', 'diagram', 'analysis', 'ruleChecks'],
+  required: ['condition', 'taskType', 'diagramRequired', 'decisions', 'sourceVerified', 'given', 'goal', 'explanation', 'steps', 'answer', 'answerKey', 'diagram', 'analysis', 'ruleChecks'],
   properties: {
     ruleChecks: ruleCheckSchema,
     condition: { type: 'string', description: 'Точная расшифровка условия по изображению источника.' },
@@ -355,6 +354,15 @@ const draftSchema = {
       properties: {
         title: { type: 'string', enum: ['Найти', 'Доказать', 'Построить'] },
         text: { type: 'string' },
+      },
+    },
+    explanation: {
+      type: 'array',
+      minItems: 2,
+      maxItems: 5,
+      items: {
+        type: 'string',
+        description: 'Одна мысль разбора обычными словами: что за задача, какое правило её решает, почему именно оно.',
       },
     },
     steps: { type: 'array', minItems: 1, maxItems: 14, items: { type: 'string' } },
@@ -408,6 +416,23 @@ const authorInstructions = [
   'Один шаг решения - одна строка steps: сначала правило или формула, затем подстановка чисел, затем результат.',
   'Не нумеруй строки steps и не начинай их с «1)», «2)», «Шаг 1»: номера проставляет тетрадь.',
   'Итог задачи повторяй только в answer строкой вида «AB = 13 см»: слово «Ответ» тетрадь печатает сама.',
+  // Объяснение перед решением. Продукт продаётся как «сфоткал и понял»:
+  // разбор обычными словами идёт до готовой записи, а не вместо неё.
+  'Перед решением заполни explanation - разбор задачи обычными словами, как объясняет учитель у доски.',
+  'В explanation: первая строка - что это за задача и что в ней спрашивают; вторая - какое правило, формула или теорема её решают и почему именно они; дальше - на что смотреть, чтобы не ошибиться, и почему другой способ здесь не подходит.',
+  'explanation пишется живым языком полными предложениями, без формул на всю строку и без повтора шагов решения. Каждая строка - одна законченная мысль, не длиннее 180 знаков.',
+  'explanation объясняет способ, а не диктует ответ: ученик должен понять, как получить его сам.',
+  // Оформление выбирает модель: у геометрии, физики и русского школьная
+  // запись устроена по-разному, и один шаблон на всех выглядит глупо.
+  'Сам выбери школьный вид записи под это задание и запиши выбор в decisions.notebookFormat.',
+  'Виды такие: «дано-найти-чертёж-решение» для вычислительной задачи с данными; «дано-доказать-чертёж-доказательство», когда требуется доказать; «построение», когда ответ - сам чертёж; «только решение и ответ», когда данных перечислять нечего - уравнение, пример, вопрос по тексту; «разбор», когда нужна размеченная запись: по составу, по членам предложения, уравнение реакции.',
+  'given заполняй только там, где раздел «Дано» действительно пишут в тетради. Для «только решение и ответ» и «разбора» оставь given пустым: пустой раздел «Дано» на листе выглядит ошибкой.',
+  'Не переписывай в given всё условие: это короткие обозначения с числами, максимум четыре строки.',
+  // Чертёж: те же заранее заданные вопросы, что и правила предмета.
+  'Перед тем как заполнять scene, ответь себе: какая фигура на чертеже; какие точки её задают; какие из них лежат на одной прямой; где прямой угол; какие отрезки равны; что подписано на чертеже из условия.',
+  'Раскладывай точки так, чтобы чертёж занимал всё поле 0..100 и был похож на школьный: фигура крупная, вершины не ближе 12 единиц друг к другу, подписи не наезжают на линии.',
+  'Ставь фигуру прямо: основание горизонтально, ось симметрии вертикальна. Наклонённый на случайный угол чертёж в тетради не рисуют.',
+  'Числа из условия ставь подписями к отрезкам и углам чертежа, а не рядом с ним.',
   'Не используй Markdown, LaTeX, HTML, SVG, CSS и программный код.',
   // Отказ по этой причине встречался чаще всего вне геометрии: модель писала
   // rac и x^{2}, а тетрадь принимает только то, что школьник напишет ручкой.
@@ -434,6 +459,7 @@ const authorInstructions = [
     + 'morphemes — разбор слова по составу, word-analysis — морфологический разбор, equation — уравнение реакции '
     + 'или система, formula — формула с подстановкой значений, quote — цитата с пометками, generic — прочая размеченная запись.',
   'analysis.kind=none, если заданию размеченная запись не нужна и хватает обычных шагов: вычисление, доказательство, построение, сочинение.',
+  'Не повторяй в analysis строки решения. Разбор нужен там, где школьная форма записи отличается от строки решения: морфемы, члены предложения, уравнение реакции со степенями окисления. Те же формулы в рамке - не разбор, а дубль.',
   'Разбор предложения: каждый член подчёркивается по школьному стандарту — подлежащее single, сказуемое double, '
     + 'определение wavy, дополнение dashed, обстоятельство dash-dot. Служебные слова оставляй без значка.',
   'Разбор по составу: слово разбей на морфемы отдельными токенами с tight=true у всех, кроме первого, '
@@ -792,6 +818,28 @@ function normalizeAnalysis(value: unknown): HomeworkWrittenAnalysis | undefined 
   return { version: 1, kind: kind as HomeworkAnalysisKind, ...(title ? { title } : {}), blocks }
 }
 
+/* Разбор, который повторяет решение, - это не разбор.
+
+   На листе он выглядит окном непонятного назначения сразу под ходом
+   решения: те же формулы, те же числа, только в рамке. Размеченная запись
+   нужна там, где школьная форма записи отличается от строчки решения -
+   разбор по составу, члены предложения, уравнение реакции со степенями
+   окисления. Если строки разбора - те же выражения, что и в steps, окно
+   убираем: пустое место честнее повтора. */
+function analysisRepeatsSteps(analysis: HomeworkWrittenAnalysis, steps: readonly string[]) {
+  const strip = (value: string) => value.toLocaleLowerCase('ru-RU').replace(/[^0-9a-zа-яё]/gu, '')
+  const stepText = steps.map(strip).filter(Boolean)
+  if (stepText.length === 0) return false
+
+  const lines = analysis.blocks.flatMap((block) => block.lines)
+  const echoes = lines.filter((line) => {
+    const text = strip(line.tokens.map((token) => token.text).join(' '))
+    if (text.length < 6) return false
+    return stepText.some((step) => step.includes(text) || text.includes(step))
+  })
+  return echoes.length * 2 >= lines.length
+}
+
 function normalizeRuleChecks(value: unknown): RuleCheck[] {
   if (!Array.isArray(value)) return []
   return value
@@ -839,6 +887,14 @@ function normalizeDraft(value: unknown, limits = tightNotebookLimits): EngineDra
         limits.goal,
       ),
     },
+    /* Объяснение не попадает на тетрадный лист: его верстает HTML над
+       листом, поэтому пределы строки тетради к нему не применяются. */
+    explanation: Array.isArray(candidate.explanation)
+      ? candidate.explanation
+          .map((entry) => clampNotebookLine(normalizeNotebookNotation(entry, 400), 220))
+          .filter((entry) => entry.length > 12)
+          .slice(0, 5)
+      : [],
     steps: Array.isArray(candidate.steps)
       ? candidate.steps
           .map((entry) => clampNotebookLine(normalizeNotebookNotation(entry), limits.step))
@@ -850,9 +906,14 @@ function normalizeDraft(value: unknown, limits = tightNotebookLimits): EngineDra
     diagram: normalizeDiagram(candidate.diagram),
     ...(analysis ? { analysis } : {}),
   }
-  return taskType === 'construction'
+  const withSteps = taskType === 'construction'
     ? { ...draft, steps: compactConstructionSteps(draft.steps) }
     : draft
+  if (withSteps.analysis && analysisRepeatsSteps(withSteps.analysis, withSteps.steps)) {
+    const { analysis: _repeated, ...rest } = withSteps
+    return rest
+  }
+  return withSteps
 }
 
 function parseJson(value: unknown) {
@@ -1336,9 +1397,12 @@ function buildVerification(
         note: `${solution.steps.length} ${solution.steps.length === 1 ? 'строка' : 'строки'} · ${symbolicPercent}% обозначений`,
       },
       {
-        label: 'Независимый редактор',
+        // Проверяет не вторая модель, а правила предмета и разбор записи
+        // кодом. Отдельный рецензент убран 4 сентября: он стоил третьего
+        // вызова и половины времени ожидания, а ошибку ловил редко.
+        label: 'Проверка правилами',
         passed: reviewer.approved,
-        note: reviewer.issues.length === 0 ? 'Одобрено без замечаний' : `Исправлено замечаний: ${reviewer.issues.length}`,
+        note: authorIssues.length === 0 ? 'Нарушений не найдено' : `Исправлено замечаний: ${authorIssues.length}`,
       },
     ],
   }
@@ -1392,6 +1456,11 @@ export function validateSolutionQuality(solution: HomeworkSolution) {
   const russianWords = steps.join(' ').match(/[а-яё]{2,}/giu)?.length ?? 0
 
   if (!solution.sourceVerified) issues.push('Источник не подтверждён')
+  /* Объяснение обязательно. Без него на листе остаётся голая запись, то
+     есть готовое списывание, - а продаём мы разбор. */
+  const explanation = solution.explanation ?? []
+  if (explanation.length < 2) issues.push('Нет объяснения перед решением')
+  if (explanation.some((line) => line.length < 24)) issues.push('Объяснение состоит из обрывков, а не из законченных мыслей')
   if (solution.condition.length < 8) issues.push('Условие отсутствует или слишком короткое')
   if (suspiciousCondition(solution.condition)) issues.push('В условии остались признаки ошибки распознавания')
   if (/\$|\\[A-Za-z]+|```|\*\*|<\/?[a-z][a-z0-9]*\s*\/?>/iu.test(solution.condition)) issues.push('В условии осталась техническая разметка')
@@ -1495,6 +1564,7 @@ function toSolution(
     condition: draft.condition,
     given: draft.given,
     goal: draft.goal,
+    ...(draft.explanation.length > 0 ? { explanation: draft.explanation } : {}),
     steps: draft.steps,
     answer: draft.answer,
     diagram: draft.diagram,
@@ -1522,58 +1592,6 @@ export function isCurrentReviewedSolution(solution: HomeworkSolution) {
 // решения — это подтвердилось прогоном на живых задачах. Ошибка транзиентная:
 // тот же запрос со второй попытки проходит. Повторяем ограниченно и только
 // пока укладываемся в бюджет времени функции (maxDuration 180 с).
-// Сколько ждать отставший проход после того, как первый уже дошёл.
-// Разброс между здоровыми проходами укладывается в этот срок, а ответ
-// лежащей модели — нет.
-const passStragglerGraceMs = 25_000
-
-/* Ждёт все проходы, но не дольше отсрочки после первого завершившегося.
-   Не дождавшиеся считаются несостоявшимися: их результат в этом решении
-   уже не участвует. Сам вызов при этом не обрывается — он просто перестаёт
-   держать ответ, и если успеет, его результат достанется следующему запросу
-   через идемпотентность, а не пропадёт на середине генерации. */
-async function settleWithGrace<T>(
-  tasks: Promise<T>[],
-  graceMs: number,
-  // Вызывается на каждом дошедшем проходе сразу, не дожидаясь остальных:
-  // по первому же результату видно, понадобится ли рецензент.
-  onSettled?: (value: T) => void,
-): Promise<PromiseSettledResult<T>[]> {
-  const results: PromiseSettledResult<T>[] = tasks.map(() => ({
-    status: 'rejected',
-    reason: new GeometrySolutionEngineError('Проход не успел закончиться'),
-  }))
-  let finished = 0
-  let markFirstSuccess: () => void = () => undefined
-  const firstSuccess = new Promise<void>((resolve) => { markFirstSuccess = resolve })
-
-  const tracked = tasks.map((task, index) => task.then(
-    (value) => {
-      results[index] = { status: 'fulfilled', value }
-      finished += 1
-      onSettled?.(value)
-      markFirstSuccess()
-    },
-    (reason) => { results[index] = { status: 'rejected', reason }; finished += 1 },
-  ))
-  const allSettled = Promise.all(tracked)
-
-  // Отсрочка отсчитывается от первого ДОШЕДШЕГО прохода, а не от первого
-  // завершившегося. Отказ лежащего семейства приходит за секунды, и раньше
-  // он же запускал отсчёт: здоровому проходу оставалось 25 секунд, которых
-  // на медленный день не хватало, — и решение пропадало при живой модели.
-  // Отказ ничего не защищает, после него честнее дождаться остальных.
-  await Promise.race([allSettled, firstSuccess])
-  if (finished < tasks.length) {
-    await Promise.race([
-      allSettled,
-      new Promise((resolve) => { setTimeout(resolve, graceMs).unref?.() }),
-    ])
-  }
-
-  return results
-}
-
 /* Сошлись ли проходы в ответе.
 
    Раньше здесь стояло строгое равенство строк, и оно почти никогда не
@@ -1792,15 +1810,17 @@ export async function solveHomeworkWithReview(
   // На повтор оставляем время только в первой половине бюджета функции.
   const retryDeadline = Date.now() + 70_000
 
-  // Раньше это были два ПОСЛЕДОВАТЕЛЬНЫХ вызова: автор пишет решение,
-  // затем рецензент его проверяет. Отсюда и брались 110–160 секунд.
-  //
-  // Теперь два НЕЗАВИСИМЫХ прохода идут параллельно. Стоит столько же —
-  // два вызова, — но занимает время одного. И проверка получается сильнее:
-  // два независимых решения, сошедшихся в ответе, — довод весомее, чем
-  // одобрение рецензента, который видел кандидата и склонен с ним соглашаться.
-  // Пределы строк тетради — по предмету задачи: у геометрии фиксированный
-  // лист, у остальных страницу верстает HTML и переносит строки сама.
+  /* Один проход, а не два и рецензент.
+
+     Прежде было три-четыре вызова модели на задачу: два независимых прохода,
+     сверка их ответов и рецензент на расхождении. Замер 4 сентября: геометрия
+     2,5 минуты, алгебра не уложилась и в три. Стоило это вчетверо дороже, а
+     ошибку ловило редко - две одинаково слабые модели чаще сходились в одной
+     и той же ошибке, чем расходились.
+
+     Теперь проход один и идёт самой сильной моделью пула. Проверка осталась
+     там, где она объективна: правила предмета и разбор записи кодом. Что
+     нарушено - чиним одним адресным повтором. */
   const notebookLimits = subjectProfile(request.subject).notebook
 
   const evaluate = (candidate: EngineDraft, model: string) => {
@@ -1822,114 +1842,28 @@ export async function solveHomeworkWithReview(
     return { candidate, issues, model }
   }
 
-  // Проходы раскладываются по пулу пригодных семейств — см.
-  // defaultHomeworkModels. Пул короче числа проходов — модели повторяются.
-  // Если модель задана явно через KIE_MODEL, уважаем её и берём на все проходы.
-  const passModels = Array.from({ length: authorPassCount }, (_, index) => (
-    options.model ?? defaultHomeworkModels[index % defaultHomeworkModels.length]
-  ))
+  // Модель, заданную явно через KIE_MODEL, уважаем; иначе берём первую в пуле
+  // — самую сильную. Отказ шлюза уводит вызов дальше по пулу в candidateModels.
+  const passModel = options.model ?? defaultHomeworkModels[0]
 
   options.onStage?.('solving')
 
-  const passes = passModels.map(async (model) => {
-    const raw = await callModelWithRetry(
-      options,
-      authorInstructions,
-      engineMessage(request),
-      'homework_solution_draft',
-      draftSchema,
-      retryDeadline,
-      model,
-    )
-    return evaluate(normalizeDraft(raw, notebookLimits), model)
-  })
+  const raw = await callModelWithRetry(
+    options,
+    authorInstructions,
+    engineMessage(request),
+    'homework_solution_draft',
+    draftSchema,
+    retryDeadline,
+    passModel,
+  )
+  const best = evaluate(normalizeDraft(raw, notebookLimits), passModel)
 
-  /* Рецензент, запущенный спекулятивно.
-
-     Раньше он начинался только после того, как оба прохода дошли: сначала
-     ждём отставшего до 25 секунд, потом ещё столько же ждём рецензента.
-     Но нужен он или нет, видно уже по первому дошедшему проходу — если тот
-     нарушил правила, вторым мнением дело не спасти, и звать рецензента можно
-     сразу, пока второй проход ещё идёт.
-
-     Запускается он только на грязном проходе: у чистого есть шанс сойтись
-     со вторым и уйти без рецензента вовсе.
-
-     Цена спекуляции честная: если второй проход окажется чистым и согласным,
-     запущенный вызов не понадобится, и мы за него заплатим впустую. Это
-     примерно девять копеек против двадцати-пятидесяти секунд ожидания там,
-     где рецензент всё-таки нужен. При цене решения в пять рублей выбор
-     очевиден. */
-  const requestReview = (candidate: EngineDraft, issues: readonly string[], otherAnswer: string | null, model: string) => {
-    const reviewPrompt = [
-      'Проверь и при необходимости полностью исправь кандидат.',
-      `Автоматические замечания: ${issues.length > 0 ? issues.join('; ') : 'нет'}.`,
-      ...(otherAnswer ? [`Второй независимый проход дал другой ответ: ${otherAnswer}. Определи, какой верен.`] : []),
-      `Кандидат: ${JSON.stringify(candidate)}`,
-    ].join('\n')
-
-    return callModelWithRetry(
-      options,
-      reviewerInstructions,
-      engineMessage(request, reviewPrompt),
-      'homework_solution_review',
-      reviewSchema,
-      retryDeadline,
-      model,
-    )
-  }
-
-  let speculativeReview: SpeculativeReview | null = null
-  // Читаем через функцию: присваивание идёт из колбэка, и без этого вывод
-  // типов сузил бы переменную до `null` ещё до запуска проходов.
-  const startedReview = (): SpeculativeReview | null => speculativeReview
-
-  // Второй проход не должен держать ответ. Когда одно семейство лежит,
-  // ожидание его отказа было главной тратой времени: 97 секунд из 118
-  // в замере 31 августа. Как только первый проход дошёл, второму даём
-  // короткую отсрочку — здоровый в неё укладывается, лежащий нет.
-  const settled = await settleWithGrace(passes, passStragglerGraceMs, (sample) => {
-    if (speculativeReview || sample.issues.length === 0) return
-    speculativeReview = {
-      draft: sample.candidate,
-      // Отказ поймает тот, кто будет его ждать; спекуляция не должна
-      // ронять решение необработанным отклонением.
-      promise: requestReview(sample.candidate, sample.issues, null, sample.model).catch((error: unknown) => {
-        throw error
-      }),
-    }
-    speculativeReview.promise.catch(() => undefined)
-  })
   options.onStage?.('checking')
 
-  // Семейства падают независимо: 30 августа Claude лежало сутки целиком.
-  // Пока хотя бы один проход дошёл, решение выдаём — иначе теряем ответ там,
-  // где раньше, с одной моделью на оба прохода, его бы тоже не было.
-  const samples = settled
-    .filter((entry): entry is PromiseFulfilledResult<ReturnType<typeof evaluate>> => entry.status === 'fulfilled')
-    .map((entry) => entry.value)
-  if (samples.length === 0) {
-    const reasons = settled
-      .filter((entry): entry is PromiseRejectedResult => entry.status === 'rejected')
-      .map((entry) => entry.reason as unknown)
-    // Когда весь пул отвечает отказом шлюза, ученику нужен именно этот ответ:
-    // дело не в его задаче, деньги остаются на балансе, помогает повтор через
-    // минуту. Содержательную ошибку — «модель не вернула решение» — показываем
-    // только если она действительно была.
-    const meaningful = reasons.find((reason) => !isProviderOutage(reason))
-    throw meaningful
-      ?? reasons[0]
-      ?? new GeometrySolutionEngineError('Модель не вернула решение')
-  }
-
-  const [first, second = first] = samples
-  const clean = samples.filter((sample) => sample.issues.length === 0)
-  const best = clean[0] ?? (first.issues.length <= second.issues.length ? first : second)
-
   const draft = best.candidate
-  // Рецензента и починку зовём той моделью, чей проход дошёл: когда лежит
-  // целое семейство, звать его же второй раз — гарантированно потерять
-  // решение, которое у нас уже есть.
+  // Починку зовём той моделью, чей проход дошёл: когда лежит целое семейство,
+  // звать его же второй раз — гарантированно потерять решение, которое есть.
   const workingModel = best.model
   const deterministicIssues = [...best.issues]
   const authorConditionMatched = !request.condition
@@ -1942,236 +1876,167 @@ export async function solveHomeworkWithReview(
     issues: [...deterministicIssues],
   })
 
-  /* Сверяем проходы по краткому ответу, а не по записи в тетради.
+  /* Проход прошёл все проверки — отдаём как есть.
 
-     У задачи с числом ответ и так короткий, и сверка работала. У словесного
-     предмета в `answer` стоит предложение, и два прохода никогда не напишут
-     его одинаково: «Подоконник образовано от слова окно приставочно-
-     суффиксальным способом» против «Слово образовано приставочно-
-     суффиксальным способом от слова окно» — один ответ, разные строки.
-     Отсюда и брался рецензент на русском там, где на геометрии его не было:
-     замер на проде 31 августа показал 19 секунд именно на этом.
-
-     `answerKey` — тот же ответ в проверяемой форме, его модель пишет сама:
-     «48 км», «приставочно-суффиксальный». Он короткий и одинаков у любого,
-     кто решил верно. Нет его — сверяемся по записи, как раньше. */
-  const answerKeysPresent = Boolean(first.candidate.answerKey && second.candidate.answerKey)
-  const sameAnswer = answerKeysPresent
-    ? answersAgree(first.candidate.answerKey, second.candidate.answerKey)
-    : answersAgree(first.candidate.answer, second.candidate.answer)
-  const agreement = { sameAnswer, answerKeysPresent }
-
-  /* Отдаём без рецензента.
-
-     Условие было строже: чистыми должны быть оба прохода. Но отдаём мы один,
-     и требовать безупречности от того, который не пойдёт ученику, незачем:
-     замечания к нему формальные — формат записи, правило предмета, — а не
-     «другой ответ». Достаточно, чтобы выдаваемый проход прошёл все проверки,
-     а второй независимый сошёлся с ним в ответе. Это и есть заявленная
-     сверка: два прохода, пришедшие к одному, и запись без нарушений.
-
-     Двух проходов требуем по-прежнему: когда дошёл только один, `second`
-     совпадает с ним, и «согласие» было бы согласием с самим собой. */
-  if (samples.length >= 2 && best.issues.length === 0 && sameAnswer) {
-    const agreed = toSolution(draft, request, ownerId, true)
+     Второго мнения здесь не спрашиваем: правила предмета и разбор записи уже
+     проверены кодом, а модель, которую позвали бы «на всякий случай», видит
+     готового кандидата и склонна с ним соглашаться. Платить за это ещё одним
+     вызовом и полуминутой ожидания смысла нет. */
+  if (deterministicIssues.length === 0) {
+    const solved = toSolution(draft, request, ownerId, true)
     options.onTrace?.({ stage: 'reviewer', candidate: draft, approved: true, issues: [] })
     return {
-      ...agreed,
+      ...solved,
       verification: buildVerification(
         draft,
         deterministicIssues,
         { approved: true, issues: [], solution: draft },
-        agreed,
+        solved,
         authorConditionMatched,
-        agreement,
       ),
     }
   }
 
-  /* Проходы разошлись или один из них не прошёл проверку — нужен рецензент.
+  /* Проверка нашла нарушение — один адресный повтор.
 
-     Если его уже запустили спекулятивно по тому же кандидату, ждём тот вызов:
-     он идёт с того момента, как этот проход дошёл, и к этой строке чаще всего
-     уже закончился. Новый вызов делаем, только когда спекуляция не о том
-     кандидате — тогда ей на смену идёт разбор с подсказкой о расхождении. */
-  const speculative = startedReview()
-
-  /* Почему понадобился рецензент.
-
-     Без этой строки причину приходится угадывать по времени стадий: два
-     прогона на проде ушли на то, чтобы выяснить, что решение было чистым,
-     а разошлись строки ответа. Содержимого здесь нет — только признаки. */
+     Отказ проверки — обычно не «модель не умеет», а «модель забыла»: чаще
+     всего это пропущенный чертёж или пустые связи в нём. Такой сбой
+     стохастический, поэтому даём один исправляющий проход с прямым перечнем
+     того, что именно надо починить. Ослаблять саму проверку нельзя:
+     контракт геометрии в AGENTS.md запрещает менять требования к чертежу. */
   console.log(JSON.stringify({
     level: 'info',
-    event: 'homework_review_called',
+    event: 'homework_repair_called',
     subject: request.subject,
-    authorIssues: deterministicIssues.length,
-    sameAnswer,
-    answerKeysPresent,
-    speculative: Boolean(speculative && speculative.draft === draft),
+    model: workingModel,
+    issues: deterministicIssues.length,
   }))
 
-  const rawReview = await (speculative && speculative.draft === draft
-    ? speculative.promise
-    : requestReview(draft, deterministicIssues, sameAnswer ? null : second.candidate.answer, workingModel))
-  if (!rawReview || typeof rawReview !== 'object' || Array.isArray(rawReview)) {
-    throw new GeometrySolutionEngineError('Редактор не вернул проверенное решение')
-  }
-  const reviewCandidate = rawReview as Record<string, unknown>
-  const review: ReviewResult = {
-    approved: reviewCandidate.approved === true,
-    issues: lines(reviewCandidate.issues, 12, 160),
-    solution: normalizeDraft(reviewCandidate.solution, notebookLimits),
-  }
-  const solution = toSolution(review.solution, request, ownerId, review.approved)
-  const finalIssues = [
-    ...validateSolutionQuality(solution),
-    ...validateDecisionSummary(review.solution.decisions, review.solution.diagramRequired),
-  ]
-  const finalConditionMatched = !request.condition || conditionSimilarity(request.condition, solution.condition) >= 0.55
-  if (!finalConditionMatched) {
-    finalIssues.push('Условие решения не совпадает с приложенным заданием')
-  }
-  options.onTrace?.({
-    stage: 'reviewer',
-    candidate: review.solution,
-    approved: review.approved && finalIssues.length === 0,
-    issues: [...review.issues, ...finalIssues].filter(Boolean),
+  // Чинить имеет смысл только механические огрехи. Если модель решала не ту
+  // задачу, повтор не поможет: это не забывчивость, а неверное понимание.
+  const conditionMismatch = !authorConditionMatched
+    || deterministicIssues.some((issue) => issue.includes('не совпадает с приложенным заданием'))
+  const repairable = !conditionMismatch && Date.now() < retryDeadline + 60_000
+
+  /* Отдельный путь для самой частой поломки — чертежа. Просить у модели
+     координаты бесполезно: она их либо не даёт, либо даёт такие, что связи
+     не выполняются. Вместо этого просим ПЛАН ПОСТРОЕНИЯ, а координаты
+     считаем сами — тогда чертёж корректен по построению. */
+  const diagramIssue = deterministicIssues.some((issue) => {
+    const normalized = issue.toLocaleLowerCase('ru-RU').replaceAll('ё', 'е')
+    return normalized.includes('чертеж')
+      || normalized.includes('сцена')
+      || normalized.includes('поле чертежа')
+      || /perpendicular|parallel|midpoint|on-circle|collinear|equal-length/u.test(issue)
   })
-  // Отказ проверки — обычно не «модель не умеет», а «модель забыла»:
-  // чаще всего это пропущенный чертёж или пустые связи в нём. Такой сбой
-  // стохастический, поэтому даём один исправляющий проход с прямым перечнем
-  // того, что именно надо починить. Ослаблять саму проверку нельзя:
-  // контракт геометрии в AGENTS.md запрещает менять требования к чертежу.
-  if (!review.approved || finalIssues.length > 0) {
-    const issues = [...review.issues, ...finalIssues].filter(Boolean)
-    // Чинить имеет смысл только механические огрехи — пропущенный чертёж,
-    // пустые связи, формат записи. Если модель решала не ту задачу,
-    // повтор не поможет: это не забывчивость, а неверное понимание условия.
-    const conditionMismatch = !finalConditionMatched
-      || issues.some((issue) => issue.includes('не совпадает с приложенным заданием'))
-    const repairable = !conditionMismatch && Date.now() < retryDeadline + 60_000
 
-    // Отдельный путь для самой частой поломки — чертежа. Просить у модели
-    // координаты бесполезно: она их либо не даёт, либо даёт такие, что связи
-    // не выполняются. Вместо этого просим ПЛАН ПОСТРОЕНИЯ, а координаты
-    // считаем сами — тогда чертёж корректен по построению.
-    // Замечания приходят и через «ё», и через «е» («чертёж» против «поле
-    // чертежа»), поэтому сравниваем по нормализованной строке. Плюс сюда
-    // относятся все претензии к самой сцене: вышедшие за поле точки,
-    // неверные связи, слипшиеся вершины — всё это построитель делает верно.
-    const diagramIssue = issues.some((issue) => {
-      const normalized = issue.toLocaleLowerCase('ru-RU').replaceAll('ё', 'е')
-      return normalized.includes('чертеж')
-        || normalized.includes('сцена')
-        || normalized.includes('поле чертежа')
-        || /perpendicular|parallel|midpoint|on-circle|collinear|equal-length/u.test(issue)
-    })
-    if (repairable && diagramIssue) {
-      const planPrompt = [
-        'Составь план построения чертежа к этой задаче.',
-        `Что не так с предыдущим чертежом: ${issues.filter((issue) => issue.toLowerCase().includes('чертёж')).slice(0, 3).join('; ')}.`,
-        `Условие: ${solution.condition}`,
-        `Дано: ${solution.given.join('; ')}`,
-        `${solution.goal.title}: ${solution.goal.text}`,
-        diagramPlanInstructions,
-      ].join('\n')
-
-      try {
-        const rawPlan = await callModelWithRetry(
-          options,
-          diagramPlanInstructions,
-          engineMessage(request, planPrompt),
-          'diagram_plan',
-          diagramPlanSchema,
-          retryDeadline,
-          workingModel,
-        )
-        const built = buildDiagramFromModelPlan(rawPlan)
-        if (built.ok) {
-          const withDiagram = { ...solution, diagram: built.diagram }
-          const rebuiltIssues = [
-            ...validateSolutionQuality(withDiagram),
-            ...validateDecisionSummary(review.solution.decisions, true),
-          ]
-          if (rebuiltIssues.length === 0) {
-            options.onTrace?.({
-              stage: 'reviewer',
-              candidate: { ...review.solution, diagram: built.diagram },
-              approved: true,
-              issues: [],
-            })
-            return {
-              ...withDiagram,
-              verification: buildVerification(draft, deterministicIssues, review, withDiagram, finalConditionMatched, agreement),
-            }
-          }
-        }
-      } catch {
-        // Построение не удалось — идём общим путём починки ниже.
-      }
-    }
-
-    if (!repairable) {
-      throw new GeometrySolutionEngineError(`Решение не прошло проверку${issues.length > 0 ? `: ${issues.slice(0, 3).join('; ')}` : ''}`)
-    }
-
-    const repairPrompt = [
-      'Предыдущая версия решения не прошла автоматическую проверку.',
-      `Исправь ровно эти замечания, ничего больше не меняя: ${issues.slice(0, 6).join('; ')}.`,
-      'Если среди замечаний есть отсутствующий или неполный чертёж — обязательно заполни diagram.kind = "construction",',
-      'опиши сцену через scene: точки с координатами, объекты и проверяемые constraints. Пустой scene недопустим.',
-      `Версия для исправления: ${JSON.stringify(review.solution)}`,
+  if (repairable && diagramIssue) {
+    const draftSolution = toSolution(draft, request, ownerId, false)
+    const planPrompt = [
+      'Составь план построения чертежа к этой задаче.',
+      `Что не так с предыдущим чертежом: ${deterministicIssues.filter((issue) => issue.toLowerCase().includes('чертёж')).slice(0, 3).join('; ')}.`,
+      `Условие: ${draftSolution.condition}`,
+      `Дано: ${draftSolution.given.join('; ')}`,
+      `${draftSolution.goal.title}: ${draftSolution.goal.text}`,
+      diagramPlanInstructions,
     ].join('\n')
 
-    const rawRepair = await callModelWithRetry(
-      options,
-      reviewerInstructions,
-      engineMessage(request, repairPrompt),
-      'homework_solution_review',
-      reviewSchema,
-      retryDeadline,
-      workingModel,
-    )
-
-    const repairCandidate = rawRepair as Record<string, unknown>
-    const repaired: ReviewResult = {
-      approved: repairCandidate.approved === true,
-      issues: lines(repairCandidate.issues, 12, 160),
-      solution: normalizeDraft(repairCandidate.solution, notebookLimits),
+    try {
+      const rawPlan = await callModelWithRetry(
+        options,
+        diagramPlanInstructions,
+        engineMessage(request, planPrompt),
+        'diagram_plan',
+        diagramPlanSchema,
+        retryDeadline,
+        workingModel,
+      )
+      const built = buildDiagramFromModelPlan(rawPlan)
+      if (built.ok) {
+        const repairedDraft: EngineDraft = { ...draft, diagram: built.diagram }
+        const withDiagram = toSolution(repairedDraft, request, ownerId, true)
+        const rebuiltIssues = [
+          ...validateSolutionQuality(withDiagram),
+          ...validateDecisionSummary(draft.decisions, true),
+          ...verifySubjectRules(withDiagram),
+        ]
+        if (rebuiltIssues.length === 0) {
+          options.onTrace?.({ stage: 'reviewer', candidate: repairedDraft, approved: true, issues: [] })
+          return {
+            ...withDiagram,
+            verification: buildVerification(
+              draft,
+              deterministicIssues,
+              { approved: true, issues: [], solution: repairedDraft },
+              withDiagram,
+              authorConditionMatched,
+            ),
+          }
+        }
+      }
+    } catch {
+      // Построение не удалось — идём общим путём починки ниже.
     }
-    const repairedSolution = toSolution(repaired.solution, request, ownerId, repaired.approved)
-    const repairedIssues = [
-      ...validateSolutionQuality(repairedSolution),
-      ...validateDecisionSummary(repaired.solution.decisions, repaired.solution.diagramRequired),
-    ]
-    const repairedConditionMatched = !request.condition
-      || conditionSimilarity(request.condition, repairedSolution.condition) >= 0.55
-    if (!repairedConditionMatched) {
-      repairedIssues.push('Условие решения не совпадает с приложенным заданием')
-    }
+  }
 
-    options.onTrace?.({
-      stage: 'reviewer',
-      candidate: repaired.solution,
-      approved: repaired.approved && repairedIssues.length === 0,
-      issues: [...repaired.issues, ...repairedIssues].filter(Boolean),
-    })
+  if (!repairable) {
+    throw new GeometrySolutionEngineError(`Решение не прошло проверку${deterministicIssues.length > 0 ? `: ${deterministicIssues.slice(0, 3).join('; ')}` : ''}`)
+  }
 
-    if (!repaired.approved || repairedIssues.length > 0) {
-      const remaining = [...repaired.issues, ...repairedIssues].filter(Boolean)
-      throw new GeometrySolutionEngineError(`Решение не прошло проверку${remaining.length > 0 ? `: ${remaining.slice(0, 3).join('; ')}` : ''}`)
-    }
+  const repairPrompt = [
+    'Предыдущая версия решения не прошла автоматическую проверку.',
+    `Исправь ровно эти замечания, ничего больше не меняя: ${deterministicIssues.slice(0, 6).join('; ')}.`,
+    'Если среди замечаний есть отсутствующий или неполный чертёж — обязательно заполни diagram.kind = "construction",',
+    'опиши сцену через scene: точки с координатами, объекты и проверяемые constraints. Пустой scene недопустим.',
+    'Объяснение перед решением (explanation) сохрани и при необходимости дополни, но не удаляй.',
+    `Версия для исправления: ${JSON.stringify(draft)}`,
+  ].join('\n')
 
-    return {
-      ...repairedSolution,
-      verification: buildVerification(draft, deterministicIssues, repaired, repairedSolution, repairedConditionMatched, agreement),
-    }
+  const rawRepair = await callModelWithRetry(
+    options,
+    reviewerInstructions,
+    engineMessage(request, repairPrompt),
+    'homework_solution_review',
+    reviewSchema,
+    retryDeadline,
+    workingModel,
+  )
+
+  if (!rawRepair || typeof rawRepair !== 'object' || Array.isArray(rawRepair)) {
+    throw new GeometrySolutionEngineError('Исправленное решение не вернулось')
+  }
+  const repairCandidate = rawRepair as Record<string, unknown>
+  const repaired: ReviewResult = {
+    approved: repairCandidate.approved === true,
+    issues: lines(repairCandidate.issues, 12, 160),
+    solution: normalizeDraft(repairCandidate.solution, notebookLimits),
+  }
+  const repairedSolution = toSolution(repaired.solution, request, ownerId, repaired.approved)
+  const repairedIssues = [
+    ...validateSolutionQuality(repairedSolution),
+    ...validateDecisionSummary(repaired.solution.decisions, repaired.solution.diagramRequired),
+    ...verifySubjectRules(repairedSolution),
+  ]
+  const repairedConditionMatched = !request.condition
+    || conditionSimilarity(request.condition, repairedSolution.condition) >= 0.55
+  if (!repairedConditionMatched) {
+    repairedIssues.push('Условие решения не совпадает с приложенным заданием')
+  }
+
+  options.onTrace?.({
+    stage: 'reviewer',
+    candidate: repaired.solution,
+    approved: repaired.approved && repairedIssues.length === 0,
+    issues: [...repaired.issues, ...repairedIssues].filter(Boolean),
+  })
+
+  if (!repaired.approved || repairedIssues.length > 0) {
+    const remaining = [...repaired.issues, ...repairedIssues].filter(Boolean)
+    throw new GeometrySolutionEngineError(`Решение не прошло проверку${remaining.length > 0 ? `: ${remaining.slice(0, 3).join('; ')}` : ''}`)
   }
 
   return {
-    ...solution,
-    verification: buildVerification(draft, deterministicIssues, review, solution, finalConditionMatched, agreement),
+    ...repairedSolution,
+    verification: buildVerification(draft, deterministicIssues, repaired, repairedSolution, repairedConditionMatched),
   }
 }
-

@@ -2,8 +2,10 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { Readable } from 'node:stream'
 import { createClient } from '@supabase/supabase-js'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { homeworkSolutionEngineVersion } from '../src/lib/homeworkContract.ts'
 import type { SolveHomeworkRequest } from '../src/lib/homeworkContract.ts'
 import { findVerifiedTextbookTask, normalizeTaskCondition } from '../src/textbooks/taskCatalog.ts'
+import { defaultHomeworkModels } from './geometrySolutionEngine.ts'
 import { handleHomeworkSolverRequest, solveWithKie } from './homeworkSolver.ts'
 
 vi.mock('@supabase/supabase-js', async (importOriginal) => {
@@ -126,6 +128,10 @@ const taskThreeDraft = {
   sourceVerified: true,
   given: ['a, b, c — прямые'],
   goal: { title: 'Найти', text: 'n(точек пересечения)' },
+  explanation: [
+    'Три прямые на плоскости пересекаются либо попарно, либо все в одной точке.',
+    'Значит, разбираем оба случая и считаем точки пересечения в каждом из них.',
+  ],
   steps: [
     'a ∩ b = A; b ∩ c = B; a ∩ c = C ⇒ n = 3.',
     'a ∩ b ∩ c = O ⇒ n = 1.',
@@ -161,6 +167,10 @@ const photoDraft = {
   sourceVerified: true,
   given: providerSolution.given,
   goal: { title: 'Найти', text: '∠C' },
+  explanation: [
+    'В треугольнике сумма углов равна 180°, поэтому третий угол находится вычитанием.',
+    'Сначала выписываем известные углы, затем вычитаем их сумму из 180 градусов.',
+  ],
   steps: providerSolution.steps,
   answer: providerSolution.answer,
   diagram: {
@@ -215,6 +225,10 @@ const russianDraft = {
   sourceVerified: true,
   given: ['подоконник'],
   goal: { title: 'Найти', text: 'разбор по составу и способ образования' },
+  explanation: [
+    'Разбор по составу начинается с поиска корня: подбираем однокоренные слова.',
+    'Способ образования виден по тому, что добавили к исходному слову «окно».',
+  ],
   steps: ['под-окон-ник-∅.', 'окно → подоконник: приставочно-суффиксальный способ.'],
   answer: 'Слово подоконник образовано приставочно-суффиксальным способом от слова окно.',
   answerKey: 'приставочно-суффиксальный',
@@ -222,10 +236,9 @@ const russianDraft = {
   analysis: null,
 }
 
-// Движок делает два независимых прохода параллельно и зовёт рецензента,
-// только если они разошлись. Оба прохода возвращают один и тот же черновик,
-// поэтому рецензент не понадобится — но ответ для него всё равно готовим
-// на случай, если проверка качества забракует кандидат.
+// Движок делает один проход и зовёт модель второй раз только на починку —
+// когда проверка кодом нашла нарушение. Ответ починки заглушка всё равно
+// готовит: он нужен тем тестам, где черновик заведомо грязный.
 function reviewedResponses(draft: unknown) {
   return vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
     const url = String(input)
@@ -313,13 +326,13 @@ describe('homework solver', () => {
         reviewerApproved: true,
         checks: expect.arrayContaining([
           expect.objectContaining({ label: 'Источник', passed: true }),
-          expect.objectContaining({ label: 'Независимый редактор', passed: true }),
+          expect.objectContaining({ label: 'Проверка правилами', passed: true }),
         ]),
       },
     })
     // Строгая схема нужна обоим семействам, но называется в них по-разному.
-    // Пул пригодных семейств сейчас один, поэтому второе адресуется явно —
-    // маршрутизация должна остаться рабочей до его возвращения.
+    // Проход идёт одной моделью, поэтому каждое семейство адресуется явно —
+    // маршрутизация должна остаться рабочей для всего пула.
     const geminiMock = reviewedResponses(taskThreeDraft)
     const geminiHttp = createHttp('POST', taskThree)
     await handleHomeworkSolverRequest(geminiHttp.request, geminiHttp.response, {
@@ -335,8 +348,23 @@ describe('homework solver', () => {
       }),
     })
 
+    const codexMock = reviewedResponses(taskThreeDraft)
+    const codexHttp = createHttp('POST', taskThree)
+    await handleHomeworkSolverRequest(codexHttp.request, codexHttp.response, {
+      apiKey: 'test-key',
+      model: 'gpt-5-6-luna',
+      fetchImpl: codexMock,
+      taskLookup: async () => ({
+        condition: taskThreeCondition,
+        conditionNormalized: normalizeTaskCondition(taskThreeCondition),
+        sourceUrl: verifiedTask.sourceUrl,
+        sourcePage: 9,
+        hasDiagram: false,
+      }),
+    })
+
     const gemini = callTo(geminiMock, 'gemini') as { tools?: unknown; response_format?: { type: string } }
-    const codex = callTo(fetchMock, 'codex') as { tools?: unknown; text?: { format?: { type: string } } }
+    const codex = callTo(codexMock, 'codex') as { tools?: unknown; text?: { format?: { type: string } } }
     expect(gemini.tools).toBeUndefined()
     expect(gemini.response_format?.type).toBe('json_schema')
     expect(codex.tools).toBeUndefined()
@@ -365,10 +393,10 @@ describe('homework solver', () => {
   })
 
   it('sends the photo itself to the multimodal provider without an OCR condition', async () => {
+    // Оба семейства адресуются явно: проход идёт одной моделью, а кодировка
+    // картинки у семейств разная, и сломать её незаметно нельзя.
     const fetchMock = reviewedResponses(photoDraft)
-    await solveWithKie(photoTask, { apiKey: 'secret-test-key', fetchImpl: fetchMock })
-    // Второе семейство адресуется явно: в пуле его сейчас нет, но кодировка
-    // картинки у него своя, и сломать её незаметно нельзя.
+    await solveWithKie(photoTask, { apiKey: 'secret-test-key', model: 'gpt-5-6-luna', fetchImpl: fetchMock })
     const geminiMock = reviewedResponses(photoDraft)
     await solveWithKie(photoTask, { apiKey: 'secret-test-key', model: 'gemini-2.5-flash', fetchImpl: geminiMock })
 
@@ -396,79 +424,59 @@ describe('homework solver', () => {
     expect(geminiText).not.toContain(photoTask.condition ?? 'условие задачи из текста')
     expect(gemini.response_format?.type).toBe('json_schema')
     expect(gemini.tools).toBeUndefined()
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
-  /* Рецензент больше не ждёт отставший проход.
+  /* Один проход вместо двух и рецензента.
 
-     Раньше порядок был строго последовательным: дождаться обоих проходов
-     (до 25 секунд отсрочки отставшему), только потом звать рецензента.
-     Замер на проде 31 августа: 25-50 секунд из 43-78 уходило на эту стадию.
-     Нужен рецензент или нет, видно уже по первому дошедшему проходу. */
-  it('зовёт рецензента, не дожидаясь второго прохода, когда первый нарушил правила', async () => {
-    // Черновик без единицы измерения при ответе — нарушение правила предмета.
+     Прежде движок делал два независимых прохода, сверял их ответы и на
+     расхождении звал третий вызов - рецензента. Замер 4 сентября: геометрия
+     2,5 минуты, алгебра не уложилась и в три, а платили мы за три-четыре
+     вызова. Теперь проход один, а проверяет решение код: правила предмета
+     и разбор записи. */
+  it('делает один вызов модели, когда проверка ничего не нашла', async () => {
+    const fetchMock = reviewedResponses(photoDraft)
+
+    const solution = await solveWithKie(photoTask, { apiKey: 'secret-test-key', fetchImpl: fetchMock })
+
+    expect(fetchMock.mock.calls).toHaveLength(1)
+    expect(solution.answer).toBe(providerSolution.answer)
+  })
+
+  /* Нарушенное правило чинится повтором, а не разговором со второй моделью.
+
+     Черновик без единицы измерения при ответе не проходит правило предмета
+     `answer-units`. Это механический огрех: модель забыла подпись, а не
+     решила не ту задачу, - поэтому даём ровно один адресный повтор. */
+  it('чинит нарушенное правило одним повтором', async () => {
     const dirtyDraft = { ...photoDraft, answer: '90' }
     let drafts = 0
-    let secondPassDone = false
-    let reviewStartedEarly: boolean | null = null
 
     const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
       const url = String(input)
       const body = typeof init?.body === 'string' ? init.body : ''
-
       if (body.includes('homework_solution_review')) {
-        reviewStartedEarly ??= !secondPassDone
         return providerResponse({ approved: true, issues: [], solution: photoDraft }, url)
       }
-
       drafts += 1
-      if (drafts === 1) return providerResponse(dirtyDraft, url)
-      await new Promise((resolve) => { setTimeout(resolve, 50) })
-      secondPassDone = true
       return providerResponse(dirtyDraft, url)
     })
 
     const solution = await solveWithKie(photoTask, { apiKey: 'secret-test-key', fetchImpl: fetchMock })
 
-    expect(reviewStartedEarly).toBe(true)
+    expect(drafts).toBe(1)
+    const repairCalls = fetchMock.mock.calls.filter(([, init]) => String(init?.body).includes('homework_solution_review'))
+    expect(repairCalls).toHaveLength(1)
     expect(solution.answer).toBe(providerSolution.answer)
   })
 
-  /* Чистый проход, с которым сошёлся второй, отдаётся без рецензента.
+  /* Объяснение обязательно.
 
-     Прежнее условие требовало безупречности от обоих проходов, хотя ученику
-     уходит один. Замечания ко второму формальные, и держать из-за них третий
-     вызов модели значило платить временем ученика за чужой формат записи. */
-  it('отдаёт согласованное решение без вызова рецензента', async () => {
-    const dirtyDraft = { ...photoDraft, given: [...photoDraft.given, 'лишняя строка', 'ещё одна', 'и ещё', 'и пятая'] }
-    let drafts = 0
-
-    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
-      const url = String(input)
-      const body = typeof init?.body === 'string' ? init.body : ''
-      if (body.includes('homework_solution_review')) return providerResponse({ approved: true, issues: [], solution: photoDraft }, url)
-      drafts += 1
-      return providerResponse(drafts === 1 ? photoDraft : dirtyDraft, url)
-    })
-
-    await solveWithKie(photoTask, { apiKey: 'secret-test-key', fetchImpl: fetchMock })
-
-    const reviewCalls = fetchMock.mock.calls.filter(([, init]) => String(init?.body).includes('homework_solution_review'))
-    expect(reviewCalls).toHaveLength(0)
-    expect(drafts).toBe(2)
-  })
-
-  /* Сверка проходов по краткому ответу.
-
-     У словесного предмета в записи стоит предложение, и два прохода не
-     напишут его одинаково. Раньше это читалось как расхождение, и рецензента
-     звали там, где оба прохода пришли к одному: замер на проде 31 августа —
-     19 секунд на русском против нуля на геометрии. */
-  it('сверяет проходы по краткому ответу, а не по записи в тетради', async () => {
-    const otherWording = {
-      ...russianDraft,
-      answer: 'Подоконник — приставочно-суффиксальный способ образования от «окно».',
-    }
+     Без него на странице остаётся голая запись для тетради, то есть готовое
+     списывание. Продукт продаётся как «сфоткал и понял», и проверка держит
+     это обещание: черновик без разбора не проходит и уходит на починку. */
+  it('не выпускает решение без объяснения', async () => {
+    const withoutExplanation = { ...russianDraft, explanation: [] }
     let drafts = 0
 
     const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
@@ -478,36 +486,13 @@ describe('homework solver', () => {
         return providerResponse({ approved: true, issues: [], solution: russianDraft }, url)
       }
       drafts += 1
-      return providerResponse(drafts === 1 ? russianDraft : otherWording, url)
+      return providerResponse(withoutExplanation, url)
     })
 
     const solution = await solveWithKie(russianTask, { apiKey: 'secret-test-key', fetchImpl: fetchMock })
 
-    const reviewCalls = fetchMock.mock.calls.filter(([, init]) => String(init?.body).includes('homework_solution_review'))
-    expect(reviewCalls).toHaveLength(0)
-    expect(drafts).toBe(2)
-    // В тетрадь уходит запись, а не служебный ключ сверки.
-    expect(solution.answer).toBe(russianDraft.answer)
-  })
-
-  it('зовёт рецензента, когда краткие ответы проходов разошлись', async () => {
-    const disagreeing = { ...russianDraft, answerKey: 'суффиксальный' }
-    let drafts = 0
-
-    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
-      const url = String(input)
-      const body = typeof init?.body === 'string' ? init.body : ''
-      if (body.includes('homework_solution_review')) {
-        return providerResponse({ approved: true, issues: [], solution: russianDraft }, url)
-      }
-      drafts += 1
-      return providerResponse(drafts === 1 ? russianDraft : disagreeing, url)
-    })
-
-    await solveWithKie(russianTask, { apiKey: 'secret-test-key', fetchImpl: fetchMock })
-
-    const reviewCalls = fetchMock.mock.calls.filter(([, init]) => String(init?.body).includes('homework_solution_review'))
-    expect(reviewCalls).toHaveLength(1)
+    expect(drafts).toBe(1)
+    expect(solution.explanation?.length).toBeGreaterThanOrEqual(2)
   })
 
   it('rejects a reviewed answer for a different condition', async () => {
@@ -526,8 +511,7 @@ describe('homework solver', () => {
 
   it('does not abort a model stage with an application timeout', async () => {
     const signals: Array<AbortSignal | null | undefined> = []
-    // Два независимых прохода идут параллельно, рецензент — только при
-    // расхождении. Оба прохода отдают один черновик, поэтому вызовов два.
+    // Проход один, починка не нужна: черновик проходит проверку.
     const fetchMock: typeof fetch = async (input, init) => {
       signals.push(init?.signal)
       const body = typeof init?.body === 'string' ? init.body : ''
@@ -546,13 +530,16 @@ describe('homework solver', () => {
   })
 
   /* 2 сентября шлюз отвечал 500 «Server exception» на весь путь /codex,
-     и при пуле из одного семейства оба прохода падали за три секунды. */
-  it('переживает отказ шлюза: 5xx повторяется, а лежащее семейство не уносит решение', async () => {
-    let codexCalls = 0
+     и при пуле из одного семейства проход падал за три секунды. Отсюда
+     перебор пула: упавшая модель уводит вызов к следующей, а не роняет
+     решение. */
+  it('переживает отказ шлюза: лежащая модель не уносит решение', async () => {
+    const failing = `https://api.kie.ai/${defaultHomeworkModels[0]}/`
+    let failingCalls = 0
     const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
       const url = String(input)
-      if (url.includes('/codex/')) {
-        codexCalls += 1
+      if (url.startsWith(failing)) {
+        failingCalls += 1
         return { ok: false, status: 500, json: async () => ({ error: { type: 'server_error' } }) } as Response
       }
       const body = typeof init?.body === 'string' ? init.body : ''
@@ -565,9 +552,9 @@ describe('homework solver', () => {
 
     expect(solution.answer).toBe(providerSolution.answer)
     // Отказ шлюза повторять той же моделью бесполезно: проход сразу уходит
-    // к следующей семье пула, поэтому вызов /codex ровно один.
-    expect(codexCalls).toBe(1)
-    expect(fetchMock.mock.calls.some(([input]) => !String(input).includes('/codex/'))).toBe(true)
+    // к следующей модели пула, поэтому вызов к упавшей ровно один.
+    expect(failingCalls).toBe(1)
+    expect(fetchMock.mock.calls.some(([input]) => !String(input).startsWith(failing))).toBe(true)
   })
 
   it('отдаёт 503 и понятный текст, когда лежат все семейства', async () => {
@@ -614,7 +601,7 @@ describe('homework solver', () => {
     const http = createHttp('GET')
     await handleHomeworkSolverRequest(http.request, http.response, { apiKey: 'private-value' })
     expect(http.response.statusCode).toBe(200)
-    expect(http.body()).toEqual({ provider: 'kie.ai', model: 'gpt-5-6-luna', configured: true, engineVersion: 2 })
+    expect(http.body()).toEqual({ provider: 'kie.ai', model: 'gemini-3-6-flash-openai', configured: true, engineVersion: homeworkSolutionEngineVersion })
     expect(JSON.stringify(http.body())).not.toContain('private-value')
 
     const preflight = createHttp('OPTIONS')

@@ -674,7 +674,7 @@
   border-radius: var(--radius-surface);
   background: var(--paper);
   color: var(--paper-ink);
-  font-family: 'Segoe Print', 'Ink Free', 'Comic Sans MS', cursive;
+  font-family: var(--font-body);
 }
 
 .paper-grid {
@@ -770,7 +770,7 @@
 
 .paper-figure-label text {
   fill: var(--paper-ink);
-  font-family: 'Segoe Print', 'Ink Free', 'Comic Sans MS', cursive;
+  font-family: var(--font-body);
   font-size: 15px;
   font-weight: 700;
 }

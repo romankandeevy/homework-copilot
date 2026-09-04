@@ -55,6 +55,16 @@ function numberSolutionSteps(solution: readonly string[]) {
   return solution.map((line, index) => `${index + 1}) ${line.replace(/^\s*\d{1,2}[).]\s*/u, '')}`)
 }
 
+/* Как называется ход решения на листе.
+
+   В тетради у доказательства пишут «Доказательство», а не «Решение», и это
+   не украшение: по заголовку видно, что от записи требуется. Выбор идёт от
+   цели задачи, которую ставит сама модель, - отдельного поля для этого не
+   заводим. */
+function solutionTitle(spec: GeometryNotebookPageSpec) {
+  return spec.goal.title === 'Доказать' ? 'Доказательство' : 'Решение'
+}
+
 function paginateSolution(spec: GeometryNotebookPageSpec): readonly PageSegment[] {
   const segments: PageSegment[] = []
   const solutionLines = numberSolutionSteps(spec.solution).flatMap((line) => wrapText(line, layout.zones.solution.maxCharacters))
@@ -246,12 +256,22 @@ function NotebookSheet({ spec, segment }: { spec: GeometryNotebookPageSpec; segm
   )
   const givenFirstLineY = usesDenseGiven ? zones.given.dense.firstLineY : usesCompactGiven ? zones.given.compact.firstLineY : zones.given.firstLineY
   const givenLineStep = usesDenseGiven ? denseGivenLayout.lineStep : usesCompactGiven ? zones.given.compact.lineStep : zones.given.lineStep
+  /* Раздела «Дано» может не быть.
+
+     У уравнения, примера или вопроса по тексту перечислять в «Дано» нечего,
+     и пустой заголовок на листе читается как забытая строка. Когда модель
+     оставила given пустым, шапка листа схлопывается: цель поднимается на
+     место «Дано», разделительная черта не рисуется. Вертикальная черта
+     остаётся только вместе с чертежом - она отделяет запись от него. */
+  const hasGiven = givenLines.length > 0
+  const hasDiagram = Boolean(spec.sourceDiagram) || spec.diagram.kind !== 'none'
+  const goalY = hasGiven ? zones.goal.y : zones.given.titleY
   const goalText = `${spec.goal.title}: ${spec.goal.text}`
   const goalLines = wrapText(goalText, zones.goal.compact.maxCharacters)
   const usesCompactGoal = goalLines.length > 1
   const compactGoalLayout = fitLinesToZone(
     goalLines.length,
-    zones.goal.y,
+    goalY,
     zones.goal.compact.lineStep,
     zones.goal.compact.lastLineY,
     zones.goal.compact.fontSize,
@@ -265,7 +285,7 @@ function NotebookSheet({ spec, segment }: { spec: GeometryNotebookPageSpec; segm
         {!isContinuation && (
           <>
             {spec.number && <text className="notebook-number" x={zones.number.x} y={zones.number.y}>№ {spec.number}</text>}
-            <text className="notebook-title" x={zones.given.x} y={zones.given.titleY}>Дано:</text>
+            {hasGiven && <text className="notebook-title" x={zones.given.x} y={zones.given.titleY}>Дано:</text>}
             {keyed(givenLines, (line) => line).map(({ key, item: line }, index) => (
               <text
                 className={`notebook-body${usesDenseGiven ? ' notebook-body-dense' : usesCompactGiven ? ' notebook-body-compact' : ''}`}
@@ -275,14 +295,14 @@ function NotebookSheet({ spec, segment }: { spec: GeometryNotebookPageSpec; segm
                 style={usesDenseGiven ? { fontSize: denseGivenLayout.fontSize } : undefined}
               >{line}</text>
             ))}
-            <line className="notebook-divider" x1={zones.divider.horizontal.startX} x2={zones.divider.horizontal.endX} y1={zones.divider.horizontal.y} y2={zones.divider.horizontal.y} />
-            <line className="notebook-divider" x1={zones.divider.vertical.x} x2={zones.divider.vertical.x} y1={zones.divider.vertical.startY} y2={zones.divider.vertical.endY} />
+            {hasGiven && <line className="notebook-divider" x1={zones.divider.horizontal.startX} x2={zones.divider.horizontal.endX} y1={zones.divider.horizontal.y} y2={zones.divider.horizontal.y} />}
+            {hasDiagram && <line className="notebook-divider" x1={zones.divider.vertical.x} x2={zones.divider.vertical.x} y1={zones.divider.vertical.startY} y2={zones.divider.vertical.endY} />}
             {keyed(goalLines, (line) => line).map(({ key, item: line }, index) => (
               <text
                 className={`notebook-goal${usesCompactGoal ? ' notebook-goal-compact' : ''}`}
                 key={key}
                 x={zones.goal.x}
-                y={zones.goal.y + index * compactGoalLayout.lineStep}
+                y={goalY + index * compactGoalLayout.lineStep}
                 style={usesCompactGoal ? { fontSize: compactGoalLayout.fontSize } : undefined}
               >{line}</text>
             ))}
@@ -302,7 +322,7 @@ function NotebookSheet({ spec, segment }: { spec: GeometryNotebookPageSpec; segm
           </>
         )}
 
-        <text className="notebook-title" x={zones.solution.x} y={solutionTitleY}>{isContinuation ? 'Решение. (продолжение)' : 'Решение.'}</text>
+        <text className="notebook-title" x={zones.solution.x} y={solutionTitleY}>{isContinuation ? `${solutionTitle(spec)}. (продолжение)` : `${solutionTitle(spec)}.`}</text>
         {keyed(segment.lines, (line) => line).map(({ key, item: line }, index) => (
           <text className="notebook-solution" key={key} x={zones.solution.x} y={solutionFirstLineY + index * zones.solution.lineStep}>{line}</text>
         ))}

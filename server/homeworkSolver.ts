@@ -92,6 +92,7 @@ export async function solveWithKie(
       condition: verifiedTask.condition,
       given: [...verifiedTask.given],
       goal: verifiedTask.goal,
+      explanation: [...verifiedTask.explanation],
       steps: [...verifiedTask.solution],
       answer: verifiedTask.answer,
       diagram: verifiedTask.diagram,

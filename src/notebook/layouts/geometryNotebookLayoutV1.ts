@@ -12,7 +12,7 @@ export const geometryNotebookLayoutV1 = {
     pencil: '#565656',
   },
   typography: {
-    family: "'Segoe Print', 'Ink Free', 'Comic Sans MS', cursive",
+    family: "'Onest', 'Segoe UI', sans-serif",
     numberSize: 42,
     bodySize: 42,
     goalSize: 34,

@@ -38,6 +38,10 @@ export type VerifiedTextbookTask = VerifiedTextbookTaskSource & {
     title: 'Найти' | 'Доказать' | 'Построить'
     text: string
   }
+  /* Разбор обычными словами. Он идёт до готовой записи и здесь тоже
+     обязателен: проверенная задача проходит ту же проверку качества, что и
+     решённая моделью, а та без объяснения решение не выпускает. */
+  explanation: readonly string[]
   solution: readonly string[]
   answer: string
   diagram: HomeworkDiagram
@@ -85,6 +89,11 @@ export const verifiedTextbookTasks: readonly VerifiedTextbookTask[] = [
     hasDiagram: false,
     given: ['A, B, C — неколлинеарны'],
     goal: { title: 'Найти', text: 'n(прямых)' },
+    explanation: [
+      'Через две точки проходит ровно одна прямая - это основное свойство прямой.',
+      'Значит, посчитать надо не прямые на рисунке, а пары точек: их столько же.',
+      'Точки не лежат на одной прямой, поэтому ни одна пара не даёт ту же прямую дважды.',
+    ],
     solution: [
       'AB, BC, CA; n = C₃² = 3.',
     ],

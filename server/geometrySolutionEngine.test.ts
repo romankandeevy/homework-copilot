@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
+import { homeworkSolutionEngineVersion } from '../src/lib/homeworkContract.ts'
 import type { HomeworkSolution } from '../src/lib/homeworkContract.ts'
 import { answersAgree, clampNotebookLine, isCurrentReviewedSolution, normalizeNotebookNotation, validateSolutionQuality } from './geometrySolutionEngine.ts'
 
 const taskFiveSolution: HomeworkSolution = {
-  engineVersion: 2,
+  engineVersion: homeworkSolutionEngineVersion,
   textbookId: 'geometry',
   task: '5',
   source: 'number',
@@ -16,6 +17,10 @@ const taskFiveSolution: HomeworkSolution = {
   condition: 'Проведите прямую a и отметьте на ней точки A и B. Отметьте: а) точки M и N, лежащие на отрезке AB; б) точки P и Q, лежащие на прямой a, но не лежащие на отрезке AB; в) точки R и S, не лежащие на прямой a.',
   given: ['A, B ∈ a', 'M, N ∈ [AB]', 'P, Q ∈ a; R, S ∉ a'],
   goal: { title: 'Построить', text: 'P, A, M, N, B, Q; R, S' },
+  explanation: [
+    'Задача на построение: ответом служит сам чертёж, а не вычисленное число.',
+    'Точки расставляются по трём условиям: на отрезке, на прямой вне отрезка и вне прямой.',
+  ],
   steps: ['M, N ∈ [AB]; P, Q ∈ a ∖ [AB]; R, S ∉ a.'],
   answer: '',
   diagram: {
@@ -130,6 +135,10 @@ describe('пределы строки тетради', () => {
       title: 'Найти',
       text: 'Разобрать слово «подоконник» по составу, указать способ его образования и объяснить написание приставки',
     },
+    explanation: [
+      'Разбор по составу — это поиск морфем: приставки, корня, суффикса и окончания.',
+      'Способ образования виден по тому, что добавлено к исходному слову «окно».',
+    ],
     steps: [
       'под-окон-ник-∅',
       'окно → подоконник',

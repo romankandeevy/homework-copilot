@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { defaultHomeworkModels, solveHomeworkWithReview } from './geometrySolutionEngine.ts'
 import type { SolveHomeworkRequest } from '../src/lib/homeworkContract.ts'
 
-/* Два независимых прохода идут разными семействами моделей, а у KIE
-   у семейств разные протоколы: Gemini отвечает как OpenAI chat/completions,
-   GPT-5.x — как Responses API. Здесь проверяется и развилка протоколов,
+/* Проход один, но семейств моделей у шлюза по-прежнему два, и протоколы у
+   них разные: Gemini отвечает как OpenAI chat/completions, GPT-5.x — как
+   Responses API. Здесь проверяется и развилка протоколов на перебор пула,
    и то, что размеченный разбор доезжает до решения очищенным. */
 
 const request: SolveHomeworkRequest = {
@@ -35,6 +35,10 @@ const draft = {
   sourceVerified: true,
   given: ['Ветер гонит сухие листья по дороге.'],
   goal: { title: 'Найти', text: 'члены предложения' },
+  explanation: [
+    'В предложении сначала находят грамматическую основу: кто действует и что делает.',
+    'Остальные слова разбирают по вопросам от основы — так определяются второстепенные члены.',
+  ],
   steps: ['Ветер — подлежащее, гонит — сказуемое.', 'Листья — дополнение, сухие — определение.'],
   answer: 'Подлежащее — ветер, сказуемое — гонит.',
   diagram: {
@@ -110,22 +114,20 @@ function stubProvider(handler: (url: string, stage: Stage) => unknown) {
   return { urls, fetchImpl }
 }
 
-describe('два независимых прохода', () => {
-  it('делает два прохода моделями из разных семейств пула', async () => {
+describe('один проход умной моделью', () => {
+  it('делает ровно один вызов модели и берёт первую модель пула', async () => {
     const { urls, fetchImpl } = stubProvider((url) => (
       url.includes('/codex/') ? responsesPayload(draft) : geminiPayload(draft)
     ))
 
     const solution = await solveHomeworkWithReview(request, { apiKey: 'test-key', fetchImpl })
 
-    // 2 сентября путь /codex лежал целиком. Первые две модели пула берут
-    // проходы и расходятся по разным протоколам шлюза, остальные ждут
-    // запасными: отказ одного семейства решение больше не уносит.
-    expect(defaultHomeworkModels.slice(0, 2)).toEqual(['gpt-5-6-luna', 'gemini-3-5-flash-openai'])
-    expect(urls).toHaveLength(2)
-    expect(urls).toContain('https://api.kie.ai/codex/v1/responses')
-    expect(urls).toContain('https://api.kie.ai/gemini-3-5-flash-openai/v1/chat/completions')
-    // Оба прохода чистые и сошлись в ответе — рецензент не нужен.
+    // Пул отсортирован от умной модели к запасной, и проход берёт первую.
+    // Прежде проходов было два, а на расхождении звался ещё и рецензент:
+    // три-четыре вызова на задачу и 2,5 минуты ожидания.
+    expect(defaultHomeworkModels[0]).toBe('gemini-3-6-flash-openai')
+    expect(urls).toEqual(['https://api.kie.ai/gemini-3-6-flash-openai/v1/chat/completions'])
+    // Проверка прошла кодом — второй модели «на всякий случай» не зовём.
     expect(solution.quality?.reviewPassed).toBe(true)
   })
 
@@ -134,12 +136,12 @@ describe('два независимых прохода', () => {
 
     await solveHomeworkWithReview(request, { apiKey: 'test-key', fetchImpl, model: 'gemini-2.5-flash' })
 
-    // Маршрутизация по семействам остаётся рабочей: как только у шлюза
-    // появится второе семейство со строгой схемой, его хватит добавить в пул.
+    // Маршрутизация по семействам остаётся рабочей: пул перебирается по ней
+    // же, когда шлюз отвечает отказом.
     expect(urls.every((url) => url === 'https://api.kie.ai/gemini-2.5-flash/v1/chat/completions')).toBe(true)
   })
 
-  it('выдаёт решение, когда один проход упал целиком', async () => {
+  it('выдаёт решение, когда семейство модели лежит целиком', async () => {
     let draftCalls = 0
     // Форма ответа зависит от семейства: перебор уводит вызов на другой
     // протокол, и заглушка обязана отвечать по адресу, а не одинаково.
@@ -156,19 +158,16 @@ describe('два независимых прохода', () => {
     const solution = await solveHomeworkWithReview(request, { apiKey: 'test-key', fetchImpl })
 
     expect(solution.answer).toBe('Подлежащее — ветер, сказуемое — гонит.')
-    // Упавший проход пробуется дважды — сбой провайдера транзиентный.
+    // Упавшая модель уводит вызов дальше по пулу, а не роняет решение.
     expect(urls.length).toBeGreaterThanOrEqual(3)
   })
 
-  it('уважает модель, заданную через KIE_MODEL, и берёт её на оба прохода', async () => {
+  it('уважает модель, заданную через KIE_MODEL', async () => {
     const { urls, fetchImpl } = stubProvider(() => geminiPayload(draft))
 
     await solveHomeworkWithReview(request, { apiKey: 'test-key', fetchImpl, model: 'gemini-3-pro' })
 
-    expect(urls).toEqual([
-      'https://api.kie.ai/gemini-3-pro/v1/chat/completions',
-      'https://api.kie.ai/gemini-3-pro/v1/chat/completions',
-    ])
+    expect(urls).toEqual(['https://api.kie.ai/gemini-3-pro/v1/chat/completions'])
   })
 })
 

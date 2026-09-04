@@ -86,6 +86,10 @@ function qualityIssues(diagram: HomeworkDiagram, condition: string, steps: strin
     condition,
     given: [],
     goal: { title: 'Построить', text: 'чертёж по условию' },
+    explanation: [
+      'Задача просит не вычислить величину, а построить чертёж по описанию.',
+      'Строим по порядку: сначала опорная фигура, затем отмеченные на ней точки и связи.',
+    ],
     steps,
     answer: '',
     diagram,

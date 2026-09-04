@@ -70,7 +70,7 @@ function solution(task: string, condition: string) {
         }
 
   return {
-    engineVersion: 2,
+    engineVersion: 3,
     textbookId: 'geometry',
     task,
     source: 'number',
@@ -89,6 +89,10 @@ function solution(task: string, condition: string) {
     goal: isTask50
       ? { title: 'Найти', text: 'остальные углы' }
       : { title: 'Найти', text: isTask4 ? 'n(прямых)' : 'n(точек пересечения)' },
+    explanation: [
+      'Сначала разбираемся, что дано и что требуется получить в задаче.',
+      'Дальше строим чертёж по условию и считаем по нему то, о чём спрашивают.',
+    ],
     steps: isTask50
       ? [
           'По шкале транспортира: ∠AOX = 40°, ∠BOX = 60°, ∠COX = 80°, ∠DOX = 130°.',
