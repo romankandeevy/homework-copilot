@@ -1054,6 +1054,68 @@
 .route-empty > svg { color: var(--color-text-muted); }
 .route-empty > div { display: grid; justify-items: start; gap: var(--space-2); }
 
+/* Страница, которой нет.
+
+   Лист тот же, что и у решения, поэтому собственных красок здесь почти нет:
+   отличается только перечёркнутый номер. Красная черта — единственное
+   движение на экране, и оно одно: рука учителя, зачеркнувшая номер. */
+.not-found {
+  display: grid;
+  width: min(100%, 34rem);
+  justify-items: start;
+  gap: var(--space-5);
+}
+
+.not-found-sheet { width: 100%; }
+
+.not-found-number {
+  margin: 0;
+  font-size: clamp(1.6rem, 5vw, 2.1rem);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.not-found-number-strike {
+  position: relative;
+  display: inline-block;
+  color: var(--color-text-subtle);
+}
+
+.not-found-number-strike::after {
+  content: '';
+  position: absolute;
+  top: 52%;
+  left: -0.35em;
+  width: calc(100% + 0.7em);
+  height: 3px;
+  border-radius: 3px;
+  background: var(--paper-rule);
+  transform: rotate(-3.5deg) scaleX(0);
+  transform-origin: 0 50%;
+  animation: not-found-strike 420ms cubic-bezier(0.22, 1, 0.36, 1) 260ms forwards;
+}
+
+@keyframes not-found-strike {
+  to { transform: rotate(-3.5deg) scaleX(1); }
+}
+
+/* Путь пришёл из адресной строки: он может быть каким угодно, поэтому
+   строка рвётся по любому знаку, а не расталкивает лист. */
+.not-found-path {
+  overflow-wrap: anywhere;
+  color: var(--color-text-muted);
+}
+
+.not-found-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .not-found-number-strike::after { animation: none; transform: rotate(-3.5deg) scaleX(1); }
+}
+
 /* Гостю говорим правду: решение лежит только в его браузере. */
 .solution-guest-offer {
   display: flex;

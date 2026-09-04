@@ -982,17 +982,61 @@ function copyThroughSelection(value: string) {
   }
 }
 
+/* Страницы нет — и сказано это тем же языком, что и всё остальное в
+   продукте: тетрадной записью. Номер задачи перечёркнут красным, дальше
+   «Дано», «Найти», ход и ответ. Кнопки лежат под листом, а не на нём:
+   в тетради кнопок не бывает.
+
+   Адрес показывается настоящий — по нему человек и узнаёт свою опечатку.
+   Длинный обрезаем: в строку тетради он всё равно не помещается. */
 function NotFoundScreen({ onGoHome }: { onGoHome: () => void }) {
+  const missingPath = currentApplicationPath()
+  const shownPath = missingPath.length > 48 ? `${missingPath.slice(0, 48)}…` : missingPath
+
   return (
-    <section className="route-empty" aria-labelledby="not-found-title">
-      <header className="route-page-header">
-        <h1 id="not-found-title">Страница не найдена</h1>
-        <p>Такого адреса в Homework Copilot нет. Возможно, ссылка устарела или в ней опечатка.</p>
-      </header>
-      <button className="route-primary-action" type="button" onClick={onGoHome}>
-        <House size={18} weight="duotone" aria-hidden="true" />
-        На главную
-      </button>
+    <section className="route-page not-found" aria-labelledby="not-found-title">
+      {/* Заголовок страницы говорит правду голосом, а не почерком: на листе
+          написано «Решение», и читалке этого мало. */}
+      <h1 id="not-found-title" className="sr-only">Страница не найдена</h1>
+      <article className="notebook-sheet not-found-sheet">
+        <span className="notebook-sheet-grid" aria-hidden="true" />
+        <span className="notebook-sheet-margin" aria-hidden="true" />
+        <div className="notebook-sheet-body">
+          <p className="not-found-number">
+            <span className="not-found-number-strike">№ 404</span>
+          </p>
+
+          <section className="notebook-sheet-given">
+            <h2>Дано:</h2>
+            <p className="not-found-path">{shownPath}</p>
+          </section>
+          <p className="notebook-sheet-goal">
+            <strong>Найти:</strong> страницу, которая была нужна
+          </p>
+
+          <span className="notebook-sheet-divider" aria-hidden="true" />
+
+          <div className="notebook-sheet-steps">
+            <h2>Решение</h2>
+            <ol>
+              <li>Такого адреса в Homework Copilot нет: чаще всего в нём опечатка или ссылка устарела.</li>
+              <li>Задачу это не отменяет — условие приносится заново на главной.</li>
+            </ol>
+          </div>
+
+          <p className="notebook-sheet-answer">
+            <strong>Ответ:</strong> страницы нет, задача решается.
+          </p>
+        </div>
+      </article>
+
+      <div className="not-found-actions">
+        <button className="route-primary-action" type="button" onClick={onGoHome}>
+          <House size={18} weight="duotone" aria-hidden="true" />
+          Списать задачу
+        </button>
+        <a className="route-secondary-action" href={applicationPath('/')}>О сервисе</a>
+      </div>
     </section>
   )
 }
