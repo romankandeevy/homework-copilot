@@ -792,7 +792,9 @@ function UnderstandingPage({
       ...(source.given.length > 0 ? ['Дано:', ...source.given] : []),
       source.goal.title + ': ' + source.goal.text,
       'Решение:',
-      ...source.steps,
+      // Копия уходит в тетрадь той же записью, что и на листе: с номерами
+      // шагов и без модельной нумерации внутри строки.
+      ...source.steps.map((step, index) => `${index + 1}) ${step.replace(/^\s*\d{1,2}[).]\s*/u, '')}`),
       ...(source.answer ? ['Ответ: ' + source.answer] : []),
     ].join('\n')
 

@@ -12,13 +12,31 @@ describe('GeometryNotebookLayoutV1', () => {
     expect(layout.invariants.hasAngleArcAtB).toBe(true)
   })
 
-  it('renders the verified three-point task without an invented angle mark', () => {
+  it('renders the approved rhombus page with numbered solution rows', () => {
     const { container } = render(<GeometryNotebookLayoutV1 spec={geometryFixtures[0]} />)
 
-    expect(screen.getByText('№ 2', { selector: '.notebook-number' })).toBeInTheDocument()
+    expect(screen.getByText('№ 274', { selector: '.notebook-number' })).toBeInTheDocument()
     expect(container.querySelectorAll('[data-angle-arc="B"]')).toHaveLength(0)
-    expect(screen.getByLabelText(/Три точки A, B и C/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/Ромб ABCD с диагоналями/)).toBeInTheDocument()
     expect(screen.getByText('Решение.', { selector: '.notebook-title' })).toBeInTheDocument()
+    expect(screen.getByText('1) Диагонали ромба делятся пополам и ⟂.')).toBeInTheDocument()
+    expect(screen.getByText('5) AB = √169 = 13 см')).toBeInTheDocument()
+    expect(screen.getByText('Ответ: AB = 13 см')).toBeInTheDocument()
+  })
+
+  /* Номер получает шаг, а не перенос: иначе продолжение строки читается
+     как новый пункт решения. */
+  it('numbers solution steps once and leaves wrapped rows unnumbered', () => {
+    render(<GeometryNotebookLayoutV1 spec={{
+      ...geometryFixtures[0],
+      diagram: { kind: 'none', description: '', vertices: [] },
+      solution: ['1) Итого прямых: прямая a и три прямые AD, BD, CD.', 'Готово'],
+      answer: '4 прямые',
+    }} />)
+
+    expect(screen.getByText('1) Итого прямых: прямая a и три прямые')).toBeInTheDocument()
+    expect(screen.getByText('AD, BD, CD.')).toBeInTheDocument()
+    expect(screen.getByText('2) Готово')).toBeInTheDocument()
   })
 
   /* Номера у принесённой задачи не существует.
@@ -58,7 +76,7 @@ describe('GeometryNotebookLayoutV1', () => {
 
     expect(screen.getAllByTestId('geometry-notebook-page')).toHaveLength(2)
     expect(screen.getByText('Решение. (продолжение)')).toHaveAttribute('y', String(layout.zones.solution.continuation.titleY))
-    expect(screen.getByText('Строка 9')).toHaveAttribute('y', String(layout.zones.solution.continuation.firstLineY))
+    expect(screen.getByText('9) Строка 9')).toHaveAttribute('y', String(layout.zones.solution.continuation.firstLineY))
   })
 
   it('renders the exact source scan instead of a semantic template', () => {
@@ -104,8 +122,8 @@ describe('GeometryNotebookLayoutV1', () => {
       answer: '4 прямые',
     }} />)
 
-    expect(screen.getByText('Итого прямых: прямая a и три прямые AD,')).toBeInTheDocument()
-    expect(screen.getByText('BD, CD.')).toBeInTheDocument()
+    expect(screen.getByText('1) Итого прямых: прямая a и три прямые')).toBeInTheDocument()
+    expect(screen.getByText('AD, BD, CD.')).toBeInTheDocument()
     expect(screen.getByText('Ответ: 4 прямые')).toBeInTheDocument()
   })
 

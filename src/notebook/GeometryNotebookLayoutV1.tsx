@@ -46,9 +46,18 @@ function fitLinesToZone(
   }
 }
 
+/* Тетрадь сама нумерует ход решения: «1)», «2)», «3)» — так его пишут от
+   руки, так он выглядит на эталонной странице и так же его нумерует
+   HTML-лист остальных предметов. Номер получает шаг, а не перенос:
+   продолжение строки остаётся без номера. Номер, который модель всё же
+   поставила в тексте, снимается, чтобы не вышло «1) 1)». */
+function numberSolutionSteps(solution: readonly string[]) {
+  return solution.map((line, index) => `${index + 1}) ${line.replace(/^\s*\d{1,2}[).]\s*/u, '')}`)
+}
+
 function paginateSolution(spec: GeometryNotebookPageSpec): readonly PageSegment[] {
   const segments: PageSegment[] = []
-  const solutionLines = spec.solution.flatMap((line) => wrapText(line, layout.zones.solution.maxCharacters))
+  const solutionLines = numberSolutionSteps(spec.solution).flatMap((line) => wrapText(line, layout.zones.solution.maxCharacters))
   const answerLines = spec.answer
     ? wrapText(`Ответ: ${spec.answer}`, layout.zones.solution.maxCharacters)
     : []

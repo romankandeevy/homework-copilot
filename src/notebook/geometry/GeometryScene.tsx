@@ -143,10 +143,25 @@ function ParallelMark({ points, label }: { points: readonly Point[]; label: stri
   </>
 }
 
+/* Подпись вершины уводится наружу от середины чертежа: иначе буква A
+   ложится внутрь фигуры поверх диагонали и прямого угла, а D наезжает
+   на сторону. Величина отступа остаётся утверждённой, меняется только
+   сторона, в которую он отложен. */
+function labelPlacement(point: Point, center: { x: number; y: number }) {
+  const toLeft = point.x < center.x - sceneLayout.pointRadius
+  const below = point.y > center.y + sceneLayout.pointRadius
+  return {
+    x: point.x + (toLeft ? -sceneLayout.labelOffsetX : sceneLayout.labelOffsetX),
+    y: point.y + (below ? -sceneLayout.labelOffsetY : sceneLayout.labelOffsetY),
+    anchor: toLeft ? 'end' as const : 'start' as const,
+  }
+}
+
 export function GeometryScene({ scene, description }: { scene: HomeworkDiagramScene; description: string }) {
   const clipId = `geometry-scene-${useId().replace(/:/gu, '')}`
   const points = scene.points.map(mapPoint)
   const pointMap = new Map(points.map((point) => [point.id, point]))
+  const center = points.length > 0 ? average(points) : { x: 0, y: 0 }
 
   return (
     <g className="geometry-diagram geometry-scene" data-testid="geometry-scene" role="img" aria-label={description}>
@@ -182,12 +197,15 @@ export function GeometryScene({ scene, description }: { scene: HomeworkDiagramSc
           if (mark.kind === 'equal-segment') return <EqualSegmentMark points={markPoints} label={mark.label} key={key} />
           return <ParallelMark points={markPoints} label={mark.label} key={key} />
         })}
-        {points.filter((point) => point.visible).map((point) => (
-          <g key={point.id}>
-            <circle className="diagram-point" cx={point.x} cy={point.y} r={sceneLayout.pointRadius} />
-            <text className="diagram-vertex" x={point.x + sceneLayout.labelOffsetX} y={point.y + sceneLayout.labelOffsetY}>{point.label || point.id}</text>
-          </g>
-        ))}
+        {points.filter((point) => point.visible).map((point) => {
+          const place = labelPlacement(point, center)
+          return (
+            <g key={point.id}>
+              <circle className="diagram-point" cx={point.x} cy={point.y} r={sceneLayout.pointRadius} />
+              <text className="diagram-vertex" textAnchor={place.anchor} x={place.x} y={place.y}>{point.label || point.id}</text>
+            </g>
+          )
+        })}
       </g>
     </g>
   )

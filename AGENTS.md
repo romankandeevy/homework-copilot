@@ -6,7 +6,9 @@
 - Keep every geometry layout value in `src/notebook/layouts/geometryNotebookLayoutV1.ts`. Do not add component-local layout numbers.
 - Keep the page in its fixed SVG coordinate system and scale the whole page on narrow screens. Do not reflow, independently resize, or reposition page zones.
 - Do not change the paper, grid, red margin, ink colour, writing font, title/solution alignment, task-number position, divider joint, or diagram zone without an explicitly approved layout-version change.
-- The approved fixture is task №123. Never update visual snapshot baselines without explicit manual design approval.
+- The approved fixture is task №274 (ромб ABCD) in `src/notebook/fixtures.ts`; the reference image was re-approved from it on 4 September 2026. Never update visual snapshot baselines without explicit manual design approval.
+- Эта запись — эталон для решения любой задачи и любого предмета: «Дано» списком, «Найти», чертёж справа, ход решения пронумерованными шагами, «Ответ» последней строкой.
+- Номера шагов («1)», «2)») ставит сама тетрадь в `GeometryNotebookLayoutV1`, а не данные задачи и не модель: перенос строки номера не получает. Слово «Ответ» тетрадь тоже печатает сама — в `answer` лежит только значение.
 
 # Витрина и приложение — разные адреса
 
