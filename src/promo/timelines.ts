@@ -36,9 +36,12 @@ export const solveBeats = [
   { id: 'done', label: 'Готово', duration: 3 },
 ] as const satisfies readonly Beat[]
 
+/* Имена готовых файлов знает scripts/render-promo.mjs: у каждого ролика их
+   два - широкий и вертикальный с суффиксом `-tall`. Здесь только то, что
+   нужно самой студии: удары, подпись и кадр для постера. */
 export const films = {
-  hero: { beats: heroBeats as readonly Beat[], label: 'Первый экран', output: 'public/hero.mp4', poster: 'public/hero-poster.jpg', posterAt: 21 },
-  solve: { beats: solveBeats as readonly Beat[], label: 'Как решается задача', output: 'public/promo.mp4', poster: 'public/promo-poster.jpg', posterAt: 12 },
+  hero: { beats: heroBeats as readonly Beat[], label: 'Первый экран', posterAt: 21 },
+  solve: { beats: solveBeats as readonly Beat[], label: 'Как решается задача', posterAt: 12 },
 } as const
 
 export type FilmId = keyof typeof films

@@ -195,10 +195,31 @@ function CompareRow({ row, index }: { row: (typeof comparison)[number]; index: n
   )
 }
 
+/* Какой ролик играть. Ролики сняты в двух форматах: широкий 16:9 и
+   вертикальный 4:5 с суффиксом `-tall`. Раньше телефон получал широкий, и
+   `object-fit: cover` срезал ему бока вместе с половиной надписей. Порог
+   тот же, что у вёрстки первого экрана в LandingPage.css - 640 px. */
+const narrowScreen = '(max-width: 640px)'
+
+function useFilmName(base: string) {
+  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.matchMedia(narrowScreen).matches)
+
+  useEffect(() => {
+    const query = window.matchMedia(narrowScreen)
+    const update = () => setNarrow(query.matches)
+    update()
+    query.addEventListener('change', update)
+    return () => query.removeEventListener('change', update)
+  }, [])
+
+  return narrow ? `${base}-tall` : base
+}
+
 /* Ролик о продукте. Файл тяжёлый, поэтому до появления в кадре грузится
    только постер: `preload="none"` плюс запуск по пересечению. */
 function PromoFilm() {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const film = useFilmName('promo')
 
   useEffect(() => {
     const video = videoRef.current
@@ -218,8 +239,11 @@ function PromoFilm() {
   return (
     <video
       ref={videoRef}
+      // Смена формата - это другой файл: без key браузер остаётся на уже
+      // загруженном источнике и поворот телефона ничего не меняет.
+      key={film}
       className="promo-film"
-      poster="/promo-poster.jpg"
+      poster={`/${film}-poster.jpg`}
       preload="none"
       muted
       loop
@@ -228,7 +252,7 @@ function PromoFilm() {
       // то, что рядом написано словами, поэтому обходится без подписей.
       aria-label="Как выглядит решение задачи в Homework Copilot"
     >
-      <source src="/promo.mp4" type="video/mp4" />
+      <source src={`/${film}.mp4`} type="video/mp4" />
     </video>
   )
 }
@@ -240,19 +264,21 @@ function PromoFilm() {
    остаётся неподвижный постер. */
 function HeroFilm() {
   const reduce = prefersReducedMotion()
+  const film = useFilmName('hero')
 
   return (
     <div className="hero-media" aria-hidden="true">
       <video
+        key={film}
         className="hero-video"
-        poster="/hero-poster.jpg"
+        poster={`/${film}-poster.jpg`}
         autoPlay={!reduce}
         muted
         loop
         playsInline
         preload="auto"
       >
-        <source src="/hero.mp4" type="video/mp4" />
+        <source src={`/${film}.mp4`} type="video/mp4" />
       </video>
       <span className="hero-scrim" />
     </div>

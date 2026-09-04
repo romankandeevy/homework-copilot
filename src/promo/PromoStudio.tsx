@@ -4,8 +4,9 @@
      http://localhost:5173/?promo=1            - ролик первого экрана
      http://localhost:5173/?promo=1&film=solve - ролик «как решается задача»
 
-   С `&render=1` остаётся голая сцена 1920×1080 без панели - так её снимает
+   С `&render=1` остаётся голая сцена без панели - так её снимает
    scripts/render-promo.mjs, выставляя время через window.promoControl.
+   `&format=tall` показывает вертикальный кадр 1080×1350 для телефона.
 
    Управление: пробел - пуск/пауза, стрелки - кадр, с Shift - секунда,
    Home - в начало. Панель нарисована inline-стилями, как и сами ролики. */
@@ -14,7 +15,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from
 import { flushSync } from 'react-dom'
 import { HeroFilm } from './HeroFilm'
 import { SolveFilm } from './SolveFilm'
-import { stageHeight, stageWidth } from './stage'
+import { stageFormats, viewScaleOf, type StageFormat } from './stage'
 import { beatAt, films, frameRate, timelineOf, type FilmId } from './timelines'
 
 declare global {
@@ -23,6 +24,7 @@ declare global {
       total: number
       fps: number
       film: FilmId
+      format: StageFormat
       setTime: (T: number) => void
       getTime: () => number
     }
@@ -42,19 +44,19 @@ const chipStyle: CSSProperties = {
   cursor: 'pointer',
 }
 
-function useStageScale(renderMode: boolean) {
+function useStageScale(renderMode: boolean, stage: { width: number; height: number }) {
   const [scale, setScale] = useState(1)
   useLayoutEffect(() => {
     if (renderMode) return
     const measure = () => {
-      const width = (window.innerWidth - 48) / stageWidth
-      const height = (window.innerHeight - transportHeight - 48) / stageHeight
+      const width = (window.innerWidth - 48) / stage.width
+      const height = (window.innerHeight - transportHeight - 48) / stage.height
       setScale(Math.max(0.1, Math.min(width, height)))
     }
     measure()
     window.addEventListener('resize', measure)
     return () => window.removeEventListener('resize', measure)
-  }, [renderMode])
+  }, [renderMode, stage.width, stage.height])
   return scale
 }
 
@@ -62,6 +64,12 @@ export default function PromoStudio() {
   const params = new URLSearchParams(window.location.search)
   const renderMode = params.get('render') === '1'
   const filmId: FilmId = params.get('film') === 'solve' ? 'solve' : 'hero'
+  const format: StageFormat = params.get('format') === 'tall' ? 'tall' : 'wide'
+  const stage = stageFormats[format]
+  /* Окно кадра уже самой сцены: медиазапросы приложения должны увидеть
+     ширину телефона. В студии окно - это окно браузера, поэтому раскладку
+     интерфейса вертикального ролика точно показывает только рендер. */
+  const viewScale = viewScaleOf(format)
   const film = films[filmId]
   const { total } = timelineOf(film.beats)
   const Film = filmId === 'solve' ? SolveFilm : HeroFilm
@@ -71,7 +79,7 @@ export default function PromoStudio() {
   const [playing, setPlaying] = useState(!renderMode && params.get('autoplay') !== '0')
   const timeRef = useRef(initialTime)
   timeRef.current = T
-  const scale = useStageScale(renderMode)
+  const scale = useStageScale(renderMode, stage)
 
   // Часы студии: время течёт по requestAnimationFrame и зацикливается.
   useEffect(() => {
@@ -97,6 +105,7 @@ export default function PromoStudio() {
       total,
       fps: frameRate,
       film: filmId,
+      format,
       setTime: (value) => {
         flushSync(() => {
           setPlaying(false)
@@ -108,7 +117,7 @@ export default function PromoStudio() {
     return () => {
       delete window.promoControl
     }
-  }, [filmId, total])
+  }, [filmId, format, total])
 
   useEffect(() => {
     document.title = renderMode ? `Рендер: ${film.label}` : `Студия: ${film.label}`
@@ -153,8 +162,10 @@ export default function PromoStudio() {
 
   if (renderMode) {
     return (
-      <div style={{ width: stageWidth, height: stageHeight, overflow: 'hidden' }}>
-        <Film T={T} />
+      <div style={{ width: Math.round(stage.width * viewScale), height: Math.round(stage.height * viewScale), overflow: 'hidden' }}>
+        <div style={{ width: stage.width, height: stage.height, transform: `scale(${viewScale})`, transformOrigin: '0 0' }}>
+          <Film T={T} format={format} />
+        </div>
       </div>
     )
   }
@@ -165,9 +176,9 @@ export default function PromoStudio() {
   return (
     <div style={{ position: 'fixed', inset: 0, display: 'grid', gridTemplateRows: `1fr ${transportHeight}px`, background: '#08090c', color: '#e6e8ee' }}>
       <div style={{ display: 'grid', placeItems: 'center', overflow: 'hidden' }}>
-        <div style={{ width: stageWidth * scale, height: stageHeight * scale }}>
-          <div style={{ transform: `scale(${scale})`, transformOrigin: '0 0', width: stageWidth, height: stageHeight, boxShadow: '0 30px 100px rgba(0,0,0,0.6)' }}>
-            <Film T={T} />
+        <div style={{ width: stage.width * scale, height: stage.height * scale }}>
+          <div style={{ transform: `scale(${scale})`, transformOrigin: '0 0', width: stage.width, height: stage.height, boxShadow: '0 30px 100px rgba(0,0,0,0.6)' }}>
+            <Film T={T} format={format} />
           </div>
         </div>
       </div>
@@ -185,10 +196,21 @@ export default function PromoStudio() {
             {(Object.keys(films) as FilmId[]).map((id) => (
               <a
                 key={id}
-                href={`?promo=1&film=${id}`}
+                href={`?promo=1&film=${id}&format=${format}`}
                 style={{ ...chipStyle, textDecoration: 'none', borderColor: id === filmId ? '#3f6cff' : 'rgba(255,255,255,0.14)', color: id === filmId ? '#fff' : '#c9ccd6' }}
               >
                 {films[id].label}
+              </a>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {(Object.keys(stageFormats) as StageFormat[]).map((id) => (
+              <a
+                key={id}
+                href={`?promo=1&film=${filmId}&format=${id}`}
+                style={{ ...chipStyle, textDecoration: 'none', borderColor: id === format ? '#3f6cff' : 'rgba(255,255,255,0.14)', color: id === format ? '#fff' : '#c9ccd6' }}
+              >
+                {id === 'tall' ? 'Телефон 4:5' : 'Экран 16:9'}
               </a>
             ))}
           </div>
