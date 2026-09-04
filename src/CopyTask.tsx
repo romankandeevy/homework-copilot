@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ClipboardEvent, FormEvent } from 'react'
 import { ArrowRight, ImageSquare, X } from '@phosphor-icons/react'
+import { maxConditionLength } from './lib/homeworkContract'
 import type { HomeworkSource } from './lib/homeworkContract'
 import { formatRubles } from './lib/currency'
 import { getSolutionPrice } from './lib/solutionPricing'
@@ -193,7 +194,7 @@ export default function CopyTask({
           ref={conditionRef}
           value={condition}
           onChange={(event) => {
-            setCondition(event.target.value.slice(0, 5000))
+            setCondition(event.target.value.slice(0, maxConditionLength))
             if (error) setError('')
           }}
           onPaste={pastePhoto}

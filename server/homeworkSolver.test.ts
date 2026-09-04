@@ -13,6 +13,18 @@ vi.mock('@supabase/supabase-js', async (importOriginal) => {
 const verifiedTask = findVerifiedTextbookTask('geometry', '14-е издание, Просвещение, 2023', '2')
 if (!verifiedTask) throw new Error('Verified geometry task #2 is required for solver tests')
 
+/* Книга кошелька в мокнутом клиенте: цепочка select-eq-gte-limit, которой
+   решатель считает попытки и неудачи за сутки. */
+function walletQuery(entries: { kind: string; idempotency_key: string }[]) {
+  const query = {
+    select: () => query,
+    eq: () => query,
+    gte: () => query,
+    limit: () => Promise.resolve({ data: entries, error: null }),
+  }
+  return query
+}
+
 const task: SolveHomeworkRequest = {
   textbookId: 'geometry',
   task: '2',
@@ -628,6 +640,92 @@ describe('homework solver', () => {
     await handleHomeworkSolverRequest(unconfirmed.request, unconfirmed.response, { apiKey: 'test-key', fetchImpl: fetchMock })
     expect(unconfirmed.response.statusCode).toBe(422)
     expect(unconfirmed.body().error).toContain('не найдено')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  /* Пределы суток. Неудача возвращает деньги ученику, но провайдеру за неё
+     уже уплачено, поэтому считаем свои вызовы, а не чужие рубли. */
+  it('отказывает, когда за сутки накопилось слишком много неудач', async () => {
+    // Восстановление решения спрашивает базу до всякой оплаты: пусто.
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: null })
+    const walletEntries = Array.from({ length: 12 }, (_, index) => ({
+      kind: 'credit',
+      idempotency_key: `solution-${index}:refund`,
+    }))
+    vi.mocked(createClient).mockReturnValueOnce({
+      auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'student-1' } }, error: null }) },
+      from: vi.fn().mockReturnValue(walletQuery(walletEntries)),
+      rpc,
+    } as never)
+
+    const http = createHttp('POST', {
+      ...task,
+      source: 'text',
+      task: 'own-condition',
+      condition: 'Ромб ABCD, AC = 10 см, BD = 24 см. Найти AB.',
+      idempotencyKey: 'solution-limit-failed',
+    })
+    http.request.headers.authorization = 'Bearer test-session'
+    const fetchMock = vi.fn<typeof fetch>()
+    await handleHomeworkSolverRequest(http.request, http.response, {
+      supabaseUrl: 'https://project.supabase.co',
+      supabasePublishableKey: 'publishable-test-key',
+      fetchImpl: fetchMock,
+    })
+
+    expect(http.response.statusCode).toBe(429)
+    expect(http.body().error).toContain('не решилось')
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(rpc.mock.calls.some((call) => call[0] === 'reserve_solution_credit')).toBe(false)
+  })
+
+  it('отказывает после шестидесяти решений за сутки', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: null })
+    const walletEntries = Array.from({ length: 60 }, (_, index) => ({
+      kind: 'debit',
+      idempotency_key: `solution-${index}`,
+    }))
+    vi.mocked(createClient).mockReturnValueOnce({
+      auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'student-1' } }, error: null }) },
+      from: vi.fn().mockReturnValue(walletQuery(walletEntries)),
+      rpc,
+    } as never)
+
+    const http = createHttp('POST', {
+      ...task,
+      source: 'text',
+      task: 'own-condition',
+      condition: 'Ромб ABCD, AC = 10 см, BD = 24 см. Найти AB.',
+      idempotencyKey: 'solution-limit-attempts',
+    })
+    http.request.headers.authorization = 'Bearer test-session'
+    const fetchMock = vi.fn<typeof fetch>()
+    await handleHomeworkSolverRequest(http.request, http.response, {
+      supabaseUrl: 'https://project.supabase.co',
+      supabasePublishableKey: 'publishable-test-key',
+      fetchImpl: fetchMock,
+    })
+
+    expect(http.response.statusCode).toBe(429)
+    expect(http.body().error).toContain('дневной предел')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  /* Простыня из сотен примеров - не задача. Раньше она резалась молча, и
+     ученик получал разбор обрезанного задания, а мы платили за вызовы. */
+  it('не берёт в работу условие длиннее полутора тысяч знаков', async () => {
+    const http = createHttp('POST', {
+      ...task,
+      source: 'text',
+      task: 'own-condition',
+      condition: Array.from({ length: 200 }, (_, index) => `${index + 1}) 12 · 47 = ?`).join(' '),
+      idempotencyKey: 'solution-limit-condition',
+    })
+    const fetchMock = vi.fn<typeof fetch>()
+    await handleHomeworkSolverRequest(http.request, http.response, { apiKey: 'test-key', fetchImpl: fetchMock })
+
+    expect(http.response.statusCode).toBe(400)
+    expect(http.body().error).toContain('это уже не одна задача')
     expect(fetchMock).not.toHaveBeenCalled()
   })
 

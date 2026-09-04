@@ -26,6 +26,14 @@ export type HomeworkDiagramKind = typeof homeworkDiagramKinds[number]
 //          с любым учебником и любым предметом: индекс для него не нужен.
 export type HomeworkSource = 'number' | 'photo' | 'text'
 
+/* Предел условия одной задачи.
+
+   Тетрадная страница держит четырнадцать строк решения, поэтому вставленная
+   простыня из сотен примеров всё равно не пройдёт проверку - а три-четыре
+   вызова модели за неё будут оплачены. Ограничение общее для формы и сервера:
+   форма не даёт набрать больше, сервер не берёт в работу больше. */
+export const maxConditionLength = 1500
+
 export const homeworkSolutionEngineVersion = 2
 
 export const homeworkTaskTypes = ['construction', 'calculation', 'proof', 'mixed'] as const

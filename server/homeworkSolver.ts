@@ -2,7 +2,7 @@ import { createHmac } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createClient } from '@supabase/supabase-js'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { homeworkSolutionEngineVersion } from '../src/lib/homeworkContract.ts'
+import { homeworkSolutionEngineVersion, maxConditionLength } from '../src/lib/homeworkContract.ts'
 import type { HomeworkSolution, HomeworkTaskType, SolveHomeworkRequest } from '../src/lib/homeworkContract.ts'
 import type { Database, Json } from '../src/lib/database.types.ts'
 import { formatRubles } from '../src/lib/currency.ts'
@@ -182,6 +182,56 @@ async function lookupVerifiedTask(request: SolveHomeworkRequest, options: Solver
   }
 }
 
+/* Пределы одного аккаунта за сутки.
+
+   Неудача возвращает деньги ученику — так обещано на витрине, — но
+   провайдеру за неё уже уплачено: один разбор это три-четыре вызова модели,
+   примерно 18 копеек. Пока пределов не было, любой аккаунт с пятью рублями
+   на счету мог гонять заведомо непроходные условия по кругу и тратить наши
+   деньги без остановки: с него не списывалось ничего, с нас — за каждую
+   попытку. Поэтому считаем не деньги ученика, а свои вызовы модели, и
+   отдельно — неудачи, у которых цена та же, а выручки нет.
+
+   Живому ученику эти числа не мешают: шестьдесят решений в сутки — это
+   больше, чем домашка за неделю. */
+const dailySolveAttempts = 60
+const dailyFailedAttempts = 12
+const dayMs = 24 * 60 * 60 * 1000
+
+async function assertDailySolveLimits(account: AuthenticatedAccount) {
+  const since = new Date(Date.now() - dayMs).toISOString()
+  let entries: { kind: string; idempotency_key: string }[]
+  try {
+    const { data, error } = await account.client
+      .from('wallet_entries')
+      .select('kind,idempotency_key')
+      .eq('user_id', account.userId)
+      .gte('created_at', since)
+      .limit(400)
+    // Книга не прочиталась — это наша беда, а не ученика: решение идёт дальше.
+    if (error || !data) {
+      if (error) logSolverEvent('error', 'homework_solve_limit_unreadable', { message: error.message })
+      return
+    }
+    entries = data
+  } catch (error) {
+    logSolverEvent('error', 'homework_solve_limit_unreadable', {
+      message: error instanceof Error ? error.message : 'unknown',
+    })
+    return
+  }
+
+  const attempts = entries.filter((entry) => entry.kind === 'debit').length
+  const failed = entries.filter((entry) => entry.idempotency_key.endsWith(':refund')).length
+
+  if (failed >= dailyFailedAttempts) {
+    throw new HomeworkSolverError(429, 'Сегодня слишком много задач не решилось. Проверь условие и вернись завтра')
+  }
+  if (attempts >= dailySolveAttempts) {
+    throw new HomeworkSolverError(429, 'Сегодня решено ' + dailySolveAttempts + ' задач — это дневной предел. Продолжим завтра')
+  }
+}
+
 async function validateRequest(value: unknown, options: SolverOptions): Promise<SolveHomeworkRequest> {
   if (!value || typeof value !== 'object') {
     throw new HomeworkSolverError(400, 'Передай учебник и задачу для решения')
@@ -225,6 +275,17 @@ async function validateRequest(value: unknown, options: SolverOptions): Promise<
   if (source === 'text' && condition.trim().length < 15) {
     throw new HomeworkSolverError(400, 'Впиши условие задачи целиком — хотя бы одно предложение')
   }
+  /* Верхняя граница условия — тоже граница задачи.
+
+     Раньше условие молча резалось до 5000 знаков: вставленная простыня из
+     сотен примеров доезжала до модели первой четвертью, а ученик получал
+     разбор обрезанного задания и не знал об этом. Тетрадная страница держит
+     четырнадцать строк решения, так что такой запрос всё равно не прошёл бы
+     проверку — но три-четыре вызова модели за него мы бы уже оплатили.
+     Теперь длинное условие отвергается сразу и с объяснением. */
+  if (condition.length > maxConditionLength) {
+    throw new HomeworkSolverError(400, 'Условие длиннее ' + maxConditionLength + ' знаков — это уже не одна задача. Раздели её и пришли по частям')
+  }
   if (imageDataUrl.length > 4_000_000) {
     throw new HomeworkSolverError(413, 'Фотография задачи слишком большая')
   }
@@ -239,7 +300,7 @@ async function validateRequest(value: unknown, options: SolverOptions): Promise<
     authors: text(candidate.authors).slice(0, 300),
     edition: text(candidate.edition).slice(0, 150),
     idempotencyKey: text(candidate.idempotencyKey).slice(0, 150),
-    ...(condition ? { condition: condition.slice(0, 5000) } : {}),
+    ...(condition ? { condition: condition.slice(0, maxConditionLength) } : {}),
     ...(sourceUrl ? { sourceUrl: sourceUrl.slice(0, 500) } : {}),
     ...(sourcePage ? { sourcePage } : {}),
     ...(imageDataUrl ? { imageDataUrl } : {}),
@@ -770,6 +831,7 @@ export async function handleHomeworkSolverRequest(
     }
 
     stage = 'balance'
+    if (account && !existingSolution) await assertDailySolveLimits(account)
     const reserved = existingSolution
       ? false
       : guestSolving
