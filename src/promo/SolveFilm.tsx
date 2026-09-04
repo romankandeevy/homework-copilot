@@ -64,7 +64,7 @@ function SheetScene({ t, duration }: { t: number; duration: number }) {
     <div style={at(0, 0, { width: stageWidth, height: stageHeight, opacity })}>
       <Eyebrow style={at(0, 120, { width: stageWidth, textAlign: 'center', ...rise(t, 0.05, 0.45) })}>Возвращается страницей тетради</Eyebrow>
       <div style={at(0, 190, { width: stageWidth, display: 'flex', justifyContent: 'center', transform: `scale(${zoom.toFixed(4)})`, transformOrigin: '50% 20%' })}>
-        <NotebookPage filled={filled} width={620} />
+        <NotebookPage filled={filled} width={470} />
       </div>
     </div>
   )

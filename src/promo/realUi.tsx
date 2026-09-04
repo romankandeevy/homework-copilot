@@ -7,24 +7,25 @@
    - форма - разметка `src/CopyTask.tsx`, стили `src/App.css`;
    - карточка решения - разметка `src/solution/SolutionQueue.tsx`,
      стили `src/solution/SolutionQueue.css`, шаги - `src/lib/solutionJobs.ts`;
-   - тетрадный лист - сам компонент `GeometryNotebookLayoutV1` с проверенной
-     задачей из `src/notebook/fixtures.ts`.
+   - тетрадный лист - `NotebookPreview` из `src/landing/LandingPreviews.tsx`,
+     тот же самый лист, что лежит на первом экране витрины и в разделе
+     «Как это работает»: задача про ромб ABCD.
 
    Живого состояния у них здесь нет: поля только показываются, значения
    приходят сверху как функция времени ролика. */
 
 import type { CSSProperties, ReactNode } from 'react'
 import { ArrowRight, Check, ImageSquare, SpinnerGap } from '@phosphor-icons/react'
-import { GeometryNotebookLayoutV1 } from '../notebook/GeometryNotebookLayoutV1'
-import { approvedGeometryNotebookLayoutV1Fixture } from '../notebook/fixtures'
+import { NotebookPreview } from '../landing/LandingPreviews'
 import { solutionStages } from '../lib/solutionJobs'
 import { solutionPriceKopecks } from '../lib/solutionPricing'
 import '../App.css'
+import '../landing/LandingPage.css'
 import '../solution/SolutionQueue.css'
 
-export const notebookSpec = approvedGeometryNotebookLayoutV1Fixture
-
-export const taskCondition = notebookSpec.condition
+/* Условие той же задачи, что и на листе: форма, карточка решения и тетрадь
+   в ролике показывают одну задачу, а не три разные. */
+export const taskCondition = 'Ромб ABCD, AC = 10 см, BD = 24 см. Найти AB.'
 
 export const taskPrice = `${Math.round(solutionPriceKopecks / 100)} ₽`
 
@@ -106,8 +107,8 @@ export function TaskFormCard({ condition, pressed, submitting }: {
           </label>
           <label className="task-select">
             <span className="sr-only">Класс</span>
-            <select value="7" onChange={() => {}}>
-              <option value="7">7</option>
+            <select value="8" onChange={() => {}}>
+              <option value="8">8</option>
             </select>
           </label>
           <button
@@ -167,14 +168,14 @@ export function SolveCard({ stageIndex, clock, spin }: { stageIndex: number; clo
   )
 }
 
-/* Тетрадный лист - настоящий компонент разбора. Заполнение показано
-   подрезкой сверху вниз: сам лист при этом не подменяется. */
+/* Тетрадный лист - тот же, что и на витрине. Заполнение показано подрезкой
+   сверху вниз: сам лист при этом не подменяется. */
 export function NotebookPage({ filled, width }: { filled: number; width: number }) {
   const visible = Math.min(1, Math.max(0, filled))
   return (
     <div style={{ position: 'relative', width, filter: 'drop-shadow(0 40px 90px rgba(0, 0, 0, 0.55))' }}>
       <div style={{ clipPath: `inset(0 0 ${((1 - visible) * 100).toFixed(2)}% 0)` }}>
-        <GeometryNotebookLayoutV1 spec={notebookSpec} />
+        <NotebookPreview />
       </div>
       {visible > 0.02 && visible < 0.995 && (
         <div

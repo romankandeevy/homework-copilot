@@ -144,7 +144,7 @@ function PhotoScene({ t, duration }: { t: number; duration: number }) {
         })}
       >
         <div style={at(72, 0, { width: 2, height: 500, background: '#e8a3ae', opacity: 0.75 })} />
-        <div style={at(104, 40, { fontSize: 30, fontWeight: 700 })}>№ 2</div>
+        <div style={at(104, 40, { fontSize: 30, fontWeight: 700 })}>№ 274</div>
         <div style={at(104, 100, { width: 440, fontSize: 22, lineHeight: 1.55 })}>{taskCondition}</div>
       </div>
       <div
@@ -242,7 +242,7 @@ function SheetScene({ t, duration }: { t: number; duration: number }) {
     <div style={at(0, 0, { width: stageWidth, height: stageHeight, opacity })}>
       <Eyebrow style={at(0, 110, { width: stageWidth, textAlign: 'center', ...rise(t, 0.05, 0.4) })}>Готовая запись, а не голый ответ</Eyebrow>
       <div style={at(0, 175, { width: stageWidth, display: 'flex', justifyContent: 'center', transform: `scale(${zoom.toFixed(4)})`, transformOrigin: '50% 18%' })}>
-        <NotebookPage filled={filled} width={640} />
+        <NotebookPage filled={filled} width={480} />
       </div>
     </div>
   )
@@ -260,7 +260,7 @@ function RewriteScene({ t, duration }: { t: number; duration: number }) {
         Дано, ход решения по шагам, чертёж и ответ. Формулы записаны по-школьному.
       </div>
       <div style={at(1240, 150, { ...whip(t, 0.3, 0.55, 300) })}>
-        <NotebookPage filled={1} width={430} />
+        <NotebookPage filled={1} width={350} />
       </div>
     </div>
   )
