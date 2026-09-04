@@ -4,9 +4,25 @@ import type { Json } from './database.types'
 
 export const generatedSolutionsStorageKey = 'homework-copilot:generated-solutions-v1'
 
+/* Что показываем ученику.
+
+   Версия движка здесь не при чём: за решение заплачено, и от того, что мы
+   поменяли формат записи, оно не должно пропадать со страницы. Так и вышло
+   4 сентября - подняли версию до 3, и оплаченное решение молча исчезло из
+   «Моих решений», хотя лежало в базе. Лист рендерится и без новых полей:
+   объяснение необязательно. */
 export function isReviewedHomeworkSolution(solution: HomeworkSolution) {
+  return solution.quality?.reviewPassed === true
+}
+
+/* Что можно отдать повторно вместо нового вызова модели.
+
+   Здесь версия важна: повтор по той же задаче должен дать нынешний формат,
+   а не запись, собранную прежним движком - без объяснения и с прежними
+   правилами проверки. */
+export function isCurrentEngineSolution(solution: HomeworkSolution) {
   return solution.engineVersion === homeworkSolutionEngineVersion
-    && solution.quality?.reviewPassed === true
+    && isReviewedHomeworkSolution(solution)
 }
 
 export function parseStoredHomeworkSolution(value: Json | unknown, ownerId?: string): HomeworkSolution | null {

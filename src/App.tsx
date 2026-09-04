@@ -49,6 +49,7 @@ import { applySeoMetadata, getSeoMetadata } from './lib/siteMetadata'
 import { getSolutionPrice } from './lib/solutionPricing'
 import { findSubjectByName } from './lib/subjects'
 import {
+  isCurrentEngineSolution,
   isReviewedHomeworkSolution,
   loadGeneratedSolutions,
   parseStoredHomeworkSolution,
@@ -1973,7 +1974,9 @@ function HomePage() {
     }
 
     const previouslyGenerated = visibleGeneratedSolutions.find((solution) => (
-      isReviewedHomeworkSolution(solution)
+      // Повтор отдаём только записью нынешнего движка: иначе ученик получит
+      // старый формат вместо того, за чем пришёл, и без объяснения.
+      isCurrentEngineSolution(solution)
       && solution.textbookId === submission.textbookId
       && solution.task === resolvedTask
       && solution.source === submission.source
