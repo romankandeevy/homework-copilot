@@ -291,7 +291,12 @@
 .profile-button.is-compact { width: 2.75rem; height: 2.75rem; flex: 0 0 auto; grid-template-columns: 2rem; padding: 0.3125rem; }
 
 .home-content {
+  display: grid;
   width: min(100%, var(--content-width));
+  /* Между чёрной карточкой и «Мои решения» отступа не было: .home-content
+     не задавал gap, а у соседних блоков не было своих полей, так что они
+     стояли впритык. */
+  gap: var(--space-8);
   margin: var(--space-8) auto 0;
 }
 
