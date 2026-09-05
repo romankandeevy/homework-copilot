@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto'
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createClient } from '@supabase/supabase-js'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -362,15 +362,53 @@ function readGuestIdentity(request: IncomingMessage, options: SolverOptions): Gu
   return { guestId: value, ipHash: hashRequestAddress(request, options) }
 }
 
+/* Подпись прокси на Supabase (supabase/functions/api).
+
+   Из российских сетей запрос идёт не напрямую на Vercel, а через функцию
+   на домене Supabase. Vercel переписывает `x-forwarded-for` адресом того,
+   кто подключился, - то есть прокси, - и все гости сливались бы в один
+   адрес, а предел бесплатных решений на адрес закрывал бы их третьим по
+   счёту. Поэтому прокси присылает настоящий адрес в `x-client-ip` и
+   подпись в `x-proxy-auth`: хэш служебного ключа, который есть у обеих
+   сторон. Без верной подписи заголовок не читается - подставить чужой
+   адрес прямым запросом на Vercel нельзя. */
+export function proxyAuthDigest(serviceRoleKey: string) {
+  return createHash('sha256').update(serviceRoleKey + ':homework-copilot-proxy').digest('hex')
+}
+
+function headerText(value: string | string[] | undefined) {
+  return (Array.isArray(value) ? value[0] : value ?? '').trim()
+}
+
+export function trustedClientAddress(
+  headers: Record<string, string | string[] | undefined>,
+  serviceRoleKey: string | undefined,
+): string | null {
+  const proxied = headerText(headers['x-client-ip'])
+  const auth = headerText(headers['x-proxy-auth'])
+  if (!proxied || !auth || !serviceRoleKey) return null
+  const expected = Buffer.from(proxyAuthDigest(serviceRoleKey))
+  const matches = auth.split(',').some((candidate) => {
+    const offered = Buffer.from(candidate.trim())
+    return offered.length === expected.length && timingSafeEqual(offered, expected)
+  })
+  return matches ? proxied : null
+}
+
+export function requestCameThroughProxy(request: IncomingMessage, options: SolverOptions) {
+  return trustedClientAddress(request.headers, options.serviceRoleKey) !== null
+}
+
 // Адрес не хранится: в базу уходит только необратимый хэш, и соль для него
 // выводится из служебного ключа, а не задаётся отдельной переменной окружения.
 function hashRequestAddress(request: IncomingMessage, options: SolverOptions): string | null {
   if (!options.serviceRoleKey) return null
 
   const forwarded = request.headers['x-forwarded-for']
-  const raw = (Array.isArray(forwarded) ? forwarded[0] : forwarded ?? request.socket?.remoteAddress ?? '')
-    .split(',')[0]
-    .trim()
+  const raw = trustedClientAddress(request.headers, options.serviceRoleKey)
+    ?? (Array.isArray(forwarded) ? forwarded[0] : forwarded ?? request.socket?.remoteAddress ?? '')
+      .split(',')[0]
+      .trim()
   if (!raw) return null
 
   return createHmac('sha256', options.serviceRoleKey).update('guest-ip:' + raw).digest('hex')
@@ -806,6 +844,8 @@ export async function handleHomeworkSolverRequest(
       requestId: solveRequestId,
       task: taskNumber,
       source,
+      // По этому полю видно, что путь через Supabase работает и подпись сошлась.
+      via: requestCameThroughProxy(request, options) ? 'supabase-proxy' : 'direct',
     })
 
     stage = 'authenticate'

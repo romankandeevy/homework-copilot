@@ -207,6 +207,13 @@ export async function requestHomeworkSolution(
   try {
     payload = await response.json()
   } catch {
+    /* Шлюз перед сервером (функция на Supabase) живёт 150 секунд и на
+       более долгом решении отвечает 504 текстом. Сам решатель при этом
+       работает дальше и сохранит ответ в базу - для вкладки это обрыв
+       связи, а не отказ: очередь дождётся и заберёт решение оттуда. */
+    if (response.status === 502 || response.status === 503 || response.status === 504) {
+      throw new SolutionConnectionLostError()
+    }
     throw new Error('Сервер решений вернул некорректный ответ')
   }
 

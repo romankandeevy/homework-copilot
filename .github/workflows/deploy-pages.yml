@@ -56,9 +56,12 @@ jobs:
       - run: npm run build
         env:
           GITHUB_PAGES_CUSTOM_DOMAIN: www.homeworkcopilot.ru
-          VITE_HOMEWORK_API_URL: https://homework-copilot-taupe.vercel.app/api/solve
-          VITE_SUPPORT_API_URL: https://homework-copilot-taupe.vercel.app/api/support
-          VITE_CHAT_API_URL: https://homework-copilot-taupe.vercel.app/api/chat
+          # Функции живут на Vercel, но браузер зовёт их через функцию на домене
+          # Supabase (supabase/functions/api): из российских сетей до
+          # *.vercel.app запрос доходит через раз. См. AGENTS.md, «Хостинг».
+          VITE_HOMEWORK_API_URL: https://opacucumlgwmhgjonhhe.supabase.co/functions/v1/api/solve
+          VITE_SUPPORT_API_URL: https://opacucumlgwmhgjonhhe.supabase.co/functions/v1/api/support
+          VITE_CHAT_API_URL: https://opacucumlgwmhgjonhhe.supabase.co/functions/v1/api/chat
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
       - uses: actions/configure-pages@v5

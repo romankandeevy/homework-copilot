@@ -363,9 +363,23 @@
 
 - фронт раздаёт GitHub Pages на `www.homeworkcopilot.ru` (workflow
   `.github/workflows/deploy-pages.yml`);
-- serverless-функции живут на Vercel, клиент зовёт их по абсолютным адресам
-  `https://homework-copilot-taupe.vercel.app/api/*` из переменных сборки
-  `VITE_HOMEWORK_API_URL`, `VITE_SUPPORT_API_URL`, `VITE_CHAT_API_URL`;
+- serverless-функции живут на Vercel, но клиент зовёт их **через функцию на
+  домене Supabase** (`supabase/functions/api`, адреса
+  `https://opacucumlgwmhgjonhhe.supabase.co/functions/v1/api/*` в переменных
+  сборки `VITE_HOMEWORK_API_URL`, `VITE_SUPPORT_API_URL`, `VITE_CHAT_API_URL`).
+  С 5 сентября 2026 до `*.vercel.app` из российских сетей доходит через раз,
+  а домен Supabase ходит без сбоев - опрос очереди шёл весь день с тех же
+  телефонов, у которых фото до Vercel не долетало. Функция ничего не решает:
+  передаёт запрос и ответ как есть, добавляя настоящий адрес ученика в
+  `x-client-ip` с подписью `x-proxy-auth` (Vercel переписывает
+  `x-forwarded-for` адресом прокси, а по адресу считается предел бесплатных
+  решений гостя). Срок функции на бесплатном плане - 150 секунд: если
+  решатель считает дольше, Vercel дорешает и запишет ответ в базу, а вкладка
+  заберёт его оттуда как после обрыва связи. Деплой -
+  `supabase functions deploy api --no-verify-jwt`; JWT не проверяется
+  намеренно, гость приходит без токена;
+- если и домен Supabase начнут душить - следующий шаг Yandex Cloud Functions
+  (бесплатно 1 000 000 вызовов в месяц, из России доступно всегда);
 - `scripts/check-build-env.mjs` роняет сборку под Pages, если адреса функций
   не заданы: без них клиент бьёт в относительный путь и попадает в SPA-заглушку.
 

@@ -434,3 +434,8 @@ enabled = true
 # declarative_schema_path = "./database"
 # JSON string passed through to pg-delta SQL formatting.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":80,\"commaStyle\":\"trailing\"}"
+
+# Вход для функций решателя, чата и поддержки (supabase/functions/api).
+# JWT не проверяется: гость приходит без токена, сессию проверяет функция на Vercel.
+[functions.api]
+verify_jwt = false

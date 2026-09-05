@@ -6,7 +6,26 @@ import { homeworkSolutionEngineVersion } from '../src/lib/homeworkContract.ts'
 import type { SolveHomeworkRequest } from '../src/lib/homeworkContract.ts'
 import { findVerifiedTextbookTask, normalizeTaskCondition } from '../src/textbooks/taskCatalog.ts'
 import { defaultHomeworkModels } from './geometrySolutionEngine.ts'
-import { handleHomeworkSolverRequest, solveWithKie } from './homeworkSolver.ts'
+import { handleHomeworkSolverRequest, proxyAuthDigest, solveWithKie, trustedClientAddress } from './homeworkSolver.ts'
+
+/* Адрес ученика из-за прокси на Supabase. Vercel переписывает
+   x-forwarded-for адресом прокси, поэтому настоящий адрес приходит в
+   x-client-ip - но только с подписью, иначе его подставит кто угодно. */
+describe('адрес ученика через прокси', () => {
+  const key = 'service-role-key-for-tests'
+
+  it('верит x-client-ip только с верной подписью', () => {
+    expect(trustedClientAddress({ 'x-client-ip': '203.0.113.7', 'x-proxy-auth': proxyAuthDigest(key) }, key)).toBe('203.0.113.7')
+    expect(trustedClientAddress({ 'x-client-ip': '203.0.113.7', 'x-proxy-auth': 'forged' }, key)).toBeNull()
+    expect(trustedClientAddress({ 'x-client-ip': '203.0.113.7' }, key)).toBeNull()
+    expect(trustedClientAddress({ 'x-client-ip': '203.0.113.7', 'x-proxy-auth': proxyAuthDigest(key) }, undefined)).toBeNull()
+  })
+
+  it('принимает любую из нескольких подписей прокси', () => {
+    const auth = proxyAuthDigest('other-key') + ',' + proxyAuthDigest(key)
+    expect(trustedClientAddress({ 'x-client-ip': '198.51.100.2', 'x-proxy-auth': auth }, key)).toBe('198.51.100.2')
+  })
+})
 
 vi.mock('@supabase/supabase-js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@supabase/supabase-js')>()

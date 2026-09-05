@@ -11,7 +11,7 @@
 - `TELEGRAM_OWNER_CHAT_ID` — числовой chat id владельца, которому бот отправляет обращения.
 - `TELEGRAM_WEBHOOK_SECRET` — случайная длинная строка для заголовка webhook.
 
-Публичному клиенту по-прежнему нужны только `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` и URL поддержки `VITE_SUPPORT_API_URL` (`https://homework-copilot-taupe.vercel.app/api/support` для GitHub Pages).
+Публичному клиенту по-прежнему нужны только `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` и URL поддержки `VITE_SUPPORT_API_URL` (`https://opacucumlgwmhgjonhhe.supabase.co/functions/v1/api/support` для GitHub Pages - вход через функцию на Supabase, которая передаёт запрос на Vercel).
 
 ## Webhook
 
