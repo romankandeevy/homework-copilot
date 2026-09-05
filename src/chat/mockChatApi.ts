@@ -13,10 +13,10 @@ import type {
 
 /* Список моделей повторяет боевой каталог, а не выдумывает его.
 
-   Раньше здесь стояли Gemini 3.7 Flash, GPT-5.6 и Claude Sonnet 5 - модели,
-   которых у шлюза для нас нет: 3.7 отвечает «no user can use», семейство
-   Claude отдаёт 500, а путь /codex не доносит ответ до ученика. Разработка
-   по такому списку показывает продукт, которого не существует. */
+   Раньше здесь стояли Gemini 3.7 Flash и Claude Sonnet 5 - модели, которых
+   у шлюза для нас нет: 3.7 отвечает «no user can use», Claude Sonnet и
+   Haiku отдают api_error. Разработка по такому списку показывает продукт,
+   которого не существует. */
 const models: ChatModelsState = {
   enabled: true,
   models: [
@@ -45,6 +45,15 @@ const models: ChatModelsState = {
       supportsImages: true,
       supportsWebSearch: true,
       maxChargeKopecks: 900,
+      minChargeKopecks: 20,
+    },
+    {
+      id: 'gpt-5-6-terra',
+      title: 'GPT-5.6 Terra',
+      description: 'Другое семейство: пригодится, когда Gemini отвечает не то.',
+      supportsImages: true,
+      supportsWebSearch: true,
+      maxChargeKopecks: 480,
       minChargeKopecks: 20,
     },
   ],
