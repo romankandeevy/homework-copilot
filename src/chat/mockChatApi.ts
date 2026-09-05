@@ -11,52 +11,40 @@ import type {
 /* Демо-сервер чата: работает, пока настоящие RPC, таблицы и /api/chat не подключены.
    Хранит диалоги только в памяти вкладки и повторяет контракт событий SSE. */
 
+/* Список моделей повторяет боевой каталог, а не выдумывает его.
+
+   Раньше здесь стояли Gemini 3.7 Flash, GPT-5.6 и Claude Sonnet 5 - модели,
+   которых у шлюза для нас нет: 3.7 отвечает «no user can use», семейство
+   Claude отдаёт 500, а путь /codex не доносит ответ до ученика. Разработка
+   по такому списку показывает продукт, которого не существует. */
 const models: ChatModelsState = {
   enabled: true,
   models: [
     {
-      id: 'gemini-3-7-flash',
-      title: 'Gemini 3.7 Flash',
-      description: 'Дешёвая и быстрая: короткие вопросы, проверка формул, черновики.',
+      id: 'gemini-3-6-flash-openai',
+      title: 'Gemini 3.6 Flash',
+      description: 'Быстрая и дешёвая. Подходит для большинства вопросов.',
       supportsImages: true,
       supportsWebSearch: true,
-      maxChargeKopecks: 120,
+      maxChargeKopecks: 300,
       minChargeKopecks: 20,
     },
     {
-      id: 'gpt-5-6-luna',
-      title: 'GPT-5.6 Luna',
-      description: 'Быстрая универсальная модель для повседневных задач.',
-      supportsImages: false,
+      id: 'gemini-2.5-flash',
+      title: 'Gemini 2.5 Flash',
+      description: 'Короткие вопросы, проверка формул, черновики.',
+      supportsImages: true,
       supportsWebSearch: true,
-      maxChargeKopecks: 250,
+      maxChargeKopecks: 200,
       minChargeKopecks: 20,
     },
     {
-      id: 'gemini-3-1-pro',
-      title: 'Gemini 3.1 Pro',
-      description: 'Сильная мультимодальная: разбирает фото задачи и чертежи.',
+      id: 'gemini-3-pro',
+      title: 'Gemini 3 Pro',
+      description: 'Разбирает фото задачи и чертежи, объясняет подробно.',
       supportsImages: true,
       supportsWebSearch: true,
-      maxChargeKopecks: 640,
-      minChargeKopecks: 20,
-    },
-    {
-      id: 'gpt-5-6-terra',
-      title: 'GPT-5.6 Terra',
-      description: 'Сбалансированная по цене и качеству, длинные объяснения.',
-      supportsImages: true,
-      supportsWebSearch: false,
-      maxChargeKopecks: 480,
-      minChargeKopecks: 20,
-    },
-    {
-      id: 'claude-sonnet-5',
-      title: 'Claude Sonnet 5',
-      description: 'Премиальная модель для сложных и многошаговых разборов.',
-      supportsImages: true,
-      supportsWebSearch: true,
-      maxChargeKopecks: 1200,
+      maxChargeKopecks: 900,
       minChargeKopecks: 20,
     },
   ],
