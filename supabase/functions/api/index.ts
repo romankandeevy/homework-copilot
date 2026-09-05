@@ -52,24 +52,50 @@ async function sha256Hex(value: string) {
    Vercel. Сам ключ по сети не ходит. Ключей у проекта может быть два -
    прежний JWT и новый секретный, - подписываем каждым, чтобы сойтись с тем,
    который лежит на Vercel. */
+/* Все строки-ключи из переменной: форма `SUPABASE_SECRET_KEYS` - объект, и
+   значения в нём могут быть вложенными. Берём каждую строку, похожую на
+   ключ: JWT или `sb_secret_…`. */
+function collectKeys(value: unknown, into: Set<string>) {
+  if (typeof value === 'string') {
+    if (/^(?:eyJ|sb_secret_)/u.test(value)) into.add(value)
+    return
+  }
+  if (Array.isArray(value)) {
+    for (const entry of value) collectKeys(entry, into)
+    return
+  }
+  if (value && typeof value === 'object') {
+    for (const entry of Object.values(value as Record<string, unknown>)) collectKeys(entry, into)
+  }
+}
+
 async function proxyAuth() {
   if (proxyAuthCache !== null) return proxyAuthCache
   const keys = new Set<string>()
   const legacy = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
   if (legacy) keys.add(legacy)
-  try {
-    const parsed = JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') ?? '{}') as Record<string, unknown>
-    for (const value of Object.values(parsed)) if (typeof value === 'string' && value) keys.add(value)
-  } catch {
-    // Переменной нет или она не JSON - остаёмся с прежним ключом.
+  /* Ключ, которым подписывает Vercel. Платформа кладёт в SUPABASE_SERVICE_ROLE_KEY
+     новый секретный ключ `sb_secret_…`, а на Vercel лежит прежний JWT
+     service_role - подписи не сходились (5 сентября, журнал
+     proxy_auth_ready против homework_solve_started). Тот же JWT положен
+     секретом функции: `supabase secrets set HOMEWORK_PROXY_KEY=…`. */
+  const shared = Deno.env.get('HOMEWORK_PROXY_KEY')
+  if (shared) keys.add(shared)
+  const secretRaw = Deno.env.get('SUPABASE_SECRET_KEYS')
+  if (secretRaw) {
+    try {
+      collectKeys(JSON.parse(secretRaw) as unknown, keys)
+    } catch {
+      collectKeys(secretRaw, keys)
+    }
   }
   const digests = await Promise.all([...keys].map((key) => sha256Hex(key + ':homework-copilot-proxy')))
   proxyAuthCache = digests.join(',')
-  // Раз на воркер: какие ключи нашлись и начала их подписей - чтобы сверить
-  // с журналом Vercel, если подпись не сходится. Самих ключей в журнале нет.
+  /* Раз на воркер: начала подписей, по восемь знаков. По ним видно, сошлась
+     ли подпись с той, которую ждёт Vercel (`proxyAuthExpected` в его
+     журнале). Самих ключей в журнале нет. */
   console.log(JSON.stringify({
     event: 'proxy_auth_ready',
-    keys: [legacy ? 'SUPABASE_SERVICE_ROLE_KEY' : null, Deno.env.get('SUPABASE_SECRET_KEYS') ? 'SUPABASE_SECRET_KEYS' : null].filter(Boolean),
     digests: digests.map((digest) => digest.slice(0, 8)),
   }))
   return proxyAuthCache
