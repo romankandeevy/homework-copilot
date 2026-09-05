@@ -65,6 +65,13 @@ async function proxyAuth() {
   }
   const digests = await Promise.all([...keys].map((key) => sha256Hex(key + ':homework-copilot-proxy')))
   proxyAuthCache = digests.join(',')
+  // Раз на воркер: какие ключи нашлись и начала их подписей - чтобы сверить
+  // с журналом Vercel, если подпись не сходится. Самих ключей в журнале нет.
+  console.log(JSON.stringify({
+    event: 'proxy_auth_ready',
+    keys: [legacy ? 'SUPABASE_SERVICE_ROLE_KEY' : null, Deno.env.get('SUPABASE_SECRET_KEYS') ? 'SUPABASE_SECRET_KEYS' : null].filter(Boolean),
+    digests: digests.map((digest) => digest.slice(0, 8)),
+  }))
   return proxyAuthCache
 }
 
@@ -109,6 +116,8 @@ Deno.serve(async (request: Request) => {
   if (address) {
     headers.set('x-client-ip', address)
     headers.set('x-proxy-auth', await proxyAuth())
+  } else {
+    console.log(JSON.stringify({ event: 'proxy_no_client_address', headers: [...request.headers.keys()] }))
   }
 
   const hasBody = request.method !== 'GET' && request.method !== 'HEAD' && request.method !== 'OPTIONS'

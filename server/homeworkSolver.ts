@@ -846,6 +846,10 @@ export async function handleHomeworkSolverRequest(
       source,
       // По этому полю видно, что путь через Supabase работает и подпись сошлась.
       via: requestCameThroughProxy(request, options) ? 'supabase-proxy' : 'direct',
+      // Начала подписей - своей и присланной: по ним видно, чей ключ разошёлся.
+      // Самих ключей в журнале нет.
+      proxyAuthExpected: options.serviceRoleKey ? proxyAuthDigest(options.serviceRoleKey).slice(0, 8) : '',
+      proxyAuthOffered: headerText(request.headers['x-proxy-auth']).split(',').map((entry) => entry.slice(0, 8)).join(','),
     })
 
     stage = 'authenticate'
