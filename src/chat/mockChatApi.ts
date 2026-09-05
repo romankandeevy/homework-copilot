@@ -47,15 +47,6 @@ const models: ChatModelsState = {
       maxChargeKopecks: 900,
       minChargeKopecks: 20,
     },
-    {
-      id: 'gpt-5-6-terra',
-      title: 'GPT-5.6 Terra',
-      description: 'Другое семейство: пригодится, когда Gemini отвечает не то.',
-      supportsImages: true,
-      supportsWebSearch: true,
-      maxChargeKopecks: 480,
-      minChargeKopecks: 20,
-    },
   ],
 }
 
