@@ -185,6 +185,33 @@ describe('geometry solution quality gate', () => {
     expect(isCurrentReviewedSolution(taskFiveSolution)).toBe(true)
   })
 
+  /* 5 сентября на проде и в локальной пробе: верное решение про сумму углов
+     десятиугольника - формула и подстановка - дважды отвергалось как
+     «слишком много слов». Скобка с названием теоремы, которую промпт сам
+     просит писать, перевешивала запись. */
+  it('не считает обоснование в скобках словесным абзацем', () => {
+    const issues = validateSolutionQuality({
+      ...taskFiveSolution,
+      source: 'text',
+      condition: 'Найдите сумму углов выпуклого десятиугольника.',
+      given: ['n = 10'],
+      goal: { title: 'Найти', text: 'S' },
+      explanation: [
+        'Это задача на нахождение суммы внутренних углов выпуклого многоугольника.',
+        'Для решения используется теорема о сумме углов выпуклого n-угольника.',
+      ],
+      steps: [
+        'S = (n - 2) · 180° (по теореме о сумме углов выпуклого n-угольника)',
+        'S = (10 - 2) · 180° = 8 · 180° = 1440°',
+      ],
+      answer: '1440°',
+      diagram: { kind: 'none', description: '', vertices: [] },
+      taskType: 'calculation',
+      quality: { diagramRequired: false, reviewPassed: true, symbolicShare: 0.9 },
+    })
+    expect(issues).toEqual([])
+  })
+
   it('rejects a text wall even when it claims to be a construction', () => {
     const issues = validateSolutionQuality({
       ...taskFiveSolution,

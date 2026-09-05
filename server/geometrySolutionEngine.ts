@@ -1261,8 +1261,18 @@ function constraintIssue(
   return ''
 }
 
+/* Доля математической записи в шагах.
+
+   Обоснование в скобках - «(по теореме о сумме углов n-угольника)» - в долю
+   не входит: промпт сам просит такие пометки, и школьная запись без них
+   неполна. 5 сентября верное решение в две строки, S = (n - 2) · 180° и
+   подстановка, дважды отвергалось как «слишком много слов»: скобка с
+   названием теоремы перевешивала формулу. Считаем только саму запись. */
 function symbolicShare(linesValue: readonly string[]) {
-  const value = linesValue.join(' ').replace(/\s+/gu, '')
+  const value = linesValue
+    .join(' ')
+    .replace(/\([^()]*[а-яё]{2,}[^()]*\)/giu, '')
+    .replace(/\s+/gu, '')
   if (!value) return 0
   const wordCharacters = [...value.matchAll(/[а-яё]{2,}/giu)].reduce((sum, match) => sum + match[0].length, 0)
   return Math.max(0, Math.min(1, (value.length - wordCharacters) / value.length))

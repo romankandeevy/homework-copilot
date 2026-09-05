@@ -80,28 +80,62 @@ function readFileAsDataUrl(file: Blob): Promise<string> {
   })
 }
 
-export async function prepareTaskPhoto(file: File): Promise<string> {
-  const maxBytes = 2_800_000
-  if (file.size <= maxBytes) return readFileAsDataUrl(file)
-  if (typeof createImageBitmap !== 'function') {
-    throw new Error('Фотография слишком большая. Выбери изображение до 2,8 МБ')
-  }
+/* Фото ужимается до отправки, а не только когда не влезает в предел.
 
+   Аудит 5 сентября: за три дня девять гостей прислали задачу фотографией, и
+   ни одна не дошла до функции на Vercel - в журнале функции нет ни вызова,
+   строка очереди осталась без `started_at`. Текстовые задачи в те же часы
+   доходили. Разница одна: тело запроса с фото - 3-4 МБ base64, а трафик к
+   адресам Vercel из российских сетей после первых килобайт режется до
+   килобайта в секунду (замер в AGENTS.md, «Хостинг»). Снимок учебника в
+   1600 px и JPEG 0,8 весит 300-700 КБ - в пять-десять раз меньше; на цену
+   это не влияет, картинка тарифицируется плоско (KIE_MODEL_MATRIX.md).
+
+   Мелкий файл не трогаем: PNG со схемой или скриншот условия и так лёгкие,
+   а перекодирование в JPEG только размыло бы тонкие линии. */
+const photoPassThroughBytes = 600_000
+const photoMaxBytes = 2_800_000
+const photoMaxSide = 1600
+
+async function shrinkPhoto(file: Blob, maxSide: number, quality: number): Promise<Blob | null> {
   const bitmap = await createImageBitmap(file)
-  const scale = Math.min(1, 1800 / Math.max(bitmap.width, bitmap.height))
+  const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height))
   const canvas = document.createElement('canvas')
   canvas.width = Math.max(1, Math.round(bitmap.width * scale))
   canvas.height = Math.max(1, Math.round(bitmap.height * scale))
   const context = canvas.getContext('2d')
   if (!context) {
     bitmap.close()
-    throw new Error('Не получилось уменьшить фотографию задачи')
+    return null
   }
-
   context.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
   bitmap.close()
-  const compressed = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.8))
-  if (!compressed || compressed.size > maxBytes) {
+  return new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality))
+}
+
+export async function prepareTaskPhoto(file: File): Promise<string> {
+  if (file.size <= photoPassThroughBytes) return readFileAsDataUrl(file)
+  if (typeof createImageBitmap !== 'function') {
+    if (file.size <= photoMaxBytes) return readFileAsDataUrl(file)
+    throw new Error('Фотография слишком большая. Выбери изображение до 2,8 МБ')
+  }
+
+  let compressed: Blob | null = null
+  try {
+    compressed = await shrinkPhoto(file, photoMaxSide, 0.8)
+    // Всё ещё тяжёлая - значит снимок шумный; вторая попытка мельче и грубее.
+    if (compressed && compressed.size > 1_200_000) compressed = await shrinkPhoto(file, 1280, 0.72)
+  } catch {
+    // Формат браузеру не по зубам (например, HEIC): отправляем как есть,
+    // если влезает в предел. Лучше медленно, чем никак.
+    compressed = null
+  }
+
+  if (!compressed) {
+    if (file.size <= photoMaxBytes) return readFileAsDataUrl(file)
+    throw new Error('Не получилось уменьшить фотографию задачи')
+  }
+  if (compressed.size > photoMaxBytes) {
     throw new Error('Фотография слишком большая. Сделай снимок ближе к условию')
   }
   return readFileAsDataUrl(compressed)
@@ -120,6 +154,27 @@ export class SolutionConnectionLostError extends Error {
   }
 }
 
+/* Сколько ждём, пока сервер подтвердит, что задача до него дошла.
+
+   Обрыв связи и запрос, который не дошёл вовсе, снаружи неразличимы: и там
+   и там fetch молчит. Различает их сервер: получив задачу, он через секунду
+   ставит ей стадию «reading» в очереди (`report_homework_job`), и вкладка
+   видит это опросом. Нет отметки полминуты - задача до сервера не дошла, и
+   ждать дальше нечего: решатель её не считает, денег не резервировал.
+
+   5 сентября задача из текста дошла до функции через четыре с половиной
+   минуты после постановки, задачи с фото не доходили вовсе, а вкладка всё
+   это время показывала «Читаем» и закрывала строку только по сроку - через
+   пять или двадцать минут. */
+export const serverAcceptLimitMs = 30_000
+
+export class SolutionNotAcceptedError extends Error {
+  constructor() {
+    super('Сервер решений не принял задачу за 30 секунд: соединение до него не доходит. Попробуй ещё раз или смени сеть')
+    this.name = 'SolutionNotAcceptedError'
+  }
+}
+
 export async function requestHomeworkSolution(
   endpoint: string,
   request: SolveHomeworkRequest,
@@ -127,6 +182,8 @@ export async function requestHomeworkSolution(
   // Метка браузера. Нужна только гостю: по ней сервер выдаёт одно
   // бесплатное решение до регистрации.
   guestId?: string | null,
+  // Обрыв по инициативе вкладки - когда сервер так и не подтвердил приём.
+  signal?: AbortSignal,
 ): Promise<HomeworkSolution> {
   let response: Response
 
@@ -139,8 +196,10 @@ export async function requestHomeworkSolution(
         ...(!accessToken && guestId ? { 'X-Guest-Id': guestId } : {}),
       },
       body: JSON.stringify(request),
+      ...(signal ? { signal } : {}),
     })
   } catch {
+    if (signal?.aborted) throw new SolutionNotAcceptedError()
     throw new SolutionConnectionLostError()
   }
 

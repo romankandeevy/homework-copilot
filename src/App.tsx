@@ -55,7 +55,9 @@ import {
   parseStoredHomeworkSolution,
   prepareTaskPhoto,
   requestHomeworkSolution,
+  serverAcceptLimitMs,
   SolutionConnectionLostError,
+  SolutionNotAcceptedError,
   saveGeneratedSolutions,
 } from './lib/homeworkSolution'
 import { normalizeTaskCondition } from './textbooks/taskCatalog'
@@ -1119,6 +1121,11 @@ function HomePage() {
   // `localJobs` — то, о чём эта вкладка узнала раньше базы.
   const [remoteJobs, setRemoteJobs] = useState<SolutionJob[]>([])
   const [localJobs, setLocalJobs] = useState<SolutionJob[]>([])
+  // Свежие строки базы для сторожа приёма: он живёт в таймере, а не в рендере.
+  const remoteJobsRef = useRef<SolutionJob[]>([])
+  useEffect(() => {
+    remoteJobsRef.current = remoteJobs
+  }, [remoteJobs])
   const [dismissedJobKeys, setDismissedJobKeys] = useState<readonly string[]>(loadDismissedJobs)
   const [dispatchTick, setDispatchTick] = useState(0)
   const runningJobKeysRef = useRef(new Set<string>())
@@ -1810,6 +1817,26 @@ function HomePage() {
     const textbook = getTextbook(payload.textbookId, availableTextbooks)
     const solvingAsGuest = Boolean(supabaseClient) && !user
 
+    /* Сторож приёма.
+
+       Получив задачу, сервер сразу ставит ей стадию в очереди - это его
+       расписка. Нет расписки через `serverAcceptLimitMs` - запрос до него не
+       дошёл, и держать его дальше незачем: решатель не считает, денег не
+       резервировал. Обрываем сами и говорим ученику правду вместо «Читаем»
+       на двадцать минут. Строка, которой в базе нет, расписки дать не может -
+       такую задачу не трогаем. */
+    const serverKnows = (row: SolutionJob | undefined) => !row || row.startedAt !== '' || row.status !== 'queued'
+    const remoteRow = () => remoteJobsRef.current.find((entry) => entry.idempotencyKey === job.idempotencyKey)
+    const abort = new AbortController()
+    const watchdog = window.setTimeout(async () => {
+      if (!supabaseClient) return
+      // Опрос мог отстать на пару секунд: перед обрывом смотрим в базу сами.
+      const fresh = await listSolutionJobs(supabaseClient, guestJobId)
+      if (fresh) setRemoteJobs(fresh)
+      const row = (fresh ?? remoteJobsRef.current).find((entry) => entry.idempotencyKey === job.idempotencyKey)
+      if (!serverKnows(row)) abort.abort()
+    }, serverAcceptLimitMs)
+
     try {
       let accessToken: string | undefined
       if (supabaseClient && user) {
@@ -1837,6 +1864,7 @@ function HomePage() {
         },
         accessToken,
         solvingAsGuest ? getGuestId() : null,
+        abort.signal,
       )
 
       if (solvingAsGuest) {
@@ -1890,19 +1918,28 @@ function HomePage() {
          видел «Решение не дошло» на задаче, которая решена и оплачена.
          Теперь задача остаётся в работе, очередь опрашивает сервер, а
          готовый ответ подхватывает восстановление ниже. */
-      if (error instanceof SolutionConnectionLostError) {
+      if (error instanceof SolutionConnectionLostError && serverKnows(remoteRow())) {
         markLocalJob(job, { status: 'running', error: '' })
         void refreshJobs()
         return null
       }
 
-      const reason = error instanceof Error ? error.message : 'Не получилось подготовить решение'
+      /* Связь оборвалась, а расписки сервера нет - значит, задача до него не
+         дошла. Ждать здесь нечего: это не «решение продолжает готовиться»,
+         а сеть, которая не пропустила запрос. */
+      const reason = error instanceof SolutionConnectionLostError
+        ? 'Задача не дошла до сервера решений: соединение оборвалось. Попробуй ещё раз или смени сеть'
+        : error instanceof SolutionNotAcceptedError
+          ? error.message
+          : error instanceof Error ? error.message : 'Не получилось подготовить решение'
       // Запрос остаётся в хранилище: по нему работает «Решить ещё раз», и
       // ученику не придётся заново набирать условие или искать фотографию.
       markLocalJob(job, { status: 'failed', stage: 'failed', error: reason, finishedAt: new Date().toISOString() })
       if (supabaseClient) await closeSolutionJob(supabaseClient, job.idempotencyKey, 'failed', reason, guestJobId)
       void refreshJobs()
       return null
+    } finally {
+      window.clearTimeout(watchdog)
     }
   }, [
     availableTextbooks,
