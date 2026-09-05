@@ -47,6 +47,33 @@ describe('правила предмета', () => {
     expect(verifySubjectRules(solution({ answer: '48' }))).toContain('В ответе нет единицы измерения')
   })
 
+  /* Счётный ответ единицы не имеет. Живой отказ 5 сентября на проде:
+     «Сколько сторон имеет выпуклый многоугольник, каждый угол которого
+     равен 160°?» - в условии градус есть, у ответа «12» единицы нет. */
+  it('не требует единицы у счётного ответа', () => {
+    const sides = solution({
+      textbookId: 'geometry',
+      subject: 'Геометрия',
+      condition: 'Сколько сторон имеет выпуклый многоугольник, каждый угол которого равен 160°?',
+      goal: { title: 'Найти', text: 'n' },
+      steps: ['(n - 2) · 180° = 160° · n', 'n = 12'],
+      answer: '12',
+    })
+
+    expect(verifySubjectRules(sides)).not.toContain('В ответе нет единицы измерения')
+  })
+
+  it('всё ещё требует единицу там, где её спрашивают', () => {
+    const length = solution({
+      condition: 'Найдите сторону ромба, если его диагонали равны 10 см и 24 см.',
+      goal: { title: 'Найти', text: 'AB' },
+      steps: ['AB² = 5² + 12²', 'AB = 13 см'],
+      answer: '13',
+    })
+
+    expect(verifySubjectRules(length)).toContain('В ответе нет единицы измерения')
+  })
+
   it('ловит ответ-отговорку вместо числа', () => {
     const issues = verifySubjectRules(solution({ answer: 'смотри решение' }))
     expect(issues).toContain('В ответе нет найденного числа')

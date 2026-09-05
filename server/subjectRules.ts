@@ -57,11 +57,25 @@ const numericAnswer: SubjectRule = {
   verify: (solution) => (numberPattern.test(solution.answer) ? null : 'В ответе нет найденного числа'),
 }
 
+/* Счётный ответ единицы измерения не имеет.
+
+   5 сентября на проде отказ получила верно решённая задача «Сколько сторон
+   имеет выпуклый многоугольник, каждый угол которого равен 160°?». В
+   условии есть «160°», поэтому правило требовало единицу и от ответа - а
+   ответом там служит число сторон, двенадцать. Единицы у него нет и быть
+   не может, и адресный повтор её не придумает: он тоже вернул «12», и
+   ученик остался без решения при верном ответе. */
+const countableNouns = 'сторон|вершин|углов|точек|прямых|диагоналей|отрезков|треугольников'
+  + '|чисел|цифр|способов|решений|корней|элементов|делителей|букв|слов|слагаемых|множителей'
+const countingQuestion = new RegExp(`(?:скольк\\p{L}*|количеств\\p{L}*|число)\\s+(?:${countableNouns})`, 'iu')
+
 // Единицы измерения теряются чаще всего, и работа за это снижается.
 const answerUnits: SubjectRule = {
   id: 'answer-units',
   question: 'Единица измерения стоит при ответе, если она есть в условии?',
-  applies: (solution) => solution.taskType === 'calculation' && unitPattern.test(solution.condition),
+  applies: (solution) => solution.taskType === 'calculation'
+    && unitPattern.test(solution.condition)
+    && !mentions(`${solution.condition} ${solution.goal.text}`, countingQuestion),
   verify: (solution) => (unitPattern.test(solution.answer) ? null : 'В ответе нет единицы измерения'),
 }
 
