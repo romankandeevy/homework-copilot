@@ -585,6 +585,26 @@ export function normalizeNotebookNotation(value: unknown, maxLength = 5000) {
     .replace(/\$+/gu, '')
     .replace(/\^\{?2\}?/gu, '²')
     .replace(/\^\{?3\}?/gu, '³')
+    /* Дальше - то, что раньше отменяло решение целиком.
+
+       6 сентября физика восьмого класса вернулась с «Решение не дошло:
+       в решении есть разметка вместо школьной записи; не пишут const».
+       Всё три замечания - про запись, а не про математику: решение было
+       верным, а ученик не получил ничего.
+
+       Разметку и чужие значки чинит код. Звать ради этого модель дорого
+       и незачем, а отменять решение - тем более: правило «формальное поле
+       не отменяет верное решение» тут ровно то же. Модель зовут только
+       туда, где нужен смысл: неверный счёт, чертёж вразрез с ответом.
+
+       «const» превращается в «постоянно» - слово, которое и пишут в
+       тетради; «:=» в обычное равенство; жирная разметка и обратные
+       кавычки просто снимаются. */
+    .replace(/\*\*/gu, '')
+    .replace(/`+/gu, '')
+    .replace(/\s*:=\s*/gu, ' = ')
+    .replace(/\s*=\s*const\b\.?/giu, ' - величина постоянная')
+    .replace(/\bconst\b/giu, 'постоянно')
     .replace(/\s+/gu, ' ')
     .trim()
     .slice(0, maxLength)
@@ -2314,62 +2334,91 @@ export async function solveHomeworkWithReview(
     throw new GeometrySolutionEngineError(`Решение не прошло проверку${deterministicIssues.length > 0 ? `: ${deterministicIssues.slice(0, 3).join('; ')}` : ''}`)
   }
 
-  const repairPrompt = [
-    'Предыдущая версия решения не прошла автоматическую проверку.',
-    `Исправь ровно эти замечания, ничего больше не меняя: ${deterministicIssues.slice(0, 6).join('; ')}.`,
-    'Если среди замечаний есть отсутствующий или неполный чертёж — обязательно заполни diagram.kind = "construction",',
-    'опиши сцену через scene: точки с координатами, объекты и проверяемые constraints. Пустой scene недопустим.',
-    'Объяснение перед решением (explanation) сохрани и при необходимости дополни, но не удаляй.',
-    'Если замечание про черновик - пересчитай выражение сам и исправь ВСЕ числа, которые из него следуют: шаги, ответ и answerKey.',
-    `Версия для исправления: ${JSON.stringify(draft)}`,
-  ].join('\n')
+  /* Чинить, а не обрывать.
 
-  const rawRepair = await callModelWithRetry(
-    options,
-    reviewerInstructions,
-    engineMessage(request, repairPrompt),
-    'homework_solution_review',
-    reviewSchema,
-    retryDeadline,
-    workingModel,
-    subjectModels,
-  )
+     Починка была одна: не помогла - ученик читает «Решение не дошло» и
+     список наших замечаний. 6 сентября так пропало верное решение по
+     физике: все три замечания были про запись, а не про математику.
+     Запись теперь правит сам код (normalizeNotebookNotation), а смысловое
+     чинится в два захода - второй видит и прежнее замечание, и то, что
+     осталось после первой правки.
 
-  if (!rawRepair || typeof rawRepair !== 'object' || Array.isArray(rawRepair)) {
-    throw new GeometrySolutionEngineError('Исправленное решение не вернулось')
-  }
-  const repairCandidate = rawRepair as Record<string, unknown>
-  const repaired: ReviewResult = {
-    approved: repairCandidate.approved === true,
-    issues: lines(repairCandidate.issues, 12, 160),
-    solution: normalizeDraft(repairCandidate.solution, notebookLimits),
-  }
-  const repairedSolution = toSolution(repaired.solution, request, ownerId, repaired.approved)
-  const repairedIssues = [
-    ...validateSolutionQuality(repairedSolution),
-    ...validateDecisionSummary(repaired.solution.decisions, repaired.solution.diagramRequired),
-    ...verifySubjectRules(repairedSolution),
-  ]
-  const repairedConditionMatched = !request.condition
-    || conditionSimilarity(request.condition, repairedSolution.condition) >= 0.55
-  if (!repairedConditionMatched) {
-    repairedIssues.push('Условие решения не совпадает с приложенным заданием')
+     Больше двух не делаем: каждый заход - вызов модели и полминуты
+     ожидания, а на третий раз модель обычно повторяет то же самое.
+     И не начинаем новый заход, если бюджет на повторы уже вышел. */
+  let pending = deterministicIssues
+  let lastRepair: ReviewResult | null = null
+  let lastIssues: string[] = []
+
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    if (attempt > 1 && Date.now() > retryDeadline) break
+
+    const repairPrompt = [
+      'Предыдущая версия решения не прошла автоматическую проверку.',
+      `Исправь ровно эти замечания, ничего больше не меняя: ${pending.slice(0, 6).join('; ')}.`,
+      ...(attempt > 1
+        ? ['Это вторая попытка: прошлая правка замечания не сняла. Меняй именно то, на что указано, а не соседние строки.']
+        : []),
+      'Если среди замечаний есть отсутствующий или неполный чертёж — обязательно заполни diagram.kind = "construction",',
+      'опиши сцену через scene: точки с координатами, объекты и проверяемые constraints. Пустой scene недопустим.',
+      'Объяснение перед решением (explanation) сохрани и при необходимости дополни, но не удаляй.',
+      'Если замечание про черновик - пересчитай выражение сам и исправь ВСЕ числа, которые из него следуют: шаги, ответ и answerKey.',
+      `Версия для исправления: ${JSON.stringify(lastRepair?.solution ?? draft)}`,
+    ].join('\n')
+
+    // eslint-disable-next-line no-await-in-loop
+    const rawRepair = await callModelWithRetry(
+      options,
+      reviewerInstructions,
+      engineMessage(request, repairPrompt),
+      'homework_solution_review',
+      reviewSchema,
+      retryDeadline,
+      workingModel,
+      subjectModels,
+    )
+
+    if (!rawRepair || typeof rawRepair !== 'object' || Array.isArray(rawRepair)) {
+      throw new GeometrySolutionEngineError('Исправленное решение не вернулось')
+    }
+    const repairCandidate = rawRepair as Record<string, unknown>
+    const repaired: ReviewResult = {
+      approved: repairCandidate.approved === true,
+      issues: lines(repairCandidate.issues, 12, 160),
+      solution: normalizeDraft(repairCandidate.solution, notebookLimits),
+    }
+    const repairedSolution = toSolution(repaired.solution, request, ownerId, repaired.approved)
+    const repairedIssues = [
+      ...validateSolutionQuality(repairedSolution),
+      ...validateDecisionSummary(repaired.solution.decisions, repaired.solution.diagramRequired),
+      ...verifySubjectRules(repairedSolution),
+    ]
+    const repairedConditionMatched = !request.condition
+      || conditionSimilarity(request.condition, repairedSolution.condition) >= 0.55
+    if (!repairedConditionMatched) {
+      repairedIssues.push('Условие решения не совпадает с приложенным заданием')
+    }
+
+    options.onTrace?.({
+      stage: 'reviewer',
+      candidate: repaired.solution,
+      approved: repaired.approved && repairedIssues.length === 0,
+      issues: [...repaired.issues, ...repairedIssues].filter(Boolean),
+    })
+
+    lastRepair = repaired
+    lastIssues = repairedIssues
+
+    if (repaired.approved && repairedIssues.length === 0) {
+      return {
+        ...repairedSolution,
+        verification: buildVerification(draft, deterministicIssues, repaired, repairedSolution, repairedConditionMatched),
+      }
+    }
+
+    pending = repairedIssues.length > 0 ? repairedIssues : pending
   }
 
-  options.onTrace?.({
-    stage: 'reviewer',
-    candidate: repaired.solution,
-    approved: repaired.approved && repairedIssues.length === 0,
-    issues: [...repaired.issues, ...repairedIssues].filter(Boolean),
-  })
-
-  if (!repaired.approved || repairedIssues.length > 0) {
-    const remaining = [...repaired.issues, ...repairedIssues].filter(Boolean)
-    throw new GeometrySolutionEngineError(`Решение не прошло проверку${remaining.length > 0 ? `: ${remaining.slice(0, 3).join('; ')}` : ''}`)
-  }
-
-  return {
-    ...repairedSolution,
-    verification: buildVerification(draft, deterministicIssues, repaired, repairedSolution, repairedConditionMatched),
-  }
+  const remaining = [...(lastRepair?.issues ?? []), ...lastIssues].filter(Boolean)
+  throw new GeometrySolutionEngineError(`Решение не прошло проверку${remaining.length > 0 ? `: ${remaining.slice(0, 3).join('; ')}` : ''}`)
 }
