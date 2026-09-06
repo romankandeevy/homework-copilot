@@ -221,6 +221,62 @@ describe('geometry solution quality gate', () => {
     expect(isCurrentReviewedSolution({ ...taskFiveSolution, steps: ['Длинный словесный пересказ решения без обозначений.'] })).toBe(false)
   })
 
+  /* Задача 369 на проде 6 сентября. Ответ верный - ∠A = ∠B = ∠C = 75°,
+     ∠D = 135°, - а чертёж нарисован равнобедренной трапецией: C и D по
+     105°. Ученик перечерчивал фигуру, которая спорит с его же ответом.
+     Ни одна прежняя проверка этого не видела: ограничение про
+     параллельность координатам не противоречило. */
+  it('ловит чертёж, где подписанный градус расходится с нарисованным', () => {
+    const quadrilateral = {
+      ...taskFiveSolution,
+      diagram: {
+        kind: 'construction' as const,
+        description: 'Выпуклый четырёхугольник ABCD.',
+        vertices: ['A', 'B', 'C', 'D'],
+        scene: {
+          points: [
+            { id: 'A', label: 'A', x: 20, y: 75, visible: true },
+            { id: 'B', label: 'B', x: 80, y: 75, visible: true },
+            { id: 'C', label: 'C', x: 72, y: 46, visible: true },
+            { id: 'D', label: 'D', x: 28, y: 46, visible: true },
+          ],
+          objects: [{ kind: 'polygon' as const, points: ['A', 'B', 'C', 'D'], label: '', auxiliary: false }],
+          marks: [{ kind: 'angle' as const, points: ['C', 'D', 'A'], label: '135°' }],
+          constraints: [],
+        },
+      },
+    }
+    const issues = validateSolutionQuality(quadrilateral)
+    expect(issues.some((issue) => issue.includes('Угол подписан 135°, а на чертеже 105°'))).toBe(true)
+  })
+
+  it('ловит углы, помеченные равными, но нарисованные разными', () => {
+    const quadrilateral = {
+      ...taskFiveSolution,
+      diagram: {
+        kind: 'construction' as const,
+        description: 'Выпуклый четырёхугольник ABCD.',
+        vertices: ['A', 'B', 'C', 'D'],
+        scene: {
+          points: [
+            { id: 'A', label: 'A', x: 20, y: 75, visible: true },
+            { id: 'B', label: 'B', x: 80, y: 75, visible: true },
+            { id: 'C', label: 'C', x: 72, y: 46, visible: true },
+            { id: 'D', label: 'D', x: 28, y: 46, visible: true },
+          ],
+          objects: [{ kind: 'polygon' as const, points: ['A', 'B', 'C', 'D'], label: '', auxiliary: false }],
+          marks: [
+            { kind: 'angle' as const, points: ['D', 'A', 'B'], label: '∠A = ∠B = ∠C' },
+            { kind: 'angle' as const, points: ['B', 'C', 'D'], label: '∠A = ∠B = ∠C' },
+          ],
+          constraints: [],
+        },
+      },
+    }
+    const issues = validateSolutionQuality(quadrilateral)
+    expect(issues.some((issue) => issue.includes('помечены как равные'))).toBe(true)
+  })
+
   it('rejects a drawing whose coordinates contradict its constraints', () => {
     const scene = taskFiveSolution.diagram.scene!
     const issues = validateSolutionQuality({

@@ -120,13 +120,35 @@ function AngleMark({ points, label }: { points: readonly Point[]; label: string 
     y: vertex.y + secondUnit.y * sceneLayout.angleRadius,
   }
   const sweep = firstUnit.x * secondUnit.y - firstUnit.y * secondUnit.x >= 0 ? 1 : 0
+  /* Подпись угла ставится по биссектрисе и дальше дуги.
+
+     Раньше она вставала на сумму единичных векторов - у тупого угла это
+     почти вершина, и «135°» ложилось прямо на дугу: на проде 6 сентября
+     читалось как «I 35». Теперь берём направление биссектрисы, нормируем
+     его и отодвигаем на полторы длины радиуса, а текст центрируем по
+     обеим осям - иначе он всё равно сползает на линию. */
+  const bisector = unit(
+    { x: 0, y: 0 } as Point,
+    { x: firstUnit.x + secondUnit.x, y: firstUnit.y + secondUnit.y } as Point,
+  ) ?? firstUnit
+  const labelDistance = sceneLayout.angleRadius * 2.05
   const labelPoint = {
-    x: vertex.x + (firstUnit.x + secondUnit.x) * sceneLayout.angleRadius,
-    y: vertex.y + (firstUnit.y + secondUnit.y) * sceneLayout.angleRadius,
+    x: vertex.x + bisector.x * labelDistance,
+    y: vertex.y + bisector.y * labelDistance,
   }
   return <>
     <path className="diagram-mark" d={`M ${start.x} ${start.y} A ${sceneLayout.angleRadius} ${sceneLayout.angleRadius} 0 0 ${sweep} ${end.x} ${end.y}`} />
-    {label && <text className="diagram-angle-label" x={labelPoint.x} y={labelPoint.y}>{label}</text>}
+    {label && (
+      <text
+        className="diagram-angle-label"
+        textAnchor="middle"
+        dominantBaseline="central"
+        x={labelPoint.x}
+        y={labelPoint.y}
+      >
+        {label}
+      </text>
+    )}
   </>
 }
 
@@ -310,6 +332,42 @@ function objectLabelPlacement(
   return { x: best.x, y: best.y }
 }
 
+/* Что писать на чертеже, а что нет.
+
+   6 сентября на проде чертёж к задаче про четырёхугольник вышел кашей:
+   стороны подписаны «AB», «BC», «CD», «DA», сам многоугольник - «ABCD»,
+   в трёх углах трижды написано «∠A = ∠B = ∠C», поперёк фигуры «AB ∥ CD»,
+   и всё это налезает друг на друга и на буквы вершин.
+
+   В тетради так не делают. Сторону между A и D не подписывают «AD» - это
+   и так видно по вершинам. Равенство углов показывают дугами, а не
+   формулой поверх чертежа. Подпись на чертеже нужна там, где она вводит
+   то, чего из рисунка не прочесть: имя прямой «a», градусную меру «135°»,
+   длину «10 см».
+
+   Поэтому подпись отбрасывается, если она просто перечисляет вершины
+   объекта, и если она длиннее короткой пометки. */
+const maxDrawnLabelLength = 8
+
+function isVertexListLabel(label: string, pointIds: readonly string[]) {
+  // Класс задан свойствами Юникода, а не перечислением алфавитов: проверка
+  // сборки справедливо ругается на латиницу вплотную к кириллице.
+  const letters = label.replace(/[^\p{L}\p{N}]/gu, '').toLocaleUpperCase('ru-RU')
+  if (letters.length === 0) return false
+  const ids = pointIds.map((id) => id.toLocaleUpperCase('ru-RU')).join('')
+  // «AD» при вершинах A и D, «ABCD» при четырёх вершинах - имя из букв
+  // самих вершин, и оно на чертеже уже написано.
+  return letters === ids || letters === [...ids].reverse().join('')
+}
+
+function drawnLabel(label: string, pointIds: readonly string[]) {
+  const trimmed = label.trim()
+  if (!trimmed) return ''
+  if (isVertexListLabel(trimmed, pointIds)) return ''
+  if (trimmed.length > maxDrawnLabelLength) return ''
+  return trimmed
+}
+
 export function GeometryScene({ scene, description }: { scene: HomeworkDiagramScene; description: string }) {
   const clipId = `geometry-scene-${useId().replace(/:/gu, '')}`
   const projection = sceneProjection(scene.points)
@@ -351,7 +409,7 @@ export function GeometryScene({ scene, description }: { scene: HomeworkDiagramSc
               : object.kind === 'polyline' || object.kind === 'polygon'
                 ? <path className={className} d={chainPath(objectPoints, object.kind === 'polygon')} />
                 : <path className={className} d={segmentPath(objectPoints, object.kind as 'line' | 'segment' | 'ray')} />}
-            {object.label && labelPoint && (() => {
+            {drawnLabel(object.label, object.points) && labelPoint && (() => {
               /* Подпись линии раньше вставала в её середину, а середина
                  отрезка - это чаще всего точка пересечения с другой линией
                  или вершина: на чертеже выходило слипшееся «aB». Теперь
@@ -359,17 +417,19 @@ export function GeometryScene({ scene, description }: { scene: HomeworkDiagramSc
                  по тем же правилам, что и подпись вершины. */
               const place = objectLabelPlacement(objectPoints, points, edges, placedLabels)
               placedLabels.push(place)
-              return <text className="diagram-angle-label" textAnchor="middle" x={place.x} y={place.y}>{object.label}</text>
+              return <text className="diagram-angle-label" textAnchor="middle" x={place.x} y={place.y}>{drawnLabel(object.label, object.points)}</text>
             })()}
           </g>
         })}
         {scene.marks.map((mark, index) => {
           const markPoints = mark.points.map((id) => pointMap.get(id)).filter((point): point is Point => Boolean(point))
           const key = `${mark.kind}-${mark.points.join('-')}-${index}`
-          if (mark.kind === 'angle') return <AngleMark points={markPoints} label={mark.label} key={key} />
-          if (mark.kind === 'right-angle') return <RightAngleMark points={markPoints} label={mark.label} key={key} />
-          if (mark.kind === 'equal-segment') return <EqualSegmentMark points={markPoints} label={mark.label} key={key} />
-          return <ParallelMark points={markPoints} label={mark.label} key={key} />
+          // Значок рисуется всегда, подпись - только короткая и по делу.
+          const label = drawnLabel(mark.label, mark.points)
+          if (mark.kind === 'angle') return <AngleMark points={markPoints} label={label} key={key} />
+          if (mark.kind === 'right-angle') return <RightAngleMark points={markPoints} label={label} key={key} />
+          if (mark.kind === 'equal-segment') return <EqualSegmentMark points={markPoints} label={label} key={key} />
+          return <ParallelMark points={markPoints} label={label} key={key} />
         })}
         {points.filter((point) => point.visible).map((point) => {
           const place = labelPlacement(point, center, points, edges, placedLabels)

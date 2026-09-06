@@ -482,6 +482,10 @@ const authorInstructions = [
   'Если diagramRequired=true, constraints не может быть пустым.',
   'Для collinear перечисли все точки одной прямой; between: [точка, конец1, конец2]; not-on-line: [точка, точкаЛинии1, точкаЛинии2].',
   'Для parallel, perpendicular и equal-length используй четыре точки; midpoint: [середина, конец1, конец2]; on-circle: [точка, центр, точкаОкружности].',
+  'На чертеже не бывает того, чего нет в условии. Не добавляй параллельность, равенство сторон, прямой угол или симметрию, если это не дано и не доказано в решении: 6 сентября чертёж к четырёхугольнику получил выдуманное «AB ∥ CD», и фигура перестала соответствовать собственному ответу.',
+  'Подписи на чертеже - короткие: имя прямой «a», градусная мера «135°», длина «10 см». Равенство углов и сторон показывай значками, а не формулой поверх рисунка: «∠A = ∠B = ∠C» на чертеже не пишут.',
+  'Стороны не подписывай именами их вершин: между A и D не нужна подпись «AD», это и так видно.',
+  'Градусная мера в подписи должна совпадать с чертежом: подписал 135° - строй угол в 135°.',
   'Не ставь diagram.kind=none, если ответ задачи состоит в построении, рисунке или расположении геометрических объектов.',
   'Условие «начертите», «проведите», «отметьте», «постройте» обычно требует diagramRequired=true.',
   'В Дано и цели используй краткие обозначения. Для чистого построения title=Построить.',
@@ -1285,6 +1289,25 @@ function pointLineDistance(point: Point, start: Point, end: Point) {
   return length > 0 ? Math.abs(cross(start, end, point)) / length : Number.POSITIVE_INFINITY
 }
 
+/* Градус в подписи метки: «135°», «∠A = 60°». Нет градуса - null. */
+function markDegrees(mark: HomeworkDiagramScene['marks'][number]) {
+  const match = /(\d{1,3})\s*°/u.exec(mark.label ?? '')
+  if (!match) return null
+  const value = Number(match[1])
+  return Number.isFinite(value) && value > 0 && value < 360 ? value : null
+}
+
+/* Угол в градусах по трём точкам чертежа. */
+function angleBetween(first?: Point, vertex?: Point, second?: Point) {
+  if (!first || !vertex || !second) return null
+  const left = { x: first.x - vertex.x, y: first.y - vertex.y }
+  const right = { x: second.x - vertex.x, y: second.y - vertex.y }
+  const lengths = Math.hypot(left.x, left.y) * Math.hypot(right.x, right.y)
+  if (lengths === 0) return null
+  const cosine = Math.min(1, Math.max(-1, (left.x * right.x + left.y * right.y) / lengths))
+  return (Math.acos(cosine) * 180) / Math.PI
+}
+
 function constraintIssue(
   constraint: HomeworkDiagramScene['constraints'][number],
   pointMap: Map<string, Point>,
@@ -1680,8 +1703,58 @@ export function validateSolutionQuality(solution: HomeworkSolution) {
         if (mark.points.some((id) => !pointMap.has(id))) issues.push(`${mark.kind}: ссылка на отсутствующую точку`)
         if ((mark.kind === 'angle' || mark.kind === 'right-angle') && mark.points.length !== 3) issues.push(`${mark.kind}: нужны три точки`)
         if (mark.kind === 'equal-segment' && ![2, 4].includes(mark.points.length)) issues.push('equal-segment: нужны две или четыре точки')
+        /* Подписанный градус должен совпадать с нарисованным.
+
+           Задача 369 на проде 6 сентября: угол D подписан «135°», а
+           координаты давали 105°, и вся фигура была не та - равнобедренная
+           трапеция вместо четырёхугольника из условия. Ответ при этом
+           верный, и ученик перечерчивал чертёж, противоречащий его же
+           ответу. Подпись с градусом проверяется координатами: разошлись
+           больше чем на три градуса - чертёж перерисовывается. */
+        const degrees = markDegrees(mark)
+        if (degrees !== null && mark.points.length === 3) {
+          const drawn = angleBetween(
+            pointMap.get(mark.points[0]),
+            pointMap.get(mark.points[1]),
+            pointMap.get(mark.points[2]),
+          )
+          if (drawn !== null && Math.abs(drawn - degrees) > 3) {
+            issues.push(`Угол подписан ${degrees}°, а на чертеже ${Math.round(drawn)}°`)
+          }
+        }
         if (mark.kind === 'parallel' && mark.points.length !== 4) issues.push('parallel: нужны четыре точки')
       }
+      /* Углы, помеченные одинаково, должны быть равны и на рисунке.
+
+         В задаче 369 три угла несли одну подпись «∠A = ∠B = ∠C», а
+         нарисованы были 75°, 75° и 105°: угол C выглядел как D, и чертёж
+         спорил с собственным ответом. Градусной меры у такой пометки нет,
+         поэтому предыдущая проверка её не видит - сравниваем углы между
+         собой. */
+      const equalAngleGroups = new Map<string, number[]>()
+      for (const mark of scene.marks) {
+        if (mark.kind !== 'angle' || mark.points.length !== 3) continue
+        const label = (mark.label ?? '').trim()
+        if (!label || markDegrees(mark) !== null) continue
+        const drawn = angleBetween(
+          pointMap.get(mark.points[0]),
+          pointMap.get(mark.points[1]),
+          pointMap.get(mark.points[2]),
+        )
+        if (drawn === null) continue
+        equalAngleGroups.set(label, [...(equalAngleGroups.get(label) ?? []), drawn])
+      }
+      for (const [label, angles] of equalAngleGroups) {
+        if (angles.length < 2) continue
+        const spread = Math.max(...angles) - Math.min(...angles)
+        if (spread > 3) {
+          issues.push(
+            `Углы помечены как равные («${label}»), а на чертеже расходятся: `
+            + angles.map((angle) => `${Math.round(angle)}°`).join(', '),
+          )
+        }
+      }
+
       for (const constraint of scene.constraints) {
         const issue = constraintIssue(constraint, pointMap)
         if (issue) issues.push(issue)

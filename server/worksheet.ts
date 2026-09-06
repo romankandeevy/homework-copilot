@@ -328,6 +328,25 @@ function valuesAgree(written: number, computed: number) {
    вызывает, «36 наборов» - вызывает. */
 const traceableFrom = 13
 
+/* Школьные постоянные выводить не надо.
+
+   6 сентября проверка происхождения потребовала вывести 180 в «сумма
+   углов треугольника = 180°», и модель дописала в решение строку
+   «∠1 + ∠2 + ∠3 = 180°» про треугольник, которого в задаче не было.
+   Ученик получил в тетради обломок доказательства теоремы вместо решения.
+
+   Эти числа - не результат счёта, а известные величины: градусы полного
+   угла и развёрнутого, проценты, метрические кратности, нормальные
+   условия. Требовать для них вывода - плодить мусор в записи.
+   Список нарочно короткий. «120» сюда не входит, хотя это и градусы: в
+   комбинаторике 120 это 5!, и требовать вывода там правильно. Берём
+   только те числа, которые счётным результатом почти не бывают. */
+const schoolConstants = new Set([
+  '100', '180', '360',
+  '1000', '10000', '100000', '1000000',
+  '273', '760', '1013',
+])
+
 function numbersIn(text: string): string[] {
   return (text.match(/\d+(?:[.,]\d+)?/gu) ?? []).map((entry) => entry.replace(',', '.'))
 }
@@ -349,6 +368,7 @@ export function verifyWorksheetDerivation(
     for (const number of numbersIn(line.expression)) {
       const size = Number(number)
       if (!Number.isFinite(size) || size < traceableFrom) continue
+      if (schoolConstants.has(number)) continue
       if (known.has(number) || known.has(String(size))) continue
       issues.push(`Черновик, «${line.label}»: число ${number} взято ниоткуда - выпиши строкой, как оно получено`)
     }
