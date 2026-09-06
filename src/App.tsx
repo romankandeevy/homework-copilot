@@ -761,7 +761,7 @@ function UnderstandingPage({
 
     const value = [
       'Условие: ' + source.condition,
-      ...(explanationLines.length > 0 ? ['Как это решается:', ...explanationLines.map((line) => '- ' + line)] : []),
+      ...(explanationLines.length > 0 ? ['Что нужно понять:', ...explanationLines.map((line) => '- ' + line)] : []),
       ...(source.given.length > 0 ? ['Дано:', ...source.given] : []),
       source.goal.title + ': ' + source.goal.text,
       'Решение:',
@@ -807,7 +807,11 @@ function UnderstandingPage({
   const explanationLines = generatedSolution?.explanation ?? []
   const explanation = explanationLines.length > 0 ? (
     <section className="solution-explanation" aria-labelledby="solution-explanation-title">
-      <h2 id="solution-explanation-title">Как это решается</h2>
+      {/* Заголовок обещает разбор темы, а не пересказ решения: ниже стоят
+          правило и откуда оно, признак такой задачи, частая ошибка и
+          способ проверить себя. «Как это решается» обещало ход решения -
+          и ученик читал в разборе то же самое, что в тетрадной записи. */}
+      <h2 id="solution-explanation-title">Что нужно понять</h2>
       <ol>
         {keyed(explanationLines, (line) => line).map(({ key, item: line }) => <li key={key}>{line}</li>)}
       </ol>
