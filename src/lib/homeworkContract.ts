@@ -185,6 +185,12 @@ export type SolveHomeworkRequest = {
   authors: string
   edition: string
   condition?: string
+  /* Пометка ученика к фотографии: «реши только б)», «задача 1 сверху».
+     Условием она не является - условие на снимке, - но модели без неё
+     непонятно, что именно решать. Отдельным полем именно поэтому: как
+     `condition` она однажды поехала в промпт «проверенным условием», и
+     модель разобрала подпись вместо задачи. */
+  note?: string
   sourceUrl?: string
   sourcePage?: number
   imageDataUrl?: string

@@ -267,6 +267,8 @@ async function validateRequest(value: unknown, options: SolverOptions): Promise<
   const sourcePageValue = Number(candidate.sourcePage)
   const sourcePage = Number.isInteger(sourcePageValue) && sourcePageValue > 0 ? sourcePageValue : undefined
   const imageDataUrl = text(candidate.imageDataUrl)
+  // Пометка к фотографии: короткая строка, условием не считается.
+  const note = text(candidate.note).slice(0, 200)
   if (imageDataUrl && !/^data:image\/(?:jpeg|png|webp|heic|heif);base64,/i.test(imageDataUrl)) {
     throw new HomeworkSolverError(400, 'Изображение задачи должно быть в формате JPEG, PNG или WebP')
   }
@@ -289,6 +291,25 @@ async function validateRequest(value: unknown, options: SolverOptions): Promise<
   if (condition.length > maxConditionLength) {
     throw new HomeworkSolverError(400, 'Условие длиннее ' + maxConditionLength + ' знаков — это уже не одна задача. Раздели её и пришли по частям')
   }
+  /* Указание на задачу — не задача.
+
+     6 сентября на проде: условие целиком выглядело как «Решить задачу 1 про
+     образование воды». Ни данных, ни вопроса, ни самой задачи - ученик
+     сослался на учебник, который есть только у него. Модель сочинила общий
+     текст, проверка увидела словесный абзац и пустое «Дано», ученик прочёл
+     «Решение не дошло», как будто сломались мы. Двадцать две секунды и
+     двадцать девять копеек за отказ, который был виден до вызова модели.
+
+     Отвергаем только явную ссылку без содержания: короткая строка, которая
+     отсылает к номеру, странице или фотографии. Настоящее короткое задание
+     («Докажите, что диагонали прямоугольника равны») ссылок не содержит и
+     проходит. */
+  if (source === 'text' && conditionIsOnlyAReference(condition)) {
+    throw new HomeworkSolverError(
+      422,
+      'В условии только ссылка на задачу. Пришли саму задачу текстом или сфотографируй её — учебника у нас нет',
+    )
+  }
   if (imageDataUrl.length > 4_000_000) {
     throw new HomeworkSolverError(413, 'Фотография задачи слишком большая')
   }
@@ -304,6 +325,7 @@ async function validateRequest(value: unknown, options: SolverOptions): Promise<
     edition: text(candidate.edition).slice(0, 150),
     idempotencyKey: text(candidate.idempotencyKey).slice(0, 150),
     ...(condition ? { condition: condition.slice(0, maxConditionLength) } : {}),
+    ...(note ? { note: note.slice(0, 200) } : {}),
     ...(sourceUrl ? { sourceUrl: sourceUrl.slice(0, 500) } : {}),
     ...(sourcePage ? { sourcePage } : {}),
     ...(imageDataUrl ? { imageDataUrl } : {}),
@@ -837,6 +859,26 @@ async function recordSolveCost(
   }
 }
 
+/* Ссылка на задание вместо задания.
+
+   Короткая строка, которая отсылает к номеру, странице, фотографии или
+   учебнику и ничего больше не сообщает. Порог в 90 знаков не строгий, а
+   осторожный: чем длиннее строка, тем вероятнее, что ученик всё-таки
+   переписал условие и просто упомянул номер. */
+const referenceOnlyPattern = /задач[уиае]?\s*(?:№|номер)?\s*\d|упражнени[еяю]\s*(?:№|номер)?\s*\d|задани[еяю]\s*(?:№|номер)?\s*\d|пример\s*(?:№|номер)?\s*\d|номер\s*\d|стр\.?\s*\d|страниц[ыеу]\s*\d|сверху|снизу|на фото|с фото|по фото|на картинке|из учебника|в учебнике/giu
+
+export function conditionIsOnlyAReference(condition: string) {
+  const trimmed = condition.trim()
+  if (trimmed.length === 0 || trimmed.length > 90) return false
+  referenceOnlyPattern.lastIndex = 0
+  if (!referenceOnlyPattern.test(trimmed)) return false
+  /* Данные в строке - признак настоящей задачи: «В задаче 1 масса 200 г»
+     решается и без учебника. Числа из самой ссылки («задачу 1») в счёт не
+     идут, поэтому ссылки вырезаем перед проверкой. */
+  const withoutReference = trimmed.replace(referenceOnlyPattern, ' ')
+  return !/\d/u.test(withoutReference)
+}
+
 function logSolverEvent(
   level: 'info' | 'error',
   event: string,
@@ -919,6 +961,11 @@ export async function handleHomeworkSolverRequest(
       source,
       // По этому полю видно, что путь через Supabase работает и подпись сошлась.
       via: requestCameThroughProxy(request, options) ? 'supabase-proxy' : 'direct',
+      // Дошла ли фотография. 6 сентября выяснять это пришлось по косвенным
+      // признакам, потому что в журнале о снимке не было ни слова.
+      photoBytes: task.imageDataUrl ? task.imageDataUrl.length : 0,
+      conditionLength: task.condition ? task.condition.length : 0,
+      noteLength: task.note ? task.note.length : 0,
       // Начала подписей - своей и присланной: по ним видно, чей ключ разошёлся.
       // Самих ключей в журнале нет.
       proxyAuthExpected: options.serviceRoleKey ? proxyAuthDigest(options.serviceRoleKey).slice(0, 8) : '',

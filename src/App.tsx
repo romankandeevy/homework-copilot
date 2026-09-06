@@ -1859,7 +1859,13 @@ function HomePage() {
           authors: textbook.authors,
           edition: textbook.edition,
           idempotencyKey: payload.idempotencyKey,
-          ...(payload.condition ? { condition: payload.condition } : {}),
+          /* У задачи с фотографии текст ученика - пометка, а не условие:
+             условие на снимке. Как `condition` эта пометка однажды поехала
+             в промпт «проверенным условием», и модель разобрала подпись
+             «Решить задачу 1 про образование воды» вместо самой задачи. */
+          ...(payload.condition
+            ? (payload.source === 'photo' ? { note: payload.condition } : { condition: payload.condition })
+            : {}),
           ...(payload.imageDataUrl ? { imageDataUrl: payload.imageDataUrl } : {}),
         },
         accessToken,
