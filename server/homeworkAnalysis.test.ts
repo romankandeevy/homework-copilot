@@ -171,6 +171,55 @@ describe('один проход умной моделью', () => {
   })
 })
 
+describe('служебная графа не отменяет решение', () => {
+  /* 6 сентября на проде: верное решение про углы выпуклого многоугольника
+     отвергнуто с «Самопроверка решения неполна» - модель дала два пункта
+     самопроверки вместо трёх. Схема требует три, но шлюз minItems не
+     обеспечивает. Ученик остался без решения из-за нашей бухгалтерии,
+     которой он даже не видит. */
+  it('решение с двумя пунктами самопроверки выдаётся, а не бракуется', async () => {
+    const shortSelfChecks = {
+      ...draft,
+      decisions: { ...draft.decisions, selfChecks: ['Подстановка сошлась', 'Единицы на месте'] },
+    }
+    /* Отвечаем по адресу: соседний тест мог отправить модели на отдых, и
+       вызов уходит в другое семейство с другим протоколом ответа. */
+    const { urls, fetchImpl } = stubProvider((url) => (
+      url.includes('/codex/') ? responsesPayload(shortSelfChecks) : geminiPayload(shortSelfChecks)
+    ))
+    const issues: string[] = []
+
+    const solution = await solveHomeworkWithReview(request, {
+      apiKey: 'test-key',
+      fetchImpl,
+      onTrace: (event) => issues.push(...event.issues),
+    })
+    // Ни одного замечания: два пункта самопроверки - не изъян решения.
+    expect(issues).toEqual([])
+
+    expect(solution.quality?.reviewPassed).toBe(true)
+    // И починку ради этого не зовём: второй вызов модели тут не за что платить.
+    expect(urls).toHaveLength(1)
+  })
+
+  it('но совсем без самопроверки решение не выпускается', async () => {
+    const noSelfChecks = {
+      ...draft,
+      decisions: { ...draft.decisions, selfChecks: [] },
+    }
+    // Починка отвечает тем же черновиком: модель настаивает, значит отказ.
+    const { urls, fetchImpl } = stubProvider((url, stage) => {
+      const body = stage === 'review' ? reviewOf(noSelfChecks) : noSelfChecks
+      return url.includes('/codex/') ? responsesPayload(body) : geminiPayload(body)
+    })
+
+    await expect(solveHomeworkWithReview(request, { apiKey: 'test-key', fetchImpl }))
+      .rejects.toThrow(/не проверено самой моделью/u)
+    // Починку позвали: пустая самопроверка - повод переспросить модель.
+    expect(urls.length).toBeGreaterThan(1)
+  })
+})
+
 describe('размеченный разбор', () => {
   it('доезжает до решения очищенным от мусора', async () => {
     const { fetchImpl } = stubProvider((url) => (url.includes('/codex/')
