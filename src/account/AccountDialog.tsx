@@ -33,6 +33,7 @@ import { formatRubles } from '../lib/currency'
 import { solutionPriceKopecks } from '../lib/solutionPricing'
 import { deleteMyAccount } from '../lib/accountDeletion'
 import { forgetPendingLegalAcceptance, rememberPendingLegalAcceptance } from '../lib/legalConsent'
+import { getGuestId } from '../lib/guestSolutions'
 import { loadReferralStatus, preparePendingReferralClaim } from '../lib/referrals'
 import type { ReferralStatus } from '../lib/referrals'
 import { useModalIsolation } from '../lib/useModalIsolation'
@@ -432,6 +433,9 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
         if (!agreementAccepted || !personalDataAccepted || !ageConfirmed) throw new Error('legal consent')
         rememberPendingLegalAcceptance('email', email)
         const referralClaimToken = await preparePendingReferralClaim(supabase)
+        // Метку читаем прямо перед отправкой: она живёт в localStorage и
+        // могла появиться уже после того, как диалог открыли.
+        const deviceId = getGuestId()
         const { data, error: signUpError } = await supabase.auth.signUp({
           email: email.trim(),
           password,
@@ -443,6 +447,13 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
               legal_source: 'email',
               full_name: fullName.trim(),
               grade,
+              /* Метка браузера - та же, по которой гостю выдаётся первое
+                 бесплатное решение. Стартовые 20 ₽ выдаются один раз на
+                 метку: до этого одноразовая почта стоила нам двадцати
+                 рублей подарка, и ящиков таких бесконечно. Метки нет
+                 (приватный режим, отключённое хранилище) - деньги всё
+                 равно выдаются: честный ученик дороже редкого обхода. */
+              ...(deviceId ? { device_id: deviceId } : {}),
               ...(referralClaimToken ? { referral_claim_token: referralClaimToken } : {}),
             },
             emailRedirectTo: verificationRedirectUrl(),
@@ -749,7 +760,7 @@ function ReferralCard() {
         <span className="account-referral-icon"><Gift size={23} weight="duotone" aria-hidden="true" /></span>
         <div>
           <h3 id="account-referral-title">Пригласи друга</h3>
-          <p>Как только он подтвердит регистрацию по твоей ссылке, тебе начислят <strong>+10 ₽</strong>, а ему — <strong>+5 ₽</strong>. Пополнять ничего не нужно.</p>
+          <p>Когда он пополнит баланс в первый раз, тебе начислят <strong>+10 ₽</strong>, а ему — <strong>+5 ₽</strong>.</p>
         </div>
       </header>
 
