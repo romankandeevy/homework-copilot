@@ -296,6 +296,20 @@ describe('geometry solution quality gate', () => {
     expect(issues.some((issue) => issue.includes('которого нет в условии'))).toBe(false)
   })
 
+  /* Прод, вечер 6 сентября: верное решение про четырёхугольник упало с
+     «У выпуклой фигуры не бывает угла 360°». В строке
+     «∠A + ∠B + ∠C + ∠D = 360°» проверка выхватила хвост «∠D = 360°».
+     Сумма углов - не угол. */
+  it('не принимает сумму углов за один угол', () => {
+    const issues = validateSolutionQuality({
+      ...taskFiveSolution,
+      condition: 'Найдите углы выпуклого четырёхугольника ABCD, если ∠D = 135°.',
+      steps: ['∠A + ∠B + ∠C + ∠D = 360° (сумма углов четырёхугольника).', '∠A = 75°.'],
+      answer: '∠A = ∠B = ∠C = 75°',
+    })
+    expect(issues.some((issue) => issue.includes('не бывает угла'))).toBe(false)
+  })
+
   it('ловит угол от 180° у выпуклой фигуры', () => {
     const issues = validateSolutionQuality({
       ...taskFiveSolution,

@@ -937,7 +937,30 @@ function normalizeWorksheet(value: unknown): WorksheetLine[] {
     .slice(0, 20)
 }
 
-function normalizeDraft(value: unknown, limits = tightNotebookLimits): EngineDraft {
+/* Качественный вопрос: «свидетельствует ли», «почему», «объясните».
+   Расчётные слова его отменяют - там спрашивают величину. */
+export function isQualitativeQuestion(condition: string) {
+  return /свидетельству|аргументир|объясни|почему|как измен|докажи/iu.test(condition)
+    && !/найд|вычисл|рассчита|определи/iu.test(condition)
+}
+
+/* Лишняя строка «Дано» убирается, а не отменяет решение.
+
+   6 сентября физика восьмого класса дважды вернулась с «Дано: m_a(O) =
+   16 · m_a(H)» - справочным фактом, которого в условии нет. Он и есть
+   подставленный ответ: существование атомов берётся как данность, чтобы
+   доказать существование атомов. Проверка это ловила и отменяла решение
+   целиком - ученик оставался ни с чем после двух починок.
+
+   Строку из «Дано» код убирает сам. Рассуждение в решении при этом
+   остаётся: объяснить наблюдаемое отношение составом молекулы - законно,
+   незаконно объявить это данностью. */
+function withoutSmuggledGiven(given: readonly string[], condition: string) {
+  if (!isQualitativeQuestion(condition)) return [...given]
+  const conditionNumbers = new Set(condition.match(/\d+/gu) ?? [])
+  return given.filter((line) => (line.match(/\d+/gu) ?? []).every((number) => conditionNumbers.has(number)))
+}
+function normalizeDraft(value: unknown, limits = tightNotebookLimits, condition = ''): EngineDraft {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new GeometrySolutionEngineError('Модель не вернула решение')
   }
@@ -957,12 +980,17 @@ function normalizeDraft(value: unknown, limits = tightNotebookLimits): EngineDra
     diagramRequired: candidate.diagramRequired === true,
     decisions: normalizeDecisionSummary(candidate.decisions),
     sourceVerified: candidate.sourceVerified === true,
-    given: Array.isArray(candidate.given)
-      ? candidate.given
-          .map((entry) => clampNotebookLine(normalizeNotebookNotation(entry), limits.given))
-          .filter(Boolean)
-          .slice(0, 4)
-      : [],
+    given: withoutSmuggledGiven(
+      Array.isArray(candidate.given)
+        ? candidate.given
+            .map((entry) => clampNotebookLine(normalizeNotebookNotation(entry), limits.given))
+            .filter(Boolean)
+            .slice(0, 4)
+        : [],
+      // У задачи с фотографии условие приходит не в запросе, а с самого
+      // снимка: берём то, что модель прочла.
+      condition || normalizeNotebookNotation(candidate.condition),
+    ),
     goal: {
       title: goalTitle,
       text: clampNotebookLine(
@@ -1753,11 +1781,21 @@ export function validateSolutionQuality(solution: HomeworkSolution) {
   }
   /* Выпуклый многоугольник не имеет углов от 180°.
 
-     Проверка дешёвая и ловит грубую нестыковку между условием и ответом:
-     «выпуклый» в условии и «∠A = 200°» в ответе - взаимоисключающие вещи. */
+     Проверка ловит грубую нестыковку между условием и ответом: «выпуклый»
+     в условии и «∠A = 200°» в ответе - взаимоисключающие вещи.
+
+     6 сентября она сама уронила верное решение: в строке
+     «∠A + ∠B + ∠C + ∠D = 360°» поиск выхватил хвост «∠D = 360°» и объявил
+     угол в 360 градусов. Сумма углов - не угол, поэтому утверждения со
+     сложением из проверки исключены: смотрим только там, где угол стоит
+     один на один со своей мерой. */
   if (/выпукл/iu.test(solution.condition)) {
-    const found = [...[solution.answer, ...steps].join(' ')
-      .matchAll(/∠\s*\p{Lu}[\p{L}\p{N}₀-₉]*\s*=\s*(\d{1,3})\s*°/gu)]
+    const statements = [solution.answer, ...steps]
+      .join('. ')
+      .split(/[.;,]/u)
+      .filter((statement) => !statement.includes('+'))
+    const found = statements
+      .flatMap((statement) => [...statement.matchAll(/∠\s*\p{Lu}[\p{L}\p{N}₀-₉]*\s*=\s*(\d{1,3})\s*°/gu)])
       .map((match) => Number(match[1]))
       .filter((degrees) => degrees >= 180)
     if (found.length > 0) issues.push(`У выпуклой фигуры не бывает угла ${found[0]}°`)
@@ -2207,7 +2245,7 @@ export async function solveHomeworkWithReview(
     passModel,
     subjectModels,
   )
-  const best = evaluate(normalizeDraft(raw, notebookLimits), passModel)
+  const best = evaluate(normalizeDraft(raw, notebookLimits, request.condition ?? ''), passModel)
 
   options.onStage?.('checking')
 
@@ -2385,7 +2423,7 @@ export async function solveHomeworkWithReview(
     const repaired: ReviewResult = {
       approved: repairCandidate.approved === true,
       issues: lines(repairCandidate.issues, 12, 160),
-      solution: normalizeDraft(repairCandidate.solution, notebookLimits),
+      solution: normalizeDraft(repairCandidate.solution, notebookLimits, request.condition ?? ''),
     }
     const repairedSolution = toSolution(repaired.solution, request, ownerId, repaired.approved)
     const repairedIssues = [
