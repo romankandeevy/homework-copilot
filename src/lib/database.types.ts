@@ -842,6 +842,27 @@ export type Database = {
         Args: { p_solution: Json }
         Returns: string
       }
+      sign_solution_price: {
+        Args: { p_idempotency_key: string; p_price_kopecks: number }
+        Returns: string
+      }
+      reserve_solution_credit_v2: {
+        Args: {
+          p_description?: string
+          p_idempotency_key: string
+          p_price_kopecks: number
+          p_price_proof: string
+          p_source?: string
+          p_task_number?: number | null
+          p_textbook_id?: string | null
+        }
+        Returns: {
+          alreadyReserved?: boolean
+          balance: number | null
+          price?: number
+          reserved: boolean
+        }
+      }
       record_solution_cost: {
         Args: {
           p_subject: string

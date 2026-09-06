@@ -470,25 +470,6 @@ async function authenticateAccount(
 // идемпотентности проходили её одновременно и запускали модель несколько раз,
 // а списывалось за один. Резерв идемпотентен по ключу запроса; если решение
 // получить не удалось, он возвращается через refundSolutionCredit.
-/* Вызов функции базы, которой ещё нет в сгенерированных типах.
-
-   `database.types.ts` собирается по схеме прода, а новые денежные функции
-   ждут применения миграции. Пока их там нет, TypeScript о них не знает.
-   Заглушка узкая - имя и аргументы, - и снимается перегенерацией типов
-   сразу после того, как миграция применится. */
-type RpcClient = { rpc: (name: string, args: Record<string, unknown>) => unknown }
-
-async function callRpc(
-  client: SupabaseClient<Database>,
-  name: string,
-  args: Record<string, unknown>,
-): Promise<{ data: unknown; error: { message: string } | null }> {
-  return await (client as unknown as RpcClient).rpc(name, args) as {
-    data: unknown
-    error: { message: string } | null
-  }
-}
-
 /* Цена задачи. Считает сервер, а не браузер: число, присланное клиентом,
    ничем не подтверждается, и решение за рубль стало бы делом одной правки
    в консоли. Формула одна на всех - src/lib/solutionPricing.ts, - поэтому
@@ -513,7 +494,7 @@ async function signSolutionPrice(
   const admin = guestAdminClient(options)
   if (!admin) return null
   try {
-    const { data, error } = await callRpc(admin, 'sign_solution_price', {
+    const { data, error } = await admin.rpc('sign_solution_price', {
       p_idempotency_key: request.idempotencyKey,
       p_price_kopecks: price,
     })
@@ -532,7 +513,7 @@ async function reserveSolutionCredit(
   const price = solutionPriceFor(request)
   const proof = options ? await signSolutionPrice(options, request, price) : null
   const { data, error } = proof
-    ? await callRpc(account.client, 'reserve_solution_credit_v2', {
+    ? await account.client.rpc('reserve_solution_credit_v2', {
       p_idempotency_key: request.idempotencyKey,
       p_price_kopecks: price,
       p_price_proof: proof,
@@ -564,12 +545,7 @@ async function reserveSolutionCredit(
     throw new HomeworkSolverError(502, 'Не получилось зарезервировать оплату')
   }
 
-  return Boolean(
-    data
-    && typeof data === 'object'
-    && !Array.isArray(data)
-    && (data as { reserved?: unknown }).reserved === true,
-  )
+  return Boolean(data && typeof data === 'object' && !Array.isArray(data) && data.reserved === true)
 }
 
 // Гостевой резерв. Денег у гостя нет, поэтому «резервируется» единственная
