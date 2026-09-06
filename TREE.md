@@ -11,6 +11,7 @@ homework Copilot/
 ├── scripts/                 — сборка статических маршрутов, иконки, проверки перед сборкой
 ├── server/                  — логика функций, общая для api/ и тестов
 │   ├── geometrySolutionEngine.ts — проходы модели, перебор семейств, проверка качества
+│   ├── homeworkModels.ts    — какая модель на каком предмете, с замерами
 │   ├── homeworkSolver.ts    — HTTP решателя: оплата, стадии, сохранение решения
 │   ├── subjectRules.ts      — правила предмета, они же рецензент
 │   ├── chat.ts / chatProviders.ts — ИИ-чат: квоты, списание, два протокола шлюза
@@ -46,7 +47,7 @@ homework Copilot/
 | Задача | Где |
 |---|---|
 | Цена, списание, возврат | `supabase/migrations/*wallet*`, `src/lib/solutionPricing.ts` |
-| Модели и их отказы | `server/geometrySolutionEngine.ts`, раздел «Пул моделей» в `AGENTS.md` |
+| Модели и их отказы | `server/homeworkModels.ts`, раздел «Пул моделей» в `AGENTS.md` |
 | Очередь и стадии решения | `src/lib/solutionJobs.ts`, `src/solution/SolutionQueue.tsx` |
 | Вход, письма, согласия | `src/account/AccountDialog.tsx`, `supabase/templates/`, `src/lib/legalConsent.ts` |
 | Юридические тексты | `src/LegalPage.tsx` (версия — `private.current_legal_version()`) |

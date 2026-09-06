@@ -27,6 +27,11 @@ import {
   diagramPlanInstructions,
   diagramPlanSchema,
 } from './diagramBuilder.ts'
+import {
+  defaultHomeworkModel,
+  defaultHomeworkModels,
+  homeworkModelsForSubject,
+} from './homeworkModels.ts'
 import { subjectRuleQuestions, verifySubjectRules } from './subjectRules.ts'
 
 export { homeworkSolutionEngineVersion }
@@ -39,54 +44,18 @@ export { homeworkSolutionEngineVersion }
 // за три-четыре вызова, а качество давала не сверка, а модель: два прохода
 // слабой модели чаще сходились в одной и той же ошибке, чем ловили её.
 //
-// Теперь проход один и идёт самой сильной моделью пула. Освободившийся
+// Теперь проход один и идёт сильнейшей моделью предмета. Освободившийся
 // бюджет — и по деньгам, и по времени — уходит в неё же: подробный промпт,
 // объяснение перед решением, разбор оформления. Проверка осталась там, где
 // она объективна и мгновенна: правила предмета и разбор записи кодом
 // (validateSolutionQuality, verifySubjectRules). Нарушенное чинится одним
 // адресным повтором, а не разговором с ещё одной моделью.
 //
-// Порядок пула снят с живого замера, а не с прайса. Две задачи с известным
-// ответом: комбинаторика (9744 и 29/405, проверено перебором) и ромб с
-// диагоналями 10 и 24 (сторона 13 см). Замер 5 сентября:
-//
-//   модель                    комбинаторика        геометрия        цена
-//   gemini-3-6-flash-openai   54 с, верно          10 с, верно      0,41 кр
-//   gpt-5-6-terra             69 с, верно          13 с, верно      1,01 кр
-//   gpt-5-6-sol               97 с, верно          10 с, верно      3,47 кр
-//   gpt-5-5                  132 с, верно           6 с, верно     12,00 кр
-//   claude-opus-5             34 с, верно          не мерил         5,48 кр
-//   grok-4-6                  сорвался             44 с, верно      0,74 кр
-//   gpt-5-6-luna             107 с, НЕВЕРНО        не мерил         дёшево
-//
-// Голый вопрос - не то же самое, что полный запрос решателя. Прогон
-// целиком, со строгой схемой, промптом и проверкой (5 сентября):
-//
-//   gemini-3-6-flash-openai    57 с   9744 и 29/405 - верно
-//   gpt-5-6-terra             201 с   9312 и 194/2835 - НЕВЕРНО
-//
-// Та же Terra, которой хватило 69 секунд на вопрос без схемы, под
-// решателем считает втрое дольше и ошибается в разборе случая. Поэтому
-// в пуле остаётся только Gemini: другого семейства, проходящего полный
-// запрос решателя верно, у шлюза нет.
-//
-// Кого в пуле нет и почему: gpt-5-6-terra - под решателем 201 секунда и
-// неверный ответ; gpt-5-6-luna - неверный ответ; gpt-5-5 - 12 кредитов,
-// дороже самого решения; claude-opus-5 - шлюз не доносит для Claude
-// строгую схему (запрос с tools отвечает 503), а без схемы формат решения
-// держать нечем; grok-4-6 - на трудной задаче шлюз отдал HTML.
-//
-// Запасная модель, которая ошибается, хуже честного отказа: за решение
-// заплачено, а проверить его ученик не может - за этим он и пришёл.
-//
-// Семейство Gemini без суффикса -openai строгую схему решателя через KIE
-// не принимает: gemini-2.5-flash отвечает «сервер на обслуживании».
-// Проверять пул заново — `probe-models.local.mjs` (локальный, в индексе
-// не держится).
-export const defaultHomeworkModels = ['gemini-3-6-flash-openai', 'gemini-3-5-flash-openai', 'gemini-3-pro'] as const
-
-// Одиночные вызовы — рецензент, починка чертежа, ответ GET /api/solve.
-export const defaultHomeworkModel = defaultHomeworkModels[0]
+// Какая модель сильнейшая — зависит от предмета: комбинаторику и физику
+// держит reasoning-модель, разбор слова и датировку одинаково хорошо делает
+// быстрая. Порядок моделей по предметам и замеры, на которых он собран, —
+// в `homeworkModels.ts`.
+export { defaultHomeworkModel, defaultHomeworkModels, homeworkModelsForSubject }
 
 export type GeometrySolutionTraceEvent = {
   stage: 'author' | 'reviewer'
@@ -1774,10 +1743,11 @@ function reportModelFailure(model: string, error: unknown) {
    Проход начинает со своей модели, а дальше идёт по остальному пулу: одна
    упавшая семья не должна уносить решение целиком. Явно заданную `KIE_MODEL`
    не перебираем — это воля владельца, а не запасной вариант. */
-function candidateModels(options: EngineOptions, assigned?: string): string[] {
+function candidateModels(options: EngineOptions, assigned?: string, pool?: readonly string[]): string[] {
   if (options.model) return [options.model]
-  const first = assigned || defaultHomeworkModel
-  const ordered = [first, ...defaultHomeworkModels.filter((model) => model !== first)]
+  const subjectPool = pool && pool.length > 0 ? pool : defaultHomeworkModels
+  const first = assigned || subjectPool[0]
+  const ordered = [first, ...subjectPool.filter((model) => model !== first)]
   const ready = ordered.filter((model) => !modelIsCoolingDown(model))
   // Все на отдыхе — значит отдых кончился: лучше попробовать, чем не решить.
   return ready.length > 0 ? ready : ordered
@@ -1791,8 +1761,9 @@ async function callModelWithRetry(
   schema: object,
   deadline: number,
   modelOverride?: string,
+  pool?: readonly string[],
 ) {
-  const candidates = candidateModels(options, modelOverride)
+  const candidates = candidateModels(options, modelOverride, pool)
   let lastError: unknown = new GeometrySolutionEngineError('Модель не вернула решение')
   let calls = 0
 
@@ -1872,8 +1843,10 @@ export async function solveHomeworkWithReview(
   }
 
   // Модель, заданную явно через KIE_MODEL, уважаем; иначе берём первую в пуле
-  // — самую сильную. Отказ шлюза уводит вызов дальше по пулу в candidateModels.
-  const passModel = options.model ?? defaultHomeworkModels[0]
+  // предмета — сильнейшую именно на нём. Отказ шлюза уводит вызов дальше по
+  // тому же пулу в candidateModels.
+  const subjectModels = homeworkModelsForSubject(request.subject)
+  const passModel = options.model ?? subjectModels[0]
 
   options.onStage?.('solving')
 
@@ -1885,6 +1858,7 @@ export async function solveHomeworkWithReview(
     draftSchema,
     retryDeadline,
     passModel,
+    subjectModels,
   )
   const best = evaluate(normalizeDraft(raw, notebookLimits), passModel)
 
@@ -1979,6 +1953,7 @@ export async function solveHomeworkWithReview(
         diagramPlanSchema,
         retryDeadline,
         workingModel,
+        subjectModels,
       )
       const built = buildDiagramFromModelPlan(rawPlan)
       if (built.ok) {
@@ -2029,6 +2004,7 @@ export async function solveHomeworkWithReview(
     reviewSchema,
     retryDeadline,
     workingModel,
+    subjectModels,
   )
 
   if (!rawRepair || typeof rawRepair !== 'object' || Array.isArray(rawRepair)) {

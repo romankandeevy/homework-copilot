@@ -51,7 +51,7 @@ React 19, TypeScript, Vite 8, motion. Serverless-функции на Vercel (Nod
   `lib/` — клиент Supabase, деньги, контракты.
 - `server/` — общая логика функций: `homeworkSolver.ts` (HTTP, оплата,
   сохранение), `geometrySolutionEngine.ts` (проходы модели и проверка),
-  `chat*.ts`, `support.ts`.
+  `homeworkModels.ts` (модель под предмет), `chat*.ts`, `support.ts`.
 - `api/` — тонкие обёртки Vercel над `server/`.
 - `supabase/migrations/` — схема и все денежные функции.
 - `scripts/` — сборка статических маршрутов, иконки, разовые проверки.
