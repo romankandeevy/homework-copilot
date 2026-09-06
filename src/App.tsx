@@ -34,10 +34,9 @@ import CopyTask from './CopyTask'
 import type { TaskSubmission } from './CopyTask'
 import { applicationPath, currentApplicationPath } from './lib/appPath'
 import { keyed } from './lib/listKeys'
+import { NotebookDiagram } from './notebook/NotebookDiagram'
 import LegalPage from './LegalPage'
 import PrivacyNotice from './PrivacyNotice'
-import { GeometryNotebookLayoutV1 } from './notebook/GeometryNotebookLayoutV1'
-import type { GeometryNotebookPageSpec } from './notebook/geometry/types'
 import type { Database } from './lib/database.types'
 import type { AccountData } from './lib/supabase'
 import type { HomeworkSolution, HomeworkSource } from './lib/homeworkContract'
@@ -734,26 +733,6 @@ function SolutionsPage({
   )
 }
 
-function asGeometryNotebookSpec(
-  solution: HomeworkSolution,
-  sourceDiagram?: GeometryNotebookPageSpec['sourceDiagram'],
-): GeometryNotebookPageSpec {
-  return {
-    id: 'generated-' + solution.textbookId + '-' + solution.task,
-    // Номер печатается только у задачи из учебника. У задачи с фотографии
-    // или из своего условия номера нет: в `task` лежит начало условия, и на
-    // листе получалось «№ В прямоугольном треугольнике ABC угол», обрезанное
-    // краем страницы.
-    ...(solution.source === 'number' ? { number: solution.task } : {}),
-    condition: solution.condition,
-    given: solution.given.slice(0, 3),
-    goal: solution.goal,
-    diagram: solution.diagram,
-    ...(sourceDiagram ? { sourceDiagram } : {}),
-    solution: solution.steps,
-    ...(solution.answer ? { answer: solution.answer } : {}),
-  }
-}
 
 function UnderstandingPage({
   solution,
@@ -776,18 +755,9 @@ function UnderstandingPage({
   // Исходный чертёж из скана учебника больше не подгружается: сканов нет,
   // а чертёж строится движком по условию.
 
-  const notebookFixture = generatedSolution?.subject === 'Геометрия'
-    ? asGeometryNotebookSpec(generatedSolution)
-    : undefined
 
   const copySolution = async () => {
-    const source = generatedSolution ?? (notebookFixture ? {
-      condition: notebookFixture.condition,
-      given: notebookFixture.given,
-      goal: notebookFixture.goal,
-      steps: notebookFixture.solution,
-      answer: notebookFixture.answer ?? '',
-    } : null)
+    const source = generatedSolution
     if (!source) return
 
     const value = [
@@ -861,7 +831,7 @@ function UnderstandingPage({
 
   const actions = (
     <div className="solution-actions">
-      {(notebookFixture || generatedSolution) && (
+      {generatedSolution && (
         <button className="route-primary-action" type="button" onClick={() => { void copySolution() }}>
           {copied ? 'Скопировано' : copyFailed ? 'Не скопировалось — выдели и скопируй сам' : 'Скопировать решение'}
           <Check size={18} weight="bold" aria-hidden="true" />
@@ -875,29 +845,6 @@ function UnderstandingPage({
       </button>
     </div>
   )
-
-  if (notebookFixture) {
-    return (
-      <section className="route-page solution-view" aria-labelledby="understanding-page-title">
-        <header className="route-page-header">
-          <h1 id="understanding-page-title">{solution?.source === 'number' ? 'Решение № ' + notebookFixture.number : solution?.source === 'photo' ? 'Решение по фото' : 'Решение задачи'}</h1>
-          <p>Готовый лист для тетради. Проверь условие перед тем, как переписывать ответ.</p>
-        </header>
-        {generatedSolution && (
-          <div className="solution-condition">
-            <strong>Условие</strong>
-            <p>{generatedSolution.condition}</p>
-          </div>
-        )}
-        {explanation}
-        <div className="solution-notebook-preview"><GeometryNotebookLayoutV1 spec={notebookFixture} /></div>
-        {disclaimer}
-        {guestInvite}
-        {generatedSolution?.verification && <SolutionVerificationPanel verification={generatedSolution.verification} />}
-        {actions}
-      </section>
-    )
-  }
 
   if (generatedSolution) {
     return (
@@ -929,6 +876,10 @@ function UnderstandingPage({
               <h2>{generatedSolution.goal.title}:</h2>
               <p>{generatedSolution.goal.text}</p>
             </section>
+            {/* Чертёж стоит там же, где в тетради: после «Найти» и до хода
+                решения. Раньше он существовал только на SVG-листе геометрии,
+                и у остальных предметов пропадал совсем. */}
+            <NotebookDiagram diagram={generatedSolution.diagram} />
             <span className="notebook-sheet-divider" aria-hidden="true" />
             <section className="notebook-sheet-steps">
               {/* У доказательства в тетради пишут «Доказательство»: по

@@ -1446,10 +1446,17 @@
     clamp(3rem, 8%, 4.25rem);
   /* Тетрадный лист набран Onest, а не рукописной гарнитурой: рукописный
      шрифт читается хуже, съезжает по строке и на снимке экрана выглядит
-     дешевле, чем запись, которую ученик переписывает. */
+     дешевле, чем запись, которую ученик переписывает.
+
+     Строка держит шаг клетки. Клетка 1,35rem, строка ровно вдвое - запись
+     ложится на линовку, а не плывёт поверх неё. Из-за этого lh задаётся в
+     единицах, а не множителем: множитель тянется за размером шрифта и
+     ритм расходится. */
   font-family: var(--font-body);
-  font-size: clamp(0.95rem, 1.2vw, 1.05rem);
-  line-height: 1.7;
+  font-size: clamp(0.95rem, 1.15vw, 1.02rem);
+  line-height: 1.8rem;
+  /* Цифры одной ширины: «5,4·10⁶» и «136080» в столбик не пляшут. */
+  font-variant-numeric: tabular-nums;
 }
 
 .notebook-sheet-body h2 {
@@ -1458,6 +1465,20 @@
   font-size: inherit;
   font-weight: 700;
   letter-spacing: 0;
+}
+
+/* Числа и формулы - моноширинным.
+
+   «Дано» и «Ответ» это почти всегда величины: m = 200 г, Q = 5,4·10⁶ Дж.
+   Пропорциональным шрифтом степени и единицы прыгают, и колонка «Дано»
+   перестаёт читаться колонкой. Слова в этих разделах короткие, поэтому
+   моноширинный им не вредит - в отличие от хода решения, где идут целые
+   предложения с обоснованиями. */
+.notebook-sheet-given p,
+.notebook-sheet-answer p {
+  font-family: var(--font-mono);
+  font-size: 0.94em;
+  letter-spacing: -0.01em;
 }
 
 .notebook-sheet-body p { margin: 0; overflow-wrap: break-word; }
@@ -1505,6 +1526,33 @@
 .notebook-sheet-steps li::before {
   content: counter(notebook-step) ') ';
   font-weight: 700;
+}
+
+/* Чертёж на листе.
+
+   Рисунок занимает ширину записи и держит собственные пропорции: зона
+   чертежа на прежнем SVG-листе была 575×455, эти же пропорции остаются
+   и здесь. Подпись под рисунком - тем же кеглем, что и остальной лист,
+   но приглушённая: это пояснение к рисунку, а не часть решения. */
+.notebook-sheet-diagram {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  justify-items: center;
+}
+
+.notebook-sheet-diagram svg {
+  display: block;
+  width: min(100%, 26rem);
+  height: auto;
+  aspect-ratio: 575 / 455;
+}
+
+.notebook-sheet-diagram figcaption {
+  color: var(--color-text-muted);
+  font-size: 0.9em;
+  line-height: 1.4;
+  text-align: center;
 }
 
 .notebook-sheet-analysis { display: grid; min-width: 0; }

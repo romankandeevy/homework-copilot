@@ -249,12 +249,15 @@ test('task 3 renders the two correct intersection cases and fits on one sheet', 
   await page.goto('/solutions/geometry/3')
 
   await expect(page.getByRole('heading', { name: 'Решение № 3' })).toBeVisible()
-  await expect(page.getByTestId('geometry-notebook-page')).toHaveCount(1)
+  /* Лист один на все предметы: у геометрии больше нет своего SVG-листа с
+     жёсткими зонами, из-за которого «Найти» вжималось в узкую колонку, а
+     решение рвалось на «продолжение». */
+  await expect(page.locator('.notebook-sheet')).toHaveCount(1)
   await expect(page.getByRole('img', { name: 'Два случая пересечения трёх прямых: три разные точки и одна общая точка.' })).toBeVisible()
   await expect(page.locator('.geometry-diagram')).toHaveCount(1)
   await expect(page.locator('.source-diagram-image')).toHaveCount(0)
   await expect(page.getByText('Решение. (продолжение)')).toHaveCount(0)
-  await expect(page.getByText('Ответ: 1 или 3 точки')).toBeVisible()
+  await expect(page.locator('.notebook-sheet-answer')).toContainText('1 или 3 точки')
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
   await page.screenshot({ path: testInfo.outputPath('task-3-mobile.png'), fullPage: true })
   expect(failures).toEqual({ consoleErrors: [], pageErrors: [], failedResponses: [], failedRequests: [] })
@@ -274,27 +277,24 @@ test('task 4 uses symbols, the correct four-line drawing, and no grey side field
   await expect(page.getByText('A, B, C ∈ a')).toBeVisible()
   await expect(page.getByText('D ∉ a')).toBeVisible()
   await expect(page.getByText('n = n₁ + n₂ = 1 + 3 = 4.')).toBeVisible()
-  await expect(page.getByText('Ответ: 4 прямые')).toBeVisible()
+  await expect(page.locator('.notebook-sheet-answer')).toContainText('4 прямые')
   await expect(page.locator('.source-diagram-image')).toHaveCount(0)
-  await expect(page.getByTestId('geometry-notebook-page')).toHaveCount(1)
+  await expect(page.locator('.notebook-sheet')).toHaveCount(1)
 
-  const widths = await page.locator('.solution-notebook-preview').evaluate((preview) => {
-    const pageElement = preview.querySelector<HTMLElement>('.geometry-notebook-page')
+  // Чертёж вписан в лист, а не торчит за его поля.
+  const fits = await page.locator('.notebook-sheet').evaluate((sheet) => {
+    const drawing = sheet.querySelector<SVGSVGElement>('.notebook-sheet-diagram svg')
+    const sheetBox = sheet.getBoundingClientRect()
+    const drawingBox = drawing?.getBoundingClientRect()
     return {
-      preview: preview.getBoundingClientRect().width,
-      notebook: pageElement?.getBoundingClientRect().width ?? 0,
-      background: getComputedStyle(preview).backgroundColor,
+      hasDrawing: Boolean(drawing),
+      insideLeft: drawingBox ? drawingBox.left >= sheetBox.left - 1 : false,
+      insideRight: drawingBox ? drawingBox.right <= sheetBox.right + 1 : false,
     }
   })
-  expect(Math.abs(widths.preview - widths.notebook)).toBeLessThanOrEqual(2)
-  expect(widths.background).toBe('rgba(0, 0, 0, 0)')
+  expect(fits).toEqual({ hasDrawing: true, insideLeft: true, insideRight: true })
 
-  const overflowingText = await page.locator('.geometry-notebook-page text').evaluateAll((elements) => elements
-    .map((element) => ({ text: element.textContent, right: (element as SVGGraphicsElement).getBBox().x + (element as SVGGraphicsElement).getBBox().width }))
-    .filter((entry) => entry.right > 1086))
-  expect(overflowingText).toEqual([])
-
-  await page.getByTestId('geometry-notebook-page').screenshot({ path: testInfo.outputPath('task-4-sheet.png') })
+  await page.locator('.notebook-sheet').screenshot({ path: testInfo.outputPath('task-4-sheet.png') })
   await page.screenshot({ path: testInfo.outputPath('task-4-correct.png'), fullPage: true })
   expect(failures).toEqual({ consoleErrors: [], pageErrors: [], failedResponses: [], failedRequests: [] })
 })
@@ -312,14 +312,14 @@ test('task 5 is a compact checked drawing on mobile, not a text wall', async ({ 
   await expect(page.getByTestId('geometry-scene')).toBeVisible()
   await expect(page.locator('.diagram-vertex', { hasText: 'R' })).toBeVisible()
   await expect(page.locator('.diagram-vertex', { hasText: 'S' })).toBeVisible()
-  const notebookText = await page.getByTestId('geometry-notebook-page').locator('svg').textContent()
+  const notebookText = await page.locator('.notebook-sheet-steps').textContent()
   expect(notebookText?.replace(/\s/g, '')).toContain('M,N∈AB;P,Q∈a;P,Q∉AB;R,S∉a.')
   await expect(page.getByText('Проверка решения')).toBeVisible()
   await expect(page.getByText('5/5')).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Итоговые ответы движка' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Самопроверка модели' })).toBeVisible()
   await expect(page.locator('.source-diagram-image')).toHaveCount(0)
-  await expect(page.getByTestId('geometry-notebook-page')).toHaveCount(1)
+  await expect(page.locator('.notebook-sheet')).toHaveCount(1)
   await expect(page.getByText('Решение. (продолжение)')).toHaveCount(0)
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
   const verificationPanel = page.locator('.solution-verification')
