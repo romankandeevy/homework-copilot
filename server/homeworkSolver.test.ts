@@ -837,9 +837,15 @@ describe('homework solver', () => {
       fetchImpl: fetchMock,
     })
     expect(http.response.statusCode).toBe(402)
-    expect(http.body().error).toBe('На балансе меньше 5 ₽')
+    /* Цена в сообщении - цена этой задачи, а не пол цены: геометрия со
+       снимком стоит шесть рублей, и сказать «не хватает пяти» значило бы
+       соврать на рубль. */
+    expect(http.body().error).toBe('На балансе меньше 6 ₽')
     expect(fetchMock).not.toHaveBeenCalled()
     expect(rpc).toHaveBeenCalledTimes(2)
+    /* Без ключа service_role цену подписать нечем, и резерв идёт прежней
+       функцией с плоской ценой: остаться без решения из-за неподписанной
+       цены хуже, чем взять на полтинник меньше. */
     expect(rpc.mock.calls[1][0]).toBe('reserve_solution_credit')
   })
 

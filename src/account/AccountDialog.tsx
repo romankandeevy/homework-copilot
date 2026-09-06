@@ -30,7 +30,7 @@ import type { AccountData } from '../lib/supabase'
 import { supabase } from '../lib/supabase'
 import { applicationPath } from '../lib/appPath'
 import { formatRubles } from '../lib/currency'
-import { solutionPriceKopecks } from '../lib/solutionPricing'
+import { minimumSolutionPriceKopecks } from '../lib/solutionPricing'
 import { deleteMyAccount } from '../lib/accountDeletion'
 import { forgetPendingLegalAcceptance, rememberPendingLegalAcceptance } from '../lib/legalConsent'
 import { getGuestId } from '../lib/guestSolutions'
@@ -919,7 +919,15 @@ function ProfileView({ user, account, notice, initialView, theme, onToggleTheme,
         <div className="account-wallet-view">
           <section className="account-wallet-hero" aria-labelledby="account-wallet-title">
             <div><span>Доступно сейчас</span><strong id="account-wallet-title">{account ? formatRubles(account.balance) : '…'}</strong></div>
-            <div className="account-wallet-rate"><strong>{formatRubles(solutionPriceKopecks)}</strong><span>одно решение, любой предмет</span></div>
+            {/* Цена перестала быть плоской: короткая задача текстом стоит
+                четыре рубля, длинная с фотографией по счётному предмету -
+                дороже. Обещать здесь одно число нельзя, поэтому пишем пол
+                цены и то, от чего она зависит. Точная сумма стоит в форме
+                до нажатия «Решить». */}
+            <div className="account-wallet-rate">
+              <strong>от {formatRubles(minimumSolutionPriceKopecks)}</strong>
+              <span>за решение, точная цена зависит от задачи</span>
+            </div>
           </section>
 
           <ReferralCard />

@@ -51,7 +51,8 @@ React 19, TypeScript, Vite 8, motion. Serverless-функции на Vercel (Nod
   `lib/` — клиент Supabase, деньги, контракты.
 - `server/` — общая логика функций: `homeworkSolver.ts` (HTTP, оплата,
   сохранение), `geometrySolutionEngine.ts` (проходы модели и проверка),
-  `homeworkModels.ts` (модель под предмет), `chat*.ts`, `support.ts`.
+  `homeworkModels.ts` (модель под предмет), `worksheet.ts` (калькулятор
+  черновика), `chat*.ts`, `support.ts`.
 - `api/` — тонкие обёртки Vercel над `server/`.
 - `supabase/migrations/` — схема и все денежные функции.
 - `scripts/` — сборка статических маршрутов, иконки, разовые проверки.
@@ -61,8 +62,10 @@ React 19, TypeScript, Vite 8, motion. Serverless-функции на Vercel (Nod
 
 - Фронт раздаёт GitHub Pages, функции живут на Vercel. Не сводить на один
   хостинг: из России трафик к нашему домену на адресах Vercel душится.
-- Цена решения — в `private.solution_price_kopecks()` и
-  `src/lib/solutionPricing.ts`. Больше нигде.
+- Цена решения — в `src/lib/solutionPricing.ts` и её зеркале в базе
+  `private.solution_price_kopecks_for()`. Больше нигде. Цена зависит от
+  размера задачи: длина условия, снимок, предмет. Считает её сервер и
+  подписывает, база подпись проверяет — из браузера цену не назначить.
 - Миграции применяются к проду и называются той версией, которую записала база.
 - Снимки тетради не обновлять без явного согласования.
 - Ничего не обещать в интерфейсе, чего нет в коде: цена, сроки, предметы и

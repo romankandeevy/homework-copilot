@@ -128,6 +128,45 @@ describe('Homework Copilot task flow', () => {
     expect(request.imageDataUrl).toBeUndefined()
   })
 
+  /* Домашнее задание - это не одна задача.
+
+     Вечером у школьника геометрия, алгебра и физика сразу, и ставить их по
+     одной, дожидаясь каждой, - три захода вместо одного. Форма стала
+     списком: у каждой строки свой предмет и своё условие, а уходят они
+     отдельными задачами - решение у каждой своё. */
+  it('ставит несколько задач разом, каждую со своим предметом', async () => {
+    const fetchMock = installSuccessfulSolver()
+    render(<App />)
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Условие задачи' }), {
+      target: { value: 'Диагонали ромба равны 10 см и 24 см. Найдите сторону ромба.' },
+    })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Предмет' }), { target: { value: 'Геометрия' } })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ещё задача' }))
+
+    const conditions = screen.getAllByRole('textbox', { name: /Условие/ })
+    expect(conditions).toHaveLength(2)
+    fireEvent.change(conditions[1], {
+      target: { value: 'Найдите сумму всех целых решений неравенства x² − 7x + 10 < 0.' },
+    })
+    const subjects = screen.getAllByRole('combobox', { name: 'Предмет' })
+    fireEvent.change(subjects[1], { target: { value: 'Алгебра' } })
+
+    fireEvent.click(screen.getByRole('button', { name: /Решить 2 задачи/ }))
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+    const first = JSON.parse(String(fetchMock.mock.calls[0][1]?.body)) as SolveHomeworkRequest
+    const second = JSON.parse(String(fetchMock.mock.calls[1][1]?.body)) as SolveHomeworkRequest
+    expect(first.subject).toBe('Геометрия')
+    expect(second.subject).toBe('Алгебра')
+    // Ключи разные: это две задачи, а не повтор одной.
+    expect(first.idempotencyKey).not.toBe(second.idempotencyKey)
+    // И хранятся они по своему предмету, а не по предмету первой задачи.
+    expect(first.textbookId).toBe('geometry')
+    expect(second.textbookId).toBe('algebra')
+  })
+
   /* Предмет обязателен.
 
      От него зависят правила, по которым решение проверяется: «единица
@@ -381,7 +420,9 @@ describe('Homework Copilot task flow', () => {
     render(<App />)
 
     const file = new File(['photo-bytes'], 'task.png', { type: 'image/png' })
-    fireEvent.change(document.querySelector<HTMLInputElement>('#task-photo')!, { target: { files: [file] } })
+    // Полей у формы столько, сколько задач, поэтому находим ввод по типу,
+    // а не по идентификатору: он теперь свой у каждой строки списка.
+    fireEvent.change(document.querySelector<HTMLInputElement>('input[type="file"]')!, { target: { files: [file] } })
 
     expect(await screen.findByRole('img', { name: 'Приложенное фото задачи' })).toBeInTheDocument()
     expect(screen.queryByText(/распознал/i)).not.toBeInTheDocument()
