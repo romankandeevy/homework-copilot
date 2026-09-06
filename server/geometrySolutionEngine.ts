@@ -33,6 +33,8 @@ import {
   homeworkModelsForSubject,
 } from './homeworkModels.ts'
 import { subjectRuleQuestions, verifySubjectRules } from './subjectRules.ts'
+import { verifyWorksheet, verifyWorksheetDerivation } from './worksheet.ts'
+import type { WorksheetLine } from './worksheet.ts'
 
 export { homeworkSolutionEngineVersion }
 
@@ -76,6 +78,22 @@ type EngineOptions = {
   fetchImpl?: typeof fetch
   onTrace?: (event: GeometrySolutionTraceEvent) => void
   onStage?: (stage: HomeworkSolveStage) => void
+  /* Расход на один вызов модели. Шлюз возвращает его в теле ответа, и до
+     сих пор мы его выбрасывали: себестоимость решения знали только по
+     разовым замерам вручную (последний - 30 августа, на другом пуле).
+     Теперь считает сам решатель, по каждому вызову. */
+  onCost?: (event: HomeworkModelCall) => void
+}
+
+/* Один вызов модели: во что он обошёлся и чем кончился. */
+export type HomeworkModelCall = {
+  model: string
+  /* Кредиты KIE. null - шлюз не сообщил расход в этом ответе. */
+  credits: number | null
+  seconds: number
+  /* Для чего звали: черновик решения, план чертежа, починка. */
+  purpose: string
+  failed: boolean
 }
 
 type RuleCheck = {
@@ -99,6 +117,10 @@ type EngineDraft = {
   /* Ответ в краткой проверяемой форме — только для сверки проходов между
      собой. Ученику он не показывается: в тетради стоит `answer`. */
   answerKey: string
+  /* Черновик счёта: выражение и его результат на каждое вычисление. В
+     тетрадь не идёт - его считает наш калькулятор и ловит потерянный
+     множитель, который модель за собой не видит (см. worksheet.ts). */
+  worksheet: WorksheetLine[]
   diagram: HomeworkDiagram
   analysis?: HomeworkWrittenAnalysis
 }
@@ -326,7 +348,7 @@ const ruleCheckSchema = {
 const draftSchema = {
   type: 'object',
   additionalProperties: false,
-  required: ['condition', 'taskType', 'diagramRequired', 'decisions', 'sourceVerified', 'given', 'goal', 'explanation', 'steps', 'answer', 'answerKey', 'diagram', 'analysis', 'ruleChecks'],
+  required: ['condition', 'taskType', 'diagramRequired', 'decisions', 'sourceVerified', 'given', 'goal', 'explanation', 'steps', 'answer', 'answerKey', 'worksheet', 'diagram', 'analysis', 'ruleChecks'],
   properties: {
     ruleChecks: ruleCheckSchema,
     condition: { type: 'string', description: 'Точная расшифровка условия по изображению источника.' },
@@ -358,6 +380,25 @@ const draftSchema = {
     answerKey: {
       type: 'string',
       description: 'Тот же ответ в краткой проверяемой форме для сверки проходов: число с единицей, термин или короткий список.',
+    },
+    worksheet: {
+      type: 'array',
+      minItems: 0,
+      maxItems: 20,
+      description: 'Черновик счёта: по строке на каждое вычисление. Ученику не показывается, его проверяет калькулятор.',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['label', 'expression', 'value'],
+        properties: {
+          label: { type: 'string', description: 'Что именно считаем, коротко.' },
+          expression: {
+            type: 'string',
+            description: 'Выражение только из чисел, скобок, + - * / ^, √, факториала и C(n,k), A(n,k). Без букв и обозначений.',
+          },
+          value: { type: 'string', description: 'Результат этого выражения: число или дробь вида 29/405.' },
+        },
+      },
     },
     diagram: diagramSchema,
     analysis: analysisSchema,
@@ -392,6 +433,12 @@ const authorInstructions = [
   'Для construction решение — прежде всего законченный чертёж и одна короткая символическая строка; не пересказывай действия словами.',
   'В steps строительной задачи не используй глаголы и предложения: только отношения через символы, например «M, N ∈ [AB]; P, Q ∈ a ∖ [AB]; R, S ∉ a».',
   'Для чистого construction оставь answer пустым, если задача не просит числовой или словесный ответ.',
+  'В worksheet выпиши черновик счёта: по строке на каждое вычисление, из которого получается ответ.',
+  'В worksheet.expression пиши только числа, скобки, + - * / ^, √, факториал и C(n,k), A(n,k). Никаких букв, обозначений и словесных подписей: это выражение считает калькулятор.',
+  'В worksheet.value поставь результат именно этого выражения: число или дробь вида 29/405. Что написано в expression, то и должно получиться в value.',
+  'Каждое число, которое входит в ответ или в шаги решения, должно быть выведено строкой worksheet. Если величина взята из условия, а не посчитана, строка не нужна.',
+  'Число больше 12, которое стоит внутри выражения, обязано быть либо в условии, либо результатом другой строки worksheet. Посчитал в уме количество случаев - выпиши сам перебор отдельной строкой, например «наборов с суммой, кратной 3» :: C(3,3)*C(3,1)*C(3,1) + C(3,1)*C(3,3) = 12.',
+  'Черновик ученику не показывается: он существует, чтобы наш калькулятор пересчитал за тобой и поймал потерянный множитель.',
   'В answerKey положи тот же ответ в самой краткой проверяемой форме: число с единицей, термин, '
     + 'слово или короткий список через запятую. Без пояснений, без повтора условия, не длиннее 60 знаков. '
     + 'По нему два независимых прохода сверяются между собой, поэтому он должен быть одинаков у любого, '
@@ -842,6 +889,21 @@ function normalizeRuleChecks(value: unknown): RuleCheck[] {
     .slice(0, 12)
 }
 
+/* Черновик приходит из схемы, но схема гарантирует только форму. Длину и
+   мусор режем здесь: считать нам, а не модели. */
+function normalizeWorksheet(value: unknown): WorksheetLine[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === 'object' && !Array.isArray(entry))
+    .map((entry) => ({
+      label: text(entry.label, 80),
+      expression: text(entry.expression, 120),
+      value: text(entry.value, 40),
+    }))
+    .filter((line) => line.expression.length > 0 && line.value.length > 0)
+    .slice(0, 20)
+}
+
 function normalizeDraft(value: unknown, limits = tightNotebookLimits): EngineDraft {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new GeometrySolutionEngineError('Модель не вернула решение')
@@ -891,6 +953,7 @@ function normalizeDraft(value: unknown, limits = tightNotebookLimits): EngineDra
       : [],
     answer: clampNotebookLine(normalizeNotebookNotation(candidate.answer), limits.answer),
     answerKey: normalizeNotebookNotation(candidate.answerKey, 60),
+    worksheet: normalizeWorksheet(candidate.worksheet),
     diagram: normalizeDiagram(candidate.diagram),
     ...(analysis ? { analysis } : {}),
   }
@@ -1010,6 +1073,19 @@ function engineRequestBody(
   }
 }
 
+/* Расход на вызов. Шлюз кладёт его в тело ответа - иногда рядом с ответом,
+   иногда внутри usage. Нет поля - значит шлюз не сообщил, и придумывать
+   число нельзя: пусть в журнале будет пусто, а не выдуманный ноль. */
+function modelCallCredits(payload: unknown): number | null {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null
+  const root = payload as Record<string, unknown>
+  const usage = root.usage && typeof root.usage === 'object' && !Array.isArray(root.usage)
+    ? root.usage as Record<string, unknown>
+    : {}
+  const value = root.credits_consumed ?? usage.credits_consumed ?? root.credits
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
 async function callModel(
   options: EngineOptions,
   system: string,
@@ -1019,6 +1095,37 @@ async function callModel(
   modelOverride?: string,
 ) {
   const model = modelOverride || options.model || defaultHomeworkModel
+  const startedAt = Date.now()
+  let credits: number | null = null
+  let failed = true
+  try {
+    const payload = await requestModel(options, system, message, schemaName, schema, model)
+    credits = modelCallCredits(payload)
+    const { protocol } = engineEndpoint(model)
+    const parsed = parseJson(protocol === 'responses' ? responsesContent(payload) : providerContent(payload))
+    failed = false
+    return parsed
+  } finally {
+    // Вызов оплачен и тогда, когда ответ пришёл негодным: платим за токены,
+    // а не за годность. Поэтому расход пишется и на отказе.
+    options.onCost?.({
+      model,
+      credits,
+      seconds: (Date.now() - startedAt) / 1000,
+      purpose: schemaName,
+      failed,
+    })
+  }
+}
+
+async function requestModel(
+  options: EngineOptions,
+  system: string,
+  message: ReturnType<typeof engineMessage>,
+  schemaName: string,
+  schema: object,
+  model: string,
+): Promise<unknown> {
   const { protocol, url } = engineEndpoint(model)
   let response: Response
   try {
@@ -1072,7 +1179,7 @@ async function callModel(
     }
   }
 
-  return parseJson(protocol === 'responses' ? responsesContent(payload) : providerContent(payload))
+  return payload
 }
 
 /* Правила предмета в промпте.
@@ -1835,6 +1942,13 @@ export async function solveHomeworkWithReview(
       ...candidate.ruleChecks
         .filter((check) => !check.passed)
         .map((check) => `Правило предмета не выполнено: ${check.rule}`),
+      /* Счёт проверяет калькулятор, а не модель: 6 сентября обе модели
+         уронили один множитель в переборе случаев и не заметили этого ни
+         при самопроверке, ни при обратной подстановке. */
+      ...verifyWorksheet(candidate.worksheet),
+      // И отдельно - откуда взялось число: «36 * 120 = 4320» считается
+      // верно, а неверна сама 36, которую никто не выводил.
+      ...verifyWorksheetDerivation(candidate.worksheet, candidate.condition),
     ]
     if (request.condition && conditionSimilarity(request.condition, candidate.condition) < 0.55) {
       issues.push('Условие кандидата не совпадает с приложенным заданием')
@@ -1993,6 +2107,7 @@ export async function solveHomeworkWithReview(
     'Если среди замечаний есть отсутствующий или неполный чертёж — обязательно заполни diagram.kind = "construction",',
     'опиши сцену через scene: точки с координатами, объекты и проверяемые constraints. Пустой scene недопустим.',
     'Объяснение перед решением (explanation) сохрани и при необходимости дополни, но не удаляй.',
+    'Если замечание про черновик - пересчитай выражение сам и исправь ВСЕ числа, которые из него следуют: шаги, ответ и answerKey.',
     `Версия для исправления: ${JSON.stringify(draft)}`,
   ].join('\n')
 

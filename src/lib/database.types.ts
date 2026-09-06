@@ -842,6 +842,20 @@ export type Database = {
         Args: { p_solution: Json }
         Returns: string
       }
+      record_solution_cost: {
+        Args: {
+          p_subject: string
+          p_source: string
+          p_models: string
+          p_calls: number
+          p_credits: number | null
+          p_cost_kopecks: number | null
+          p_price_kopecks: number
+          p_seconds: number
+          p_outcome: string
+        }
+        Returns: undefined
+      }
       claim_guest_solution: {
         Args: { p_guest_id: string; p_idempotency_key: string; p_ip_hash?: string | null }
         Returns: boolean

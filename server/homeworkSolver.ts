@@ -6,7 +6,7 @@ import { homeworkSolutionEngineVersion, maxConditionLength } from '../src/lib/ho
 import type { HomeworkSolution, HomeworkTaskType, SolveHomeworkRequest } from '../src/lib/homeworkContract.ts'
 import type { Database, Json } from '../src/lib/database.types.ts'
 import { formatRubles } from '../src/lib/currency.ts'
-import { getSolutionPrice } from '../src/lib/solutionPricing.ts'
+import { getSolutionPrice, kieCreditKopecks } from '../src/lib/solutionPricing.ts'
 import { isSolvableSubject } from '../src/lib/subjects.ts'
 import { findVerifiedTextbookTask, geometryTextbookIdentity, normalizeTaskCondition } from '../src/textbooks/taskCatalog.ts'
 import {
@@ -17,7 +17,7 @@ import {
   solveHomeworkWithReview,
   validateSolutionQuality,
 } from './geometrySolutionEngine.ts'
-import type { HomeworkSolveStage } from './geometrySolutionEngine.ts'
+import type { HomeworkModelCall, HomeworkSolveStage } from './geometrySolutionEngine.ts'
 
 type SolverOptions = {
   apiKey?: string
@@ -71,6 +71,7 @@ export async function solveWithKie(
   options: SolverOptions,
   ownerId?: string,
   onStage?: (stage: HomeworkSolveStage) => void,
+  onCost?: (call: HomeworkModelCall) => void,
 ): Promise<HomeworkSolution> {
   const verifiedTask = request.source === 'number'
     ? findVerifiedTextbookTask(request.textbookId, request.edition, request.task)
@@ -119,6 +120,7 @@ export async function solveWithKie(
       model: options.model,
       fetchImpl: options.fetchImpl,
       ...(onStage ? { onStage } : {}),
+      ...(onCost ? { onCost } : {}),
     }, ownerId)
   } catch (error) {
     if (!(error instanceof GeometrySolutionEngineError)) throw error
@@ -768,6 +770,73 @@ function requestId(request: IncomingMessage) {
   return Array.isArray(value) ? value[0] : value ?? 'local'
 }
 
+/* Себестоимость решения.
+
+   Цена решения выведена из замера 30 августа: 18 копеек за выданный разбор
+   при цене 5 ₽. Замер был ручной, на другом пуле и на восьми задачах - с тех
+   пор сменились и пул, и устройство прохода. 6 сентября выяснилось, чего
+   стоит такая слепота: один вызов gpt-5-6-sol на трудной комбинаторике
+   обошёлся в 6,10 кредита - 3 ₽ из пяти, и это без починки.
+
+   Поэтому расход считается сам, на каждой задаче: сколько было вызовов,
+   какими моделями и во сколько они обошлись. Кредиты приходят от шлюза в
+   теле ответа; молчит шлюз - в журнале пусто, а не выдуманный ноль. */
+type SolveCostSummary = {
+  calls: number
+  credits: number | null
+  kopecks: number | null
+  models: string
+  modelSeconds: number
+}
+
+function summarizeSolveCost(calls: readonly HomeworkModelCall[]): SolveCostSummary {
+  const known = calls.filter((call) => call.credits !== null)
+  const credits = known.length > 0
+    ? Number(known.reduce((total, call) => total + (call.credits ?? 0), 0).toFixed(4))
+    : null
+  const perModel = new Map<string, number>()
+  for (const call of calls) perModel.set(call.model, (perModel.get(call.model) ?? 0) + 1)
+  return {
+    calls: calls.length,
+    credits,
+    kopecks: credits === null ? null : Math.round(credits * kieCreditKopecks),
+    models: [...perModel].map(([model, count]) => (count > 1 ? `${model}×${count}` : model)).join(','),
+    modelSeconds: Number(calls.reduce((total, call) => total + call.seconds, 0).toFixed(1)),
+  }
+}
+
+/* Замер живёт дольше журнала. Логи Vercel хранятся считаные дни, а цену
+   пересматривают по неделям наблюдений, поэтому расход ещё и записывается
+   в базу - служебной ролью, мимо ученика. Не записалось - решение всё
+   равно уходит: учёт не повод терять оплаченный разбор. */
+async function recordSolveCost(
+  options: SolverOptions,
+  request: SolveHomeworkRequest,
+  cost: SolveCostSummary,
+  outcome: 'solved' | 'failed',
+  seconds: number,
+): Promise<void> {
+  if (cost.calls === 0) return
+  const admin = guestAdminClient(options)
+  if (!admin) return
+
+  try {
+    await admin.rpc('record_solution_cost', {
+      p_subject: request.subject,
+      p_source: request.source,
+      p_models: cost.models,
+      p_calls: cost.calls,
+      p_credits: cost.credits,
+      p_cost_kopecks: cost.kopecks,
+      p_price_kopecks: getSolutionPrice(),
+      p_seconds: Number(seconds.toFixed(1)),
+      p_outcome: outcome,
+    })
+  } catch {
+    // Учёт себестоимости - не часть решения задачи.
+  }
+}
+
 function logSolverEvent(
   level: 'info' | 'error',
   event: string,
@@ -835,9 +904,13 @@ export async function handleHomeworkSolverRequest(
   let source: SolveHomeworkRequest['source'] | undefined
   let stage = 'validate'
   let job: JobReporter = { report: () => {}, flush: async () => {} }
+  // Во что обошлась задача: по строке на каждый вызов модели.
+  const modelCalls: HomeworkModelCall[] = []
+  let solveTask: SolveHomeworkRequest | null = null
 
   try {
     const task = await validateRequest(await readJsonBody(request), options)
+    solveTask = task
     taskNumber = task.task
     source = task.source
     logSolverEvent('info', 'homework_solve_started', {
@@ -895,7 +968,13 @@ export async function handleHomeworkSolverRequest(
       // это обычной неудачей: возврат отрабатывает штатно, а ответ уходит
       // с понятной причиной, пока функция ещё жива.
       const solution = await Promise.race([
-        solveWithKie(task, options, account?.userId, (modelStage) => job.report(modelStage)),
+        solveWithKie(
+          task,
+          options,
+          account?.userId,
+          (modelStage) => job.report(modelStage),
+          (call) => modelCalls.push(call),
+        ),
         solveDeadline(),
       ])
       stage = 'persist'
@@ -907,12 +986,18 @@ export async function handleHomeworkSolverRequest(
       // Гостю сохраняем по метке браузера: иначе решение существует только
       // в этом ответе и пропадает вместе с перезагруженной вкладкой.
       if (guestSolving) await storeGuestSolution(guestSolving, task, completedSolution, options)
+      const cost = summarizeSolveCost(modelCalls)
       logSolverEvent('info', 'homework_solve_completed', {
         requestId: solveRequestId,
         task: taskNumber,
         source,
         durationMs: Date.now() - startedAt,
+        modelCalls: cost.calls,
+        models: cost.models,
+        credits: cost.credits ?? undefined,
+        costKopecks: cost.kopecks ?? undefined,
       })
+      await recordSolveCost(options, task, cost, 'solved', (Date.now() - startedAt) / 1000)
       job.report('done', { task: completedSolution.task })
       await job.flush()
       sendJson(response, 200, { solution: completedSolution })
@@ -933,6 +1018,7 @@ export async function handleHomeworkSolverRequest(
        нормальный ответ продукта, а не сбой. В журнале ошибок они лежали рядом
        с настоящими отказами и превращали разбор простоя в перебор шума. */
     const expectedOutcome = status === 402 || status === 400 || status === 422
+    const failedCost = summarizeSolveCost(modelCalls)
     logSolverEvent(expectedOutcome ? 'info' : 'error', 'homework_solve_failed', {
       requestId: solveRequestId,
       task: taskNumber,
@@ -941,7 +1027,13 @@ export async function handleHomeworkSolverRequest(
       status,
       durationMs: Date.now() - startedAt,
       error: error instanceof HomeworkSolverError ? error.message : 'unexpected solver error',
+      modelCalls: failedCost.calls,
+      models: failedCost.models,
+      credits: failedCost.credits ?? undefined,
+      costKopecks: failedCost.kopecks ?? undefined,
     })
+    // Неудача стоит нам столько же: за токены платят, а не за годность.
+    if (solveTask) await recordSolveCost(options, solveTask, failedCost, 'failed', (Date.now() - startedAt) / 1000)
     if (error instanceof HomeworkSolverError) {
       sendJson(response, error.status, { error: error.message })
       return

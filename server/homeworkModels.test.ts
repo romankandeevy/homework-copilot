@@ -8,27 +8,37 @@ import {
 
 /* Модель выбирается предметом.
 
-   6 сентября общий пул выдал на комбинаторике 8616 вместо 9744: быстрая
-   модель не держит длинную счётную цепочку. Держать её должна голова пула
-   счётного предмета, а на разборе слова платить за неё нечем. */
+   Пул перестал быть общим, чтобы порядок моделей можно было менять по
+   предметам, не трогая остальные. Головы при этом одинаковые: замер
+   6 сентября показал, что дорогая reasoning-модель ошибается там же, где
+   дешёвая, только вчетверо дороже. */
 
 describe('модель под предмет', () => {
-  it('на счётном предмете первой идёт reasoning-модель', () => {
-    expect(homeworkModelsForSubject('Математика')[0]).toBe('gpt-5-6-sol')
-    expect(homeworkModelsForSubject('Физика')[0]).toBe('gpt-5-6-sol')
-    expect(homeworkModelsForSubject('Информатика')[0]).toBe('gpt-5-6-sol')
+  /* Головой везде стоит проверенная быстрая модель. Дорогую reasoning
+     6 сентября прогнали полным решателем на той самой комбинаторике:
+     75 секунд, 6,10 кредита и НЕВЕРНЫЙ ответ - вчетверо дороже за тот же
+     промах. Держим её последней, на отказ шлюза. */
+  it('везде первой идёт проверенная быстрая модель', () => {
+    for (const subject of ['Математика', 'Физика', 'Информатика', 'Русский язык', 'История', 'Геометрия']) {
+      expect(homeworkModelsForSubject(subject)[0], subject).toBe('gemini-3-6-flash-openai')
+    }
   })
 
-  it('на предмете слова и на геометрии первой идёт быстрая модель', () => {
-    expect(homeworkModelsForSubject('Русский язык')[0]).toBe('gemini-3-6-flash-openai')
-    expect(homeworkModelsForSubject('История')[0]).toBe('gemini-3-6-flash-openai')
-    // Геометрии нужен чертёж, а не длинный счёт: там быстрая модель проверена.
-    expect(homeworkModelsForSubject('Геометрия')[0]).toBe('gemini-3-6-flash-openai')
+  it('дорогая модель стоит последней, а не первой', () => {
+    const counting = homeworkModelsForSubject('Математика')
+    expect(counting.at(-1)).toBe('gpt-5-6-sol')
+    expect(counting.indexOf('gpt-5-6-sol')).toBeGreaterThan(0)
+  })
+
+  it('у счётного предмета и предмета слова порядок разный', () => {
+    // Разделение остаётся: замер по предметам ещё не сделан, но место для
+    // него есть, и менять пул одного предмета можно, не трогая остальные.
+    expect(homeworkModelsForSubject('Геометрия')).not.toEqual(homeworkModelsForSubject('Русский язык'))
   })
 
   it('понимает и название предмета, и его идентификатор', () => {
     expect(homeworkModelsForSubject('mathematics')).toEqual(homeworkModelsForSubject('Математика'))
-    expect(homeworkModelsForSubject('  Химия  ')[0]).toBe('gpt-5-6-sol')
+    expect(homeworkModelsForSubject('  Химия  ')[0]).toBe('gemini-3-6-flash-openai')
   })
 
   it('у незнакомого предмета остаётся общий пул', () => {
@@ -48,6 +58,7 @@ describe('модель под предмет', () => {
   it('дорогих моделей в пулах нет: вызов не может стоить больше решения', () => {
     // Решение стоит 5 ₽, кредит — примерно 0,5 ₽. gpt-5-5 берёт 12 кредитов.
     const banned = ['gpt-5-5', 'gpt-5-6-luna', 'claude-opus-5', 'grok-4-6']
+    expect(Object.keys(homeworkModelsBySubject).length).toBeGreaterThan(0)
     for (const pool of Object.values(homeworkModelsBySubject)) {
       for (const model of banned) expect(pool).not.toContain(model)
     }
