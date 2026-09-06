@@ -2221,7 +2221,108 @@
   margin-top: var(--space-3);
 }
 
-.task-controls #task-photo {
+/* Список задач.
+
+   Домашнее задание задают не по одному предмету, поэтому форма - список.
+   Пока задача одна, список выглядит ровно как прежняя форма: ни рамок, ни
+   нумерации, ни лишнего слова. Всё это появляется со второй задачей, когда
+   разделять их действительно нужно. */
+.task-entries {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.task-entries > li + li {
+  padding-top: var(--space-4);
+  border-top: var(--border-thin) solid var(--color-border);
+}
+
+.task-entry-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.task-entry-number {
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+}
+
+.task-entry-price {
+  margin-inline-start: auto;
+  color: var(--color-text-muted);
+  font-size: var(--text-small);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.task-entry-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: var(--border-thin) solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.task-entry-remove:hover {
+  border-color: var(--color-border-strong);
+  color: var(--color-text);
+}
+
+.task-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.task-add {
+  display: inline-flex;
+  min-height: 3rem;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-4);
+  border: var(--border-thin) dashed var(--color-border-strong);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-small);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+}
+
+.task-add:hover {
+  border-style: solid;
+  background: var(--color-surface-sunken);
+}
+
+.task-actions .copy-task-submit {
+  margin-inline-start: auto;
+}
+
+@media (max-width: 40rem) {
+  .task-actions .copy-task-submit,
+  .task-add {
+    flex: 1 1 100%;
+    margin-inline-start: 0;
+  }
+}
+
+.task-controls input[type="file"] {
   position: absolute;
   width: 1px;
   height: 1px;

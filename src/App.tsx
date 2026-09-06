@@ -53,7 +53,6 @@ import {
   isReviewedHomeworkSolution,
   loadGeneratedSolutions,
   parseStoredHomeworkSolution,
-  prepareTaskPhoto,
   requestHomeworkSolution,
   serverAcceptLimitMs,
   SolutionConnectionLostError,
@@ -1627,20 +1626,33 @@ function HomePage() {
      Раньше сюда шёл `selectedTextbookId` из прежнего выбора учебника, и
      задача по русскому языку сохранялась под геометрией — в «Моих решениях»
      она так и подписывалась. */
-  const submitFromForm = async (submission: TaskSubmission) => {
-    const imageDataUrl = submission.photo ? await prepareTaskPhoto(submission.photo) : undefined
-    return enqueueTask({
-      // Срез обрезается по границе слова trim-ом: сервер всё равно прогоняет
-      // подпись через trim, и различие в хвостовой пробел ломало сверку.
-      task: submission.condition.slice(0, 60).trim() || 'Задача с фото',
-      source: submission.source,
-      idempotencyKey: submission.idempotencyKey,
-      textbookId: findSubjectByName(submission.subject)?.id ?? selectedTextbookId,
-      subject: submission.subject,
-      ...(submission.condition ? { condition: submission.condition } : {}),
-      ...(imageDataUrl ? { imageDataUrl } : {}),
-      ...(submission.grade ? { grade: submission.grade } : {}),
-    })
+  /* Форма отдаёт список задач: домашнее задание редко состоит из одной.
+
+     Ставим их по очереди, а не разом: очередь и так решает по одной, а
+     последовательная постановка сохраняет порядок, в котором ученик их
+     набирал, и не устраивает залп из пяти резервов оплаты сразу. Если
+     где-то посередине не хватило денег, поставленные раньше остаются - о
+     том, что встало, скажет очередь. */
+  const submitFromForm = async (submissions: TaskSubmission[]) => {
+    let queued = false
+    for (const submission of submissions) {
+      // eslint-disable-next-line no-await-in-loop
+      const accepted = await enqueueTask({
+        // Срез обрезается по границе слова trim-ом: сервер всё равно прогоняет
+        // подпись через trim, и различие в хвостовой пробел ломало сверку.
+        task: submission.condition.slice(0, 60).trim() || 'Задача с фото',
+        source: submission.source,
+        idempotencyKey: submission.idempotencyKey,
+        textbookId: findSubjectByName(submission.subject)?.id ?? selectedTextbookId,
+        subject: submission.subject,
+        ...(submission.condition ? { condition: submission.condition } : {}),
+        ...(submission.imageDataUrl ? { imageDataUrl: submission.imageDataUrl } : {}),
+        ...(submission.grade ? { grade: submission.grade } : {}),
+      })
+      if (!accepted) return queued
+      queued = true
+    }
+    return queued
   }
 
   // Гость держит очередь на своей метке браузера: аккаунта у него нет,

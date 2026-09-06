@@ -7,7 +7,9 @@ const imagePath = path.resolve('public/og-card.png')
 // в форме нет, а кнопки называются «Решить» и «Заменить фото».
 async function attachPhoto(page: import('@playwright/test').Page) {
   await page.goto('/app')
-  await page.setInputFiles('#task-photo', imagePath)
+  // Полей столько, сколько задач в списке: у каждой строки свой ввод файла,
+  // поэтому берём первый, а не единственный.
+  await page.setInputFiles('input[type="file"]', imagePath)
   await expect(page.getByRole('img', { name: 'Приложенное фото задачи' })).toBeVisible()
 }
 

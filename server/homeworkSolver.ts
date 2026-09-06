@@ -6,7 +6,7 @@ import { homeworkSolutionEngineVersion, maxConditionLength } from '../src/lib/ho
 import type { HomeworkSolution, HomeworkTaskType, SolveHomeworkRequest } from '../src/lib/homeworkContract.ts'
 import type { Database, Json } from '../src/lib/database.types.ts'
 import { formatRubles } from '../src/lib/currency.ts'
-import { getSolutionPrice, kieCreditKopecks } from '../src/lib/solutionPricing.ts'
+import { estimateSolutionPrice, kieCreditKopecks } from '../src/lib/solutionPricing.ts'
 import { isSolvableSubject } from '../src/lib/subjects.ts'
 import { findVerifiedTextbookTask, geometryTextbookIdentity, normalizeTaskCondition } from '../src/textbooks/taskCatalog.ts'
 import {
@@ -470,19 +470,84 @@ async function authenticateAccount(
 // идемпотентности проходили её одновременно и запускали модель несколько раз,
 // а списывалось за один. Резерв идемпотентен по ключу запроса; если решение
 // получить не удалось, он возвращается через refundSolutionCredit.
+/* Вызов функции базы, которой ещё нет в сгенерированных типах.
+
+   `database.types.ts` собирается по схеме прода, а новые денежные функции
+   ждут применения миграции. Пока их там нет, TypeScript о них не знает.
+   Заглушка узкая - имя и аргументы, - и снимается перегенерацией типов
+   сразу после того, как миграция применится. */
+type RpcClient = { rpc: (name: string, args: Record<string, unknown>) => unknown }
+
+async function callRpc(
+  client: SupabaseClient<Database>,
+  name: string,
+  args: Record<string, unknown>,
+): Promise<{ data: unknown; error: { message: string } | null }> {
+  return await (client as unknown as RpcClient).rpc(name, args) as {
+    data: unknown
+    error: { message: string } | null
+  }
+}
+
+/* Цена задачи. Считает сервер, а не браузер: число, присланное клиентом,
+   ничем не подтверждается, и решение за рубль стало бы делом одной правки
+   в консоли. Формула одна на всех - src/lib/solutionPricing.ts, - поэтому
+   сумма в форме и сумма в кошельке сходятся. */
+export function solutionPriceFor(request: SolveHomeworkRequest) {
+  return estimateSolutionPrice({
+    conditionLength: request.condition?.length ?? 0,
+    imageBytes: request.imageDataUrl?.length ?? 0,
+    subject: request.subject,
+  })
+}
+
+/* Подпись цены. Секрет живёт в базе и сервер его не видит: база сама
+   считает HMAC и сама же проверяет его в reserve_solution_credit_v2.
+   Не подписалось - идём прежним путём с плоской ценой: остаться без
+   решения из-за неподписанной цены хуже, чем взять на полтинник меньше. */
+async function signSolutionPrice(
+  options: SolverOptions,
+  request: SolveHomeworkRequest,
+  price: number,
+): Promise<string | null> {
+  const admin = guestAdminClient(options)
+  if (!admin) return null
+  try {
+    const { data, error } = await callRpc(admin, 'sign_solution_price', {
+      p_idempotency_key: request.idempotencyKey,
+      p_price_kopecks: price,
+    })
+    return !error && typeof data === 'string' ? data : null
+  } catch {
+    return null
+  }
+}
+
 async function reserveSolutionCredit(
   account: AuthenticatedAccount | null,
   request: SolveHomeworkRequest,
+  options?: SolverOptions,
 ): Promise<boolean> {
   if (!account) return false
-  const price = getSolutionPrice()
-  const { data, error } = await account.client.rpc('reserve_solution_credit', {
-    p_idempotency_key: request.idempotencyKey,
-    p_task_number: Number.isFinite(Number(request.task)) ? Number(request.task) : null,
-    p_textbook_id: request.textbookId,
-    p_source: request.source,
-    p_description: 'Решение задачи ' + request.task,
-  })
+  const price = solutionPriceFor(request)
+  const proof = options ? await signSolutionPrice(options, request, price) : null
+  const { data, error } = proof
+    ? await callRpc(account.client, 'reserve_solution_credit_v2', {
+      p_idempotency_key: request.idempotencyKey,
+      p_price_kopecks: price,
+      p_price_proof: proof,
+      p_task_number: Number.isFinite(Number(request.task)) ? Number(request.task) : null,
+      p_textbook_id: request.textbookId,
+      p_source: request.source,
+      p_description: 'Решение задачи ' + request.task,
+    })
+    : await account.client.rpc('reserve_solution_credit', {
+      p_idempotency_key: request.idempotencyKey,
+      p_task_number: Number.isFinite(Number(request.task)) ? Number(request.task) : null,
+      p_textbook_id: request.textbookId,
+      p_source: request.source,
+      p_description: 'Решение задачи ' + request.task,
+    })
 
   if (error) {
     if (error.message.includes('insufficient balance')) {
@@ -499,7 +564,12 @@ async function reserveSolutionCredit(
     throw new HomeworkSolverError(502, 'Не получилось зарезервировать оплату')
   }
 
-  return Boolean(data && typeof data === 'object' && !Array.isArray(data) && data.reserved === true)
+  return Boolean(
+    data
+    && typeof data === 'object'
+    && !Array.isArray(data)
+    && (data as { reserved?: unknown }).reserved === true,
+  )
 }
 
 // Гостевой резерв. Денег у гостя нет, поэтому «резервируется» единственная
@@ -693,7 +763,8 @@ async function completeStoredSolution(
   options?: SolverOptions,
 ): Promise<HomeworkSolution | null> {
   if (!account) return solution ?? null
-  const price = getSolutionPrice()
+  // Сообщение о нехватке денег называет цену этой задачи, а не пол цены.
+  const price = solutionPriceFor(request)
   const condition = request.condition ?? solution?.condition ?? ''
   const conditionNormalized = normalizeTaskCondition(condition)
   // Решение, сгенерированное движком, подписываем перед сохранением.
@@ -850,7 +921,7 @@ async function recordSolveCost(
       p_calls: cost.calls,
       p_credits: cost.credits,
       p_cost_kopecks: cost.kopecks,
-      p_price_kopecks: getSolutionPrice(),
+      p_price_kopecks: solutionPriceFor(request),
       p_seconds: Number(seconds.toFixed(1)),
       p_outcome: outcome,
     })
@@ -1001,7 +1072,7 @@ export async function handleHomeworkSolverRequest(
       ? false
       : guestSolving
         ? await claimGuestSolution(guestSolving, task, options)
-        : await reserveSolutionCredit(account, task)
+        : await reserveSolutionCredit(account, task, options)
     try {
       stage = 'generate'
       // Собственный срок короче потолка функции.
