@@ -243,7 +243,7 @@ const schematicSchema = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['id', 'symbol', 'x', 'y', 'rotation', 'length', 'label'],
+        required: ['id', 'symbol', 'x', 'y', 'rotation', 'length', 'label', 'anchor'],
         properties: {
           id: { type: 'string', description: 'Короткий уникальный идентификатор: R1, L, E, F1.' },
           symbol: { type: 'string', enum: [...homeworkSchematicSymbols] },
@@ -252,6 +252,10 @@ const schematicSchema = {
           rotation: { type: 'number', description: 'Поворот в градусах по часовой: 0 - горизонтально, 90 - вертикально. У vector, ray, arrow - направление стрелки.' },
           length: { type: 'number', description: 'Длина в единицах поля для vector, ray, arrow, incline, rope, tube, ground, wall, mirror, lens. Иначе 0.' },
           label: { type: 'string', description: 'Короткая подпись: «R₁ = 4 Ом», «F», «H₂».' },
+          anchor: {
+            type: 'string',
+            description: 'Для vector, ray и arrow - id элемента, к которому приложена стрелка: сила рисуется от его центра. Пусто, если стрелка ни к чему не приложена.',
+          },
         },
       },
     },
@@ -577,7 +581,7 @@ const authorInstructions = [
   'schematic.kind: circuit - электрическая цепь, forces - силы на теле, optics - лучи и приборы, setup - химическая или физическая установка.',
   'Элемент ставится центром в поле 0..100 (y вниз); значок занимает 10×10, поэтому элементы не ближе 12 друг к другу. rotation 0 - горизонтально, 90 - вертикально. У vector, ray, arrow rotation - направление стрелки (0 вправо, 90 вниз, 270 вверх), length - длина; у incline, rope, tube, ground, wall, mirror, lens - length.',
   'Цепь рисуй прямоугольником: элементы по сторонам, соединения kind=wire между соседями по контуру, чтобы каждый элемент имел два провода и цепь замкнулась. Источник - battery, подпись «ε» или «U». Подписи элементов - короткие имена «R₁», «R₂», «U»: значения уже стоят в «Дано», а две длинные подписи на одной стороне контура налезают друг на друга.',
-  'Силы: body в центре, ground или incline под ним, каждая сила - vector с началом в центре тела (x, y тела) и подписью «mg», «N», «F тр». Ход лучей: object-arrow, линза или зеркало, лучи ray, изображение - object-arrow пунктиром не задаётся, ставь второй object-arrow с подписью.',
+  'Силы: body в центре, ground или incline под ним, каждая сила - vector с anchor=id тела и подписью «mg», «N», «F тр». Стрелку рисует лист от центра тела, поэтому её x и y ставь равными координатам тела и не разноси их: правило «не ближе 12 единиц» к паре «сила и её тело» не относится. Ход лучей: object-arrow, линза или зеркало, лучи ray, изображение - object-arrow пунктиром не задаётся, ставь второй object-arrow с подписью.',
   'Схема нужна, когда условие просит «начертите схему», «изобразите силы», «постройте ход лучей», «нарисуйте прибор», или когда без неё физическую задачу в тетради не оформляют: цепь с несколькими резисторами, тело на наклонной плоскости, линза с предметом. Для чистого расчёта по формуле схема не обязательна.',
   'Координаты scene — локальная геометрическая плоскость 0..100, а не координаты страницы.',
   'line, segment и ray задаются двумя точками; circle — центром и точкой окружности; polyline и polygon — последовательностью точек.',
@@ -1028,6 +1032,7 @@ function normalizeSchematic(value: unknown): HomeworkSchematic | null {
       rotation: Number.isFinite(rotation) ? rotation : 0,
       length: Number.isFinite(length) && length > 0 ? Math.min(length, 100) : 0,
       label: normalizeNotebookNotation(element.label, 16),
+      ...(text(element.anchor, 8) ? { anchor: text(element.anchor, 8) } : {}),
     }]
   }).slice(0, 16)
   if (elements.length === 0) return null
@@ -1846,11 +1851,27 @@ function schematicIssues(schematic: HomeworkSchematic | undefined) {
   for (const element of schematic.elements) {
     if (element.x < 0 || element.x > 100 || element.y < 0 || element.y > 100) issues.push(`Элемент ${element.id} вне поля 0..100`)
   }
+  /* Стрелка и тело, к которому она приложена, - не два разных значка.
+
+     7 сентября на проде схема к задаче про стержень на рельсах вышла с
+     оторванными F_A и m·g: эта же проверка требовала развести любые два
+     элемента на восемь единиц и растаскивала силу с телом, к которому она
+     приложена. Сила приложена к телу и рисуется от его центра. */
+  const anchored = new Set(schematic.elements.flatMap((element) => (
+    element.anchor ? [`${element.id}:${element.anchor}`, `${element.anchor}:${element.id}`] : []
+  )))
   for (const [index, element] of schematic.elements.entries()) {
     for (const other of schematic.elements.slice(index + 1)) {
       if (element.symbol === 'text' || other.symbol === 'text') continue
+      if (anchored.has(`${element.id}:${other.id}`)) continue
       if (distance(element, other) < 8) issues.push(`Элементы ${element.id} и ${other.id} накладываются: разнеси их не меньше чем на 10 единиц`)
     }
+  }
+  const byId = new Map(schematic.elements.map((element) => [element.id, element]))
+  for (const element of schematic.elements) {
+    if (!element.anchor) continue
+    if (element.anchor === element.id) issues.push(`Стрелка ${element.id} приложена сама к себе`)
+    else if (!byId.has(element.anchor)) issues.push(`Стрелка ${element.id} приложена к несуществующему элементу ${element.anchor}`)
   }
   if (schematic.kind === 'circuit') {
     if (!symbols.has('battery')) issues.push('В схеме цепи нет источника тока (battery)')
@@ -1865,6 +1886,12 @@ function schematicIssues(schematic: HomeworkSchematic | undefined) {
   if (schematic.kind === 'forces') {
     if (!symbols.has('vector')) issues.push('На схеме сил нет ни одной стрелки силы (vector)')
     if (!symbols.has('body')) issues.push('На схеме сил нет тела (body)')
+    // Сила без точки приложения на схеме сил бессмысленна: она обязана
+    // начинаться на теле, а не висеть рядом с ним.
+    const loose = schematic.elements.filter((element) => element.symbol === 'vector' && !element.anchor)
+    if (loose.length > 0) {
+      issues.push(`У сил ${loose.map((element) => element.id).join(', ')} нет anchor: укажи id тела, к которому приложена стрелка`)
+    }
   }
   if (schematic.kind === 'optics') {
     if (!symbols.has('ray')) issues.push('На схеме нет ни одного луча (ray)')

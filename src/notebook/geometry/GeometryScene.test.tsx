@@ -1,7 +1,9 @@
 import { render } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { GeometryScene } from './GeometryScene'
+import { labelRect, rectsOverlap } from './labelLayout'
 import type { HomeworkDiagramScene } from '../../lib/homeworkContract'
+import { geometryNotebookLayoutV1 } from '../layouts/geometryNotebookLayoutV1'
 
 /* Координатная плоскость на листе.
 
@@ -49,5 +51,88 @@ describe('GeometryScene с осями', () => {
     </svg>)
     const [high, low] = [...container.querySelectorAll('.diagram-point')].map((node) => Number(node.getAttribute('cy')))
     expect(high).toBeLessThan(low)
+  })
+})
+
+/* Подписи не садятся друг на друга.
+
+   7 сентября на проде график по обществознанию вышел нечитаемым: «S₀», «S₁»
+   и подписи точек налезли друг на друга и на сами кривые. Раскладчиков было
+   три, они не знали друг о друге, а сравнивали точки-якоря - без ширины
+   строки, из-за чего «S₀ = 40» считалось таким же узким, как «A». */
+describe('подписи чертежа не накладываются', () => {
+  const fontSize = geometryNotebookLayoutV1.typography.bodySize
+  const tickSize = Math.round(fontSize * 0.72)
+
+  const drawnRects = (container: HTMLElement) => [
+    ...container.querySelectorAll('.diagram-vertex,.diagram-angle-label,.diagram-axis-label,.diagram-tick-label'),
+  ].map((node) => labelRect(
+    Number(node.getAttribute('x')),
+    Number(node.getAttribute('y')),
+    node.textContent ?? '',
+    node.classList.contains('diagram-tick-label') ? tickSize : fontSize,
+    (node.getAttribute('text-anchor') as 'start' | 'middle' | 'end' | null) ?? 'start',
+  ))
+
+  const overlaps = (container: HTMLElement) => {
+    const rects = drawnRects(container)
+    return rects.flatMap((rect, index) => rects
+      .slice(index + 1)
+      .filter((other) => rectsOverlap(rect, other))
+      .map((other) => [rect, other]))
+  }
+
+  // Спрос и предложение до и после налога: та самая сцена, на которой
+  // подписи слиплись.
+  it('разводит подписи двух кривых спроса и предложения', () => {
+    const { container } = render(<svg>
+      <GeometryScene
+        scene={{
+          axes: { xMin: 0, xMax: 100, yMin: 0, yMax: 40, unit: 10, xLabel: 'Q', yLabel: 'P' },
+          points: [
+            { id: 'E', label: 'E', x: 80, y: 20, visible: true },
+            { id: 'A', label: 'A', x: 68, y: 26, visible: true },
+          ],
+          objects: [
+            { kind: 'curve', points: [], label: 'S₀', auxiliary: false, formula: '(x - 20)/3' },
+            { kind: 'curve', points: [], label: 'S₁', auxiliary: false, formula: '(x - 20)/3 + 10' },
+            { kind: 'curve', points: [], label: 'D', auxiliary: false, formula: '(120 - x)/2' },
+          ],
+          marks: [],
+          constraints: [],
+        }}
+        description="Спрос и предложение до и после налога"
+      />
+    </svg>)
+
+    expect(container.textContent).toContain('S₀')
+    expect(overlaps(container)).toEqual([])
+  })
+
+  it('разводит буквы вершин на плотном четырёхугольнике', () => {
+    const { container } = render(<svg>
+      <GeometryScene
+        scene={{
+          points: [
+            { id: 'A', label: 'A', x: 20, y: 20, visible: true },
+            { id: 'B', label: 'B', x: 80, y: 24, visible: true },
+            { id: 'C', label: 'C', x: 72, y: 78, visible: true },
+            { id: 'D', label: 'D', x: 26, y: 74, visible: true },
+            { id: 'O', label: 'O', x: 49, y: 49, visible: true },
+          ],
+          objects: [
+            { kind: 'polygon', points: ['A', 'B', 'C', 'D'], label: '', auxiliary: false },
+            { kind: 'segment', points: ['A', 'C'], label: '', auxiliary: true },
+            { kind: 'segment', points: ['B', 'D'], label: '', auxiliary: true },
+          ],
+          marks: [],
+          constraints: [],
+        }}
+        description="Четырёхугольник с диагоналями"
+      />
+    </svg>)
+
+    expect(container.querySelectorAll('.diagram-vertex')).toHaveLength(5)
+    expect(overlaps(container)).toEqual([])
   })
 })

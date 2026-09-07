@@ -1,6 +1,8 @@
 import type { HomeworkSchematic } from '../../lib/homeworkContract'
 import { geometryNotebookLayoutV1 as layout } from '../layouts/geometryNotebookLayoutV1'
 import { keyed } from '../../lib/listKeys'
+import { LabelLayout, labelRect, placementScore } from './labelLayout'
+import type { Anchor, Segment } from './labelLayout'
 
 /* Схема из условных обозначений.
 
@@ -53,6 +55,55 @@ type Projection = ReturnType<typeof projection>
 /* Размер значка в единицах поля: элемент занимает квадрат 10×10, длинные
    элементы (vector, ray, incline, rope, tube) тянутся на length. */
 const symbolSize = 13
+
+const hatchLayout = layout.zones.diagram.hatch
+
+/* Штриховка опоры, стены и зеркала - одна на всех.
+
+   Копий было три - у ground, wall и mirror, - и каждая считала по-своему:
+   шаг 0,35 против 0,3 от значка, начало с полушага против начала с нуля,
+   наклон в разные стороны. На проде 7 сентября штриховка рельсов в задаче
+   про электромагнитную индукцию вышла вразнобой именно поэтому.
+
+   Штрихи идут по отрезку от `from` к `to` с равным шагом и одинаковым
+   наклоном к нему: сторона задаётся знаком `side`. */
+function hatchPaths(args: {
+  from: { x: number; y: number }
+  to: { x: number; y: number }
+  size: number
+  side: 1 | -1
+}) {
+  const { from, to, size, side } = args
+  const length = Math.hypot(to.x - from.x, to.y - from.y)
+  if (length === 0) return []
+  const direction = { x: (to.x - from.x) / length, y: (to.y - from.y) / length }
+  const normal = { x: -direction.y * side, y: direction.x * side }
+  const strokes = Math.max(hatchLayout.minimumStrokes, Math.round(length / (size * hatchLayout.stepRatio)))
+  const step = length / strokes
+  const reach = size * hatchLayout.lengthRatio
+  return Array.from({ length: strokes }, (_, index) => {
+    const at = (index + 0.5) * step
+    const base = { x: from.x + direction.x * at, y: from.y + direction.y * at }
+    // Штрих уходит назад по отрезку и в сторону: так штрихуют опору в тетради.
+    const tip = {
+      x: base.x + (normal.x - direction.x) * reach,
+      y: base.y + (normal.y - direction.y) * reach,
+    }
+    return `M ${base.x.toFixed(2)} ${base.y.toFixed(2)} L ${tip.x.toFixed(2)} ${tip.y.toFixed(2)}`
+  })
+}
+
+function Hatch({ from, to, size, side }: {
+  from: { x: number; y: number }
+  to: { x: number; y: number }
+  size: number
+  side: 1 | -1
+}) {
+  return <>
+    {keyed(hatchPaths({ from, to, size, side }), (path) => path)
+      .map(({ key, item: path }) => <path className="diagram-mark" d={path} key={key} />)}
+  </>
+}
 
 function Symbol({ element, scale }: { element: Element; scale: number }) {
   const s = symbolSize * scale
@@ -114,18 +165,12 @@ function Symbol({ element, scale }: { element: Element; scale: number }) {
     case 'ground':
       return <>
         <path className={stroke} d={`M ${-length / 2} 0 L ${length / 2} 0`} />
-        {Array.from({ length: Math.max(3, Math.round(length / (s * 0.35))) }, (_, index) => {
-          const x = -length / 2 + (index + 0.5) * (length / Math.max(3, Math.round(length / (s * 0.35))))
-          return <path className="diagram-mark" d={`M ${x} 0 L ${x - half * 0.4} ${half * 0.5}`} key={x} />
-        })}
+        <Hatch from={{ x: -length / 2, y: 0 }} to={{ x: length / 2, y: 0 }} size={s} side={1} />
       </>
     case 'wall':
       return <>
         <path className={stroke} d={`M 0 ${-length / 2} L 0 ${length / 2}`} />
-        {Array.from({ length: Math.max(3, Math.round(length / (s * 0.35))) }, (_, index) => {
-          const y = -length / 2 + (index + 0.5) * (length / Math.max(3, Math.round(length / (s * 0.35))))
-          return <path className="diagram-mark" d={`M 0 ${y} L ${-half * 0.5} ${y + half * 0.4}`} key={y} />
-        })}
+        <Hatch from={{ x: 0, y: -length / 2 }} to={{ x: 0, y: length / 2 }} size={s} side={1} />
       </>
     case 'incline':
       return <path className={stroke} d={`M ${-length / 2} ${half * 0.6} L ${length / 2} ${half * 0.6} L ${length / 2} ${-length * 0.45} Z`} />
@@ -170,10 +215,7 @@ function Symbol({ element, scale }: { element: Element; scale: number }) {
     case 'mirror':
       return <>
         <path className={stroke} d={`M 0 ${-length / 2} L 0 ${length / 2}`} />
-        {Array.from({ length: Math.max(3, Math.round(length / (s * 0.3))) }, (_, index) => {
-          const y = -length / 2 + index * (length / Math.max(3, Math.round(length / (s * 0.3))))
-          return <path className="diagram-mark" d={`M 0 ${y} L ${half * 0.4} ${y + half * 0.4}`} key={y} />
-        })}
+        <Hatch from={{ x: 0, y: -length / 2 }} to={{ x: 0, y: length / 2 }} size={s} side={-1} />
       </>
     case 'prism':
       return <path className={stroke} d={`M ${-half * 0.8} ${half * 0.7} L ${half * 0.8} ${half * 0.7} L 0 ${-half * 0.7} Z`} />
@@ -219,50 +261,75 @@ function Symbol({ element, scale }: { element: Element; scale: number }) {
    всего от других элементов, проводов и уже поставленных подписей:
    на первой схеме с прода «R₁ = 4 Ом» и «R₂ = 6 Ом» легли одна на
    другую, а «U = 20 В» - поверх провода. */
-type Spot = { x: number; y: number; anchor: 'start' | 'middle' | 'end' }
+type Spot = { x: number; y: number; anchor: Anchor }
 
-function segmentDistance(point: { x: number; y: number }, start: { x: number; y: number }, end: { x: number; y: number }) {
-  const length = Math.hypot(end.x - start.x, end.y - start.y)
-  if (length === 0) return Math.hypot(point.x - start.x, point.y - start.y)
-  const t = Math.max(0, Math.min(1, ((point.x - start.x) * (end.x - start.x) + (point.y - start.y) * (end.y - start.y)) / (length * length)))
-  return Math.hypot(point.x - (start.x + (end.x - start.x) * t), point.y - (start.y + (end.y - start.y) * t))
-}
+const labelFontSize = Math.round(layout.typography.bodySize * 0.72)
+const labelClearance = 26
 
 function labelPlacement(
   element: Element,
   at: { x: number; y: number },
   scale: number,
   others: readonly { x: number; y: number }[],
-  wires: readonly (readonly [{ x: number; y: number }, { x: number; y: number }])[],
-  taken: readonly { x: number; y: number }[],
+  wires: readonly Segment[],
+  labels: LabelLayout,
 ): Spot {
   const size = symbolSize * scale
   if (element.symbol === 'text') return { x: at.x, y: at.y, anchor: 'middle' }
+
+  /* Подпись стрелки стоит у её острия и уходит вбок от самой стрелки.
+
+     Смещение раньше считалось как «cos по обеим осям»: по вертикали это
+     давало сдвиг вдоль стрелки вместо сдвига поперёк неё, и «F_A» садилась
+     на собственное древко. Поперечное направление - это нормаль
+     (-sin; cos), её и берём. */
   if (element.symbol === 'vector' || element.symbol === 'ray' || element.symbol === 'arrow') {
     const angle = (element.rotation * Math.PI) / 180
-    const tip = { x: at.x + Math.cos(angle) * element.length * scale, y: at.y + Math.sin(angle) * element.length * scale }
-    return { x: tip.x + Math.cos(angle) * 8 - Math.sin(angle) * 10, y: tip.y + Math.sin(angle) * 8 - Math.cos(angle) * 10 + 5, anchor: 'middle' }
+    const along = { x: Math.cos(angle), y: Math.sin(angle) }
+    const across = { x: -Math.sin(angle), y: Math.cos(angle) }
+    const tip = { x: at.x + along.x * element.length * scale, y: at.y + along.y * element.length * scale }
+    const candidates: Spot[] = [1, -1].flatMap((side) => [8, 20].map((reach) => ({
+      x: tip.x + along.x * 8 + across.x * reach * side,
+      y: tip.y + along.y * 8 + across.y * reach * side + labelFontSize * 0.35,
+      anchor: 'middle' as const,
+    })))
+    return bestSpot(candidates, element.label, others, wires, labels, at)
   }
+
   const candidates: Spot[] = [
     { x: at.x, y: at.y - size * 0.75, anchor: 'middle' },
     { x: at.x, y: at.y + size * 0.75 + 14, anchor: 'middle' },
     { x: at.x + size * 0.7, y: at.y + 5, anchor: 'start' },
     { x: at.x - size * 0.7, y: at.y + 5, anchor: 'end' },
   ]
-  // Наружу от схемы: подпись резистора на верхней стороне контура
-  // пишут над проводом, а не внутри рамки.
+  return bestSpot(candidates, element.label, others, wires, labels, at)
+}
+
+/* Лучшее из примеренных мест.
+
+   Считает тот же счёт, что и геометрическая сцена: подпись занимает
+   прямоугольник по своей длине, наложение на чужую подпись весит тяжелее
+   близости к проводу. Наружу от схемы - предпочтительно: подпись резистора
+   на верхней стороне контура пишут над проводом, а не внутри рамки. */
+function bestSpot(
+  candidates: readonly Spot[],
+  label: string,
+  others: readonly { x: number; y: number }[],
+  wires: readonly Segment[],
+  labels: LabelLayout,
+  at: { x: number; y: number },
+): Spot {
   const center = others.length > 0
     ? { x: others.reduce((sum, other) => sum + other.x, 0) / others.length, y: others.reduce((sum, other) => sum + other.y, 0) / others.length }
     : at
   const fromCenter = Math.hypot(at.x - center.x, at.y - center.y)
+
   let best = candidates[0]
   let bestScore = -Infinity
   for (const spot of candidates) {
-    const fromOthers = others.reduce((closest, other) => Math.min(closest, Math.hypot(spot.x - other.x, spot.y - other.y)), Infinity)
-    const fromWires = wires.reduce((closest, [start, end]) => Math.min(closest, segmentDistance(spot, start, end)), Infinity)
-    const fromLabels = taken.reduce((closest, other) => Math.min(closest, Math.hypot(spot.x - other.x, spot.y - other.y)), Infinity)
-    const outward = Math.hypot(spot.x - center.x, spot.y - center.y) > fromCenter ? 50 : 0
-    const score = Math.min(fromOthers, 90) + Math.min(fromWires, 40) + Math.min(fromLabels, 120) + outward
+    const rect = labelRect(spot.x, spot.y, label, labelFontSize, spot.anchor)
+    const outward = Math.hypot(spot.x - center.x, spot.y - center.y) > fromCenter ? labelClearance : 0
+    const score = placementScore({ rect, layout: labels, edges: wires, points: others, clearance: labelClearance }) + outward
     if (score > bestScore) {
       bestScore = score
       best = spot
@@ -307,17 +374,54 @@ export function SchematicScene({ schematic, description }: { schematic: Homework
   const project = projection(schematic.elements)
   const elements = new Map(schematic.elements.map((element) => [element.id, element]))
   const centers = schematic.elements.map((element) => ({ id: element.id, x: project.x(element.x), y: project.y(element.y) }))
-  const wires = schematic.connections.flatMap((connection) => {
+  const wires: Segment[] = schematic.connections.flatMap((connection) => {
     const from = elements.get(connection.from)
     const to = elements.get(connection.to)
     if (!from || !to) return []
     const start = { x: project.x(from.x), y: project.y(from.y) }
     const end = { x: project.x(to.x), y: project.y(to.y) }
-    if (connection.kind !== 'wire') return [[start, end] as const]
+    if (connection.kind !== 'wire') return [[start, end] as Segment]
     const corner = { x: end.x, y: start.y }
-    return [[start, corner] as const, [corner, end] as const]
+    return [[start, corner] as Segment, [corner, end] as Segment]
   })
-  const placed: { x: number; y: number }[] = []
+
+  /* Стрелка выходит из тела, к которому приложена.
+
+     Раньше она рисовалась от собственной точки, и модель ставила эту точку
+     подальше от тела - иначе проверка схемы ругалась на наложение. На проде
+     7 сентября так и вышло: F_A и m·g висели рядом со стержнем, ни на что
+     не опираясь. */
+  const originOf = (element: Element) => {
+    const anchor = element.anchor ? elements.get(element.anchor) : undefined
+    const at = anchor ?? element
+    return { x: project.x(at.x), y: project.y(at.y) }
+  }
+
+  /* Раскладка считается до отрисовки: подписи проводов места не выбирают -
+     они привязаны к середине провода, - поэтому занимают его первыми. */
+  const labels = new LabelLayout()
+  for (const connection of schematic.connections) {
+    const from = elements.get(connection.from)
+    const to = elements.get(connection.to)
+    if (!from || !to || !connection.label) continue
+    const middle = { x: (project.x(from.x) + project.x(to.x)) / 2, y: (project.y(from.y) + project.y(to.y)) / 2 }
+    labels.reserveText(middle.x, middle.y - 8, connection.label, labelFontSize, 'middle')
+  }
+
+  const places = new Map(schematic.elements.map((element) => {
+    const origin = originOf(element)
+    const rotation = orientedRotation(element, schematic, elements)
+    const place = labelPlacement(
+      { ...element, rotation },
+      origin,
+      project.scale,
+      centers.filter((center) => center.id !== element.id),
+      wires,
+      labels,
+    )
+    if (element.label) labels.reserveText(place.x, place.y, element.label, labelFontSize, place.anchor)
+    return [element.id, { place, origin, rotation }] as const
+  }))
 
   return (
     <g className="geometry-diagram geometry-schematic" data-testid="geometry-schematic" role="img" aria-label={description}>
@@ -333,18 +437,10 @@ export function SchematicScene({ schematic, description }: { schematic: Homework
         </g>
       })}
       {keyed(schematic.elements, (element) => element.id).map(({ key, item: element }) => {
-        const x = project.x(element.x)
-        const y = project.y(element.y)
-        const rotation = orientedRotation(element, schematic, elements)
-        const place = labelPlacement(
-          { ...element, rotation },
-          { x, y },
-          project.scale,
-          centers.filter((center) => center.id !== element.id),
-          wires,
-          placed,
-        )
-        placed.push({ x: place.x, y: place.y })
+        const placement = places.get(element.id)
+        if (!placement) return null
+        const { place, origin, rotation } = placement
+        const { x, y } = origin
         return <g key={key}>
           {/* Провод проходит через центр значка; чтобы линия не
               просвечивала сквозь резистор, под значок кладётся бумага. */}
