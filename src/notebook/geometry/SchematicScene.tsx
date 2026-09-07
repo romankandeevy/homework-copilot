@@ -52,7 +52,7 @@ type Projection = ReturnType<typeof projection>
 
 /* Размер значка в единицах поля: элемент занимает квадрат 10×10, длинные
    элементы (vector, ray, incline, rope, tube) тянутся на length. */
-const symbolSize = 10
+const symbolSize = 13
 
 function Symbol({ element, scale }: { element: Element; scale: number }) {
   const s = symbolSize * scale
@@ -249,13 +249,20 @@ function labelPlacement(
     { x: at.x + size * 0.7, y: at.y + 5, anchor: 'start' },
     { x: at.x - size * 0.7, y: at.y + 5, anchor: 'end' },
   ]
+  // Наружу от схемы: подпись резистора на верхней стороне контура
+  // пишут над проводом, а не внутри рамки.
+  const center = others.length > 0
+    ? { x: others.reduce((sum, other) => sum + other.x, 0) / others.length, y: others.reduce((sum, other) => sum + other.y, 0) / others.length }
+    : at
+  const fromCenter = Math.hypot(at.x - center.x, at.y - center.y)
   let best = candidates[0]
   let bestScore = -Infinity
   for (const spot of candidates) {
     const fromOthers = others.reduce((closest, other) => Math.min(closest, Math.hypot(spot.x - other.x, spot.y - other.y)), Infinity)
     const fromWires = wires.reduce((closest, [start, end]) => Math.min(closest, segmentDistance(spot, start, end)), Infinity)
     const fromLabels = taken.reduce((closest, other) => Math.min(closest, Math.hypot(spot.x - other.x, spot.y - other.y)), Infinity)
-    const score = Math.min(fromOthers, 90) + Math.min(fromWires, 40) + Math.min(fromLabels, 120)
+    const outward = Math.hypot(spot.x - center.x, spot.y - center.y) > fromCenter ? 50 : 0
+    const score = Math.min(fromOthers, 90) + Math.min(fromWires, 40) + Math.min(fromLabels, 120) + outward
     if (score > bestScore) {
       bestScore = score
       best = spot
