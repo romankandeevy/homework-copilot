@@ -1,5 +1,6 @@
 import { geometryNotebookLayoutV1 as layout } from './layouts/geometryNotebookLayoutV1'
 import { GeometryScene } from './geometry/GeometryScene'
+import { SchematicScene } from './geometry/SchematicScene'
 import type { GeometryDiagramSpec } from './geometry/types'
 
 /* Чертёж отдельно от листа.
@@ -20,6 +21,9 @@ export function TriangleDiagram({ diagram }: { diagram: GeometryDiagramSpec }) {
   if (diagram.kind === 'none') return null
   if (diagram.kind === 'construction') {
     return diagram.scene ? <GeometryScene scene={diagram.scene} description={diagram.description} /> : null
+  }
+  if (diagram.kind === 'schematic') {
+    return diagram.schematic ? <SchematicScene schematic={diagram.schematic} description={diagram.description} /> : null
   }
 
   if (diagram.kind === 'three-point-extended-lines') {
@@ -158,6 +162,7 @@ export function NotebookDiagram({ diagram }: { diagram: GeometryDiagramSpec }) {
   const { x, y, width, height } = layout.zones.diagram.scene
   if (diagram.kind === 'none') return null
   if (diagram.kind === 'construction' && !diagram.scene) return null
+  if (diagram.kind === 'schematic' && !diagram.schematic) return null
 
   return (
     <figure className="notebook-sheet-diagram">
@@ -171,6 +176,7 @@ export function NotebookDiagram({ diagram }: { diagram: GeometryDiagramSpec }) {
           .diagram-line,.diagram-mark,.diagram-angle-arc,.diagram-auxiliary { fill: none; stroke: ${colors.pencil}; stroke-linecap: round; stroke-linejoin: round; }
           .diagram-line { stroke-width: ${strokes.triangle}px; }
           .diagram-point { fill: ${colors.pencil}; }
+          .diagram-paper { fill: ${colors.paper}; stroke: none; }
           .diagram-axis { fill: none; stroke: ${colors.pencil}; stroke-width: ${strokes.marker}px; stroke-linecap: round; stroke-linejoin: round; }
           .diagram-axis-label,.diagram-tick-label { fill: ${colors.pencil}; font-family: ${typography.family}; font-weight: ${typography.weight}; }
           .diagram-axis-label { font-size: ${typography.bodySize}px; }

@@ -342,6 +342,53 @@ describe('geometry solution quality gate', () => {
     expect(wrong.some((issue) => issue.includes('не лежит на графике'))).toBe(true)
   })
 
+  /* Схема физики: цепь обязана быть замкнутой и с источником, а задача
+     «начертите схему цепи» - требовать именно схему, не геометрию. */
+  it('проверяет схему цепи', () => {
+    const base = {
+      ...taskFiveSolution,
+      subject: 'Физика',
+      taskType: 'calculation' as const,
+      condition: 'Начертите схему цепи из двух последовательно соединённых резисторов 4 Ом и 6 Ом и найдите общее сопротивление.',
+      given: ['R₁ = 4 Ом', 'R₂ = 6 Ом'],
+      steps: ['R = R₁ + R₂ = 4 + 6 = 10 Ом'],
+      answer: 'R = 10 Ом',
+      quality: { ...taskFiveSolution.quality!, diagramRequired: true },
+    }
+    const schematic = {
+      kind: 'circuit' as const,
+      elements: [
+        { id: 'E', symbol: 'battery' as const, x: 50, y: 85, rotation: 0, length: 0, label: 'ε' },
+        { id: 'R1', symbol: 'resistor' as const, x: 30, y: 15, rotation: 0, length: 0, label: 'R₁ = 4 Ом' },
+        { id: 'R2', symbol: 'resistor' as const, x: 70, y: 15, rotation: 0, length: 0, label: 'R₂ = 6 Ом' },
+      ],
+      connections: [
+        { from: 'E', to: 'R1', kind: 'wire' as const, label: '' },
+        { from: 'R1', to: 'R2', kind: 'wire' as const, label: '' },
+        { from: 'R2', to: 'E', kind: 'wire' as const, label: '' },
+      ],
+    }
+    const good = validateSolutionQuality({
+      ...base,
+      diagram: { kind: 'schematic', description: 'Схема цепи: источник и два резистора последовательно', vertices: [], schematic },
+    })
+    expect(good.filter((issue) => /схем|цеп|элемент/iu.test(issue))).toEqual([])
+
+    const open = validateSolutionQuality({
+      ...base,
+      diagram: {
+        kind: 'schematic',
+        description: 'Схема цепи: источник и два резистора последовательно',
+        vertices: [],
+        schematic: { ...schematic, connections: schematic.connections.slice(0, 2) },
+      },
+    })
+    expect(open.some((issue) => issue.includes('не замкнута'))).toBe(true)
+
+    const geometry = validateSolutionQuality(base)
+    expect(geometry.some((issue) => issue.includes('kind=schematic'))).toBe(true)
+  })
+
   it('ловит подставленный ответ в «Дано» качественного вопроса', () => {
     const issues = validateSolutionQuality({
       ...taskFiveSolution,

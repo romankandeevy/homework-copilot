@@ -16,10 +16,54 @@ export const homeworkDiagramKinds = [
   'square',
   'trapezoid',
   'circle',
+  'schematic',
   'none',
 ] as const
 
 export type HomeworkDiagramKind = typeof homeworkDiagramKinds[number]
+
+/* Схема - рисунок из условных обозначений.
+
+   Физика и химия чертят не координаты, а знаки: схему цепи, силы на теле,
+   ход лучей, установку для опыта. Схема - это элементы из фиксированной
+   библиотеки, поставленные в поле 0..100, и соединения между ними.
+   Значки рисует лист, модель только выбирает их и расставляет. */
+export const homeworkSchematicSymbols = [
+  // электричество
+  'battery', 'resistor', 'lamp', 'switch', 'ammeter', 'voltmeter', 'capacitor', 'node', 'bell', 'motor',
+  // механика
+  'body', 'incline', 'ground', 'wall', 'spring', 'pulley', 'rope', 'vector',
+  // оптика
+  'lens-converging', 'lens-diverging', 'mirror', 'ray', 'object-arrow', 'eye', 'prism',
+  // химия и установки
+  'beaker', 'flask', 'test-tube', 'burner', 'tube', 'gas-bubbles', 'funnel', 'thermometer', 'arrow', 'text',
+] as const
+export type HomeworkSchematicSymbol = typeof homeworkSchematicSymbols[number]
+
+export const homeworkSchematicKinds = ['circuit', 'forces', 'optics', 'setup'] as const
+export type HomeworkSchematicKind = typeof homeworkSchematicKinds[number]
+
+export type HomeworkSchematic = {
+  kind: HomeworkSchematicKind
+  elements: Array<{
+    id: string
+    symbol: HomeworkSchematicSymbol
+    x: number
+    y: number
+    /** Поворот в градусах: 0 - горизонтально, 90 - вертикально; у vector и ray - направление. */
+    rotation: number
+    /** Длина в единицах поля: у vector, ray, incline, rope, tube. */
+    length: number
+    label: string
+  }>
+  connections: Array<{
+    from: string
+    to: string
+    /** wire - провод с прямыми углами, line - прямая, dashed - пунктир. */
+    kind: 'wire' | 'line' | 'dashed'
+    label: string
+  }>
+}
 // number — задача по номеру в размеченном учебнике;
 // photo  — фотография задачи;
 // text   — условие, вписанное учеником вручную. Последний путь работает
@@ -120,6 +164,8 @@ export type HomeworkDiagram = {
   parallelTo?: string
   exteriorAngle?: string
   scene?: HomeworkDiagramScene
+  /** Для kind = schematic: схема из условных обозначений. */
+  schematic?: HomeworkSchematic
 }
 
 export type HomeworkDecisionSummary = {

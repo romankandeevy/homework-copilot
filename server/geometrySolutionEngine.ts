@@ -5,6 +5,8 @@ import {
   homeworkSceneConstraintKinds,
   homeworkSceneMarkKinds,
   homeworkSceneObjectKinds,
+  homeworkSchematicKinds,
+  homeworkSchematicSymbols,
   homeworkSolutionEngineVersion,
   homeworkTaskTypes,
 } from '../src/lib/homeworkContract.ts'
@@ -16,6 +18,7 @@ import type {
   HomeworkDiagram,
   HomeworkDiagramScene,
   HomeworkSceneAxes,
+  HomeworkSchematic,
   HomeworkSolution,
   HomeworkSolutionVerification,
   HomeworkTaskType,
@@ -223,6 +226,53 @@ const sceneSchema = {
   },
 } as const
 
+/* Схема из условных обозначений: элементы библиотеки в поле 0..100 и
+   соединения между ними. Значки рисует лист. */
+const schematicSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['enabled', 'kind', 'elements', 'connections'],
+  properties: {
+    enabled: { type: 'boolean', description: 'true - чертёж является схемой (цепь, силы, лучи, установка), а не геометрической сценой.' },
+    kind: { type: 'string', enum: [...homeworkSchematicKinds] },
+    elements: {
+      type: 'array',
+      minItems: 0,
+      maxItems: 16,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['id', 'symbol', 'x', 'y', 'rotation', 'length', 'label'],
+        properties: {
+          id: { type: 'string', description: 'Короткий уникальный идентификатор: R1, L, E, F1.' },
+          symbol: { type: 'string', enum: [...homeworkSchematicSymbols] },
+          x: { type: 'number', description: 'Центр значка в поле 0..100.' },
+          y: { type: 'number', description: 'Центр значка в поле 0..100, y вниз.' },
+          rotation: { type: 'number', description: 'Поворот в градусах по часовой: 0 - горизонтально, 90 - вертикально. У vector, ray, arrow - направление стрелки.' },
+          length: { type: 'number', description: 'Длина в единицах поля для vector, ray, arrow, incline, rope, tube, ground, wall, mirror, lens. Иначе 0.' },
+          label: { type: 'string', description: 'Короткая подпись: «R₁ = 4 Ом», «F», «H₂».' },
+        },
+      },
+    },
+    connections: {
+      type: 'array',
+      minItems: 0,
+      maxItems: 24,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['from', 'to', 'kind', 'label'],
+        properties: {
+          from: { type: 'string' },
+          to: { type: 'string' },
+          kind: { type: 'string', enum: ['wire', 'line', 'dashed'] },
+          label: { type: 'string' },
+        },
+      },
+    },
+  },
+} as const
+
 const diagramSchema = {
   type: 'object',
   additionalProperties: false,
@@ -237,9 +287,10 @@ const diagramSchema = {
     'parallelTo',
     'exteriorAngle',
     'scene',
+    'schematic',
   ],
   properties: {
-    kind: { type: 'string', enum: ['construction', 'none'] },
+    kind: { type: 'string', enum: ['construction', 'schematic', 'none'] },
     description: { type: 'string' },
     vertices: { type: 'array', minItems: 0, maxItems: 18, items: { type: 'string' } },
     apexAngle: { type: 'string' },
@@ -249,6 +300,7 @@ const diagramSchema = {
     parallelTo: { type: 'string' },
     exteriorAngle: { type: 'string' },
     scene: sceneSchema,
+    schematic: schematicSchema,
   },
 } as const
 
@@ -507,6 +559,13 @@ const authorInstructions = [
   'При axes.enabled координаты точек - математические (x; y), ось y вверх; поле 0..100 не используется. Каждый график - объект kind=curve с formula от x в школьной записи: «-0,1x + 0,5», «x² - 4x + 1», «1/x», «√(x + 2)», «|x - 1|»; label - «y = ...». Прямые тоже задавай как curve с formula, а не двумя точками.',
   'Точку пересечения графиков, корни, вершину параболы - добавь в points с точными координатами и перечисли её id в points каждой кривой, на которой она лежит: код проверит подстановкой.',
   'Для геометрического чертежа axes.enabled=false, formula у всех объектов - пустая строка.',
+  // Схемы физики и химии: значки из библиотеки, а не координаты.
+  'Схема цепи, силы на теле, ход лучей, установка для опыта - это diagram.kind=schematic и schematic.enabled=true; scene тогда пустая. Элементы - только из библиотеки symbol: battery, resistor, lamp, switch, ammeter, voltmeter, capacitor, node, bell, motor; body, incline, ground, wall, spring, pulley, rope, vector; lens-converging, lens-diverging, mirror, ray, object-arrow, eye, prism; beaker, flask, test-tube, burner, tube, gas-bubbles, funnel, thermometer, arrow, text.',
+  'schematic.kind: circuit - электрическая цепь, forces - силы на теле, optics - лучи и приборы, setup - химическая или физическая установка.',
+  'Элемент ставится центром в поле 0..100 (y вниз); значок занимает 10×10, поэтому элементы не ближе 12 друг к другу. rotation 0 - горизонтально, 90 - вертикально. У vector, ray, arrow rotation - направление стрелки (0 вправо, 90 вниз, 270 вверх), length - длина; у incline, rope, tube, ground, wall, mirror, lens - length.',
+  'Цепь рисуй прямоугольником: элементы по сторонам, соединения kind=wire между соседями по контуру, чтобы каждый элемент имел два провода и цепь замкнулась. Источник - battery, подпись «ε» или «U». Значения из условия - в label: «R₁ = 4 Ом».',
+  'Силы: body в центре, ground или incline под ним, каждая сила - vector с началом в центре тела (x, y тела) и подписью «mg», «N», «F тр». Ход лучей: object-arrow, линза или зеркало, лучи ray, изображение - object-arrow пунктиром не задаётся, ставь второй object-arrow с подписью.',
+  'Схема нужна, когда условие просит «начертите схему», «изобразите силы», «постройте ход лучей», «нарисуйте прибор», или когда без неё физическую задачу в тетради не оформляют: цепь с несколькими резисторами, тело на наклонной плоскости, линза с предметом. Для чистого расчёта по формуле схема не обязательна.',
   'Координаты scene — локальная геометрическая плоскость 0..100, а не координаты страницы.',
   'line, segment и ray задаются двумя точками; circle — центром и точкой окружности; polyline и polygon — последовательностью точек.',
   'Каждую существенную связь продублируй в constraints, а координаты обязаны ей соответствовать.',
@@ -892,10 +951,13 @@ function normalizeDiagram(value: unknown): HomeworkDiagram {
     ? value as Record<string, unknown>
     : {}
   const scene = normalizeScene(candidate.scene)
+  const schematic = normalizeSchematic(candidate.schematic)
   const rawKind = text(candidate.kind, 50)
-  const kind = rawKind === 'construction' && (scene.points.length > 0 || (scene.axes && scene.objects.length > 0))
-    ? 'construction'
-    : 'none'
+  const kind = rawKind === 'schematic' && schematic
+    ? 'schematic'
+    : rawKind === 'construction' && (scene.points.length > 0 || (scene.axes && scene.objects.length > 0))
+      ? 'construction'
+      : 'none'
   const auxiliaryKind = text(candidate.auxiliaryKind, 20)
 
   return {
@@ -911,7 +973,53 @@ function normalizeDiagram(value: unknown): HomeworkDiagram {
     ...(text(candidate.parallelTo, 16) ? { parallelTo: text(candidate.parallelTo, 16) } : {}),
     ...(text(candidate.exteriorAngle, 16) ? { exteriorAngle: text(candidate.exteriorAngle, 16) } : {}),
     scene: kind === 'construction' ? scene : emptyScene(),
+    ...(kind === 'schematic' && schematic ? { schematic } : {}),
   }
+}
+
+/* Схема: элементы только из библиотеки, идентификаторы уникальны,
+   соединения ссылаются на существующие элементы. Пустая схема - не схема. */
+function normalizeSchematic(value: unknown): HomeworkSchematic | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const raw = value as Record<string, unknown>
+  if (raw.enabled !== true) return null
+  const kind = homeworkSchematicKinds.find((item) => item === raw.kind) ?? 'setup'
+  const used = new Set<string>()
+  const elements = (Array.isArray(raw.elements) ? raw.elements : []).flatMap((entry) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return []
+    const element = entry as Record<string, unknown>
+    const symbol = homeworkSchematicSymbols.find((item) => item === element.symbol)
+    const id = text(element.id, 8)
+    if (!symbol || !id || used.has(id)) return []
+    used.add(id)
+    const rotation = number(element.rotation)
+    const length = number(element.length)
+    return [{
+      id,
+      symbol,
+      x: number(element.x),
+      y: number(element.y),
+      rotation: Number.isFinite(rotation) ? rotation : 0,
+      length: Number.isFinite(length) && length > 0 ? Math.min(length, 100) : 0,
+      label: normalizeNotebookNotation(element.label, 16),
+    }]
+  }).slice(0, 16)
+  if (elements.length === 0) return null
+  const connections = (Array.isArray(raw.connections) ? raw.connections : []).flatMap((entry) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return []
+    const connection = entry as Record<string, unknown>
+    const from = text(connection.from, 8)
+    const to = text(connection.to, 8)
+    if (!used.has(from) || !used.has(to) || from === to) return []
+    const kindRaw = text(connection.kind, 8)
+    return [{
+      from,
+      to,
+      kind: (kindRaw === 'line' || kindRaw === 'dashed' ? kindRaw : 'wire') as 'wire' | 'line' | 'dashed',
+      label: normalizeNotebookNotation(connection.label, 16),
+    }]
+  }).slice(0, 24)
+  return { kind, elements, connections }
 }
 
 function normalizeDecisionSummary(value: unknown): HomeworkDecisionSummary {
@@ -1617,8 +1725,18 @@ function conditionAsksForGraph(condition: string) {
   return /график|графическ|координатн\p{L}*\s+плоскост|систем\p{L}*\s+координат|точк\p{L}*\s+пересечени\p{L}*\s+(?:прям|график|парабол)/iu.test(condition)
 }
 
+/* Задача про схему.
+
+   «Начертите схему цепи», «изобразите силы, действующие на тело»,
+   «постройте ход лучей», «нарисуйте прибор для получения газа» -
+   ответ здесь рисунок из условных обозначений, и без него запись неполна. */
+function conditionAsksForSchematic(condition: string) {
+  return /схем\p{L}*\s+(?:электрическ\p{L}*\s+)?цеп|изобраз\p{L}*\s+(?:все\s+)?сил|покаж\p{L}*\s+(?:все\s+)?сил|ход\s+луч|построй\p{L}*\s+изображени|нарису\p{L}*\s+(?:схем|прибор|установк)|начерт\p{L}*\s+(?:схем|цеп)/iu.test(condition)
+}
+
 function conditionRequiresDiagram(solution: HomeworkSolution) {
   if (conditionAsksForGraph(solution.condition)) return true
+  if (conditionAsksForSchematic(solution.condition)) return true
   return /геометр/iu.test(solution.subject)
     && (solution.taskType === 'construction'
       || solution.goal.title === 'Построить'
@@ -1635,6 +1753,49 @@ function uppercasePointLabels(value: string) {
    нарисует. Точка, приписанная кривой (в её points), обязана на ней
    лежать: это и есть «точка пересечения», ради которой график строят.
    Точки сцены обязаны попадать в диапазон осей, иначе их не видно. */
+/* Проверка схемы.
+
+   Элементы в поле и не друг на друге; у цепи есть источник и цепь
+   замкнута - каждый элемент соединён хотя бы с двумя другими; у сил -
+   хотя бы одна стрелка и тело; у лучей - хотя бы один луч и оптический
+   прибор. Всё остальное - на совести модели: библиотека значков жёсткая,
+   а нарисовать значок неправильно лист не умеет. */
+function schematicIssues(schematic: HomeworkSchematic | undefined) {
+  const issues: string[] = []
+  if (!schematic || schematic.elements.length === 0) return ['Схема пуста']
+  const symbols = new Set(schematic.elements.map((element) => element.symbol))
+  for (const element of schematic.elements) {
+    if (element.x < 0 || element.x > 100 || element.y < 0 || element.y > 100) issues.push(`Элемент ${element.id} вне поля 0..100`)
+  }
+  for (const [index, element] of schematic.elements.entries()) {
+    for (const other of schematic.elements.slice(index + 1)) {
+      if (element.symbol === 'text' || other.symbol === 'text') continue
+      if (distance(element, other) < 8) issues.push(`Элементы ${element.id} и ${other.id} накладываются: разнеси их не меньше чем на 10 единиц`)
+    }
+  }
+  if (schematic.kind === 'circuit') {
+    if (!symbols.has('battery')) issues.push('В схеме цепи нет источника тока (battery)')
+    const degree = new Map(schematic.elements.map((element) => [element.id, 0]))
+    for (const connection of schematic.connections) {
+      degree.set(connection.from, (degree.get(connection.from) ?? 0) + 1)
+      degree.set(connection.to, (degree.get(connection.to) ?? 0) + 1)
+    }
+    const open = schematic.elements.filter((element) => element.symbol !== 'text' && (degree.get(element.id) ?? 0) < 2)
+    if (open.length > 0) issues.push(`Цепь не замкнута: у ${open.map((element) => element.id).join(', ')} меньше двух проводов`)
+  }
+  if (schematic.kind === 'forces') {
+    if (!symbols.has('vector')) issues.push('На схеме сил нет ни одной стрелки силы (vector)')
+    if (!symbols.has('body')) issues.push('На схеме сил нет тела (body)')
+  }
+  if (schematic.kind === 'optics') {
+    if (!symbols.has('ray')) issues.push('На схеме нет ни одного луча (ray)')
+    if (!['lens-converging', 'lens-diverging', 'mirror', 'prism'].some((symbol) => symbols.has(symbol as HomeworkSchematic['elements'][number]['symbol']))) {
+      issues.push('На оптической схеме нет прибора: линзы, зеркала или призмы')
+    }
+  }
+  return [...new Set(issues)]
+}
+
 function graphSceneIssues(scene: HomeworkDiagramScene) {
   const issues: string[] = []
   const axes = scene.axes
@@ -2020,6 +2181,13 @@ export function validateSolutionQuality(solution: HomeworkSolution) {
 
   if (requiredByCondition && !diagramRequired) issues.push('Условие требует обязательный чертёж')
   if ((diagramRequired || requiredByCondition) && solution.diagram.kind === 'none') issues.push('Обязательный чертёж отсутствует')
+  if (solution.diagram.kind === 'schematic') {
+    if (solution.diagram.description.trim().length < 8) issues.push('У чертежа нет понятного описания')
+    issues.push(...schematicIssues(solution.diagram.schematic))
+  }
+  if (conditionAsksForSchematic(solution.condition) && solution.diagram.kind === 'construction') {
+    issues.push('Здесь нужна схема из условных обозначений: diagram.kind=schematic и schematic.enabled=true, а не геометрическая сцена')
+  }
   if (solution.diagram.kind === 'construction') {
     const mathScene = solution.diagram.scene
     const scene = mathScene ? toLocalScene(mathScene) : mathScene
