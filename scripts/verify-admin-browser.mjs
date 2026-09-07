@@ -81,7 +81,7 @@ try {
   await solutionSection.getByRole('button', { name: 'Удалить решение задачи № 123' }).click()
   await solutionSection.getByText('Баланс автоматически не возвращается.').waitFor()
   await solutionSection.getByLabel('Причина удаления').fill('Неверное решение')
-  await solutionSection.getByRole('button', { name: 'Удалить из базы' }).click()
+  await solutionSection.getByRole('button', { name: 'Удалить решение', exact: true }).click()
   await solutionSection.getByText('Предпросмотр: решение № 123 удалено из списка.').waitFor()
 
   await desktop.reload({ waitUntil: 'domcontentloaded' })
