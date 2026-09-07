@@ -35,6 +35,7 @@ import type { TaskSubmission } from './CopyTask'
 import { applicationPath, currentApplicationPath } from './lib/appPath'
 import { keyed } from './lib/listKeys'
 import { NotebookDiagram } from './notebook/NotebookDiagram'
+import { notebookBlocks } from './notebook/systemOfEquations'
 import LegalPage from './LegalPage'
 import PrivacyNotice from './PrivacyNotice'
 import type { Database } from './lib/database.types'
@@ -762,7 +763,15 @@ function UnderstandingPage({
     const value = [
       'Условие: ' + source.condition,
       ...(explanationLines.length > 0 ? ['Что нужно понять:', ...explanationLines.map((line) => '- ' + line)] : []),
-      ...(source.given.length > 0 ? ['Дано:', ...source.given] : []),
+      ...(source.given.length > 0
+        ? ['Дано:', ...notebookBlocks(source.given, source.condition).flatMap((block) => (
+            // В текстовой копии скобку рисует сам знак: система должна
+            // остаться системой и после «Скопировать».
+            block.kind === 'system'
+              ? block.lines.map((line, index) => `${index === 0 ? '{ ' : '  '}${line}`)
+              : [block.line]
+          ))]
+        : []),
       source.goal.title + ': ' + source.goal.text,
       'Решение:',
       // Копия уходит в тетрадь той же записью, что и на листе: с номерами
@@ -872,7 +881,27 @@ function UnderstandingPage({
             {generatedSolution.given.length > 0 && (
               <section className="notebook-sheet-given">
                 <h2>Дано:</h2>
-                {keyed(generatedSolution.given, (line) => line).map(({ key, item: line }) => <p key={key}>{line}</p>)}
+                {keyed(notebookBlocks(generatedSolution.given, generatedSolution.condition), (block) => (
+                  block.kind === 'system' ? block.lines.join('|') : block.line
+                )).map(({ key, item: block }) => (block.kind === 'system'
+                  ? (
+                    <div className="notebook-system" key={key} role="group" aria-label="Система уравнений">
+                      <svg className="notebook-system-brace" viewBox="0 0 10 100" preserveAspectRatio="none" aria-hidden="true">
+                        <path
+                          d="M9 1 C5 1 5 8 5 22 C5 40 1 46 1 50 C1 54 5 60 5 78 C5 92 5 99 9 99"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      </svg>
+                      <div className="notebook-system-lines">
+                        {keyed(block.lines, (line) => line).map(({ key: lineKey, item: line }) => <p key={lineKey}>{line}</p>)}
+                      </div>
+                    </div>
+                  )
+                  : <p key={key}>{block.line}</p>))}
               </section>
             )}
             <section className="notebook-sheet-goal">

@@ -1493,6 +1493,25 @@
   border-bottom: 2px solid var(--paper-ink);
 }
 
+/* Фигурная скобка системы тянется по высоте своих строк:
+   у системы из двух и из трёх уравнений она разная. */
+.notebook-system {
+  display: flex;
+  align-items: stretch;
+  gap: 0.4rem;
+}
+
+.notebook-system-brace {
+  width: 0.6rem;
+  align-self: stretch;
+  color: var(--paper-ink);
+}
+
+.notebook-system-lines {
+  display: grid;
+  gap: 0.15rem;
+}
+
 .notebook-sheet-goal {
   display: flex;
   flex-wrap: wrap;
