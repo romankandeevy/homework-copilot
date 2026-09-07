@@ -560,7 +560,28 @@ const notebookNotation = new Map([
   ['cdot', '·'],
   ['times', '×'],
   ['pm', '±'],
+  ['le', '≤'],
+  ['ge', '≥'],
+  ['ne', '≠'],
+  ['approx', '≈'],
+  ['div', '÷'],
+  ['infty', '∞'],
+  ['pi', 'π'],
+  ['alpha', 'α'],
+  ['beta', 'β'],
+  ['gamma', 'γ'],
+  ['Delta', 'Δ'],
+  ['circ', '°'],
+  ['degree', '°'],
+  ['cap', '∩'],
+  ['cup', '∪'],
+  ['subset', '⊂'],
+  ['sqrt', '√'],
 ])
+
+const superscriptDigits: Record<string, string> = { 0: '⁰', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹', '-': '⁻', n: 'ⁿ' }
+const subscriptDigits: Record<string, string> = { 0: '₀', 1: '₁', 2: '₂', 3: '₃', 4: '₄', 5: '₅', 6: '₆', 7: '₇', 8: '₈', 9: '₉' }
+const toScript = (value: string, table: Record<string, string>) => [...value].map((char) => table[char] ?? char).join('')
 
 /* Обрез по границе слова.
 
@@ -584,14 +605,27 @@ export function clampNotebookLine(value: string, maxLength: number) {
 
 export function normalizeNotebookNotation(value: unknown, maxLength = 5000) {
   let result = text(value, maxLength)
-  result = result.replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/gu, '($1)/($2)')
+  result = result
+    .replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/gu, '($1)/($2)')
+    /* HTML и служебные команды LaTeX - не запись, а обёртка вокруг неё:
+       \text{см}, \left( ... \right), \, и <sup>2</sup>. Снимаем обёртку,
+       содержимое оставляем. */
+    .replace(/<\/?[a-z][a-z0-9]*(?:\s[^<>]*)?>/giu, '')
+    .replace(/\\(?:text|mathrm|mathbf|textbf|operatorname)\{([^{}]*)\}/gu, '$1')
+    .replace(/\\(?:left|right|displaystyle)(?![A-Za-z])/gu, '')
+    .replace(/\\[,;!:]|\\(?:quad|qquad)(?![A-Za-z])/gu, ' ')
+    .replace(/\\sqrt\{([^{}]+)\}/gu, '√($1)')
+    .replace(/\\sqrt\s*(\w+)/gu, '√$1')
   for (const [command, symbol] of notebookNotation) {
     result = result.replace(new RegExp(`\\\\${command}(?![A-Za-z])`, 'gu'), symbol)
   }
   return result
     .replace(/\$+/gu, '')
-    .replace(/\^\{?2\}?/gu, '²')
-    .replace(/\^\{?3\}?/gu, '³')
+    .replace(/\^\{?°\}?/gu, '°')
+    /* Степени и индексы - надстрочными и подстрочными знаками: x^{10} и
+       x_{12} пишутся в тетради как x¹⁰ и x₁₂, а не с крышкой и скобками. */
+    .replace(/\^\{?(-?\d+|n)\}?/gu, (_match, value: string) => toScript(value, superscriptDigits))
+    .replace(/_\{?(\d+)\}?/gu, (_match, value: string) => toScript(value, subscriptDigits))
     /* Дальше - то, что раньше отменяло решение целиком.
 
        6 сентября физика восьмого класса вернулась с «Решение не дошло:
@@ -612,6 +646,10 @@ export function normalizeNotebookNotation(value: unknown, maxLength = 5000) {
     .replace(/\s*:=\s*/gu, ' = ')
     .replace(/\s*=\s*const\b\.?/giu, ' - величина постоянная')
     .replace(/\bconst\b/giu, 'постоянно')
+    // Кванторы и Q.E.D. в школьной тетради тоже пишут словами.
+    .replace(/∀\s*/gu, 'для любого ')
+    .replace(/∃\s*/gu, 'существует ')
+    .replace(/\bQ\.?E\.?D\.?/gu, 'что и требовалось доказать')
     .replace(/\s+/gu, ' ')
     .trim()
     .slice(0, maxLength)
@@ -967,6 +1005,45 @@ function withoutSmuggledGiven(given: readonly string[], condition: string) {
   const conditionNumbers = new Set(condition.match(/\d+/gu) ?? [])
   return given.filter((line) => (line.match(/\d+/gu) ?? []).every((number) => conditionNumbers.has(number)))
 }
+/* Строки решения: по пределу листа и без повторов.
+
+   Режем по тому же пределу, каким потом меряет проверка: предел строки на
+   листе (stepOnPage) у геометрии строже общего (step), и разница между
+   ними уходила в отказ «есть строка, не помещающаяся в тетрадь».
+
+   Повтор строки - тоже механика: модель иногда дублирует шаг при
+   самопроверке. Проверка «в решении повторяются строки» роняла за это
+   всё решение, хотя убрать дубль умеет код. */
+function cleanSteps(value: unknown, limits: typeof tightNotebookLimits) {
+  if (!Array.isArray(value)) return []
+  const seen = new Set<string>()
+  const steps: string[] = []
+  for (const entry of value) {
+    const line = clampNotebookLine(normalizeNotebookNotation(entry), Math.min(limits.step, limits.stepOnPage))
+    const key = line.toLocaleLowerCase('ru-RU')
+    if (!line || seen.has(key)) continue
+    seen.add(key)
+    steps.push(line)
+  }
+  return steps.slice(0, 14)
+}
+
+/* Объяснение: только законченные мысли и только о теме.
+
+   Обрывок короче фразы и пересказ условия или шага решения проверка
+   отклоняла целиком - «объяснение из обрывков», «разбор пересказывает
+   условие». Лишнюю строку код убирает сам; модель зовут, только если
+   после чистки мыслей осталось меньше трёх - это уже про смысл. */
+function cleanExplanation(value: unknown, condition: string, steps: readonly string[]) {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((entry) => clampNotebookLine(normalizeNotebookNotation(entry, 400), 220))
+    .filter((entry) => entry.length >= 24)
+    .filter((entry) => conditionSimilarity(entry, condition) < 0.6)
+    .filter((entry) => !steps.some((step) => conditionSimilarity(entry, step) >= 0.55))
+    .slice(0, 5)
+}
+
 function normalizeDraft(value: unknown, limits = tightNotebookLimits, condition = ''): EngineDraft {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new GeometrySolutionEngineError('Модель не вернула решение')
@@ -979,6 +1056,7 @@ function normalizeDraft(value: unknown, limits = tightNotebookLimits, condition 
   const rawGoalTitle = text(goal.title, 20)
   const goalTitle = rawGoalTitle === 'Доказать' || rawGoalTitle === 'Построить' ? rawGoalTitle : 'Найти'
   const analysis = normalizeAnalysis(candidate.analysis)
+  const steps = cleanSteps(candidate.steps, limits)
 
   const draft: EngineDraft = {
     ruleChecks: normalizeRuleChecks(candidate.ruleChecks),
@@ -1007,26 +1085,8 @@ function normalizeDraft(value: unknown, limits = tightNotebookLimits, condition 
     },
     /* Объяснение не попадает на тетрадный лист: его верстает HTML над
        листом, поэтому пределы строки тетради к нему не применяются. */
-    explanation: Array.isArray(candidate.explanation)
-      ? candidate.explanation
-          .map((entry) => clampNotebookLine(normalizeNotebookNotation(entry, 400), 220))
-          .filter((entry) => entry.length > 12)
-          .slice(0, 5)
-      : [],
-    steps: Array.isArray(candidate.steps)
-      ? candidate.steps
-          /* Режем по тому же пределу, каким потом меряет проверка: предел
-             строки на листе (stepOnPage) у геометрии строже общего (step),
-             и разница между ними уходила в отказ «есть строка, не
-             помещающаяся в тетрадь» - на механической правке, которую код
-             умеет сделать сам. */
-          .map((entry) => clampNotebookLine(
-            normalizeNotebookNotation(entry),
-            Math.min(limits.step, limits.stepOnPage),
-          ))
-          .filter(Boolean)
-          .slice(0, 14)
-      : [],
+    explanation: cleanExplanation(candidate.explanation, condition || normalizeNotebookNotation(candidate.condition), steps),
+    steps,
     answer: clampNotebookLine(normalizeNotebookNotation(candidate.answer), limits.answer),
     answerKey: normalizeNotebookNotation(candidate.answerKey, 60),
     worksheet: normalizeWorksheet(candidate.worksheet),

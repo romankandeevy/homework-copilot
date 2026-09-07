@@ -272,6 +272,16 @@ describe('geometry solution quality gate', () => {
     expect(normalizeNotebookNotation('x := 5')).toBe('x = 5')
   })
 
+  /* 7 сентября: всё, что проверка называет «технической разметкой» и
+     «значками не из тетради», должно сниматься кодом до проверки - иначе
+     верное решение снова уйдёт в «Решение не дошло» из-за записи. */
+  it('снимает LaTeX, HTML и кванторы сам', () => {
+    expect(normalizeNotebookNotation('\\sqrt{16} = 4^\\circ')).toBe('√(16) = 4°')
+    expect(normalizeNotebookNotation('S = \\text{площадь} \\left( x^{10} \\right)')).toBe('S = площадь ( x¹⁰ )')
+    expect(normalizeNotebookNotation('x_{12} <sup>2</sup> \\le \\pi')).toBe('x₁₂ 2 ≤ π')
+    expect(normalizeNotebookNotation('∀ x ∃ y, Q.E.D.')).toBe('для любого x существует y, что и требовалось доказать')
+  })
+
   it('ловит const и другие значки не из школьной тетради', () => {
     const issues = validateSolutionQuality({
       ...taskFiveSolution,
