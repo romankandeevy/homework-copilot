@@ -1483,6 +1483,30 @@
 
 .notebook-sheet-body p { margin: 0; overflow-wrap: break-word; }
 
+/* Шапка листа: «Дано» и «Найти» слева, чертёж справа. Без чертежа
+   колонка одна; на телефоне чертёж уходит под текст. */
+.notebook-sheet-head {
+  display: grid;
+  gap: clamp(0.9rem, 2vw, 1.35rem);
+  align-items: start;
+}
+
+.notebook-sheet-head-text {
+  display: grid;
+  gap: clamp(0.9rem, 2vw, 1.35rem);
+  min-width: 0;
+}
+
+.notebook-sheet-head-with-diagram {
+  grid-template-columns: minmax(0, 1fr) minmax(14rem, 24rem);
+}
+
+.notebook-sheet-head-with-diagram .notebook-sheet-diagram svg { width: 100%; }
+
+@media (max-width: 720px) {
+  .notebook-sheet-head-with-diagram { grid-template-columns: minmax(0, 1fr); }
+}
+
 .notebook-sheet-given {
   display: grid;
   width: fit-content;

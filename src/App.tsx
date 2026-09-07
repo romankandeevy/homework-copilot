@@ -878,6 +878,11 @@ function UnderstandingPage({
           <span className="notebook-sheet-grid" aria-hidden="true" />
           <span className="notebook-sheet-margin" aria-hidden="true" />
           <div className="notebook-sheet-body">
+            {/* Шапка листа как в тетради: «Дано» и «Найти» слева, чертёж
+                справа от них, а не под ними. 7 сентября схема цепи
+                встала под «Найти» посреди листа, и решение уехало вниз. */}
+            <div className={`notebook-sheet-head${generatedSolution.diagram.kind !== 'none' ? ' notebook-sheet-head-with-diagram' : ''}`}>
+            <div className="notebook-sheet-head-text">
             {generatedSolution.given.length > 0 && (
               <section className="notebook-sheet-given">
                 <h2>Дано:</h2>
@@ -908,10 +913,12 @@ function UnderstandingPage({
               <h2>{generatedSolution.goal.title}:</h2>
               <p>{generatedSolution.goal.text}</p>
             </section>
-            {/* Чертёж стоит там же, где в тетради: после «Найти» и до хода
-                решения. Раньше он существовал только на SVG-листе геометрии,
-                и у остальных предметов пропадал совсем. */}
+            </div>
+            {/* Чертёж стоит там же, где в тетради: справа от «Дано» и
+                «Найти», до хода решения. Раньше он существовал только на
+                SVG-листе геометрии, и у остальных предметов пропадал совсем. */}
             <NotebookDiagram diagram={generatedSolution.diagram} />
+            </div>
             <span className="notebook-sheet-divider" aria-hidden="true" />
             <section className="notebook-sheet-steps">
               {/* У доказательства в тетради пишут «Доказательство»: по
