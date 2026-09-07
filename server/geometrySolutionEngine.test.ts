@@ -668,3 +668,56 @@ describe('разбор против дубля решения', () => {
     expect(analysisRepeatsSteps(morphemes, ['под-окон-ник-∅'])).toBe(false)
   })
 })
+
+/* Стереометрия: чертёж тела без пунктира - плоская картинка.
+
+   7 сентября на проде куб к задаче про скрещивающиеся прямые вышел
+   шестиугольником с диагоналями: невидимые рёбра отметить было нечем. */
+describe('чертёж тела', () => {
+  const cubeSolution = (hidden: boolean): HomeworkSolution => ({
+    ...taskFiveSolution,
+    source: 'text',
+    task: 'Куб ABCDA₁B₁C₁D₁',
+    condition: 'Куб ABCDA₁B₁C₁D₁ с ребром 6. M - середина BB₁. Найдите расстояние между скрещивающимися прямыми DM и A₁N.',
+    given: ['a = 6'],
+    goal: { title: 'Найти', text: 'd(DM, A₁N)' },
+    explanation: [
+      'Расстояние между скрещивающимися прямыми - длина их общего перпендикуляра, и её удобно считать через объём.',
+      'Признак такой задачи: две прямые не пересекаются и не параллельны, значит они скрещиваются.',
+      'Частая ошибка - взять расстояние между точками вместо расстояния между прямыми.',
+    ],
+    steps: ['d = 12/√53 = 12√53/53'],
+    answer: 'd = 12√53/53',
+    taskType: 'calculation',
+    diagram: {
+      kind: 'construction',
+      description: 'Куб ABCDA₁B₁C₁D₁ с отмеченными точками M и N.',
+      vertices: ['A', 'B', 'D', 'A₁'],
+      scene: {
+        points: [
+          { id: 'A', label: 'A', x: 20, y: 70, visible: true },
+          { id: 'B', label: 'B', x: 60, y: 70, visible: true },
+          { id: 'D', label: 'D', x: 34, y: 56, visible: true },
+          { id: 'A1', label: 'A₁', x: 20, y: 30, visible: true },
+        ],
+        objects: [
+          { kind: 'segment', points: ['A', 'B'], label: '', auxiliary: false },
+          { kind: 'segment', points: ['A', 'A1'], label: '', auxiliary: false },
+          { kind: 'segment', points: ['A', 'D'], label: '', auxiliary: false, ...(hidden ? { hidden: true } : {}) },
+        ],
+        marks: [],
+        constraints: [],
+      },
+    },
+  })
+
+  it('требует пунктир на невидимых рёбрах', () => {
+    expect(validateSolutionQuality(cubeSolution(false)))
+      .toContain('Это чертёж тела: невидимые рёбра обязаны быть помечены hidden=true и начерчены пунктиром')
+  })
+
+  it('пропускает чертёж тела с помеченными рёбрами', () => {
+    expect(validateSolutionQuality(cubeSolution(true)))
+      .not.toContain('Это чертёж тела: невидимые рёбра обязаны быть помечены hidden=true и начерчены пунктиром')
+  })
+})

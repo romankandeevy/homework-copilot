@@ -136,3 +136,34 @@ describe('подписи чертежа не накладываются', () => 
     expect(overlaps(container)).toEqual([])
   })
 })
+
+/* Скрытое ребро - настоящее ребро тела, а не вспомогательная линия:
+   у него своя толщина и свой пунктир. */
+describe('чертёж тела', () => {
+  it('чертит невидимые рёбра отдельным классом', () => {
+    const { container } = render(<svg>
+      <GeometryScene
+        scene={{
+          points: [
+            { id: 'A', label: 'A', x: 20, y: 70, visible: true },
+            { id: 'B', label: 'B', x: 60, y: 70, visible: true },
+            { id: 'D', label: 'D', x: 34, y: 56, visible: true },
+            { id: 'A1', label: 'A₁', x: 20, y: 30, visible: true },
+          ],
+          objects: [
+            { kind: 'segment', points: ['A', 'B'], label: '', auxiliary: false },
+            { kind: 'segment', points: ['A', 'A1'], label: '', auxiliary: false },
+            { kind: 'segment', points: ['A', 'D'], label: '', auxiliary: false, hidden: true },
+          ],
+          marks: [],
+          constraints: [],
+        }}
+        description="Куб"
+      />
+    </svg>)
+
+    expect(container.querySelectorAll('path.diagram-hidden')).toHaveLength(1)
+    expect(container.querySelectorAll('path.diagram-line')).toHaveLength(2)
+    expect(container.querySelectorAll('path.diagram-auxiliary')).toHaveLength(0)
+  })
+})

@@ -645,7 +645,13 @@ export function GeometryScene({ scene, description }: { scene: HomeworkDiagramSc
         {axes && <Axes axes={axes} projection={projection} />}
         {scene.objects.map((object, index) => {
           const objectPoints = object.points.map((id) => pointMap.get(id)).filter((point): point is Point => Boolean(point))
-          const className = object.auxiliary ? 'diagram-auxiliary' : 'diagram-line'
+          /* Три вида линии, а не два: видимое ребро, вспомогательное
+             построение и ребро тела, закрытое от наблюдателя. Последнее в
+             стереометрии обязательно - без пунктира куб читается как
+             плоский шестиугольник с диагоналями. */
+          const className = object.hidden
+            ? 'diagram-hidden'
+            : object.auxiliary ? 'diagram-auxiliary' : 'diagram-line'
           const key = `${object.kind}-${object.points.join('-')}-${index}`
           if (object.kind === 'curve') {
             return axes

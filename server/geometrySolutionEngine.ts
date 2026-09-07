@@ -185,13 +185,14 @@ const sceneSchema = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['kind', 'points', 'label', 'auxiliary', 'formula'],
+        required: ['kind', 'points', 'label', 'auxiliary', 'formula', 'hidden'],
         properties: {
           kind: { type: 'string', enum: [...homeworkSceneObjectKinds] },
           points: { type: 'array', minItems: 0, maxItems: 12, items: { type: 'string' } },
           label: { type: 'string' },
           auxiliary: { type: 'boolean' },
           formula: { type: 'string', description: 'Только для kind = curve: выражение от x, например «x² - 4x + 1» или «-0,1x + 0,5». Для остальных пустая строка.' },
+          hidden: { type: 'boolean', description: 'Ребро тела, закрытое от наблюдателя: чертится пунктиром. Только для стереометрии, иначе false.' },
         },
       },
     },
@@ -572,6 +573,8 @@ const authorInstructions = [
   'Разрешены символы ∈, ∉, ∥, ⟂, ∠, △, ∩, ∪, ⇒, ⇔, ≅, ∼, √, °, ² и обычные арифметические знаки.',
   'Если чертёж нужен, diagram.kind=construction. Описывай его только через scene.',
   // Координатная плоскость: графики, системы «графически», точки пересечения.
+  'Куб, параллелепипед, призма, пирамида - тело: чертёж строится кабинетной проекцией, как в тетради. Передняя грань - настоящий прямоугольник, глубина уходит вправо вверх под 45° и вдвое короче: точка (x; y) задней грани сдвигается на (+0,35·d; -0,35·d) от передней. Рёбра задавай отдельными segment, а не гранями-многоугольниками.',
+  'Три ребра, сходящиеся в дальней вершине тела, невидимы: у этих segment ставь hidden=true. Остальные рёбра сплошные. Без пунктира куб на листе читается как плоский шестиугольник с диагоналями.',
   'Задача про график функции, графическое решение уравнения или системы, точку пересечения прямых - чертёж на координатной плоскости: scene.axes.enabled=true с диапазонами xMin..xMax, yMin..yMax (целые, с запасом вокруг всех важных точек, ноль внутри) и unit - шагом делений.',
   'При axes.enabled координаты точек - математические (x; y), ось y вверх; поле 0..100 не используется. Каждый график - объект kind=curve с formula от x в школьной записи: «-0,1x + 0,5», «x² - 4x + 1», «1/x», «√(x + 2)», «|x - 1|»; label - «y = ...». Прямые тоже задавай как curve с formula, а не двумя точками.',
   'Точку пересечения графиков, корни, вершину параболы - добавь в points с точными координатами и перечисли её id в points каждой кривой, на которой она лежит: код проверит подстановкой.',
@@ -902,6 +905,7 @@ function normalizeScene(value: unknown): HomeworkDiagramScene {
         label: normalizeNotebookNotation(object.label, kind === 'curve' ? 24 : 12),
         auxiliary: object.auxiliary === true,
         ...(formula ? { formula } : {}),
+        ...(object.hidden === true ? { hidden: true } : {}),
       }]
     }).slice(0, 24),
     marks: rawMarks.flatMap((entry) => {
@@ -1809,6 +1813,16 @@ function conditionAsksForGraph(condition: string) {
   return /график|графическ|координатн\p{L}*\s+плоскост|систем\p{L}*\s+координат|точк\p{L}*\s+пересечени\p{L}*\s+(?:прям|график|парабол)/iu.test(condition)
 }
 
+/* Задача по стереометрии.
+
+   Куб, параллелепипед, призма, пирамида - тело, а не плоская фигура. На
+   чертеже у тела обязаны быть невидимые рёбра: три ребра, сходящиеся в
+   дальней вершине, чертятся пунктиром. Без них 7 сентября куб с прода
+   читался как плоский шестиугольник с диагоналями. */
+function conditionAsksForSolid(condition: string) {
+  return /куб|параллелепипед|призм|пирамид|тетраэдр|скрещивающ|двугранн/iu.test(condition)
+}
+
 /* Задача про схему.
 
    «Начертите схему цепи», «изобразите силы, действующие на тело»,
@@ -2333,6 +2347,14 @@ export function validateSolutionQuality(solution: HomeworkSolution) {
     const scene = mathScene ? toLocalScene(mathScene) : mathScene
     const axes = mathScene?.axes
     if (solution.diagram.description.trim().length < 8) issues.push('У чертежа нет понятного описания')
+    /* Тело без пунктира - плоская картинка.
+
+       Проверка смотрит на признак ребра, а не на глаз: у куба обязаны быть
+       рёбра, помеченные hidden. Строит их построитель по команде box, и он
+       же решает, какие именно закрыты. */
+    if (conditionAsksForSolid(solution.condition) && mathScene && !mathScene.objects.some((object) => object.hidden)) {
+      issues.push('Это чертёж тела: невидимые рёбра обязаны быть помечены hidden=true и начерчены пунктиром')
+    }
     if (conditionAsksForGraph(solution.condition) && !axes) {
       issues.push('Задача про график: заполни scene.axes (enabled=true, диапазоны осей) и задай графики как curve с formula')
     }

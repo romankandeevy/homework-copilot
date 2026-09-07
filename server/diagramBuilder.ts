@@ -41,6 +41,9 @@ export const diagramOps = [
   'square',
   'rhombus',
   'trapezoid',
+  // тела
+  'box',
+  'prism',
   // замечательные линии
   'median',
   'bisector',
@@ -103,7 +106,10 @@ export const diagramPlanInstructions = [
   'midline [M, N] ← args [A, B, C] — средняя линия треугольника, параллельная AC, или args [A, B, C, D] — средняя линия трапеции с основаниями AB ∥ DC.',
   'Пересечения: intersection [X] ← args [A, B, C, D] — прямые AB и CD; intersection-line-circle [X] или [X, Y] ← args [A, B, O, P]; intersection-circles [X] или [X, Y] ← args [O1, P1, O2, P2].',
   'Окружности треугольника: incircle [O] ← args [A, B, C] — вписанная; circumcircle [O] ← args [A, B, C] — описанная.',
+  'Тела: box ← names [A, B, C, D, A₁, B₁, C₁, D₁], values [длина, высота, глубина] - прямоугольный параллелепипед, ABCD нижнее основание, A₁ над A; для куба задай все три числа одинаковыми. prism ← names [A, B, C, A₁, B₁, C₁], values [сторона основания, высота, глубина] - треугольная призма.',
+  'Тело чертится кабинетной проекцией: сервер сам считает вершины, сам решает, какие три ребра закрыты, и чертит их пунктиром. Середины рёбер, точки на рёбрах и пересечения на теле стройте обычными командами - midpoint, point-on-segment, intersection - они работают на чертеже тела так же, как на плоском.',
   'Пометки: mark-equal ← args [A, B, C, D] (AB = CD); mark-parallel ← args [A, B, C, D]; mark-right-angle ← args [A, B, C] (прямой угол при B); mark-angle ← args [A, B, C] с подписью в label.',
+  'На чертеже тела пометки равенства и прямого угла не ставь: проекция длин и углов не сохраняет, и сервер отвергнет план как неверный. Равные рёбра показывай подписью.',
   'Пометка — это утверждение: сервер проверяет её численно и отклоняет план, если она неверна.',
 ].join(' ')
 
@@ -422,6 +428,67 @@ function placeQuadrilateral(state: BuildState, command: DiagramCommand, corners:
   return [a, b, c, d] as const
 }
 
+// ─── Стереометрия ───────────────────────────────────────────────────────────
+
+/* Кабинетная проекция - та, которой куб чертят в школе.
+
+   Передняя грань остаётся настоящим прямоугольником, глубина уходит вправо
+   вверх под 45° и вдвое короче: «нарисуй квадрат, отступи вправо вверх,
+   нарисуй второй, соедини». Настоящая изометрия со всеми тремя осями под
+   120° в тетради не рисуется - там передняя грань перестаёт быть
+   прямоугольником, и подписи сторон перестают читаться.
+
+   Проекция параллельная, то есть аффинная, и это важно: середина ребра в
+   проекции - это проекция середины ребра. Поэтому midpoint,
+   point-on-segment, intersection и остальные команды построителя работают
+   на теле без единой правки - они и должны считать по чертежу. */
+const depthScale = 0.5
+const depthAngle = 45
+
+type Space = { x: number; y: number; z: number }
+
+const space = (x: number, y: number, z: number): Space => ({ x, y, z })
+
+function projectSpace(point: Space): Vec {
+  const radians = (depthAngle * Math.PI) / 180
+  return vec(
+    point.x + point.z * depthScale * Math.cos(radians),
+    point.y + point.z * depthScale * Math.sin(radians),
+  )
+}
+
+/* Какая вершина закрыта телом.
+
+   При параллельной проекции очертание тела - выпуклая ломаная, и внутрь неё
+   попадают ровно две вершины: ближняя к наблюдателю и дальняя. Дальняя и
+   есть скрытая, а «дальняя» при нашем направлении взгляда - это наибольшая
+   глубина z. Три ребра, сходящиеся в ней, чертятся пунктиром. */
+function hiddenVertexIndex(points: readonly Space[], edges: readonly (readonly [number, number])[]) {
+  const projected = points.map(projectSpace)
+  const inside = points
+    .map((_, index) => index)
+    .filter((index) => !onHull(projected, index))
+  const candidates = inside.length > 0 ? inside : points.map((_, index) => index)
+  const hidden = candidates.reduce((deepest, index) => (points[index].z > points[deepest].z ? index : deepest), candidates[0])
+  // Скрытая вершина обязана иметь ровно три ребра: иначе тело не выпуклое
+  // и правило «дальняя внутренняя вершина» к нему неприменимо.
+  return edges.filter(([from, to]) => from === hidden || to === hidden).length === 3 ? hidden : -1
+}
+
+/** Лежит ли точка на границе выпуклой оболочки остальных. */
+function onHull(points: readonly Vec[], index: number) {
+  const target = points[index]
+  const others = points.filter((_, other) => other !== index)
+  // Точка внутри оболочки, если её окружают направления во все стороны:
+  // ищем полуплоскость, в которой нет ни одной другой точки.
+  for (let degrees = 0; degrees < 360; degrees += 5) {
+    const radians = (degrees * Math.PI) / 180
+    const direction = vec(Math.cos(radians), Math.sin(radians))
+    if (others.every((other) => dot(sub(other, target), direction) <= 1e-6)) return true
+  }
+  return false
+}
+
 /** Углы параллелограмма ABCD: A в начале, B по оси x, D под углом α, C = B + D − A. */
 function parallelogramCorners(side: number, other: number, angle: number): [Vec, Vec, Vec, Vec] {
   const a = vec(0, 0)
@@ -599,6 +666,58 @@ function runCommand(state: BuildState, command: DiagramCommand) {
     if (op === 'square' || op === 'rhombus') {
       addConstraint(state, 'equal-length', [a.id, b.id, b.id, c.id])
       addMark(state, { kind: 'equal-segment', points: [a.id, b.id, b.id, c.id], label: '' })
+    }
+    return
+  }
+
+  /* Тело: параллелепипед и призма.
+
+     Вершины считаются в пространстве, проецируются кабинетной проекцией и
+     дальше живут как обычные точки чертежа. Рёбра выпускаются отдельными
+     отрезками, а не гранями-многоугольниками: у ребра свой признак
+     видимости, у грани его быть не может.
+
+     Равенств длин в constraints не выпускаем: проекция длины не сохраняет,
+     и «AB = CD» на чертеже честно не выполняется. Равенство рёбер куба -
+     свойство тела, а не картинки; на чертеже его показывают подписью. */
+  if (op === 'box' || op === 'prism') {
+    const isBox = op === 'box'
+    const names = takeNames(command, isBox ? 8 : 6)
+    const [first, second, third] = takeValues(command, isBox ? [56, 44, 40] : [56, 46, 40])
+    requirePositive(command, [first, second, third], 3)
+
+    const corners: Space[] = isBox
+      // ABCD - нижнее основание, A₁B₁C₁D₁ - верхнее, A₁ над A.
+      ? [
+          space(0, 0, 0), space(first, 0, 0), space(first, 0, third), space(0, 0, third),
+          space(0, second, 0), space(first, second, 0), space(first, second, third), space(0, second, third),
+        ]
+      // Треугольная призма: ABC - нижнее основание, A₁B₁C₁ - верхнее.
+      : [
+          space(0, 0, 0), space(first, 0, 0), space(first * 0.45, 0, third),
+          space(0, second, 0), space(first, second, 0), space(first * 0.45, second, third),
+        ]
+
+    const half = corners.length / 2
+    const baseEdges = Array.from({ length: half }, (_, index) => [index, (index + 1) % half] as const)
+    const edges: (readonly [number, number])[] = [
+      ...baseEdges,
+      ...baseEdges.map(([from, to]) => [from + half, to + half] as const),
+      ...Array.from({ length: half }, (_, index) => [index, index + half] as const),
+    ]
+
+    const hidden = hiddenVertexIndex(corners, edges)
+    const visible = !command.hidden
+    const points = names.map((name, index) => definePoint(state, name, projectSpace(corners[index]), visible))
+
+    for (const [from, to] of edges) {
+      addObject(state, {
+        kind: 'segment',
+        points: [points[from].id, points[to].id],
+        label: '',
+        auxiliary: command.auxiliary,
+        ...(from === hidden || to === hidden ? { hidden: true } : {}),
+      })
     }
     return
   }

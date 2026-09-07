@@ -173,7 +173,7 @@ export function NotebookDiagram({ diagram }: { diagram: GeometryDiagramSpec }) {
         <TriangleDiagram diagram={diagram} />
         <style>{`
           .geometry-diagram { opacity: ${strokes.pencilOpacity}; }
-          .diagram-line,.diagram-mark,.diagram-angle-arc,.diagram-auxiliary { fill: none; stroke: ${colors.pencil}; stroke-linecap: round; stroke-linejoin: round; }
+          .diagram-line,.diagram-mark,.diagram-angle-arc,.diagram-auxiliary,.diagram-hidden { fill: none; stroke: ${colors.pencil}; stroke-linecap: round; stroke-linejoin: round; }
           .diagram-line { stroke-width: ${strokes.triangle}px; }
           .diagram-point { fill: ${colors.pencil}; }
           .diagram-paper { fill: ${colors.paper}; stroke: none; }
@@ -183,6 +183,9 @@ export function NotebookDiagram({ diagram }: { diagram: GeometryDiagramSpec }) {
           .diagram-tick-label { font-size: ${Math.round(typography.bodySize * 0.72)}px; }
           .diagram-mark,.diagram-angle-arc { stroke-width: ${strokes.marker}px; }
           .diagram-auxiliary { stroke-width: ${strokes.marker}px; stroke-dasharray: 10 7; }
+          /* Скрытое ребро - настоящее ребро тела, просто за гранью: толщина
+             как у видимых рёбер, пунктир чаще, чем у вспомогательной линии. */
+          .diagram-hidden { stroke-width: ${strokes.triangle}px; stroke-dasharray: 6 5; }
           .diagram-vertex,.diagram-angle-label { fill: ${colors.pencil}; font-size: ${typography.bodySize}px; }
           .diagram-caption { fill: ${colors.pencil}; font-size: ${typography.goalSize}px; }
         `}</style>

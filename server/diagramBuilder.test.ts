@@ -392,3 +392,90 @@ describe('построитель чертежа по плану', () => {
     expect(result.diagram.description).toBe('Равносторонний треугольник ABC.')
   })
 })
+
+/* Стереометрия: куб ABCDA₁B₁C₁D₁.
+
+   7 сентября на проде задача про расстояние между скрещивающимися прямыми
+   решилась верно, а чертёж вышел плоским шестиугольником с диагоналями:
+   трёхмерных примитивов не было вовсе, и скрытые рёбра отметить было
+   нечем. */
+describe('тела', () => {
+  const cube = () => buildDiagram(plan('Куб ABCDA₁B₁C₁D₁', [
+    { op: 'box', names: ['A', 'B', 'C', 'D', 'A₁', 'B₁', 'C₁', 'D₁'], values: [50, 50, 50] },
+  ]))
+
+  it('строит восемь вершин и двенадцать рёбер', () => {
+    const built = cube()
+    expect(built.ok).toBe(true)
+    if (!built.ok) return
+
+    expect(built.scene.points).toHaveLength(8)
+    expect(built.scene.objects).toHaveLength(12)
+    expect(built.scene.objects.every((object) => object.kind === 'segment')).toBe(true)
+  })
+
+  it('чертит пунктиром ровно три ребра одной вершины', () => {
+    const built = cube()
+    expect(built.ok).toBe(true)
+    if (!built.ok) return
+
+    const hidden = built.scene.objects.filter((object) => object.hidden)
+    expect(hidden).toHaveLength(3)
+
+    // Все три сходятся в одной вершине - той, что закрыта телом.
+    const counts = new Map<string, number>()
+    for (const edge of hidden) {
+      for (const id of edge.points) counts.set(id, (counts.get(id) ?? 0) + 1)
+    }
+    expect([...counts.values()].filter((count) => count === 3)).toHaveLength(1)
+  })
+
+  it('передняя грань остаётся прямоугольником', () => {
+    const built = cube()
+    expect(built.ok).toBe(true)
+    if (!built.ok) return
+
+    const at = (id: string) => built.scene.points.find((point) => point.id === id)
+    const [a, b, b1, a1] = [at('A'), at('B'), at('B₁'), at('A₁')]
+    expect(a && b && a1 && b1).toBeTruthy()
+    if (!a || !b || !a1 || !b1) return
+
+    // AB горизонтально, AA₁ вертикально: так куб и чертят в тетради.
+    expect(Math.abs(a.y - b.y)).toBeLessThan(0.5)
+    expect(Math.abs(a.x - a1.x)).toBeLessThan(0.5)
+    // Верхнее ребро равно нижнему, боковые - равны между собой.
+    expect(Math.abs(Math.hypot(b.x - a.x, b.y - a.y) - Math.hypot(b1.x - a1.x, b1.y - a1.y))).toBeLessThan(0.5)
+  })
+
+  // Середина ребра нужна половине задач по стереометрии: проекция
+  // параллельная, поэтому обычный midpoint на теле работает как есть.
+  it('берёт середину бокового ребра', () => {
+    const built = buildDiagram(plan('Куб с серединой BB₁', [
+      { op: 'box', names: ['A', 'B', 'C', 'D', 'A₁', 'B₁', 'C₁', 'D₁'], values: [50, 50, 50] },
+      { op: 'midpoint', names: ['M'], args: ['B', 'B₁'] },
+      { op: 'segment', args: ['D', 'M'], auxiliary: true },
+    ]))
+
+    expect(built.ok).toBe(true)
+    if (!built.ok) return
+
+    const at = (id: string) => built.scene.points.find((point) => point.id === id)
+    const [b, b1, m] = [at('B'), at('B₁'), at('M')]
+    expect(b && b1 && m).toBeTruthy()
+    if (!b || !b1 || !m) return
+    expect(Math.abs(m.x - (b.x + b1.x) / 2)).toBeLessThan(0.5)
+    expect(Math.abs(m.y - (b.y + b1.y) / 2)).toBeLessThan(0.5)
+  })
+
+  it('строит треугольную призму', () => {
+    const built = buildDiagram(plan('Призма ABCA₁B₁C₁', [
+      { op: 'prism', names: ['A', 'B', 'C', 'A₁', 'B₁', 'C₁'], values: [50, 46, 40] },
+    ]))
+
+    expect(built.ok).toBe(true)
+    if (!built.ok) return
+    expect(built.scene.points).toHaveLength(6)
+    expect(built.scene.objects).toHaveLength(9)
+    expect(built.scene.objects.filter((object) => object.hidden)).toHaveLength(3)
+  })
+})
