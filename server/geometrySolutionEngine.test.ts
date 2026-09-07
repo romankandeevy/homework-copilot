@@ -179,6 +179,13 @@ describe('пределы строки тетради', () => {
     expect(line[kept.length]).toBe(' ')
     expect(clampNotebookLine('Короткая строка', 40)).toBe('Короткая строка')
   })
+
+  // Строка без пробелов — формула: многоточие выводило её за предел,
+  // и проверка тетради роняла верное решение из-за одного знака.
+  it('укладывается в предел вместе с многоточием', () => {
+    expect(clampNotebookLine('0,3x+0,1=-0,1x+0,5'.repeat(6), 40).length).toBeLessThanOrEqual(40)
+    expect(clampNotebookLine('Слово '.repeat(20), 40).length).toBeLessThanOrEqual(40)
+  })
 })
 
 describe('geometry solution quality gate', () => {

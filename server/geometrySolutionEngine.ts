@@ -569,7 +569,14 @@ const notebookNotation = new Map([
    где кончилось слово. */
 export function clampNotebookLine(value: string, maxLength: number) {
   if (value.length <= maxLength) return value
-  const cut = value.slice(0, maxLength)
+  /* Многоточие тоже занимает место в строке.
+
+     Обрез длинной строки без пробелов - формулы вроде
+     «0,3x+0,1=-0,1x+0,5» - возвращал ровно maxLength знаков плюс «…».
+     Строка выходила на знак длиннее предела, проверка «не помещается в
+     тетрадь» её роняла, и ученик получал «Решение не дошло» из-за
+     одного символа, который дописали мы сами. */
+  const cut = value.slice(0, maxLength - 1)
   const lastSpace = cut.lastIndexOf(' ')
   const trimmed = (lastSpace > maxLength * 0.6 ? cut.slice(0, lastSpace) : cut).replace(/[\s,;:.—-]+$/u, '')
   return `${trimmed}…`
@@ -1008,7 +1015,15 @@ function normalizeDraft(value: unknown, limits = tightNotebookLimits, condition 
       : [],
     steps: Array.isArray(candidate.steps)
       ? candidate.steps
-          .map((entry) => clampNotebookLine(normalizeNotebookNotation(entry), limits.step))
+          /* Режем по тому же пределу, каким потом меряет проверка: предел
+             строки на листе (stepOnPage) у геометрии строже общего (step),
+             и разница между ними уходила в отказ «есть строка, не
+             помещающаяся в тетрадь» - на механической правке, которую код
+             умеет сделать сам. */
+          .map((entry) => clampNotebookLine(
+            normalizeNotebookNotation(entry),
+            Math.min(limits.step, limits.stepOnPage),
+          ))
           .filter(Boolean)
           .slice(0, 14)
       : [],
