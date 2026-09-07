@@ -43,7 +43,9 @@ export const homeworkSolutionEngineVersion = 3
 export const homeworkTaskTypes = ['construction', 'calculation', 'proof', 'mixed'] as const
 export type HomeworkTaskType = typeof homeworkTaskTypes[number]
 
-export const homeworkSceneObjectKinds = ['line', 'segment', 'ray', 'circle', 'polyline', 'polygon'] as const
+/* «curve» - график функции по формуле от x; рисуется только на сцене с
+   осями (axes), где координаты точек - математические, а не поле 0..100. */
+export const homeworkSceneObjectKinds = ['line', 'segment', 'ray', 'circle', 'polyline', 'polygon', 'curve'] as const
 export type HomeworkSceneObjectKind = typeof homeworkSceneObjectKinds[number]
 
 export const homeworkSceneMarkKinds = ['angle', 'right-angle', 'equal-segment', 'parallel'] as const
@@ -62,7 +64,25 @@ export const homeworkSceneConstraintKinds = [
 ] as const
 export type HomeworkSceneConstraintKind = typeof homeworkSceneConstraintKinds[number]
 
+/* Координатная плоскость.
+
+   Задачи про графики - «постройте график», «решите графически», «найдите
+   точку пересечения прямых» - на поле 0..100 не ложатся: там нет осей,
+   единичного отрезка и подписей делений. Когда axes задан, координаты
+   всех точек сцены - математические, ось y смотрит вверх, а лист сам
+   рисует оси, стрелки и деления через unit. */
+export type HomeworkSceneAxes = {
+  xMin: number
+  xMax: number
+  yMin: number
+  yMax: number
+  unit: number
+  xLabel: string
+  yLabel: string
+}
+
 export type HomeworkDiagramScene = {
+  axes?: HomeworkSceneAxes
   points: Array<{
     id: string
     label: string
@@ -75,6 +95,8 @@ export type HomeworkDiagramScene = {
     points: string[]
     label: string
     auxiliary: boolean
+    /** Формула графика для kind = curve: выражение от x, например «x² - 4x + 1». */
+    formula?: string
   }>
   marks: Array<{
     kind: HomeworkSceneMarkKind

@@ -209,6 +209,10 @@ function NotebookSheet({ spec, segment }: { spec: GeometryNotebookPageSpec; segm
           .diagram-line,.diagram-mark,.diagram-angle-arc,.diagram-auxiliary { fill: none; stroke: ${colors.pencil}; stroke-linecap: round; stroke-linejoin: round; }
           .diagram-line { stroke-width: ${strokes.triangle}px; }
           .diagram-point { fill: ${colors.pencil}; }
+          .diagram-axis { fill: none; stroke: ${colors.pencil}; stroke-width: ${strokes.marker}px; stroke-linecap: round; stroke-linejoin: round; }
+          .diagram-axis-label,.diagram-tick-label { fill: ${colors.pencil}; font-family: ${typography.family}; font-weight: ${typography.weight}; }
+          .diagram-axis-label { font-size: ${typography.bodySize}px; }
+          .diagram-tick-label { font-size: ${Math.round(typography.bodySize * 0.72)}px; }
           .diagram-mark,.diagram-angle-arc { stroke-width: ${strokes.marker}px; }
           .diagram-auxiliary { stroke-width: ${strokes.marker}px; stroke-dasharray: 10 7; }
           .diagram-vertex,.diagram-angle-label { fill: ${colors.pencil}; font-size: ${typography.bodySize}px; }

@@ -290,6 +290,58 @@ describe('geometry solution quality gate', () => {
     expect(issues.some((issue) => issue.includes('не пишут «const»'))).toBe(true)
   })
 
+  /* 7 сентября: система «y = -0,1x + 0,5 и y = 0,3x + 0,1» решилась верно,
+     а чертить её было нечем - сцена знала только поле 0..100. Теперь
+     задача про график требует осей, а точка пересечения проверяется
+     подстановкой в формулу. */
+  it('требует координатную плоскость для задачи про график', () => {
+    const issues = validateSolutionQuality({
+      ...taskFiveSolution,
+      subject: 'Алгебра',
+      condition: 'Решите графически систему уравнений y = -0,1x + 0,5 и y = 0,3x + 0,1',
+      quality: { ...taskFiveSolution.quality!, diagramRequired: true },
+    })
+    expect(issues.some((issue) => issue.includes('scene.axes'))).toBe(true)
+  })
+
+  it('принимает графики с точкой пересечения на обеих прямых', () => {
+    const graph = {
+      ...taskFiveSolution,
+      subject: 'Алгебра',
+      taskType: 'calculation' as const,
+      condition: 'Решите графически систему уравнений y = -0,1x + 0,5 и y = 0,3x + 0,1',
+      given: ['y = -0,1x + 0,5', 'y = 0,3x + 0,1'],
+      steps: ['-0,1x + 0,5 = 0,3x + 0,1', '0,4x = 0,4', 'x = 1', 'y = 0,4'],
+      answer: '(1; 0,4)',
+      quality: { ...taskFiveSolution.quality!, diagramRequired: true },
+      diagram: {
+        kind: 'construction' as const,
+        description: 'Две прямые на координатной плоскости и точка их пересечения A',
+        vertices: ['A'],
+        scene: {
+          axes: { xMin: -2, xMax: 4, yMin: -1, yMax: 2, unit: 1, xLabel: 'x', yLabel: 'y' },
+          points: [{ id: 'A', label: 'A', x: 1, y: 0.4, visible: true }],
+          objects: [
+            { kind: 'curve' as const, points: ['A'], label: 'y = -0,1x + 0,5', auxiliary: false, formula: '-0,1x + 0,5' },
+            { kind: 'curve' as const, points: ['A'], label: 'y = 0,3x + 0,1', auxiliary: false, formula: '0,3x + 0,1' },
+          ],
+          marks: [],
+          constraints: [],
+        },
+      },
+    }
+    expect(validateSolutionQuality(graph).filter((issue) => /график|ос|точк|чертёж/iu.test(issue))).toEqual([])
+
+    const wrong = validateSolutionQuality({
+      ...graph,
+      diagram: {
+        ...graph.diagram,
+        scene: { ...graph.diagram.scene, points: [{ id: 'A', label: 'A', x: 1, y: 1, visible: true }] },
+      },
+    })
+    expect(wrong.some((issue) => issue.includes('не лежит на графике'))).toBe(true)
+  })
+
   it('ловит подставленный ответ в «Дано» качественного вопроса', () => {
     const issues = validateSolutionQuality({
       ...taskFiveSolution,

@@ -15,12 +15,14 @@ import type {
   HomeworkDecisionSummary,
   HomeworkDiagram,
   HomeworkDiagramScene,
+  HomeworkSceneAxes,
   HomeworkSolution,
   HomeworkSolutionVerification,
   HomeworkTaskType,
   HomeworkWrittenAnalysis,
   SolveHomeworkRequest,
 } from '../src/lib/homeworkContract.ts'
+import { compileFormula } from '../src/lib/formula.ts'
 import { normalizeTaskCondition } from '../src/textbooks/taskCatalog.ts'
 import {
   buildDiagramFromModelPlan,
@@ -133,11 +135,28 @@ type ReviewResult = {
 
 export class GeometrySolutionEngineError extends Error {}
 
+const axesSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['enabled', 'xMin', 'xMax', 'yMin', 'yMax', 'unit', 'xLabel', 'yLabel'],
+  properties: {
+    enabled: { type: 'boolean', description: 'true - чертёж на координатной плоскости; координаты точек тогда математические.' },
+    xMin: { type: 'number' },
+    xMax: { type: 'number' },
+    yMin: { type: 'number' },
+    yMax: { type: 'number' },
+    unit: { type: 'number', description: 'Шаг делений на осях, обычно 1.' },
+    xLabel: { type: 'string' },
+    yLabel: { type: 'string' },
+  },
+} as const
+
 const sceneSchema = {
   type: 'object',
   additionalProperties: false,
-  required: ['points', 'objects', 'marks', 'constraints'],
+  required: ['axes', 'points', 'objects', 'marks', 'constraints'],
   properties: {
+    axes: axesSchema,
     points: {
       type: 'array',
       minItems: 0,
@@ -149,8 +168,8 @@ const sceneSchema = {
         properties: {
           id: { type: 'string', description: 'Короткий уникальный идентификатор точки.' },
           label: { type: 'string', description: 'Подпись точки на чертеже.' },
-          x: { type: 'number', minimum: 0, maximum: 100, description: 'Координата в локальном поле чертежа 0..100.' },
-          y: { type: 'number', minimum: 0, maximum: 100, description: 'Координата в локальном поле чертежа 0..100.' },
+          x: { type: 'number', description: 'Координата в локальном поле чертежа 0..100; при axes.enabled - математическая координата.' },
+          y: { type: 'number', description: 'Координата в локальном поле чертежа 0..100; при axes.enabled - математическая координата, ось y вверх.' },
           visible: { type: 'boolean' },
         },
       },
@@ -162,12 +181,13 @@ const sceneSchema = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['kind', 'points', 'label', 'auxiliary'],
+        required: ['kind', 'points', 'label', 'auxiliary', 'formula'],
         properties: {
           kind: { type: 'string', enum: [...homeworkSceneObjectKinds] },
           points: { type: 'array', minItems: 0, maxItems: 12, items: { type: 'string' } },
           label: { type: 'string' },
           auxiliary: { type: 'boolean' },
+          formula: { type: 'string', description: 'Только для kind = curve: выражение от x, например «x² - 4x + 1» или «-0,1x + 0,5». Для остальных пустая строка.' },
         },
       },
     },
@@ -482,6 +502,11 @@ const authorInstructions = [
     + 'Никаких \frac, x^2, x_{1}, $...$, **жирного**, обратных слешей и подчёркиваний.',
   'Разрешены символы ∈, ∉, ∥, ⟂, ∠, △, ∩, ∪, ⇒, ⇔, ≅, ∼, √, °, ² и обычные арифметические знаки.',
   'Если чертёж нужен, diagram.kind=construction. Описывай его только через scene.',
+  // Координатная плоскость: графики, системы «графически», точки пересечения.
+  'Задача про график функции, графическое решение уравнения или системы, точку пересечения прямых - чертёж на координатной плоскости: scene.axes.enabled=true с диапазонами xMin..xMax, yMin..yMax (целые, с запасом вокруг всех важных точек, ноль внутри) и unit - шагом делений.',
+  'При axes.enabled координаты точек - математические (x; y), ось y вверх; поле 0..100 не используется. Каждый график - объект kind=curve с formula от x в школьной записи: «-0,1x + 0,5», «x² - 4x + 1», «1/x», «√(x + 2)», «|x - 1|»; label - «y = ...». Прямые тоже задавай как curve с formula, а не двумя точками.',
+  'Точку пересечения графиков, корни, вершину параболы - добавь в points с точными координатами и перечисли её id в points каждой кривой, на которой она лежит: код проверит подстановкой.',
+  'Для геометрического чертежа axes.enabled=false, formula у всех объектов - пустая строка.',
   'Координаты scene — локальная геометрическая плоскость 0..100, а не координаты страницы.',
   'line, segment и ray задаются двумя точками; circle — центром и точкой окружности; polyline и polygon — последовательностью точек.',
   'Каждую существенную связь продублируй в constraints, а координаты обязаны ей соответствовать.',
@@ -769,19 +794,25 @@ function normalizeScene(value: unknown): HomeworkDiagramScene {
   const references = (raw: unknown, limit: number) => lines(raw, limit, 24).map((id) => (
     idMap.get(id) ?? idMap.get(id.toLocaleUpperCase('ru-RU')) ?? id.toLocaleUpperCase('ru-RU')
   ))
+  const axes = normalizeAxes(candidate.axes)
 
-  return inferSceneConstraints({
+  const scene: HomeworkDiagramScene = {
+    ...(axes ? { axes } : {}),
     points,
     objects: rawObjects.flatMap((entry) => {
       if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return []
       const object = entry as Record<string, unknown>
       const kind = homeworkSceneObjectKinds.find((item) => item === object.kind)
       if (!kind) return []
+      // Кривая без осей нарисована быть не может: без axes она пропускается.
+      if (kind === 'curve' && !axes) return []
+      const formula = kind === 'curve' ? normalizeNotebookNotation(object.formula, 60) : ''
       return [{
         kind,
         points: references(object.points, 12),
-        label: normalizeNotebookNotation(object.label, 12),
+        label: normalizeNotebookNotation(object.label, kind === 'curve' ? 24 : 12),
         auxiliary: object.auxiliary === true,
+        ...(formula ? { formula } : {}),
       }]
     }).slice(0, 24),
     marks: rawMarks.flatMap((entry) => {
@@ -798,7 +829,58 @@ function normalizeScene(value: unknown): HomeworkDiagramScene {
       if (!kind) return []
       return [{ kind, points: references(constraint.points, 12) }]
     }).slice(0, 24),
-  })
+  }
+  /* Связи выводятся в поле 0..100: допуски там в единицах поля. Сцену с
+     осями сначала переводим в поле, потом переносим найденные связи. */
+  return axes
+    ? { ...scene, constraints: inferSceneConstraints(toLocalScene(scene)).constraints }
+    : inferSceneConstraints(scene)
+}
+
+/* Оси координат: модель отдаёт enabled=false там, где чертёж
+   геометрический. Диапазон обязан быть невырожденным и содержать хоть
+   один шаг делений; иначе осей нет, и сцена трактуется как поле 0..100. */
+function normalizeAxes(value: unknown): HomeworkSceneAxes | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const raw = value as Record<string, unknown>
+  if (raw.enabled !== true) return null
+  const xMin = number(raw.xMin)
+  const xMax = number(raw.xMax)
+  const yMin = number(raw.yMin)
+  const yMax = number(raw.yMax)
+  const unit = number(raw.unit)
+  if (![xMin, xMax, yMin, yMax].every(Number.isFinite)) return null
+  if (xMax - xMin < 1e-6 || yMax - yMin < 1e-6) return null
+  const span = Math.max(xMax - xMin, yMax - yMin)
+  const safeUnit = Number.isFinite(unit) && unit > 0 && span / unit <= 40 ? unit : Math.max(1, Math.round(span / 10))
+  return {
+    xMin,
+    xMax,
+    yMin,
+    yMax,
+    unit: safeUnit,
+    xLabel: normalizeNotebookNotation(raw.xLabel, 4) || 'x',
+    yLabel: normalizeNotebookNotation(raw.yLabel, 4) || 'y',
+  }
+}
+
+/* Сцена с осями в поле 0..100.
+
+   Все проверки чертежа - «точки не накладываются», «объект вырожден»,
+   допуски коллинеарности - написаны в единицах поля. Масштаб один на обе
+   оси, чтобы углы не искажались; больший из размахов ложится в 100. */
+export function toLocalScene(scene: HomeworkDiagramScene): HomeworkDiagramScene {
+  const axes = scene.axes
+  if (!axes) return scene
+  const scale = 100 / Math.max(axes.xMax - axes.xMin, axes.yMax - axes.yMin)
+  return {
+    ...scene,
+    points: scene.points.map((point) => ({
+      ...point,
+      x: (point.x - axes.xMin) * scale,
+      y: (point.y - axes.yMin) * scale,
+    })),
+  }
 }
 
 function emptyScene(): HomeworkDiagramScene {
@@ -811,7 +893,9 @@ function normalizeDiagram(value: unknown): HomeworkDiagram {
     : {}
   const scene = normalizeScene(candidate.scene)
   const rawKind = text(candidate.kind, 50)
-  const kind = rawKind === 'construction' && scene.points.length > 0 ? 'construction' : 'none'
+  const kind = rawKind === 'construction' && (scene.points.length > 0 || (scene.axes && scene.objects.length > 0))
+    ? 'construction'
+    : 'none'
   const auxiliaryKind = text(candidate.auxiliaryKind, 20)
 
   return {
@@ -1524,7 +1608,17 @@ function suspiciousCondition(condition: string) {
   return /[@{}]|\b(?:HATE|Ha|HA|3[aа][mм]кнут\p{L}*)\b|\bВи\b|точк\p{L}*[^.;]{0,25}№/iu.test(condition)
 }
 
+/* Задача про график.
+
+   «Постройте график», «решите графически», «найдите точку пересечения
+   прямых», «в одной системе координат» - тут ответ читается с чертежа, и
+   без координатной плоскости запись неполная. */
+function conditionAsksForGraph(condition: string) {
+  return /график|графическ|координатн\p{L}*\s+плоскост|систем\p{L}*\s+координат|точк\p{L}*\s+пересечени\p{L}*\s+(?:прям|график|парабол)/iu.test(condition)
+}
+
 function conditionRequiresDiagram(solution: HomeworkSolution) {
+  if (conditionAsksForGraph(solution.condition)) return true
   return /геометр/iu.test(solution.subject)
     && (solution.taskType === 'construction'
       || solution.goal.title === 'Построить'
@@ -1533,6 +1627,42 @@ function conditionRequiresDiagram(solution: HomeworkSolution) {
 
 function uppercasePointLabels(value: string) {
   return [...value.matchAll(/(?<![A-Za-z])([A-Z])(?![A-Za-z])/gu)].map((match) => match[1])
+}
+
+/* Проверка графика.
+
+   Формула обязана разбираться нашим вычислителем - иначе лист её не
+   нарисует. Точка, приписанная кривой (в её points), обязана на ней
+   лежать: это и есть «точка пересечения», ради которой график строят.
+   Точки сцены обязаны попадать в диапазон осей, иначе их не видно. */
+function graphSceneIssues(scene: HomeworkDiagramScene) {
+  const issues: string[] = []
+  const axes = scene.axes
+  if (!axes) return issues
+  const pointMap = new Map(scene.points.map((point) => [point.id, point]))
+  const tolerance = (axes.yMax - axes.yMin) * 0.02
+  for (const point of scene.points) {
+    if (point.x < axes.xMin || point.x > axes.xMax || point.y < axes.yMin || point.y > axes.yMax) {
+      issues.push(`Точка ${point.label || point.id} (${point.x}; ${point.y}) вне диапазона осей`)
+    }
+  }
+  for (const object of scene.objects) {
+    if (object.kind !== 'curve') continue
+    const formula = compileFormula(object.formula ?? '')
+    if (!formula) {
+      issues.push(`Формула графика «${object.formula ?? ''}» не читается: пиши выражение от x, например «2x - 3» или «x² - 4x + 1»`)
+      continue
+    }
+    for (const id of object.points) {
+      const point = pointMap.get(id)
+      if (!point) continue
+      const expected = formula(point.x)
+      if (!Number.isFinite(expected) || Math.abs(expected - point.y) > tolerance) {
+        issues.push(`Точка ${point.label || id} (${point.x}; ${point.y}) не лежит на графике ${object.label || object.formula}`)
+      }
+    }
+  }
+  return issues
 }
 
 function conditionDiagramIssues(condition: string, scene: HomeworkDiagramScene) {
@@ -1891,9 +2021,15 @@ export function validateSolutionQuality(solution: HomeworkSolution) {
   if (requiredByCondition && !diagramRequired) issues.push('Условие требует обязательный чертёж')
   if ((diagramRequired || requiredByCondition) && solution.diagram.kind === 'none') issues.push('Обязательный чертёж отсутствует')
   if (solution.diagram.kind === 'construction') {
-    const scene = solution.diagram.scene
+    const mathScene = solution.diagram.scene
+    const scene = mathScene ? toLocalScene(mathScene) : mathScene
+    const axes = mathScene?.axes
     if (solution.diagram.description.trim().length < 8) issues.push('У чертежа нет понятного описания')
-    if (!scene || scene.points.length < 2 || scene.objects.length === 0) {
+    if (conditionAsksForGraph(solution.condition) && !axes) {
+      issues.push('Задача про график: заполни scene.axes (enabled=true, диапазоны осей) и задай графики как curve с formula')
+    }
+    if (axes && mathScene) issues.push(...graphSceneIssues(mathScene))
+    if (!scene || scene.objects.length === 0 || (scene.points.length < 2 && !axes)) {
       issues.push('Семантический чертёж пуст')
     } else {
       const ids = scene.points.map((point) => point.id)
@@ -1912,6 +2048,7 @@ export function validateSolutionQuality(solution: HomeworkSolution) {
       }
       for (const object of scene.objects) {
         if (object.points.some((id) => !pointMap.has(id))) issues.push(`${object.kind}: ссылка на отсутствующую точку`)
+        if (object.kind === 'curve') continue
         if (['line', 'segment', 'ray'].includes(object.kind) && object.points.length !== 2) issues.push(`${object.kind}: нужны две точки`)
         if (object.kind === 'circle' && object.points.length !== 2) issues.push('circle: нужны центр и точка окружности')
         if (object.kind === 'polyline' && object.points.length < 2) issues.push('polyline: нужно не менее двух точек')
@@ -1988,7 +2125,9 @@ export function validateSolutionQuality(solution: HomeworkSolution) {
         if (issue) issues.push(issue)
       }
       issues.push(...conditionDiagramIssues(solution.condition, scene))
-      if (diagramRequired && scene.constraints.length === 0) issues.push('Чертёж не содержит проверяемых геометрических связей')
+      // На координатной плоскости связь - это сам график: точка на нём
+      // проверяется формулой, а не коллинеарностью.
+      if (diagramRequired && scene.constraints.length === 0 && !axes) issues.push('Чертёж не содержит проверяемых геометрических связей')
     }
   }
 

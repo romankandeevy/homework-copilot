@@ -1,7 +1,8 @@
 import { useId } from 'react'
-import type { HomeworkDiagramScene } from '../../lib/homeworkContract'
+import type { HomeworkDiagramScene, HomeworkSceneAxes } from '../../lib/homeworkContract'
 import { geometryNotebookLayoutV1 as layout } from '../layouts/geometryNotebookLayoutV1'
 import { keyed } from '../../lib/listKeys'
+import { compileFormula, sampleFormula } from '../../lib/formula'
 
 type Point = {
   id: string
@@ -35,15 +36,28 @@ const minimumLocalSpan = 24
    линию. */
 const labelMargin = 34
 
-function sceneProjection(points: readonly HomeworkDiagramScene['points'][number][]) {
+function sceneProjection(points: readonly HomeworkDiagramScene['points'][number][], axes?: HomeworkSceneAxes) {
   const drawableWidth = sceneLayout.width - (sceneLayout.padding + labelMargin) * 2
   const drawableHeight = sceneLayout.height - (sceneLayout.padding + labelMargin) * 2
   const centerX = sceneLayout.x + sceneLayout.width / 2
   const centerY = sceneLayout.y + sceneLayout.height / 2
 
+  /* Координатная плоскость: в поле вписывается диапазон осей, а не
+     точки, и ось y смотрит вверх - поэтому знак по вертикали меняется. */
+  if (axes) {
+    return {
+      scale: Math.min(drawableWidth / (axes.xMax - axes.xMin), drawableHeight / (axes.yMax - axes.yMin)),
+      localCenterX: (axes.xMin + axes.xMax) / 2,
+      localCenterY: (axes.yMin + axes.yMax) / 2,
+      centerX,
+      centerY,
+      flipY: true,
+    }
+  }
+
   if (points.length === 0) {
     const scale = Math.min(drawableWidth, drawableHeight) / (sceneLayout.localMax - sceneLayout.localMin)
-    return { scale, localCenterX: 50, localCenterY: 50, centerX, centerY }
+    return { scale, localCenterX: 50, localCenterY: 50, centerX, centerY, flipY: false }
   }
 
   const xs = points.map((point) => point.x)
@@ -61,17 +75,102 @@ function sceneProjection(points: readonly HomeworkDiagramScene['points'][number]
     localCenterY: (minY + maxY) / 2,
     centerX,
     centerY,
+    flipY: false,
   }
 }
 
 type SceneProjection = ReturnType<typeof sceneProjection>
 
-function mapPoint(point: HomeworkDiagramScene['points'][number], projection: SceneProjection): Point {
+function mapXY(x: number, y: number, projection: SceneProjection) {
   return {
-    ...point,
-    x: projection.centerX + (point.x - projection.localCenterX) * projection.scale,
-    y: projection.centerY + (point.y - projection.localCenterY) * projection.scale,
+    x: projection.centerX + (x - projection.localCenterX) * projection.scale,
+    y: projection.centerY + (y - projection.localCenterY) * projection.scale * (projection.flipY ? -1 : 1),
   }
+}
+
+function mapPoint(point: HomeworkDiagramScene['points'][number], projection: SceneProjection): Point {
+  return { ...point, ...mapXY(point.x, point.y, projection) }
+}
+
+/* Оси координат со стрелками, делениями и подписями.
+
+   Рисуются как в тетради: ось проходит через ноль, если ноль в диапазоне,
+   иначе по краю поля; деления через unit подписаны числами, ноль подписан
+   буквой O один раз; имена осей стоят у стрелок. */
+function Axes({ axes, projection }: { axes: HomeworkSceneAxes; projection: SceneProjection }) {
+  const originX = Math.min(Math.max(0, axes.xMin), axes.xMax)
+  const originY = Math.min(Math.max(0, axes.yMin), axes.yMax)
+  const origin = mapXY(originX, originY, projection)
+  const left = mapXY(axes.xMin, originY, projection)
+  const right = mapXY(axes.xMax, originY, projection)
+  const bottom = mapXY(originX, axes.yMin, projection)
+  const top = mapXY(originX, axes.yMax, projection)
+  const arrow = 12
+  const tick = 6
+  const ticks = (min: number, max: number) => {
+    const values: number[] = []
+    const first = Math.ceil(min / axes.unit) * axes.unit
+    for (let value = first; value <= max + 1e-9; value += axes.unit) {
+      const rounded = Number(value.toFixed(6))
+      if (Math.abs(rounded) > 1e-9) values.push(rounded)
+    }
+    return values
+  }
+  const format = (value: number) => String(value).replace('.', ',')
+  const xTicks = ticks(axes.xMin, axes.xMax)
+  const yTicks = ticks(axes.yMin, axes.yMax)
+  return (
+    <g className="diagram-axes">
+      <path className="diagram-axis" d={`M ${left.x} ${left.y} L ${right.x} ${right.y}`} />
+      <path className="diagram-axis" d={`M ${right.x - arrow} ${right.y - arrow / 2} L ${right.x} ${right.y} L ${right.x - arrow} ${right.y + arrow / 2}`} />
+      <path className="diagram-axis" d={`M ${bottom.x} ${bottom.y} L ${top.x} ${top.y}`} />
+      <path className="diagram-axis" d={`M ${top.x - arrow / 2} ${top.y + arrow} L ${top.x} ${top.y} L ${top.x + arrow / 2} ${top.y + arrow}`} />
+      <text className="diagram-axis-label" textAnchor="end" x={right.x - 4} y={right.y - 10}>{axes.xLabel}</text>
+      <text className="diagram-axis-label" textAnchor="start" x={top.x + 10} y={top.y + 14}>{axes.yLabel}</text>
+      <text className="diagram-axis-label" textAnchor="end" x={origin.x - 6} y={origin.y + 18}>O</text>
+      {keyed(xTicks, (value) => `x${value}`).map(({ key, item: value }) => {
+        const at = mapXY(value, originY, projection)
+        return <g key={key}>
+          <path className="diagram-axis" d={`M ${at.x} ${at.y - tick} L ${at.x} ${at.y + tick}`} />
+          <text className="diagram-tick-label" textAnchor="middle" x={at.x} y={at.y + 22}>{format(value)}</text>
+        </g>
+      })}
+      {keyed(yTicks, (value) => `y${value}`).map(({ key, item: value }) => {
+        const at = mapXY(originX, value, projection)
+        return <g key={key}>
+          <path className="diagram-axis" d={`M ${at.x - tick} ${at.y} L ${at.x + tick} ${at.y}`} />
+          <text className="diagram-tick-label" textAnchor="end" x={at.x - 10} y={at.y + 5}>{format(value)}</text>
+        </g>
+      })}
+    </g>
+  )
+}
+
+/* График по формуле: кривая считается по точкам в диапазоне осей и
+   переводится на лист той же проекцией, что и точки сцены. Подпись
+   «y = ...» ставится у правого конца последней ветви, внутри поля. */
+function Curve({ object, axes, projection, className }: {
+  object: HomeworkDiagramScene['objects'][number]
+  axes: HomeworkSceneAxes
+  projection: SceneProjection
+  className: string
+}) {
+  const formula = compileFormula(object.formula ?? '')
+  if (!formula) return null
+  const branches = sampleFormula(formula, axes.xMin, axes.xMax, axes.yMin, axes.yMax)
+    .map((branch) => branch.map((point) => mapXY(point.x, point.y, projection)))
+  const paths = branches.map((branch) => branch.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' '))
+  const fieldTop = sceneLayout.y + sceneLayout.padding
+  const fieldBottom = sceneLayout.y + sceneLayout.height - sceneLayout.padding
+  const inside = branches.flat().filter((point) => point.y > fieldTop + 12 && point.y < fieldBottom - 12)
+  const anchor = inside.length > 0 ? inside[inside.length - 1] : null
+  const label = object.label.trim().slice(0, 24)
+  return <>
+    {keyed(paths, (path) => path).map(({ key, item: path }) => <path className={className} d={path} key={key} />)}
+    {label && anchor && (
+      <text className="diagram-angle-label" textAnchor="end" x={anchor.x - 6} y={anchor.y - 10}>{label}</text>
+    )}
+  </>
 }
 
 function distance(left: Point, right: Point) {
@@ -370,7 +469,8 @@ function drawnLabel(label: string, pointIds: readonly string[]) {
 
 export function GeometryScene({ scene, description }: { scene: HomeworkDiagramScene; description: string }) {
   const clipId = `geometry-scene-${useId().replace(/:/gu, '')}`
-  const projection = sceneProjection(scene.points)
+  const axes = scene.axes
+  const projection = sceneProjection(scene.points, axes)
   const points = scene.points.map((point) => mapPoint(point, projection))
   const pointMap = new Map(points.map((point) => [point.id, point]))
   const center = points.length > 0 ? average(points) : { x: 0, y: 0 }
@@ -379,7 +479,7 @@ export function GeometryScene({ scene, description }: { scene: HomeworkDiagramSc
      Окружности сюда не идут - подпись на дуге читается, а хорда между
      центром и точкой окружности линией не является. */
   const edges = scene.objects.flatMap((object) => {
-    if (object.kind === 'circle') return []
+    if (object.kind === 'circle' || object.kind === 'curve') return []
     const objectPoints = object.points.map((id) => pointMap.get(id)).filter((point): point is Point => Boolean(point))
     return objectPoints
       .slice(0, -1)
@@ -398,11 +498,15 @@ export function GeometryScene({ scene, description }: { scene: HomeworkDiagramSc
         </clipPath>
       </defs>
       <g clipPath={`url(#${clipId})`}>
+        {axes && <Axes axes={axes} projection={projection} />}
         {scene.objects.map((object, index) => {
           const objectPoints = object.points.map((id) => pointMap.get(id)).filter((point): point is Point => Boolean(point))
           const className = object.auxiliary ? 'diagram-auxiliary' : 'diagram-line'
           const key = `${object.kind}-${object.points.join('-')}-${index}`
           const labelPoint = objectPoints.length > 0 ? average(objectPoints) : null
+          if (object.kind === 'curve') {
+            return axes ? <Curve object={object} axes={axes} projection={projection} className={className} key={key} /> : null
+          }
           return <g key={key}>
             {object.kind === 'circle' && objectPoints[0] && objectPoints[1]
               ? <circle className={className} cx={objectPoints[0].x} cy={objectPoints[0].y} r={distance(objectPoints[0], objectPoints[1])} />
