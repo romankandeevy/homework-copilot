@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { homeworkSolutionEngineVersion } from '../src/lib/homeworkContract.ts'
-import type { HomeworkSolution } from '../src/lib/homeworkContract.ts'
-import { answersAgree, clampNotebookLine, isCurrentReviewedSolution, normalizeNotebookNotation, validateSolutionQuality } from './geometrySolutionEngine.ts'
+import type { HomeworkAnnotatedLine, HomeworkSolution, HomeworkWrittenAnalysis } from '../src/lib/homeworkContract.ts'
+import { analysisRepeatsSteps, answersAgree, clampNotebookLine, isCurrentReviewedSolution, normalizeNotebookNotation, validateSolutionQuality } from './geometrySolutionEngine.ts'
 
 const taskFiveSolution: HomeworkSolution = {
   engineVersion: homeworkSolutionEngineVersion,
@@ -621,5 +621,50 @@ describe('geometry solution quality gate', () => {
 
   it('converts provider notation to ordinary school symbols', () => {
     expect(normalizeNotebookNotation('$A \\in a$, $C \\notin a$, $a \\parallel b$, x^{2}$')).toBe('A ∈ a, C ∉ a, a ∥ b, x²')
+  })
+})
+
+/* Разбор существует ради школьной разметки: морфем, членов предложения,
+   степеней окисления. 7 сентября на физике и химии вместо него всплывала
+   старая карточка - те же формулы решения, обведённые рамкой. */
+describe('разбор против дубля решения', () => {
+  const analysisOf = (kind: 'formula' | 'morphemes', lines: HomeworkAnnotatedLine[]): HomeworkWrittenAnalysis => ({
+    version: 1,
+    kind,
+    blocks: [{ title: 'Разбор', lines, legend: [] }],
+  })
+
+  /* Порог «половина строк» такую карточку пропускал: подстановка и
+     результат записаны иначе, чем в решении - другой порядок множителей,
+     свёрнутые степени, - и эхо засчитывалось одно из трёх. */
+  it('вырезает карточку «формула, подстановка, ответ»', () => {
+    const card = analysisOf('formula', [
+      { kind: 'formula', lead: 'Формула', tokens: [{ text: 'v = mgR / (B²L²)' }] },
+      { kind: 'formula', lead: 'Подстановка', tokens: [{ text: 'v = 0,20 · 10 · 0,40 / (0,64 · 0,25)' }] },
+      { kind: 'formula', lead: 'Ответ', tokens: [{ text: 'v = 5 м/с', mark: 'box' }] },
+    ])
+    const steps = [
+      'v = m·g·R/(B²·L²)',
+      'v = 0,2·10·0,4/(0,8²·0,5²) = 5 м/с',
+      'Сила Ампера направлена вертикально вверх, против движения стержня.',
+    ]
+
+    expect(analysisRepeatsSteps(card, steps)).toBe(true)
+  })
+
+  // Те же буквы, что и в решении, но со значками морфем: это и есть та
+  // запись, которую ученик перечерчивает в тетрадь.
+  it('оставляет разбор по составу', () => {
+    const morphemes = analysisOf('morphemes', [{
+      kind: 'word',
+      tokens: [
+        { text: 'под', mark: 'prefix' },
+        { text: 'окон', mark: 'root', tight: true },
+        { text: 'ник', mark: 'suffix', tight: true },
+        { text: '∅', mark: 'ending', tight: true },
+      ],
+    }])
+
+    expect(analysisRepeatsSteps(morphemes, ['под-окон-ник-∅'])).toBe(false)
   })
 })

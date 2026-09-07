@@ -608,10 +608,12 @@ const authorInstructions = [
     + 'определение wavy, дополнение dashed, обстоятельство dash-dot. Служебные слова оставляй без значка.',
   'Разбор по составу: слово разбей на морфемы отдельными токенами с tight=true у всех, кроме первого, '
     + 'и значками prefix, root, suffix, ending.',
-  'Химия: строку уравнения давай kind=equation, степени окисления ставь в label над нужным элементом, '
-    + 'найденную величину помечай box.',
-  'Физика: три строки — формула (lead «Формула»), подстановка значений с единицами (lead «Подстановка»), '
-    + 'результат с единицей и меткой box (lead «Ответ»).',
+  // Образцы «Химия: … помечай box» и «Физика: три строки - формула,
+  // подстановка, результат» стояли здесь с 30 августа, а 4 сентября выше
+  // появился прямо противоположный запрет: те же формулы в рамке - не
+  // разбор, а дубль. Пошаговый образец конкретнее запрета, поэтому модель
+  // слушалась его, и 7 сентября карточка снова вылезла на физике и химии.
+  'Химия: строку уравнения реакции давай kind=equation, степени окисления ставь в label над нужным элементом. Расчёт по уравнению - это шаги решения, а не разбор.',
   'В note коротко пиши, что означает значок именно здесь: из note собираются условные обозначения под разбором.',
   'Токены analysis — куски записи, а не готовая разметка: не пиши в text подчёркивания, звёздочки, теги и значки символами.',
 ].join(' ')
@@ -1155,17 +1157,42 @@ function normalizeAnalysis(value: unknown): HomeworkWrittenAnalysis | undefined 
    разбор по составу, члены предложения, уравнение реакции со степенями
    окисления. Если строки разбора - те же выражения, что и в steps, окно
    убираем: пустое место честнее повтора. */
-function analysisRepeatsSteps(analysis: HomeworkWrittenAnalysis, steps: readonly string[]) {
+export function analysisRepeatsSteps(analysis: HomeworkWrittenAnalysis, steps: readonly string[]) {
   const strip = (value: string) => value.toLocaleLowerCase('ru-RU').replace(/[^0-9a-zа-яё]/gu, '')
   const stepText = steps.map(strip).filter(Boolean)
   if (stepText.length === 0) return false
 
   const lines = analysis.blocks.flatMap((block) => block.lines)
+
+  /* Разбор от дубля отличают значки, а не слова.
+
+     «под-окон-ник-∅» в разборе и в решении - одни и те же буквы, но в
+     разборе над ними стоят приставка, корень и суффикс, а в решении нет:
+     это и есть та школьная запись, ради которой блок существует. Рамка -
+     не разметка в этом смысле: ею модель обводила уже посчитанный ответ,
+     и получалась та самая карточка «формула, подстановка, ответ». */
+  const marked = (line: HomeworkAnnotatedLine) => line.tokens.some((token) => (
+    (token.mark && token.mark !== 'none' && token.mark !== 'box' && token.mark !== 'circle')
+    || Boolean(token.label)
+  ))
+
+  /* Сравниваем по существу, а не по подстроке: голый includes ловил только
+     дословный повтор, а карточка писала «v = m·g·R/(B²·L²)» там, где в
+     решении стояло «v = mgR / (B²L²)». Тем же трёхграммным сходством в этом
+     файле сверяется условие с разбором. */
   const echoes = lines.filter((line) => {
+    if (marked(line)) return false
     const text = strip(line.tokens.map((token) => token.text).join(' '))
     if (text.length < 6) return false
-    return stepText.some((step) => step.includes(text) || text.includes(step))
+    return stepText.some((step) => step.includes(text) || text.includes(step) || conditionSimilarity(text, step) >= 0.6)
   })
+  /* Карточка из трёх строк - «формула, подстановка, ответ» - повторяла
+     решение целиком, а порог «половина строк» её пропускал: подстановка
+     с единицами и результат в рамке дословно не совпадали, эхо
+     засчитывалось одно из трёх. Короткому блоку хватает одного повтора:
+     разбор из трёх строк, где строка взята из решения без единого значка, -
+     уже дубль. */
+  if (lines.length <= 3) return echoes.length > 0
   return echoes.length * 2 >= lines.length
 }
 
