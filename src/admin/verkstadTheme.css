@@ -1,0 +1,312 @@
+/* Kandeev Design System (VERKSTAD) - тема только для админки.
+   Источник: C:\prog\_materials\design-system\VERKSTAD, projectId f3f28b8f.
+   Правило одно: всё внутри .admin-shell. Витрина и продукт не задеты.
+
+   Замена гарнитуры: система просит Golos Text через Google Fonts, но фронт
+   раздаёт GitHub Pages и внешние шрифты не тянем - текстовая роль остаётся на
+   локальном Onest. Display и mono совпадают с системой: Unbounded, JetBrains Mono. */
+
+.admin-shell {
+  /* Ink ramp */
+  --ink-1000: oklch(0.14 0.008 60);
+  --ink-900: oklch(0.21 0.008 60);
+  --ink-700: oklch(0.38 0.006 60);
+  --ink-500: oklch(0.56 0.005 60);
+  --ink-400: oklch(0.68 0.005 60);
+  --ink-300: oklch(0.8 0.004 70);
+  --ink-200: oklch(0.89 0.004 80);
+  --ink-100: oklch(0.945 0.003 85);
+
+  /* Paper - тёплый off-white, чистого белого на больших полях нет */
+  --paper-000: oklch(0.995 0.002 90);
+  --paper-100: oklch(0.978 0.004 88);
+  --paper-200: oklch(0.958 0.006 85);
+
+  /* Единственный акцент - вермильон */
+  --signal-600: oklch(0.52 0.2 36);
+  --signal-500: oklch(0.62 0.22 38);
+  --signal-100: oklch(0.93 0.05 45);
+
+  /* Blueprint - только сетки и технические подписи */
+  --blueprint-600: oklch(0.48 0.11 245);
+  --blueprint-100: oklch(0.93 0.03 245);
+
+  --ok-500: oklch(0.6 0.13 150);
+  --ok-700: oklch(0.45 0.11 150);
+  --warn-500: oklch(0.75 0.15 80);
+  --error-500: oklch(0.55 0.2 27);
+
+  --grid-line: oklch(0.14 0.008 60 / 0.07);
+  --grid-size: 32px;
+
+  /* Проектные токены переопределены на систему */
+  --color-canvas: var(--paper-100);
+  --color-surface: var(--paper-000);
+  --color-surface-raised: var(--paper-000);
+  --color-surface-sunken: var(--paper-200);
+  --color-border: oklch(0.14 0.008 60 / 0.12);
+  --color-border-strong: var(--ink-1000);
+  --color-text-subtle: var(--ink-500);
+  --color-text-muted: var(--ink-700);
+  --color-text: var(--ink-900);
+  --color-strong: var(--ink-1000);
+  --color-on-strong: var(--paper-000);
+
+  --color-accent: var(--signal-500);
+  --color-accent-hover: var(--signal-600);
+  --color-accent-soft: var(--signal-100);
+  --color-accent-surface: var(--signal-500);
+  --color-on-accent: var(--paper-000);
+  --color-brand-accent: var(--signal-600);
+
+  --color-info: var(--blueprint-600);
+  --color-info-soft: var(--blueprint-100);
+  --color-success: var(--ok-500);
+  --color-success-strong: var(--ok-700);
+  --color-success-soft: oklch(0.94 0.03 150);
+  --color-warning: var(--warn-500);
+  --color-warning-soft: oklch(0.95 0.04 80);
+  --color-danger: var(--error-500);
+  --color-danger-soft: oklch(0.94 0.04 27);
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+  --weight-display: 900;
+
+  --leading-title: 1.05;
+  --leading-compact: 1.15;
+  --leading-ui: 1.45;
+  --leading-copy: 1.55;
+
+  --radius-xs: 8px;
+  --radius-control: 12px;
+  --radius-surface: 14px;
+  --radius-panel: 14px;
+  --radius-pill: 999px;
+
+  --shadow-control: 0 1px 2px oklch(0.14 0.008 60 / 0.04);
+  --shadow-raised: 0 2px 4px oklch(0.14 0.008 60 / 0.05), 0 18px 44px -18px oklch(0.14 0.008 60 / 0.2);
+  --shadow-overlay: 0 24px 80px -24px oklch(0.14 0.008 60 / 0.3);
+  --focus-ring: 0 0 0 2px var(--paper-000), 0 0 0 3px var(--ink-1000), 0 0 0 6px oklch(0.62 0.22 38 / 0.28);
+
+  --motion-panel: 280ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --tracking-eyebrow: 0.16em;
+
+  color-scheme: light;
+}
+
+/* Техническая клетка 32px под всей админкой */
+.admin-shell.admin-shell {
+  background-color: var(--color-canvas);
+  background-image:
+    repeating-linear-gradient(to right, var(--grid-line) 0 1px, transparent 1px var(--grid-size)),
+    repeating-linear-gradient(to bottom, var(--grid-line) 0 1px, transparent 1px var(--grid-size));
+}
+
+.admin-shell .admin-topbar,
+.admin-shell .admin-rail,
+.admin-shell .admin-user-drawer,
+.admin-shell .admin-drawer-loading {
+  background-color: color-mix(in oklch, var(--paper-100) 88%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+.admin-shell .admin-user-drawer,
+.admin-shell .admin-drawer-loading {
+  background-color: var(--paper-000);
+}
+
+/* Надзаголовки и мета - моно, капс, трекинг 0.16em */
+.admin-shell .admin-topbar-title,
+.admin-shell .admin-drawer-topbar > span,
+.admin-shell .admin-data-source,
+.admin-shell .admin-online-count,
+.admin-shell .admin-rail > a,
+.admin-shell .admin-users-workspace th,
+.admin-shell .admin-summary-list dt,
+.admin-shell .admin-finance-list dt,
+.admin-shell .admin-signal-list dt,
+.admin-shell .admin-total-number > span,
+.admin-shell .admin-drawer-balance > div > span,
+.admin-shell .admin-status {
+  font-family: var(--font-mono);
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+}
+
+.admin-shell .admin-rail > a,
+.admin-shell .admin-users-workspace th,
+.admin-shell .admin-summary-list dt,
+.admin-shell .admin-finance-list dt,
+.admin-shell .admin-signal-list dt,
+.admin-shell .admin-total-number > span,
+.admin-shell .admin-drawer-balance > div > span {
+  font-size: var(--text-micro);
+  font-weight: var(--weight-medium);
+}
+
+/* Заголовки - display-гарнитура, капс, отрицательный трекинг */
+.admin-shell .admin-page-heading h1,
+.admin-shell .admin-state-card h1 {
+  font-family: var(--font-display);
+  font-weight: var(--weight-display);
+  letter-spacing: -0.035em;
+  text-transform: uppercase;
+}
+
+.admin-shell .admin-summary-heading h2,
+.admin-shell .admin-users-heading h2,
+.admin-shell .admin-chart-heading h2,
+.admin-shell .admin-feed-panel h2,
+.admin-shell .admin-drawer-user h2,
+.admin-shell .admin-drawer-history h3 {
+  font-family: var(--font-display);
+  font-weight: var(--weight-bold);
+  letter-spacing: -0.02em;
+}
+
+/* Цифры - моно, tabular */
+.admin-shell .admin-total-number strong,
+.admin-shell .admin-drawer-balance strong,
+.admin-shell .admin-summary-list dd,
+.admin-shell .admin-finance-list dd,
+.admin-shell .admin-signal-list dd,
+.admin-shell .admin-balance-cell,
+.admin-shell .admin-chart-panel > footer strong,
+.admin-shell .admin-rail-status strong {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.admin-shell .admin-total-number strong,
+.admin-shell .admin-drawer-balance strong {
+  font-family: var(--font-display);
+  font-weight: var(--weight-display);
+}
+
+/* Разделяет рамка, а не тень: панели без подложки-тени */
+.admin-shell .admin-population-summary,
+.admin-shell .admin-finance-summary,
+.admin-shell .admin-users-workspace,
+.admin-shell .admin-chart-panel,
+.admin-shell .admin-signal-summary,
+.admin-shell .admin-feed-panel {
+  box-shadow: none;
+}
+
+/* Таблица-линейка: 2px под шапкой, хайрлайн между строк, без зебры */
+.admin-shell .admin-users-workspace th {
+  padding-bottom: var(--space-2);
+  border-bottom: 2px solid var(--ink-1000);
+  color: var(--color-strong);
+}
+
+.admin-shell .admin-users-workspace tr:hover td {
+  background: oklch(0.62 0.22 38 / 0.05);
+}
+
+/* Марка - чернильный квадрат, не акцентная плашка */
+.admin-shell .admin-wordmark {
+  font-family: var(--font-display);
+  font-weight: var(--weight-bold);
+  letter-spacing: -0.03em;
+  text-transform: uppercase;
+}
+
+.admin-shell .admin-wordmark > span {
+  border-radius: var(--radius-xs);
+  background: var(--ink-1000);
+  color: var(--paper-000);
+}
+
+/* Активный раздел рейла - вермильон одной линией, без заливки */
+.admin-shell .admin-rail > a.is-active {
+  border-left-color: var(--signal-500);
+  background: transparent;
+  color: var(--color-strong);
+}
+
+.admin-shell .admin-panel-icon,
+.admin-shell .admin-avatar,
+.admin-shell .admin-activity-mark {
+  border-color: var(--color-border);
+  background: transparent;
+  color: var(--signal-600);
+}
+
+.admin-shell .admin-period-control,
+.admin-shell .admin-chart-switch {
+  border-radius: var(--radius-control);
+}
+
+.admin-shell .admin-period-control button.is-selected,
+.admin-shell .admin-chart-switch button.is-selected {
+  background: var(--paper-000);
+  box-shadow: none;
+  border-bottom: 1px solid var(--signal-500);
+  border-radius: var(--radius-xs) var(--radius-xs) 0 0;
+}
+
+/* График: главная серия - чернила, вторые - вермильон и blueprint */
+.admin-shell .admin-chart-bar > i { background: var(--ink-1000); }
+.admin-shell .admin-chart--openedSolutions .admin-chart-bar > i { background: var(--signal-500); }
+.admin-shell .admin-chart--charges .admin-chart-bar > i { background: var(--blueprint-600); }
+
+.admin-shell .admin-status {
+  font-size: var(--text-micro);
+  border-radius: var(--radius-pill);
+}
+
+.admin-shell .admin-status.is-active { background: transparent; border: 1px solid var(--color-border); color: var(--color-text-muted); }
+.admin-shell .admin-status.is-banned { background: transparent; border: 1px solid var(--signal-500); color: var(--signal-600); }
+
+.admin-shell .admin-row-open:hover { background: transparent; color: var(--signal-600); text-decoration: underline; text-underline-offset: 0.22em; }
+
+/* Кнопка действия - чернила. Вермильон в системе один на экран, он занят
+   активным разделом и статусами, заливать им кнопки нельзя. */
+.admin-shell .admin-primary-action {
+  background: var(--ink-1000);
+  color: var(--paper-000);
+  border-radius: var(--radius-control);
+}
+
+.admin-shell .admin-primary-action:hover:not(:disabled) { background: var(--ink-900); }
+
+.admin-shell .admin-action-form.is-verified-top-up { background: transparent; }
+.admin-shell .admin-ban-control { background: transparent; }
+.admin-shell .admin-ban-control.is-banned { background: transparent; }
+
+.admin-shell .support-admin-filters button.is-selected {
+  border-color: var(--ink-1000);
+  background: transparent;
+  color: var(--color-strong);
+}
+
+.admin-shell .support-admin-status-pill {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+}
+
+.admin-shell .support-admin-message.is-owner { background: var(--paper-200); }
+.admin-shell .support-admin-status-dot { background: var(--signal-500); }
+
+.admin-shell .admin-solution-main > span,
+.admin-shell .support-admin-detail-category {
+  letter-spacing: var(--tracking-eyebrow);
+  color: var(--signal-600);
+}
+
+/* Пресс-состояние контролов - 0.975 за 80ms */
+.admin-shell button:active:not(:disabled) { transform: scale(0.975); transition: transform 80ms cubic-bezier(0.2, 0, 0, 1); }
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-shell button:active:not(:disabled) { transform: none; }
+}
