@@ -87,6 +87,24 @@ export const homeworkSolutionEngineVersion = 3
 export const homeworkTaskTypes = ['construction', 'calculation', 'proof', 'mixed'] as const
 export type HomeworkTaskType = typeof homeworkTaskTypes[number]
 
+/* Форма записи: тетрадная строка или связный текст.
+
+   Живёт в контракте, потому что нужна с обеих сторон: сервер меряет по ней
+   пределы строк и проверяет запись, страница по ней решает, нумеровать шаги
+   или ставить абзацы. Нумерованный список из четырёх абзацев сочинения по
+   литературе читается как перечень, а не как ответ.
+
+   Предмета мало: обществознание считает налог строкой на вычисление и оно же
+   пишет развёрнутый ответ. Поэтому решает пара «предмет плюс тип задачи»: у
+   гуманитарных предметов расчёт остаётся записью, остальное - текстом. */
+export function homeworkSolutionForm(subject: string, taskType: HomeworkTaskType = 'mixed') {
+  const normalized = subject.toLocaleLowerCase('ru-RU')
+  const notebookSubject = ['геометр', 'алгебр', 'математ', 'физик', 'хими', 'информат', 'астроном']
+    .some((entry) => normalized.includes(entry))
+  if (notebookSubject || taskType === 'calculation' || taskType === 'construction') return 'notebook' as const
+  return 'essay' as const
+}
+
 /* «curve» - график функции по формуле от x; рисуется только на сцене с
    осями (axes), где координаты точек - математические, а не поле 0..100. */
 export const homeworkSceneObjectKinds = ['line', 'segment', 'ray', 'circle', 'polyline', 'polygon', 'curve'] as const

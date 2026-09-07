@@ -71,7 +71,7 @@ export type ChatStreamHandlers = {
   onDelta: (text: string) => void
   onCitation?: (citation: ChatCitation) => void
   onUsage?: (usage: ChatStreamUsage) => void
-  onDone?: (messageId: string) => void
+  onDone?: (messageId: string, truncated: boolean) => void
 }
 
 export type ChatStreamOutcome = 'done' | 'cancelled'
@@ -400,7 +400,7 @@ function applyFrame(frame: SseFrame, handlers: ChatStreamHandlers) {
     return
   }
 
-  if (frame.event === 'done') handlers.onDone?.(readString(payload, 'messageId'))
+  if (frame.event === 'done') handlers.onDone?.(readString(payload, 'messageId'), payload.truncated === true)
 }
 
 async function readResponseError(response: Response) {

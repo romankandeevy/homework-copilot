@@ -422,7 +422,13 @@ export async function handleChatRequest(
         ? settlement.balanceKopecks
         : null,
     })
-    stream.send('done', { messageId: assistantMessage?.id ?? null })
+    /* Обрезанный ответ называем обрезанным.
+
+       Длину ответа режет баланс: answerCharacterBudget - это то, что
+       пользователь в состоянии оплатить. Провайдер честно возвращал признак
+       обрезки, а мы его никуда не отдавали, и ответ просто заканчивался на
+       полуслове без единого слова о причине. */
+    stream.send('done', { messageId: assistantMessage?.id ?? null, truncated: answer.truncated })
     stream.close()
   } catch (error) {
     const status = error instanceof ChatApiError ? error.status : 500

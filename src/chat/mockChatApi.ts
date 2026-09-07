@@ -241,6 +241,6 @@ export async function mockStreamChatMessage(
   })
 
   assistant.status = 'done'
-  handlers.onDone?.(assistantId)
+  handlers.onDone?.(assistantId, false)
   return 'done'
 }

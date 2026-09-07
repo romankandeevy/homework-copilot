@@ -622,6 +622,8 @@ export default function ChatPage({ userId = null, onRequireAuth, onOpenWallet }:
       },
     ])
 
+    let truncated = false
+
     try {
       const outcome = await sendChatMessage(
         {
@@ -646,6 +648,7 @@ export default function ChatPage({ userId = null, onRequireAuth, onOpenWallet }:
             setCitations((current) => ({ ...current, [assistantId]: [...(current[assistantId] ?? []), citation] }))
           },
           onUsage: (value) => setUsage(value),
+          onDone: (_messageId, wasTruncated) => { truncated = wasTruncated },
         },
         controller.signal,
       )
@@ -653,7 +656,11 @@ export default function ChatPage({ userId = null, onRequireAuth, onOpenWallet }:
       setMessages((current) => current.map((item) => (
         item.id === assistantId ? { ...item, status: outcome === 'cancelled' ? 'cancelled' : 'done' } : item
       )))
-      setLiveStatus(outcome === 'cancelled' ? 'Генерация остановлена' : 'Ответ готов')
+      setLiveStatus(outcome === 'cancelled'
+        ? 'Генерация остановлена'
+        // Длину ответа ограничивает баланс, и раньше он просто обрывался
+        // на полуслове: причину знал сервер, а пользователь - нет.
+        : truncated ? 'Ответ обрезан: на длинный не хватило баланса' : 'Ответ готов')
       setMockMode(isChatMockMode())
       void loadConversations()
 

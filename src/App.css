@@ -1571,6 +1571,18 @@
   font-weight: 700;
 }
 
+/* Развёрнутый ответ: абзацы с красной строки, как в тетради по литературе. */
+.notebook-sheet-prose {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.notebook-sheet-prose p {
+  margin: 0;
+  text-indent: 1.5em;
+  overflow-wrap: break-word;
+}
+
 /* Чертёж на листе.
 
    Рисунок занимает ширину записи и держит собственные пропорции: зона

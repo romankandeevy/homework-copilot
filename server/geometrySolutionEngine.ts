@@ -8,6 +8,7 @@ import {
   homeworkSchematicKinds,
   homeworkSchematicSymbols,
   homeworkSolutionEngineVersion,
+  homeworkSolutionForm,
   homeworkTaskTypes,
 } from '../src/lib/homeworkContract.ts'
 import type {
@@ -441,13 +442,17 @@ const draftSchema = {
     explanation: {
       type: 'array',
       minItems: 3,
-      maxItems: 5,
+      maxItems: 8,
       items: {
         type: 'string',
         description: 'Одна мысль разбора темы: правило и откуда оно берётся; признак такой задачи; частая ошибка; способ проверить ответ. Не пересказ условия и не пересказ шагов.',
       },
     },
-    steps: { type: 'array', minItems: 1, maxItems: 14, items: { type: 'string' } },
+    /* Потолок по самому просторному предмету: сколько строк уместно этой
+       задаче, решает проверка по профилю предмета, а не схема. Развёрнутый
+       ответ по литературе - это абзацы, и в четырнадцать строк записи
+       формулами он не укладывается. */
+    steps: { type: 'array', minItems: 1, maxItems: 24, items: { type: 'string' } },
     answer: { type: 'string' },
     answerKey: {
       type: 'string',
@@ -517,6 +522,14 @@ const authorInstructions = [
     + 'кто решил задачу верно: не «слово образовано приставочно-суффиксальным способом», а «приставочно-суффиксальный».',
   'Для calculation и proof используй формулы, обозначения и короткие обоснования в скобках. Никаких абзацев.',
   'Каждая строка steps должна помещаться в строку школьной тетради и содержать математическое действие или вывод.',
+  // Развёрнутый ответ. 7 сентября на проде литература вместо связного текста
+  // на 200-250 слов выдала план «1) Раскрываем... 2) Анализируем...» и
+  // оборвалась на двадцати словах: правила выше писаны под запись формулами,
+  // и модель подгоняла сочинение под них.
+  'Развёрнутый ответ - литература, история, обществознание, русский, английский - пишется связным текстом: один абзац - одна строка steps. Правило «одна строка - одно действие» и «строка помещается в строку тетради» к нему не относятся, абзац на несколько предложений здесь нормален.',
+  'План ответа - не ответ. Если задание просит рассуждение, сочинение, перевод или объяснение, пиши сам текст, а не перечень того, что собираешься раскрыть.',
+  'Объём задан в условии - выполняй его. Сказано «200-250 слов» - напиши столько; сказано «не менее двух примеров» - приведи их полностью, а не назови.',
+  'Каждый пункт задания дописывай до конца. Оборванная на полуслове мысль - хуже отсутствующей: ученик сдаст её учителю в таком виде.',
   // Формат тетради один на все предметы: «Дано» списком, «Найти», ход
   // решения отдельными шагами и «Ответ». Номера шагов ставит сама
   // тетрадь, поэтому модель их не пишет: иначе на листе выходит «1) 1)».
@@ -622,9 +635,20 @@ const reviewerInstructions = [
   'Не раскрывай скрытые рассуждения. Верни только JSON по схеме.',
 ].join(' ')
 
+const incompleteAnswerMessage = 'Модель не дописала ответ до конца'
+
 function text(value: unknown, maxLength = 5000) {
   return typeof value === 'string' ? value.trim().slice(0, maxLength) : ''
 }
+
+/* Предел на сырой ответ шлюза, а не на строку тетради.
+
+   Дефолтные пять тысяч знаков `text()` стоят на полях записи: строка «Дано»,
+   шаг решения, подпись. Разбор конверта модели звал ту же функцию без второго
+   аргумента и резал по тому же пределу целый JSON решения - со сценой чертежа
+   он выходит длиннее. Обрезанный JSON падал в parseJson «Модель вернула
+   некорректный JSON», и вместо ответа уходил лишний платный повтор. */
+const modelPayloadLimit = 1_000_000
 
 const notebookNotation = new Map([
   ['notin', '∉'],
@@ -1217,7 +1241,7 @@ function cleanSteps(value: unknown, limits: typeof tightNotebookLimits) {
     seen.add(key)
     steps.push(line)
   }
-  return steps.slice(0, 14)
+  return steps.slice(0, limits.stepCount)
 }
 
 /* Объяснение: только законченные мысли и только о теме.
@@ -1226,17 +1250,17 @@ function cleanSteps(value: unknown, limits: typeof tightNotebookLimits) {
    отклоняла целиком - «объяснение из обрывков», «разбор пересказывает
    условие». Лишнюю строку код убирает сам; модель зовут, только если
    после чистки мыслей осталось меньше трёх - это уже про смысл. */
-function cleanExplanation(value: unknown, condition: string, steps: readonly string[]) {
+function cleanExplanation(value: unknown, condition: string, steps: readonly string[], limit: number) {
   if (!Array.isArray(value)) return []
   return value
-    .map((entry) => clampNotebookLine(normalizeNotebookNotation(entry, 400), 220))
+    .map((entry) => clampNotebookLine(normalizeNotebookNotation(entry, limit * 2), limit))
     .filter((entry) => entry.length >= 24)
     .filter((entry) => conditionSimilarity(entry, condition) < 0.6)
     .filter((entry) => !steps.some((step) => conditionSimilarity(entry, step) >= 0.55))
-    .slice(0, 5)
+    .slice(0, 8)
 }
 
-function normalizeDraft(value: unknown, limits = tightNotebookLimits, condition = ''): EngineDraft {
+function normalizeDraft(value: unknown, subject = '', condition = ''): EngineDraft {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new GeometrySolutionEngineError('Модель не вернула решение')
   }
@@ -1245,6 +1269,11 @@ function normalizeDraft(value: unknown, limits = tightNotebookLimits, condition 
     ? candidate.goal as Record<string, unknown>
     : {}
   const taskType = homeworkTaskTypes.find((entry) => entry === candidate.taskType) ?? 'mixed'
+  /* Предел строки известен только вместе с типом задачи: расчёт по
+     обществознанию остаётся тетрадной записью, развёрнутый ответ по тому же
+     предмету пишется абзацами. Тип приносит сама модель, поэтому профиль
+     берём здесь, а не до вызова. */
+  const limits = subjectProfile(subject, taskType).notebook
   const rawGoalTitle = text(goal.title, 20)
   const goalTitle = rawGoalTitle === 'Доказать' || rawGoalTitle === 'Построить' ? rawGoalTitle : 'Найти'
   const analysis = normalizeAnalysis(candidate.analysis)
@@ -1277,7 +1306,7 @@ function normalizeDraft(value: unknown, limits = tightNotebookLimits, condition 
     },
     /* Объяснение не попадает на тетрадный лист: его верстает HTML над
        листом, поэтому пределы строки тетради к нему не применяются. */
-    explanation: cleanExplanation(candidate.explanation, condition || normalizeNotebookNotation(candidate.condition), steps),
+    explanation: cleanExplanation(candidate.explanation, condition || normalizeNotebookNotation(candidate.condition), steps, limits.explanation),
     steps,
     answer: clampNotebookLine(normalizeNotebookNotation(candidate.answer), limits.answer),
     answerKey: normalizeNotebookNotation(candidate.answerKey, 60),
@@ -1319,7 +1348,7 @@ function providerContent(payload: unknown) {
     : {}
   return Array.isArray(message.content)
     ? message.content.map((part) => part && typeof part === 'object' && !Array.isArray(part)
-      ? text((part as Record<string, unknown>).text)
+      ? text((part as Record<string, unknown>).text, modelPayloadLimit)
       : '').join('\n')
     : message.content
 }
@@ -1339,7 +1368,7 @@ function responsesContent(payload: unknown) {
     const parts = Array.isArray(record.content) ? record.content : []
     for (const part of parts) {
       if (!part || typeof part !== 'object' || Array.isArray(part)) continue
-      const value = text((part as Record<string, unknown>).text)
+      const value = text((part as Record<string, unknown>).text, modelPayloadLimit)
       if (value) chunks.push(value)
     }
   }
@@ -1507,7 +1536,30 @@ async function requestModel(
     }
   }
 
+  assertAnswerComplete(payload)
+
   return payload
+}
+
+/* Ответ дописан до конца, а не срезан по потолку вывода.
+
+   На проде обрывы шли от наших же пределов строки, а не от шлюза, и признак
+   незавершённости никто не читал: у семейства Gemini это finish_reason у
+   первого choice, у Responses API - status «incomplete». Пока схема строгая,
+   срезанный ответ падает в «некорректный JSON» и выглядит случайной
+   поломкой модели; при мягкой схеме он молча дошёл бы до ученика половиной
+   решения. Дешевле сказать прямо и повторить. */
+function assertAnswerComplete(payload: unknown) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return
+  const root = payload as Record<string, unknown>
+
+  if (root.status === 'incomplete') throw new GeometrySolutionEngineError(incompleteAnswerMessage)
+
+  const choices = Array.isArray(root.choices) ? root.choices : []
+  const first = choices[0] && typeof choices[0] === 'object' && !Array.isArray(choices[0])
+    ? choices[0] as Record<string, unknown>
+    : {}
+  if (first.finish_reason === 'length') throw new GeometrySolutionEngineError(incompleteAnswerMessage)
 }
 
 /* Правила предмета в промпте.
@@ -2003,16 +2055,36 @@ function buildVerification(
    Общие 80 знаков на цель и ответ были сняты с геометрии и уезжали в русский
    язык: «Найти: Разобрать слово «подоконник» по составу, указать способ его
    образования и объясн» — обрезано посреди слова, и так же обрывался ответ. */
-const tightNotebookLimits = { given: 80, goal: 80, step: 120, stepOnPage: 92, answer: 80 }
-const roomyNotebookLimits = { given: 130, goal: 190, step: 190, stepOnPage: 190, answer: 280 }
+const tightNotebookLimits = { given: 80, goal: 80, step: 120, stepOnPage: 92, answer: 80, explanation: 220, stepCount: 14 }
+const roomyNotebookLimits = { given: 130, goal: 190, step: 190, stepOnPage: 190, answer: 280, explanation: 220, stepCount: 14 }
+/* Сочинение не помещается в строку тетради.
 
-function subjectProfile(subject: string) {
+   7 сентября прогон по всем предметам: литература просила связный текст на
+   200-250 слов, а получила план и обрывок на двадцати словах. Английский
+   оборвал перевод на «...реакция…», история - каждый развёрнутый пункт.
+   Многоточие в конце дописали не модель и не шлюз, а мы сами: строку резал
+   clampNotebookLine по 190 знакам, потому что предел был один на все
+   предметы. Краткий ответ выживал только потому, что его предел - 280.
+
+   У сочинения строка - абзац, и меряется он абзацем. Число строк тоже
+   другое: пять мыслей разбора и четырнадцать шагов рассчитаны на запись
+   формулами, а не на развёрнутый ответ по литературе. */
+const essayNotebookLimits = { given: 130, goal: 300, step: 700, stepOnPage: 700, answer: 900, explanation: 600, stepCount: 24 }
+
+/* Форма записи - от задачи, а не только от предмета.
+
+   Обществознание считает налог и рисует график - это школьная запись со
+   строкой на вычисление. Оно же пишет развёрнутый ответ на четыре абзаца.
+   Один и тот же предмет, разные формы, поэтому решает пара «предмет плюс
+   тип задачи»: у гуманитарных предметов расчёт остаётся записью, всё
+   остальное пишется текстом. */
+function subjectProfile(subject: string, taskType: HomeworkTaskType = 'mixed') {
   const normalized = subject.toLocaleLowerCase('ru-RU')
   if (normalized.includes('геометр')) {
-    return { minimumSymbolicShare: 1, maxWordsPerStep: 8, allowsDiagram: true, notebook: tightNotebookLimits }
+    return { minimumSymbolicShare: 1, maxWordsPerStep: 8, allowsDiagram: true, form: 'notebook' as const, notebook: tightNotebookLimits }
   }
   if (normalized.includes('алгебр') || normalized.includes('математ')) {
-    return { minimumSymbolicShare: 0.85, maxWordsPerStep: 10, allowsDiagram: true, notebook: roomyNotebookLimits }
+    return { minimumSymbolicShare: 0.85, maxWordsPerStep: 10, allowsDiagram: true, form: 'notebook' as const, notebook: roomyNotebookLimits }
   }
   /* Физика и химия пишутся формулой, но не одними значками.
 
@@ -2027,21 +2099,35 @@ function subjectProfile(subject: string) {
      Планка снижена до уровня, который отсекает пересказ абзацами, но не
      требует превращать физику в исчисление. */
   if (normalized.includes('физик')) {
-    return { minimumSymbolicShare: 0.35, maxWordsPerStep: 20, allowsDiagram: true, notebook: roomyNotebookLimits }
+    return { minimumSymbolicShare: 0.35, maxWordsPerStep: 20, allowsDiagram: true, form: 'notebook' as const, notebook: roomyNotebookLimits }
   }
   if (normalized.includes('хими')) {
-    return { minimumSymbolicShare: 0.3, maxWordsPerStep: 20, allowsDiagram: false, notebook: roomyNotebookLimits }
+    return { minimumSymbolicShare: 0.3, maxWordsPerStep: 20, allowsDiagram: false, form: 'notebook' as const, notebook: roomyNotebookLimits }
   }
   // Остальные предметы: формальной записи может не быть вовсе.
   // Гуманитарные предметы: формальной записи может не быть вовсе, поэтому
   // доля математических обозначений здесь не показатель качества.
-  return { minimumSymbolicShare: 0, maxWordsPerStep: 24, allowsDiagram: false, notebook: roomyNotebookLimits }
+  //
+  // Демография и налог считаются формулой и в строку тетради помещаются:
+  // расчёт остаётся записью, а разбор, перевод и сочинение - текстом. Форму
+  // берём из контракта: по ней же страница решает, нумеровать шаги или
+  // ставить абзацы, и расходиться этим двоим нельзя.
+  if (homeworkSolutionForm(subject, taskType) === 'notebook') {
+    return { minimumSymbolicShare: 0, maxWordsPerStep: 24, allowsDiagram: false, form: 'notebook' as const, notebook: roomyNotebookLimits }
+  }
+  /* Порог слов на строку здесь неприменим, а не «помягче».
+
+     На проде русский язык не дошёл до ученика с сообщением «Есть словесный
+     абзац вместо школьной записи»: разбор предложения по членам не влезал в
+     двадцать четыре слова. Доля математических обозначений для гуманитарных
+     уже обнулена - словесный порог остался конечным по недосмотру. */
+  return { minimumSymbolicShare: 0, maxWordsPerStep: Number.POSITIVE_INFINITY, allowsDiagram: false, form: 'essay' as const, notebook: essayNotebookLimits }
 }
 
 export function validateSolutionQuality(solution: HomeworkSolution) {
   const issues: string[] = []
   const taskType = solution.taskType ?? 'mixed'
-  const profile = subjectProfile(solution.subject)
+  const profile = subjectProfile(solution.subject, taskType)
   const diagramRequired = solution.quality?.diagramRequired === true
   const requiredByCondition = profile.allowsDiagram && conditionRequiresDiagram(solution)
   const steps = solution.steps
@@ -2076,7 +2162,7 @@ export function validateSolutionQuality(solution: HomeworkSolution) {
   const limits = profile.notebook
   if (solution.given.length > 4 || solution.given.some((line) => line.length > limits.given)) issues.push('Раздел «Дано» слишком длинный')
   if (!solution.goal.text || solution.goal.text.length > limits.goal) issues.push('Цель задачи не оформлена кратко')
-  if (steps.length === 0 || steps.length > 14) issues.push('Неверное число строк решения')
+  if (steps.length === 0 || steps.length > limits.stepCount) issues.push('Неверное число строк решения')
   if (steps.some((line) => line.length > limits.stepOnPage || /[\r\n]/u.test(line))) issues.push('Есть строка, не помещающаяся в тетрадь')
   if (steps.some((line) => /(?:```|\*\*|\\frac|\\angle|<\/?[a-z][a-z0-9]*\s*\/?>)/iu.test(line))) issues.push('В решении есть разметка вместо школьной записи')
   if ([...solution.given, solution.goal.text, ...steps, solution.answer].some((line) => /\$|\\[A-Za-z]+|```|\*\*|<\/?[a-z][a-z0-9]*\s*\/?>/iu.test(line))) {
@@ -2456,6 +2542,7 @@ const transientModelFailures = new Set([
   'Модель не вернула решение',
   'Не получилось подключиться к модели решения',
   'Модель временно перегружена',
+  incompleteAnswerMessage,
   providerUnavailableMessage,
 ])
 
@@ -2581,8 +2668,6 @@ export async function solveHomeworkWithReview(
      Теперь проход один и идёт самой сильной моделью пула. Проверка осталась
      там, где она объективна: правила предмета и разбор записи кодом. Что
      нарушено - чиним одним адресным повтором. */
-  const notebookLimits = subjectProfile(request.subject).notebook
-
   const evaluate = (candidate: EngineDraft, model: string) => {
     const asSolution = toSolution(candidate, request, ownerId, false)
     const issues = [
@@ -2627,7 +2712,7 @@ export async function solveHomeworkWithReview(
     passModel,
     subjectModels,
   )
-  const best = evaluate(normalizeDraft(raw, notebookLimits, request.condition ?? ''), passModel)
+  const best = evaluate(normalizeDraft(raw, request.subject, request.condition ?? ''), passModel)
 
   options.onStage?.('checking')
 
@@ -2805,7 +2890,7 @@ export async function solveHomeworkWithReview(
     const repaired: ReviewResult = {
       approved: repairCandidate.approved === true,
       issues: lines(repairCandidate.issues, 12, 160),
-      solution: normalizeDraft(repairCandidate.solution, notebookLimits, request.condition ?? ''),
+      solution: normalizeDraft(repairCandidate.solution, request.subject, request.condition ?? ''),
     }
     const repairedSolution = toSolution(repaired.solution, request, ownerId, repaired.approved)
     const repairedIssues = [

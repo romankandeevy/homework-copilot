@@ -40,6 +40,7 @@ import LegalPage from './LegalPage'
 import PrivacyNotice from './PrivacyNotice'
 import type { Database } from './lib/database.types'
 import type { AccountData } from './lib/supabase'
+import { homeworkSolutionForm } from './lib/homeworkContract'
 import type { HomeworkSolution, HomeworkSource } from './lib/homeworkContract'
 import { formatRubles } from './lib/currency'
 import { recordPendingLegalAcceptance, rememberPendingLegalAcceptance } from './lib/legalConsent'
@@ -924,13 +925,28 @@ function UnderstandingPage({
               {/* У доказательства в тетради пишут «Доказательство»: по
                   заголовку видно, что от записи требуется. */}
               <h2>{generatedSolution.goal.title === 'Доказать' ? 'Доказательство' : 'Решение'}</h2>
-              <ol>
-                {keyed(generatedSolution.steps, (step) => step).map(({ key, item: step }) => (
-                  // Нумерацию ставит страница, поэтому свою — из модели —
-                  // с шага снимаем, чтобы не выходило «1) 1) …».
-                  <li key={key}>{step.replace(/^\s*\d{1,2}[).]\s+/u, '')}</li>
-                ))}
-              </ol>
+              {/* Развёрнутый ответ - абзацы, а не нумерованный список.
+
+                  Сочинение по литературе на четыре абзаца, разложенное по
+                  пунктам «1) 2) 3)», читается как план, а не как ответ.
+                  Форму даёт контракт: по ней же сервер меряет длину строк. */}
+              {homeworkSolutionForm(generatedSolution.subject, generatedSolution.taskType) === 'essay'
+                ? (
+                  <div className="notebook-sheet-prose">
+                    {keyed(generatedSolution.steps, (step) => step).map(({ key, item: step }) => (
+                      <p key={key}>{step}</p>
+                    ))}
+                  </div>
+                )
+                : (
+                  <ol>
+                    {keyed(generatedSolution.steps, (step) => step).map(({ key, item: step }) => (
+                      // Нумерацию ставит страница, поэтому свою — из модели —
+                      // с шага снимаем, чтобы не выходило «1) 1) …».
+                      <li key={key}>{step.replace(/^\s*\d{1,2}[).]\s+/u, '')}</li>
+                    ))}
+                  </ol>
+                )}
             </section>
             {generatedSolution.analysis && (
               <section className="notebook-sheet-analysis">
