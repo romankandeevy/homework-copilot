@@ -15,14 +15,36 @@ const labelMargin = 24
 
 type Element = HomeworkSchematic['elements'][number]
 
-function projection() {
+/* Схема вписывается в поле по своим границам, как и геометрическая сцена.
+
+   7 сентября первая схема с прода: модель поставила цепь в квадрат
+   30..70, и при проекции всего поля 0..100 значки вышли с горошину, а
+   подписи - крупнее самой цепи. Теперь масштаб берётся по занятому
+   прямоугольнику с запасом под значки, минимальный размах не даёт
+   одному элементу растянуться на весь лист. */
+const minimumSpan = 40
+
+function projection(elements: readonly Element[]) {
   const drawableWidth = sceneLayout.width - (sceneLayout.padding + labelMargin) * 2
   const drawableHeight = sceneLayout.height - (sceneLayout.padding + labelMargin) * 2
-  const scale = Math.min(drawableWidth, drawableHeight) / 100
+  const centerX = sceneLayout.x + sceneLayout.width / 2
+  const centerY = sceneLayout.y + sceneLayout.height / 2
+  const reach = (element: Element) => Math.max(symbolSize, element.length) / 2
+  const xs = elements.flatMap((element) => [element.x - reach(element), element.x + reach(element)])
+  const ys = elements.flatMap((element) => [element.y - reach(element), element.y + reach(element)])
+  const minX = xs.length > 0 ? Math.min(...xs) : 0
+  const maxX = xs.length > 0 ? Math.max(...xs) : 100
+  const minY = ys.length > 0 ? Math.min(...ys) : 0
+  const maxY = ys.length > 0 ? Math.max(...ys) : 100
+  const spanX = Math.max(maxX - minX, minimumSpan)
+  const spanY = Math.max(maxY - minY, minimumSpan)
+  const scale = Math.min(drawableWidth / spanX, drawableHeight / spanY)
+  const localCenterX = (minX + maxX) / 2
+  const localCenterY = (minY + maxY) / 2
   return {
     scale,
-    x: (value: number) => sceneLayout.x + sceneLayout.width / 2 + (value - 50) * scale,
-    y: (value: number) => sceneLayout.y + sceneLayout.height / 2 + (value - 50) * scale,
+    x: (value: number) => centerX + (value - localCenterX) * scale,
+    y: (value: number) => centerY + (value - localCenterY) * scale,
   }
 }
 
@@ -191,17 +213,76 @@ function Symbol({ element, scale }: { element: Element; scale: number }) {
   }
 }
 
-/* Куда ставить подпись элемента: у длинных и повёрнутых - рядом с
-   серединой, у остальных - над значком. */
-function labelPlacement(element: Element, scale: number) {
-  const vertical = Math.abs(((element.rotation % 360) + 360) % 360 - 90) < 45 || Math.abs(((element.rotation % 360) + 360) % 360 - 270) < 45
+/* Куда ставить подпись элемента.
+
+   Подпись примеряется с четырёх сторон значка и встаёт туда, где дальше
+   всего от других элементов, проводов и уже поставленных подписей:
+   на первой схеме с прода «R₁ = 4 Ом» и «R₂ = 6 Ом» легли одна на
+   другую, а «U = 20 В» - поверх провода. */
+type Spot = { x: number; y: number; anchor: 'start' | 'middle' | 'end' }
+
+function segmentDistance(point: { x: number; y: number }, start: { x: number; y: number }, end: { x: number; y: number }) {
+  const length = Math.hypot(end.x - start.x, end.y - start.y)
+  if (length === 0) return Math.hypot(point.x - start.x, point.y - start.y)
+  const t = Math.max(0, Math.min(1, ((point.x - start.x) * (end.x - start.x) + (point.y - start.y) * (end.y - start.y)) / (length * length)))
+  return Math.hypot(point.x - (start.x + (end.x - start.x) * t), point.y - (start.y + (end.y - start.y) * t))
+}
+
+function labelPlacement(
+  element: Element,
+  at: { x: number; y: number },
+  scale: number,
+  others: readonly { x: number; y: number }[],
+  wires: readonly (readonly [{ x: number; y: number }, { x: number; y: number }])[],
+  taken: readonly { x: number; y: number }[],
+): Spot {
   const size = symbolSize * scale
-  if (element.symbol === 'text') return { dx: 0, dy: 0, anchor: 'middle' as const }
+  if (element.symbol === 'text') return { x: at.x, y: at.y, anchor: 'middle' }
   if (element.symbol === 'vector' || element.symbol === 'ray' || element.symbol === 'arrow') {
-    return { dx: 0, dy: -size * 0.4, anchor: 'start' as const }
+    const angle = (element.rotation * Math.PI) / 180
+    const tip = { x: at.x + Math.cos(angle) * element.length * scale, y: at.y + Math.sin(angle) * element.length * scale }
+    return { x: tip.x + Math.cos(angle) * 8 - Math.sin(angle) * 10, y: tip.y + Math.sin(angle) * 8 - Math.cos(angle) * 10 + 5, anchor: 'middle' }
   }
-  if (vertical) return { dx: size * 0.7, dy: 4, anchor: 'start' as const }
-  return { dx: 0, dy: -size * 0.75, anchor: 'middle' as const }
+  const candidates: Spot[] = [
+    { x: at.x, y: at.y - size * 0.75, anchor: 'middle' },
+    { x: at.x, y: at.y + size * 0.75 + 14, anchor: 'middle' },
+    { x: at.x + size * 0.7, y: at.y + 5, anchor: 'start' },
+    { x: at.x - size * 0.7, y: at.y + 5, anchor: 'end' },
+  ]
+  let best = candidates[0]
+  let bestScore = -Infinity
+  for (const spot of candidates) {
+    const fromOthers = others.reduce((closest, other) => Math.min(closest, Math.hypot(spot.x - other.x, spot.y - other.y)), Infinity)
+    const fromWires = wires.reduce((closest, [start, end]) => Math.min(closest, segmentDistance(spot, start, end)), Infinity)
+    const fromLabels = taken.reduce((closest, other) => Math.min(closest, Math.hypot(spot.x - other.x, spot.y - other.y)), Infinity)
+    const score = Math.min(fromOthers, 90) + Math.min(fromWires, 40) + Math.min(fromLabels, 120)
+    if (score > bestScore) {
+      bestScore = score
+      best = spot
+    }
+  }
+  return best
+}
+
+/* Двухполюсник ложится вдоль своего провода.
+
+   Источник на левой стороне контура модель отдала с rotation=0, и его
+   пластины легли поперёк вертикального провода. Если оба соседа элемента
+   по проводам стоят с ним на одной вертикали, значок поворачивается сам. */
+const twoTerminal = new Set(['battery', 'resistor', 'lamp', 'switch', 'ammeter', 'voltmeter', 'capacitor', 'bell', 'motor'])
+
+function orientedRotation(element: Element, schematic: HomeworkSchematic, elements: Map<string, Element>) {
+  if (!twoTerminal.has(element.symbol)) return element.rotation
+  const neighbours = schematic.connections
+    .filter((connection) => connection.from === element.id || connection.to === element.id)
+    .map((connection) => elements.get(connection.from === element.id ? connection.to : connection.from))
+    .filter((neighbour): neighbour is Element => Boolean(neighbour))
+  if (neighbours.length === 0) return element.rotation
+  const vertical = neighbours.every((neighbour) => Math.abs(neighbour.x - element.x) < 3)
+  const horizontal = neighbours.every((neighbour) => Math.abs(neighbour.y - element.y) < 3)
+  if (vertical && !horizontal) return 90
+  if (horizontal && !vertical) return 0
+  return element.rotation
 }
 
 /* Провод идёт под прямыми углами: сначала по горизонтали, потом по
@@ -216,8 +297,20 @@ function connectionPath(from: Element, to: Element, kind: 'wire' | 'line' | 'das
 }
 
 export function SchematicScene({ schematic, description }: { schematic: HomeworkSchematic; description: string }) {
-  const project = projection()
+  const project = projection(schematic.elements)
   const elements = new Map(schematic.elements.map((element) => [element.id, element]))
+  const centers = schematic.elements.map((element) => ({ id: element.id, x: project.x(element.x), y: project.y(element.y) }))
+  const wires = schematic.connections.flatMap((connection) => {
+    const from = elements.get(connection.from)
+    const to = elements.get(connection.to)
+    if (!from || !to) return []
+    const start = { x: project.x(from.x), y: project.y(from.y) }
+    const end = { x: project.x(to.x), y: project.y(to.y) }
+    if (connection.kind !== 'wire') return [[start, end] as const]
+    const corner = { x: end.x, y: start.y }
+    return [[start, corner] as const, [corner, end] as const]
+  })
+  const placed: { x: number; y: number }[] = []
 
   return (
     <g className="geometry-diagram geometry-schematic" data-testid="geometry-schematic" role="img" aria-label={description}>
@@ -229,24 +322,33 @@ export function SchematicScene({ schematic, description }: { schematic: Homework
         const middle = { x: (project.x(from.x) + project.x(to.x)) / 2, y: (project.y(from.y) + project.y(to.y)) / 2 }
         return <g key={key}>
           <path className={connection.kind === 'dashed' ? 'diagram-auxiliary' : 'diagram-line'} d={path} />
-          {connection.label && <text className="diagram-angle-label" textAnchor="middle" x={middle.x} y={middle.y - 8}>{connection.label}</text>}
+          {connection.label && <text className="diagram-tick-label" textAnchor="middle" x={middle.x} y={middle.y - 8}>{connection.label}</text>}
         </g>
       })}
       {keyed(schematic.elements, (element) => element.id).map(({ key, item: element }) => {
-        const place = labelPlacement(element, project.scale)
         const x = project.x(element.x)
         const y = project.y(element.y)
+        const rotation = orientedRotation(element, schematic, elements)
+        const place = labelPlacement(
+          { ...element, rotation },
+          { x, y },
+          project.scale,
+          centers.filter((center) => center.id !== element.id),
+          wires,
+          placed,
+        )
+        placed.push({ x: place.x, y: place.y })
         return <g key={key}>
           {/* Провод проходит через центр значка; чтобы линия не
               просвечивала сквозь резистор, под значок кладётся бумага. */}
           {element.symbol !== 'text' && element.symbol !== 'node' && !['vector', 'ray', 'arrow', 'ground', 'wall', 'rope', 'tube', 'incline'].includes(element.symbol) && (
-            <rect className="diagram-paper" x={x - symbolSize * project.scale * 0.45} y={y - symbolSize * project.scale * 0.45} width={symbolSize * project.scale * 0.9} height={symbolSize * project.scale * 0.9} transform={`rotate(${element.rotation} ${x} ${y})`} />
+            <rect className="diagram-paper" x={x - symbolSize * project.scale * 0.45} y={y - symbolSize * project.scale * 0.45} width={symbolSize * project.scale * 0.9} height={symbolSize * project.scale * 0.9} transform={`rotate(${rotation} ${x} ${y})`} />
           )}
-          <g transform={`translate(${x} ${y}) rotate(${element.rotation})`}>
-            <Symbol element={element} scale={project.scale} />
+          <g transform={`translate(${x} ${y}) rotate(${rotation})`}>
+            <Symbol element={{ ...element, rotation }} scale={project.scale} />
           </g>
           {element.label && (
-            <text className="diagram-angle-label" textAnchor={place.anchor} x={x + place.dx} y={y + place.dy}>{element.label}</text>
+            <text className="diagram-tick-label" textAnchor={place.anchor} x={place.x} y={place.y}>{element.label}</text>
           )}
         </g>
       })}
