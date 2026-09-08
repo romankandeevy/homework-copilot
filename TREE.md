@@ -16,6 +16,7 @@ homework Copilot/
 │   ├── worksheet.ts         — калькулятор черновика: счёт проверяет код
 │   ├── homeworkSolver.ts    — HTTP решателя: оплата, стадии, сохранение решения
 │   ├── subjectRules.ts      — правила предмета, они же рецензент
+│   ├── gradeRules.ts        — приём решения по ступени: школа против вуза
 │   ├── chat.ts / chatProviders.ts — ИИ-чат: квоты, списание, два протокола шлюза
 │   └── support.ts           — обращения, мост в Telegram
 ├── src/
@@ -51,6 +52,8 @@ homework Copilot/
 |---|---|
 | Цена, списание, возврат | `supabase/migrations/*wallet*`, `src/lib/solutionPricing.ts` |
 | Модели и их отказы | `server/homeworkModels.ts`, раздел «Пул моделей» в `AGENTS.md` |
+| Что можно решать в этом классе | `server/gradeRules.ts`, `src/lib/subjects.ts` (`solvableGrades`) |
+| Требования к записи по предмету | `server/subjectRules.ts`, `server/worksheet.ts` |
 | Очередь и стадии решения | `src/lib/solutionJobs.ts`, `src/solution/SolutionQueue.tsx` |
 | Вход, письма, согласия | `src/account/AccountDialog.tsx`, `supabase/templates/`, `src/lib/legalConsent.ts` |
 | Юридические тексты | `src/LegalPage.tsx` (версия — `private.current_legal_version()`) |
