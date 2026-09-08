@@ -38,7 +38,8 @@ node scripts/render-app-icons.mjs   # перерисовать иконки пр
 
 Push в `main` выкатывает только превью: Vercel обновляет
 [homework-copilot-taupe.vercel.app](https://homework-copilot-taupe.vercel.app)
-сам. Прод (`www.homeworkcopilot.ru`, GitHub Pages) — вручную, после проверки
+сам. На превью страницы приходят пустым шеллом: отрисовка в готовый HTML
+требует браузера, а он там не поднимается - подробности в AGENTS.md. Прод (`www.homeworkcopilot.ru`, GitHub Pages) — вручную, после проверки
 на превью: `gh workflow run deploy-pages.yml`. Подробнее — «Выкатка» в AGENTS.md.
 
 ## Стек
