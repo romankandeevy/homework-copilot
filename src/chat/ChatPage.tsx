@@ -506,9 +506,24 @@ export default function ChatPage({ userId = null, onRequireAuth, onOpenWallet }:
     }
   }, [])
 
+  /* Список моделей просит гость - и получает ошибку прав.
+
+     8 сентября на проде: незалогиненный открывает чат и видит красное
+     «Чат не загрузился» и строку «permission denied for function
+     list_chat_models». Функция намеренно выдана только authenticated -
+     чат платный, - а страница звала её сразу при открытии, до всякой
+     проверки сессии. Приглашение войти при этом не показывалось никогда:
+     оно ждёт modelsStatus === 'ready', а статус был 'error'.
+
+     Без сессии моделей и не спрашиваем: гостю сразу видно, что нужно
+     войти, а не поломка. */
   useEffect(() => {
+    if (requiresAuth) {
+      setModelsStatus('ready')
+      return
+    }
     void loadModels()
-  }, [loadModels])
+  }, [loadModels, requiresAuth])
 
   useEffect(() => {
     if (requiresAuth) {
@@ -1179,9 +1194,13 @@ export default function ChatPage({ userId = null, onRequireAuth, onOpenWallet }:
             {attachmentNotice && <p className="chat-attachment-notice" role="alert">{attachmentNotice}</p>}
 
             <p className="chat-price-hint">
-              {selectedModel
-                ? <>Спишем после ответа и по факту: обычный вопрос — {formatKopecks(selectedModel.minChargeKopecks)}. Заранее с баланса ничего не снимаем, а если модель недоступна, списания не будет вовсе.</>
-                : 'Модели пока недоступны.'}
+              {/* Гостю моделей не показывают вовсе: список выдан только тем,
+                  кто вошёл. «Модели пока недоступны» читалось как поломка. */}
+              {requiresAuth
+                ? 'Войди, чтобы задать вопрос: чат платный, и списание идёт с баланса аккаунта.'
+                : selectedModel
+                  ? <>Спишем после ответа и по факту: обычный вопрос — {formatKopecks(selectedModel.minChargeKopecks)}. Заранее с баланса ничего не снимаем, а если модель недоступна, списания не будет вовсе.</>
+                  : 'Модели пока недоступны.'}
             </p>
           </form>
         </div>
