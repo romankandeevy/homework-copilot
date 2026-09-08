@@ -1191,14 +1191,22 @@
   .landing-brand { min-width: 0; overflow: hidden; }
   .landing-brand .brand-name { overflow: hidden; text-overflow: ellipsis; }
   .landing-header-actions .landing-ghost-action { display: none; }
-  .compare-head { display: none; }
-  .compare-row { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
-  .compare-gdz::before { content: 'Решебник: '; color: var(--color-text-subtle); font-weight: var(--weight-semibold); }
-  .compare-ours::before { content: 'Homework Copilot: '; font-weight: var(--weight-semibold); }
   .how-steps { grid-template-columns: minmax(0, 1fr); gap: var(--space-6); }
   .feature-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .price-grid { grid-template-columns: minmax(0, 1fr); }
   .showcase-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Сравнение с решебником держится таблицей до последнего: три колонки - и
+   есть само сравнение. Схлопывалось оно на 960 пикселях, и на ноутбуке
+   шириной 800 самое сильное место витрины читалось тремя строчками текста с
+   приписками «Решебник:» и «Homework Copilot:». Колонка при 800 пикселях
+   выходит около 230 - тесно, но читаемо. */
+@media (max-width: 720px) {
+  .compare-head { display: none; }
+  .compare-row { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
+  .compare-gdz::before { content: 'Решебник: '; color: var(--color-text-subtle); font-weight: var(--weight-semibold); }
+  .compare-ours::before { content: 'Homework Copilot: '; font-weight: var(--weight-semibold); }
 }
 
 @media (max-width: 640px) {

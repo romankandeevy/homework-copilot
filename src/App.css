@@ -1962,13 +1962,16 @@
   .task-condition-preview { grid-template-columns: minmax(0, 1fr) 5.5rem; gap: var(--space-2); padding: var(--space-3); }
   .task-condition-preview--copy-only { grid-template-columns: minmax(0, 1fr); padding: var(--space-4); }}
 
-/* На узких телефонах «Расписание» должно помещаться целиком, без многоточия. */
+/* На узких телефонах «Расписание» должно помещаться целиком, без многоточия.
+   Кегль ради этого опускали до 10 px - ниже всего остального в продукте и
+   ниже собственной шкалы. Слово помещается и в 12: колонка на 375 пикселях
+   выходит около 90, слово - около 68. Тесним трекингом, а не размером. */
 @media (max-width: 380px) {
   .product-topbar {
     padding-right: max(var(--space-2), env(safe-area-inset-right));
     padding-left: max(var(--space-2), env(safe-area-inset-left));
   }
-  .navigation-item { padding-inline: 0; font-size: 0.625rem; }
+  .navigation-item { padding-inline: 0; letter-spacing: -0.01em; }
   /* На самых маленьких экранах приветствие уступает место кнопке:
      72 пикселя вежливости не стоят того, чтобы «Решить» ушло за сгиб. */
   .page-header { display: none; }
