@@ -409,10 +409,13 @@ export default function CopyTask({
 
         <div className="task-actions">
           {/* Домашнее задание редко состоит из одной задачи, и уж точно не
-              из одного предмета: у каждой строки свой предмет и своя цена. */}
+              из одного предмета: у каждой строки свой предмет и своя цена.
+
+              Надпись начинается с глагола: «Ещё задача» не говорила, добавит
+              она строку к уже набранной или сбросит её и начнёт заново. */}
           <button type="button" className="task-add" onClick={addEntry}>
             <Plus size={18} weight="bold" aria-hidden="true" />
-            Ещё задача
+            Добавить задачу
           </button>
 
           <button className="copy-task-submit" type="submit" disabled={isSubmitting}>

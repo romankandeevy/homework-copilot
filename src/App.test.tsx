@@ -143,7 +143,7 @@ describe('Homework Copilot task flow', () => {
     })
     fireEvent.change(screen.getByRole('combobox', { name: 'Предмет' }), { target: { value: 'Геометрия' } })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Ещё задача' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Добавить задачу' }))
 
     const conditions = screen.getAllByRole('textbox', { name: /Условие/ })
     expect(conditions).toHaveLength(2)
