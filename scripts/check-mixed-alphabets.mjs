@@ -15,6 +15,26 @@ const intentionalRegexTokens = new Map([
   ['src/scheduleOcr.ts', new Set(['bпн', 'bвт', 'bср', 'bчт', 'bпт', 'bсб', 'яa', 'ЯЁA', 'яёA'])],
 ])
 
+/* Тире в русском тексте витрины.
+
+   Правило проекта - «только дефис» (CLAUDE.md, «Язык»). Разбор 8 сентября
+   нашёл, чем оборачивается его отсутствие в проверках: на первом экране, то
+   есть на единственной странице, которую видят все посетители, стояли
+   дефисы, а по всей остальной витрине - длинные тире. Три ошибки подряд там,
+   где их видно лучше всего, и никто не заметил, потому что каждая правка по
+   отдельности выглядела нормально.
+
+   Проверяются страницы, которые читает посетитель: витрина, разметка
+   входного файла, заголовки маршрутов и текст для машин. Строка без
+   кириллицы пропускается - служебное описание замысла в `index.html`
+   написано по-английски, и к нему правило не относится. */
+const hyphenOnlyPaths = [
+  /^src\/landing\//,
+  /^src\/lib\/siteMetadata\.ts$/,
+  /^index\.html$/,
+  /^public\/llms\.txt$/,
+]
+
 async function collect(directory) {
   const files = []
   for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -46,6 +66,16 @@ for (const path of files) {
   if (invisibleIndex >= 0) {
     const point = location(text, invisibleIndex)
     problems.push(`${normalizedPath}:${point.line}:${point.column}: невидимый или повреждённый символ`)
+  }
+
+  if (hyphenOnlyPaths.some((pattern) => pattern.test(normalizedPath))) {
+    text.split(/\r?\n/).forEach((line, index) => {
+      if (!/[А-Яа-яЁё]/.test(line)) return
+      const column = line.search(/[–—]/u)
+      if (column >= 0) {
+        problems.push(`${normalizedPath}:${index + 1}:${column + 1}: тире в русском тексте, а по правилу проекта только дефис`)
+      }
+    })
   }
 
   for (const match of text.matchAll(/[\p{L}\p{M}\p{N}_]+/gu)) {
