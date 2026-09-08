@@ -264,7 +264,7 @@
 .landing-main { flex: 1; }
 
 .landing-section {
-  padding-block: clamp(3.5rem, 7vw, 7rem);
+  padding-block: clamp(2.25rem, 7vw, 7rem);
   border-top: 1px solid var(--color-border);
   /* Шапка липкая, поэтому переход по якорю должен останавливаться
      под ней, а не заводить заголовок секции ей за спину. */
@@ -281,7 +281,7 @@
 
 .section-head {
   max-width: 44rem;
-  margin-bottom: clamp(2.25rem, 4vw, 3.75rem);
+  margin-bottom: clamp(1.5rem, 4vw, 3.75rem);
 }
 
 .section-head h2,
@@ -688,7 +688,7 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: clamp(1.25rem, 3vw, 2.5rem);
-  margin: 0 0 clamp(3rem, 6vw, 5.5rem);
+  margin: 0 0 clamp(1.75rem, 6vw, 5.5rem);
   padding: 0;
   list-style: none;
   counter-reset: step;
@@ -742,8 +742,11 @@
    каждому пункту границу и точку входа. */
 .feature-list {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: clamp(1rem, 2vw, 1.5rem);
+  /* Карточка со значками выше соседей из-за картинки. Без этого сетка
+     растягивала под неё весь ряд, и рядом стояла карточка на треть пустая. */
+  align-items: start;
   margin: 0;
 }
 
@@ -774,6 +777,26 @@
   line-height: var(--leading-copy);
 }
 
+/* Разбор со значками показан прямо в своей карточке: отдельной секции у него
+   больше нет, а без картинки утверждение про «как ждёт учитель» голословно. */
+.feature-row .parse-preview { margin-top: var(--space-2); }
+
+/* Расписание - блок в одну строку: слева что это, справа как выглядит. */
+.schedule-band {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 20rem);
+  gap: clamp(1.5rem, 4vw, 3rem);
+  align-items: center;
+  margin-top: clamp(1rem, 2vw, 1.5rem);
+  padding: clamp(1.25rem, 2.6vw, 1.75rem);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
+}
+
+.schedule-band-copy { display: grid; gap: var(--space-2); }
+.schedule-band-copy p { margin: 0; color: var(--color-text-muted); font-size: var(--text-ui); }
+
 .subject-band h3 {
   margin: 0 0 var(--space-4);
   font-family: var(--font-display);
@@ -782,8 +805,8 @@
 }
 
 .subject-band {
-  margin-top: clamp(2rem, 4vw, 3.5rem);
-  padding: clamp(1.5rem, 3vw, 2.25rem);
+  margin-top: clamp(1rem, 4vw, 3.5rem);
+  padding: clamp(1.1rem, 3vw, 2.25rem);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-panel);
 }
@@ -806,27 +829,25 @@
   font-weight: var(--weight-medium);
 }
 
-/* ─── Витрина возможностей ─────────────────────────────────────────── */
+/* ─── Превью внутри карточек ───────────────────────────────────────── */
 
-.showcase-grid {
+.schedule-preview {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: clamp(1.25rem, 2.5vw, 2rem);
-}
-
-.showcase-card {
-  display: grid;
-  align-content: start;
-  gap: var(--space-5);
-  padding: clamp(1.5rem, 3vw, 2.5rem);
+  gap: var(--space-3);
+  padding: clamp(1.1rem, 2.5vw, 1.5rem);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-panel);
-  background: var(--color-surface);
+  border-radius: var(--radius-surface);
+  background: var(--color-surface-raised);
 }
 
-.showcase-card.is-wide { grid-column: 1 / -1; }
-.showcase-copy { display: grid; gap: var(--space-2); max-width: 40rem; }
-.showcase-copy p { margin: 0; color: var(--color-text-muted); font-size: var(--text-ui); }
+.schedule-preview-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-subtle);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+}
 
 .preview-kicker {
   font-family: var(--font-mono);
@@ -893,52 +914,6 @@
   background-size: 100% 2px;
   background-position: 0 100%;
 }
-
-.chat-preview,
-.schedule-preview {
-  display: grid;
-  gap: var(--space-3);
-  padding: clamp(1.1rem, 2.5vw, 1.5rem);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-surface);
-  background: var(--color-surface-raised);
-}
-
-.chat-preview-head,
-.schedule-preview-head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  color: var(--color-text-subtle);
-  font-size: var(--text-caption);
-  font-weight: var(--weight-semibold);
-}
-
-.chat-preview-head svg { color: var(--color-brand-accent); }
-.chat-preview-model { margin-left: auto; font-family: var(--font-mono); font-weight: var(--weight-medium); }
-
-.chat-preview-ask {
-  justify-self: end;
-  max-width: 90%;
-  margin: 0;
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-surface);
-  background: var(--color-accent);
-  color: var(--color-on-accent);
-  font-size: var(--text-small);
-}
-
-.chat-preview-answer {
-  display: grid;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-surface);
-  background: var(--color-surface);
-}
-
-.chat-preview-answer p { margin: 0; color: var(--color-text-muted); font-size: var(--text-small); }
-.chat-preview-formula { font-family: var(--font-mono); color: var(--color-text) !important; }
 
 .schedule-preview-badge {
   display: inline-flex;
@@ -1191,10 +1166,8 @@
   .landing-brand { min-width: 0; overflow: hidden; }
   .landing-brand .brand-name { overflow: hidden; text-overflow: ellipsis; }
   .landing-header-actions .landing-ghost-action { display: none; }
-  .how-steps { grid-template-columns: minmax(0, 1fr); gap: var(--space-6); }
-  .feature-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .how-steps { grid-template-columns: minmax(0, 1fr); gap: var(--space-5); }
   .price-grid { grid-template-columns: minmax(0, 1fr); }
-  .showcase-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* Сравнение с решебником держится таблицей до последнего: три колонки - и
@@ -1216,6 +1189,7 @@
   .landing-header-actions .landing-primary-action { display: none; }
 
   .feature-list { grid-template-columns: minmax(0, 1fr); }
+  .schedule-band { grid-template-columns: minmax(0, 1fr); }
   .hero-marks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .hero-actions { flex-direction: column; align-items: stretch; }
   .hero-actions a { width: 100%; }

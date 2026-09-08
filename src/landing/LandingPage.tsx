@@ -16,8 +16,6 @@ import {
   ChatsCircle,
   Check,
   CheckCircle,
-  ClockCounterClockwise,
-  Compass,
   List,
   Moon,
   Notebook,
@@ -28,12 +26,7 @@ import {
   X,
 } from '@phosphor-icons/react'
 import { SiteFooter } from '../support/SupportCenter'
-import {
-  AnalysisPreview,
-  ChatPreview,
-  NotebookPreview,
-  SchedulePreview,
-} from './LandingPreviews'
+import { AnalysisPreview, NotebookPreview, SchedulePreview } from './LandingPreviews'
 import './LandingPage.css'
 
 const appPath = '/app'
@@ -300,7 +293,7 @@ const steps = [
   {
     icon: ShieldCheck,
     title: 'Сначала объясняем, потом решаем',
-    text: 'Разбор обычными словами - что за задача и каким правилом решается - и только под ним готовая запись. Решение проверяется по правилам предмета: единица измерения при ответе, разбор по составу, уравненная реакция. Правило нарушено - решение переделывается; не вышло - не выдаём и деньги не списываем.',
+    text: 'Разбор обычными словами - что за задача и каким правилом решается - и только под ним готовая запись. Не вышло - не выдаём и деньги не списываем.',
   },
   {
     icon: PencilSimpleLine,
@@ -324,47 +317,41 @@ const comparison = [
     ours: 'Решается так же, как любая другая',
   },
   {
-    question: 'Что получаешь',
-    gdz: 'Ответ к номеру',
-    ours: 'Дано, ход решения, чертёж и ответ',
-  },
-  {
     question: 'В каком виде',
     gdz: 'Как в книге',
     ours: 'Как запись в тетради - переписывай строкой за строкой',
   },
 ] as const
 
+/* Четыре карточки, а не шесть плюс ещё три блока рядом.
+
+   Разбор 8 сентября: витрина на телефоне была 10 999 пикселей - тринадцать
+   с половиной экранов для человека, которому сдавать завтра. Секции
+   «Сделано под то, как сдают домашку» и «Не только решение задачи»
+   наполовину пересказывали друг друга и «Три шага». Слиты в одну: чертёж
+   ушёл к записи, чат - к сохранённым решениям, значки забрали к себе
+   картинку из бывшей витрины возможностей. */
 const features = [
   {
     icon: Notebook,
     title: 'Запись, а не голый ответ',
-    text: 'Решение приходит разложенным: что дано, что найти, каждый шаг с пояснением и вывод. Переписывать можно строку за строкой.',
-  },
-  {
-    icon: Compass,
-    title: 'Чертёж строится по условию',
-    text: 'Треугольники, ромбы, трапеции, окружности. Фигура собирается из данных задачи - с точками, равными сторонами и прямыми углами на своих местах.',
+    text: 'Что дано, что найти, каждый шаг с пояснением и вывод. Чертёж строится по условию: треугольники, ромбы, трапеции, окружности - с точками, равными сторонами и прямыми углами на своих местах.',
   },
   {
     icon: PencilSimpleLine,
     title: 'Школьные значки на месте',
     text: 'Подлежащее одной чертой, сказуемое двумя, корень дугой, суффикс крышкой, степень окисления над элементом. Разбор выглядит так, как его ждёт учитель.',
+    preview: 'analysis' as const,
   },
   {
     icon: ShieldCheck,
     title: 'Проверка до выдачи',
-    text: 'Решение сверяется независимо, а не отдаётся как есть. Не прошло проверку - задача не считается решённой и не оплачивается.',
+    text: 'Решение сверяется по правилам предмета, а не отдаётся как есть. Не прошло проверку - задача не считается решённой и не оплачивается.',
   },
   {
     icon: ChatsCircle,
-    title: 'Чат, когда нужно понять',
-    text: 'Отдельный ИИ-чат на три модели: спросить, почему шаг именно такой, разобрать тему заново, показать фото или поискать в интернете.',
-  },
-  {
-    icon: ClockCounterClockwise,
-    title: 'Решения не теряются',
-    text: 'Каждая решённая задача остаётся в разделе «Мои решения». Открыть её снова можно в любой момент - платить второй раз не нужно.',
+    title: 'Чат рядом, решения не теряются',
+    text: 'Спросить, почему шаг именно такой, можно в ИИ-чате - от 20 копеек за ответ. Каждая решённая задача остаётся в «Моих решениях», открыть её снова бесплатно.',
   },
 ]
 
@@ -567,10 +554,7 @@ export default function LandingPage() {
             <Reveal className="how-proof" delay={120}>
               <div className="how-proof-copy">
                 <h3>Готовая страница, а не абзац текста</h3>
-                <p>
-                  Ромб ABCD с диагоналями 10 и 24 см - реальная задача, решённая продуктом: условие разложено
-                  на «дано» и «найти», чертёж построен по данным, каждый шаг записан отдельной строкой, ответ выделен.
-                </p>
+                <p>Ромб ABCD с диагоналями 10 и 24 см - реальная задача, решённая продуктом.</p>
                 <a className="landing-inline-action" href={appPath}>
                   Попробовать на своей задаче
                   <ArrowRight size={16} weight="bold" aria-hidden="true" />
@@ -588,14 +572,30 @@ export default function LandingPage() {
             </Reveal>
 
             <div className="feature-list">
-              {features.map(({ icon: Icon, title, text }, index) => (
-                <Reveal key={title} className="feature-row" delay={index * 60}>
-                  <Icon size={24} weight="duotone" aria-hidden="true" />
-                  <h3>{title}</h3>
-                  <p>{text}</p>
-                </Reveal>
-              ))}
+              {features.map((feature, index) => {
+                const Icon = feature.icon
+                return (
+                  <Reveal key={feature.title} className="feature-row" delay={index * 60}>
+                    <Icon size={24} weight="duotone" aria-hidden="true" />
+                    <h3>{feature.title}</h3>
+                    <p>{feature.text}</p>
+                    {feature.preview === 'analysis' && <AnalysisPreview />}
+                  </Reveal>
+                )
+              })}
             </div>
+
+            {/* Расписание - самостоятельная бесплатная вещь и не про решение
+                задач, поэтому оно стоит отдельным блоком, а не пятой
+                карточкой. Своей секции с заголовком второго уровня ему не
+                дают: страница и так была длиннее, чем её читают. */}
+            <Reveal className="schedule-band" delay={80}>
+              <div className="schedule-band-copy">
+                <h3>Расписание с фотографии</h3>
+                <p>Снимок доски превращается в редактируемое расписание. Бесплатно и без аккаунта.</p>
+              </div>
+              <SchedulePreview />
+            </Reveal>
 
             <Reveal className="subject-band" delay={60}>
               <h3>14 предметов, 5-11 класс</h3>
@@ -603,40 +603,6 @@ export default function LandingPage() {
                 {subjects.map((subject) => <li key={subject}>{subject}</li>)}
               </ul>
             </Reveal>
-          </div>
-        </section>
-
-        <section className="landing-section landing-showcase" aria-labelledby="showcase-title">
-          <div className="landing-shell">
-            <Reveal className="section-head">
-              <h2 id="showcase-title">Не только решение задачи</h2>
-            </Reveal>
-
-            <div className="showcase-grid">
-              <Reveal className="showcase-card is-wide">
-                <div className="showcase-copy">
-                  <h3>Разбор со школьными значками</h3>
-                  <p>Русский и литература приходят размеченными: члены предложения подчёркнуты, морфемы отмечены, под записью - условные обозначения.</p>
-                </div>
-                <AnalysisPreview />
-              </Reveal>
-
-              <Reveal className="showcase-card" delay={70}>
-                <div className="showcase-copy">
-                  <h3>ИИ-чат по домашке</h3>
-                  <p>Спросить, почему шаг именно такой. Модель выбираешь сам, ответ от 20 копеек, можно приложить фото.</p>
-                </div>
-                <ChatPreview />
-              </Reveal>
-
-              <Reveal className="showcase-card" delay={140}>
-                <div className="showcase-copy">
-                  <h3>Расписание с фотографии</h3>
-                  <p>Снимок доски превращается в редактируемое расписание. Работает бесплатно и без аккаунта.</p>
-                </div>
-                <SchedulePreview />
-              </Reveal>
-            </div>
           </div>
         </section>
 
@@ -670,14 +636,6 @@ export default function LandingPage() {
                   <li>
                     <span><strong>Старт</strong><small>Начисляются сразу после регистрации</small></span>
                     <b>20 ₽</b>
-                  </li>
-                  <li>
-                    <span><strong>Ответ в ИИ-чате</strong><small>Короткий вопрос упирается в минимальное списание</small></span>
-                    <b>от 20 коп</b>
-                  </li>
-                  <li>
-                    <span><strong>Расписание</strong><small>Ввод вручную и распознавание фото</small></span>
-                    <b>бесплатно</b>
                   </li>
                   <li>
                     <span><strong>Приглашение друга</strong><small>Когда он пополнит баланс в первый раз: ему 5 ₽, тебе 10 ₽</small></span>

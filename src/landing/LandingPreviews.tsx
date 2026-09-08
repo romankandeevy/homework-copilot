@@ -5,7 +5,7 @@
    с продуктом ученик идёт на `/app`, а витрина только показывает, что
    он там увидит. */
 
-import { ChatsCircle, ImageSquare } from '@phosphor-icons/react'
+import { ImageSquare } from '@phosphor-icons/react'
 
 /* Ромб с диагоналями 10 и 24 - та самая фигура, которую движок строит
    по условию. Пропорции честные: AC = 70, BD = 168, это ровно 10 к 24. */
@@ -92,23 +92,6 @@ export function AnalysisPreview() {
         <li><i className="legend-wavy" aria-hidden="true" />определение</li>
         <li><i className="legend-dash-dot" aria-hidden="true" />обстоятельство</li>
       </ul>
-    </div>
-  )
-}
-
-export function ChatPreview() {
-  return (
-    <div className="chat-preview">
-      <div className="chat-preview-head">
-        <ChatsCircle size={18} weight="duotone" aria-hidden="true" />
-        <span>ИИ-чат</span>
-        <span className="chat-preview-model">Gemini 3.6 Flash · от 20 коп</span>
-      </div>
-      <p className="chat-preview-ask">Почему в четвёртом шаге вдруг теорема Пифагора?</p>
-      <div className="chat-preview-answer">
-        <p>Потому что диагонали ромба пересекаются под прямым углом. Значит △AOB - прямоугольный, и его гипотенуза AB считается по катетам AO и BO.</p>
-        <p className="chat-preview-formula">AB² = AO² + BO²</p>
-      </div>
     </div>
   )
 }
