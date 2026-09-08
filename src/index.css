@@ -89,6 +89,20 @@ a {
   text-stroke: 1px var(--color-brand-accent);
 }
 
+/* Знак нарисован обводкой при прозрачной заливке. Где обводки нет, буквы
+   пропадают целиком - остаётся пустая коробка вместо логотипа. Заливка
+   возвращается только в этом случае.
+
+   Отдельно: проверка контраста читает у знака `color`, то есть прозрачный, и
+   на тёмной теме даёт 1,06:1. Это свойство инструмента, а не картинки: сами
+   буквы обведены `--color-brand-accent` (светло-синий) и `--color-text`, и в
+   тёмной теме видны. Знак к тому же `aria-hidden`, рядом с ним стоит
+   название словом. */
+@supports not ((-webkit-text-stroke: 1px currentColor) or (text-stroke: 1px currentColor)) {
+  .brand-mark { color: var(--color-brand-accent); }
+  .brand-mark > span:last-child { color: var(--color-text); }
+}
+
 .brand-mark > span:last-child {
   -webkit-text-stroke-color: var(--color-text);
   text-stroke-color: var(--color-text);

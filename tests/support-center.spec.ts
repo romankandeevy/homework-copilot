@@ -11,7 +11,9 @@ test.describe('центр поддержки', () => {
     await page.goto('/app')
     // Плавающей кнопки на главной больше нет: она перекрывала угол «Решить».
     // Поддержка открывается из подвала, который есть на каждой странице.
-    await page.getByRole('button', { name: 'Написать в поддержку' }).first().click()
+    // Подвал приложения с 8 сентября короткий: одна строка вместо портала
+    // на пять документов и второго меню, и надпись на ссылке - «Поддержка».
+    await page.locator('.site-footer').getByRole('button', { name: 'Поддержка' }).click()
     await expect(page.getByRole('heading', { name: 'Разберёмся вместе' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Войти в аккаунт' })).toBeVisible()
     await page.getByRole('button', { name: 'Как получить решение задачи?' }).click()

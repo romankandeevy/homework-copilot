@@ -1060,6 +1060,33 @@
 
 .route-empty > svg { color: var(--color-text-muted); }
 .route-empty > div { display: grid; justify-items: start; gap: var(--space-2); }
+.route-empty p { max-width: 42rem; }
+
+.route-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin-top: var(--space-2);
+}
+
+/* Второе действие рядом с первым не спорит с ним весом: это строка со
+   стрелкой, а не вторая кнопка того же роста. */
+.route-quiet-action {
+  display: inline-flex;
+  min-height: var(--size-control);
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-2);
+  border: 0;
+  background: transparent;
+  color: var(--color-accent);
+  font-size: var(--text-small);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+}
+
+.route-quiet-action:hover { color: var(--color-accent-hover); }
 
 /* Страница, которой нет.
 

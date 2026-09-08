@@ -17,7 +17,7 @@ export type SeoMetadata = {
    noindex. */
 export const metadataByPath: Record<string, SeoMetadata> = {
   '/': {
-    title: 'Homework Copilot — решение задачи по фото за одну минуту',
+    title: 'Homework Copilot — решение задачи по фото с разбором',
     description: 'Сфотографируй задачу или впиши условие. Получишь готовую запись для тетради: дано, ход решения, чертёж и ответ. Любой предмет с 5 по 11 класс.',
     path: '/',
     robots: 'index, follow',

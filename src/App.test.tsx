@@ -214,7 +214,7 @@ describe('Homework Copilot task flow', () => {
     expect(screen.queryByRole('button', { name: 'Задача № 2 · 5 ₽' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Вернуться на главную' }))
     expect(window.location.pathname).toBe('/app')
-    expect(screen.getByRole('heading', { name: 'Списать задачу' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Решить задачу' })).toBeInTheDocument()
   })
 
   // Витрина и приложение — разные адреса. `/` встречает нового посетителя,
@@ -226,7 +226,7 @@ describe('Homework Copilot task flow', () => {
     render(<Root />)
 
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Сфоткал.')
-    expect(screen.queryByRole('heading', { name: 'Списать задачу' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Решить задачу' })).not.toBeInTheDocument()
     expect(screen.getAllByRole('link', { name: /Решить задачу/ })[0]).toHaveAttribute('href', '/app')
   })
 
@@ -234,7 +234,7 @@ describe('Homework Copilot task flow', () => {
     window.history.replaceState({}, '', '/app')
     render(<Root />)
 
-    expect(await screen.findByRole('heading', { name: 'Списать задачу' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Решить задачу' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { level: 1, name: /Сфоткал/ })).not.toBeInTheDocument()
   })
 
@@ -252,7 +252,7 @@ describe('Homework Copilot task flow', () => {
     window.history.replaceState({}, '', `/${search}${hash}`)
     render(<Root />)
 
-    expect(await screen.findByRole('heading', { name: 'Списать задачу' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Решить задачу' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { level: 1, name: /Сфоткал/ })).not.toBeInTheDocument()
   })
 
@@ -263,7 +263,7 @@ describe('Homework Copilot task flow', () => {
     render(<App />)
 
     expect(screen.getByRole('heading', { name: 'Страница не найдена' })).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Списать задачу' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Решить задачу' })).not.toBeInTheDocument()
     expect(document.head.querySelector('link[rel="canonical"]')).toBeNull()
     expect(document.head.querySelector('meta[name="robots"]')).toHaveAttribute('content', 'noindex, nofollow')
   })
@@ -272,7 +272,7 @@ describe('Homework Copilot task flow', () => {
     window.history.replaceState({}, '', '/main')
     render(<App />)
 
-    expect(screen.getByRole('heading', { name: 'Списать задачу' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Решить задачу' })).toBeInTheDocument()
     expect(window.location.pathname).toBe('/app')
   })
 

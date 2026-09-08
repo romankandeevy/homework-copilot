@@ -218,6 +218,20 @@ function localSolutionJob(input: {
    поверх него на сохранение решения и ответ. */
 const silentSolverLimitMs = 300_000
 
+/* Смена раздела начинается сверху.
+
+   Разбор 8 сентября: прокрутить главную вниз, нажать «Решения» в меню - и
+   попасть сразу в подвал нового раздела. Заголовок «Мои решения» человек не
+   видел вообще. Браузер сам скролл не трогает: адрес меняет `pushState`, а
+   он ничего не прокручивает. Восстановление позиции по «назад» это не ломает:
+   `popstate` идёт своим путём и сюда не заходит. */
+function scrollRouteToTop() {
+  if (typeof window === 'undefined') return
+  const reduce = typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  window.scrollTo({ top: 0, left: 0, behavior: reduce ? 'auto' : 'smooth' })
+}
+
 const applicationRoutes = [
   { label: 'Главная', path: '/app', icon: House },
   { label: 'Решения', path: '/solutions', icon: Notebook },
@@ -710,7 +724,30 @@ function SolutionsPage({
         </label>
       )}
 
-      {!user ? <GuestSolutionsNote onOpenAccount={onOpenAccount} />
+      {/* Самый частый экран нового человека. До 8 сентября здесь стояли
+          заголовок, подзаголовок и мелкая строка-ссылка - и семьсот пикселей
+          пустоты под ними: страница читалась как недогрузившаяся. Теперь то
+          же, что и у пустой истории вошедшего: карточка со значком,
+          объяснением и действием. */}
+      {!user ? (
+        <section className="route-empty" aria-labelledby="solutions-empty-title">
+          <Notebook size={34} weight="duotone" aria-hidden="true" />
+          <div>
+            <h2 id="solutions-empty-title">Здесь будут твои решения</h2>
+            <p>
+              Первую задачу можно решить без аккаунта. Чтобы решения сохранялись и открывались
+              снова бесплатно, нужен вход - заодно на счёт придут 20 ₽.
+            </p>
+            <div className="route-empty-actions">
+              <button className="route-secondary-action" type="button" onClick={onStartTask}>Решить задачу</button>
+              <button className="route-quiet-action" type="button" onClick={onOpenAccount}>
+                Войти
+                <ArrowRight size={16} weight="bold" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+        </section>
+      )
         : personalResults.length > 0 ? (
           <div className="solution-cards">
             {personalResults.map(({ textbookId, task, time, mode, source, solution }) => (
@@ -736,7 +773,7 @@ function SolutionsPage({
             <Notebook size={34} weight="duotone" aria-hidden="true" />
             <div>
               <h2 id="solutions-empty-title">Решений пока нет</h2>
-              <p>Отправь задачу с главной — она появится здесь и останется в истории.</p>
+              <p>Отправь задачу с главной — она появится здесь и останется в истории. Открыть её снова можно бесплатно.</p>
               <button className="route-secondary-action" type="button" onClick={onStartTask}>Решить задачу</button>
             </div>
           </section>
@@ -850,7 +887,7 @@ function UnderstandingPage({
     <section className="solution-guest-offer" aria-labelledby="solution-guest-offer-title">
       <div>
         <h2 id="solution-guest-offer-title">Это решение хранится только в этом браузере</h2>
-        <p>Зарегистрируйся — оно останется в аккаунте, а на счёт придут 20 ₽. Это ещё четыре решения.</p>
+        <p>Зарегистрируйся — оно останется в аккаунте, а на счёт придут 20 ₽. Это ещё пять задач по минимальной цене.</p>
       </div>
       <button className="route-primary-action" type="button" onClick={onOpenAccount}>
         Сохранить решение
@@ -1096,7 +1133,7 @@ function NotFoundScreen({ onGoHome }: { onGoHome: () => void }) {
       <div className="not-found-actions">
         <button className="route-primary-action" type="button" onClick={onGoHome}>
           <House size={18} weight="duotone" aria-hidden="true" />
-          Списать задачу
+          Решить задачу
         </button>
         <a className="route-secondary-action" href={applicationPath('/')}>О сервисе</a>
       </div>
@@ -1657,6 +1694,7 @@ function HomePage() {
     if (currentApplicationPath() !== path) window.history.pushState({}, '', applicationPath(path))
     setSelectedSolution(solution)
     setActiveNavigation(label)
+    scrollRouteToTop()
   }
   const openSolution = (state: SolutionState) => navigate('Решения', state)
 
@@ -2064,7 +2102,7 @@ function HomePage() {
     const solvingAsGuest = Boolean(supabaseClient) && !user
     if (solvingAsGuest && guestFreeSolutionUsed) {
       rememberAccountTrigger()
-      setAccountNotice('Бесплатное решение уже использовано. Зарегистрируйся — на счёт придут 20 ₽, это ещё четыре решения')
+      setAccountNotice('Бесплатное решение уже использовано. Зарегистрируйся — на счёт придут 20 ₽, это ещё пять задач по минимальной цене')
       setAccountOpen(true)
       return false
     }
@@ -2253,7 +2291,7 @@ function HomePage() {
           ) : activeNavigation === 'ИИ-чат' ? (
             <Suspense fallback={<div className="route-loading" role="status">Загружаем чат…</div>}><ChatPage userId={user?.id ?? null} onRequireAuth={openAccount} onOpenWallet={openWallet} /></Suspense>
           ) : activeNavigation === 'Расписание' ? (
-            <Suspense fallback={<div className="route-loading" role="status">Загружаем расписание…</div>}><SchedulePage userId={user?.id ?? null} grade={account?.profile.grade ?? 8} /></Suspense>
+            <Suspense fallback={<div className="route-loading" role="status">Загружаем расписание…</div>}><SchedulePage userId={user?.id ?? null} grade={account?.profile.grade ?? null} /></Suspense>
           ) : activeNavigation === 'Решения' ? (
             <SolutionsPage
               user={user}
@@ -2267,7 +2305,11 @@ function HomePage() {
             <CdzComingSoon onGoHome={() => navigate('Главная')} />
           )}
         </div>
-        <SiteFooter onOpenSupport={() => openSupport()} />
+        {/* Вход в поддержку один на экран. Пузырь виден без прокрутки, но на
+            главной он перекрывал угол «Решить» и снят оттуда - там его роль
+            берёт строка в подвале. Раньше на одном экране стояли все три:
+            пузырь, кнопка в подвале и ссылка в колонке «Помощь». */}
+        <SiteFooter onOpenSupport={activeNavigation === 'Главная' ? () => openSupport() : undefined} compact />
       </div>
       {activeNavigation !== 'Главная' && <SupportLauncher onClick={() => openSupport()} />}
       {supportOpen && createPortal(

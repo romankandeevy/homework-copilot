@@ -392,8 +392,8 @@ function MoreScene({ t, duration }: { t: number; duration: number }) {
 /* 12. Цена. Без «бесплатно без регистрации»: обещаем то, что даёт сервер.
    В вертикальном кадре строка цены складывается в столбик. */
 const priceRows = [
-  { label: 'Решение задачи', value: '5 ₽', note: 'любой предмет, фото или текст', accent: false },
-  { label: 'После регистрации', value: '20 ₽', note: 'сразу на счёте - это четыре решения', accent: true },
+  { label: 'Решение задачи', value: 'от 4 ₽', note: 'цена зависит от размера задачи', accent: false },
+  { label: 'После регистрации', value: '20 ₽', note: 'сразу на счёте - это ещё пять задач', accent: true },
   { label: 'Не решилась', value: '0 ₽', note: 'деньги остаются на балансе', accent: false },
 ]
 
@@ -455,7 +455,7 @@ function OutroScene({ t, duration }: { t: number; duration: number }) {
         </div>
       </div>
       <div style={at(0, pick(560, 700), { width, textAlign: 'center', ...rise(t, 0.5, 0.5), fontFamily: font.display, fontSize: type(46), color: color.muted })}>
-        Сфоткал. Списал.
+        Сфоткал. Понял. Сдал.
       </div>
       <div style={at(0, pick(660, 810), { width, display: 'flex', justifyContent: 'center', ...pop(t, 0.85, 0.5, 0.85), transformOrigin: '50% 50%' })}>
         <div

@@ -214,7 +214,7 @@ function ModelPicker({
         }}
       >
         <span className="chat-model-trigger-copy">
-          <strong>{selected?.title ?? 'Модель недоступна'}</strong>
+          <strong>{selected?.title ?? 'Выбор модели'}</strong>
         </span>
         <CaretDown size={15} weight="bold" aria-hidden="true" />
       </button>
@@ -932,7 +932,7 @@ export default function ChatPage({ userId = null, onRequireAuth, onOpenWallet }:
               <div className="chat-state is-error" role="alert">
                 <WarningCircle size={32} weight="duotone" aria-hidden="true" />
                 <strong>Чат не загрузился</strong>
-                <p>Проверь соединение и попробуй ещё раз.</p>
+                <p>Список моделей не пришёл. Проверь соединение и попробуй ещё раз — деньги за это не списываются.</p>
                 <button type="button" onClick={() => { void loadModels() }}>Повторить</button>
               </div>
             )}
@@ -1077,7 +1077,12 @@ export default function ChatPage({ userId = null, onRequireAuth, onOpenWallet }:
             )}
           </div>
 
-          {failure && (
+          {/* Полоска ошибки молчит, когда о той же поломке уже сказано крупно
+              посреди листа. 8 сентября один упавший вызов `list_chat_models`
+              выдавал на одном экране четыре объявления о своей смерти:
+              «Чат не загрузился», строка Postgres, «Модель недоступна» в
+              выпадающем списке и «Модели пока недоступны» под полем ввода. */}
+          {failure && modelsStatus !== 'error' && (
             <div className={`chat-failure${failure.code === 'insufficient_funds' || failure.code === 'limit' ? ' is-soft' : ''}`} role="alert">
               <WarningCircle size={18} weight="bold" aria-hidden="true" />
               <span>{failure.message}</span>
@@ -1090,6 +1095,7 @@ export default function ChatPage({ userId = null, onRequireAuth, onOpenWallet }:
             </div>
           )}
 
+          {modelsStatus !== 'error' && (
           <form className="chat-composer" onSubmit={(event) => { void submit(event) }}>
             <div className="chat-composer-field">
               {attachments.length > 0 && (
@@ -1200,9 +1206,10 @@ export default function ChatPage({ userId = null, onRequireAuth, onOpenWallet }:
                 ? 'Войди, чтобы задать вопрос: чат платный, и списание идёт с баланса аккаунта.'
                 : selectedModel
                   ? <>Спишем после ответа и по факту: обычный вопрос — {formatKopecks(selectedModel.minChargeKopecks)}. Заранее с баланса ничего не снимаем, а если модель недоступна, списания не будет вовсе.</>
-                  : 'Модели пока недоступны.'}
+                  : 'Список моделей ещё загружается.'}
             </p>
           </form>
+          )}
         </div>
       </div>
 

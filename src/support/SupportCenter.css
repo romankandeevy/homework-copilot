@@ -319,9 +319,61 @@
   padding: var(--space-5) max(clamp(1.5rem, 5vw, 4.5rem), 10rem) var(--space-5) clamp(1.5rem, 5vw, 4.5rem);
   border-top: 1px solid var(--footer-line);
   color: var(--footer-muted);
+  /* Моноширинный оставлен номеру года и знаку копирайта. Оговорка рядом -
+     обычная фраза, и набирать её как машинный вывод незачем. */
   font-family: var(--font-mono);
   font-size: var(--text-caption);
   line-height: var(--leading-ui);
+}
+
+.site-footer-disclaimer { font-family: var(--font-body); }
+
+/* Рабочий подвал: одна строка вместо одиннадцати ссылок и пяти документов. */
+.site-footer.is-compact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3) var(--space-5);
+  margin-top: clamp(2rem, 5vw, 3.5rem);
+  padding: var(--space-4) clamp(1rem, 3vw, 1.75rem);
+}
+
+.site-footer.is-compact .site-footer-disclaimer {
+  margin: 0;
+  color: var(--footer-muted);
+  font-size: var(--text-caption);
+  line-height: var(--leading-ui);
+}
+
+.site-footer-compact-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  font-size: var(--text-caption);
+}
+
+.site-footer-compact-links a,
+.site-footer-compact-links button {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--footer-muted);
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.site-footer-compact-links a:hover,
+.site-footer-compact-links button:hover { color: var(--footer-text); }
+
+.site-footer-compact-links > span {
+  color: var(--footer-muted);
+  font-family: var(--font-mono);
 }
 
 .site-footer a:focus-visible,
@@ -362,6 +414,7 @@
   .site-footer-column a,
   .site-footer-column button { min-height: 2.75rem; font-size: var(--text-small); }
   .site-footer-meta { align-items: flex-start; flex-direction: column; gap: var(--space-2); padding: var(--space-5) var(--space-5) 5.5rem; font-size: var(--text-caption); }
+  .site-footer.is-compact { flex-direction: column; align-items: flex-start; }
 }
 
 /* Запасной канал для гостя: тише кнопки входа, но на виду. */

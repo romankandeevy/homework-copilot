@@ -5,13 +5,7 @@
    с продуктом ученик идёт на `/app`, а витрина только показывает, что
    он там увидит. */
 
-import {
-  ArrowRight,
-  Check,
-  ChatsCircle,
-  ImageSquare,
-  Sparkle,
-} from '@phosphor-icons/react'
+import { ChatsCircle, ImageSquare } from '@phosphor-icons/react'
 
 /* Ромб с диагоналями 10 и 24 — та самая фигура, которую движок строит
    по условию. Пропорции честные: AC = 70, BD = 168, это ровно 10 к 24. */
@@ -108,7 +102,7 @@ export function ChatPreview() {
       <div className="chat-preview-head">
         <ChatsCircle size={18} weight="duotone" aria-hidden="true" />
         <span>ИИ-чат</span>
-        <span className="chat-preview-model">Gemini 2.5 Flash · от 20 коп</span>
+        <span className="chat-preview-model">Gemini 3.6 Flash · от 20 коп</span>
       </div>
       <p className="chat-preview-ask">Почему в четвёртом шаге вдруг теорема Пифагора?</p>
       <div className="chat-preview-answer">
@@ -141,66 +135,6 @@ export function SchedulePreview() {
           </li>
         ))}
       </ul>
-    </div>
-  )
-}
-
-/* Карточка постановки задачи из первого экрана: повторяет форму
-   «Списать задачу» вплоть до подписей и цены. */
-export function TaskFormPreview({ typed, submitted }: { typed: string; submitted: boolean }) {
-  return (
-    <div className="stage-card stage-form">
-      <span className="stage-label">Условие задачи</span>
-      <div className="stage-input">
-        <p>
-          {typed}
-          {!submitted && <i className="stage-caret" aria-hidden="true" />}
-        </p>
-      </div>
-      <div className="stage-controls">
-        <span className="stage-chip"><ImageSquare size={17} weight="duotone" aria-hidden="true" />Добавить фото</span>
-        <span className="stage-chip is-muted">Предмет: геометрия</span>
-        <span className="stage-chip is-muted">Класс: 8</span>
-        <span className={`stage-submit${submitted ? ' is-pressed' : ''}`}>
-          Решить
-          <ArrowRight size={18} weight="bold" aria-hidden="true" />
-        </span>
-      </div>
-      <p className="stage-note">Решение стоит 5 ₽. Если задача не решится, деньги вернутся на баланс.</p>
-    </div>
-  )
-}
-
-export function SolvingPreview({ passes }: { passes: number }) {
-  const steps = ['Первый проход', 'Второй проход', 'Сверка решений']
-
-  return (
-    <div className="stage-card stage-solving">
-      <div className="stage-solving-head">
-        <span className="stage-spinner" aria-hidden="true" />
-        <span><strong>Решаем задачу</strong><small>Затем оформим ответ как в тетради</small></span>
-      </div>
-      <ul className="stage-passes">
-        {steps.map((step, index) => (
-          <li key={step} className={index < passes ? 'is-done' : ''}>
-            <i aria-hidden="true">{index < passes && <Check size={12} weight="bold" />}</i>
-            {step}
-          </li>
-        ))}
-      </ul>
-      <span className="stage-track" aria-hidden="true"><i /></span>
-    </div>
-  )
-}
-
-export function ResultPreview() {
-  return (
-    <div className="stage-card stage-result">
-      <div className="stage-result-head">
-        <Sparkle size={19} weight="duotone" aria-hidden="true" />
-        <span><strong>Решение готово</strong><small>Геометрия · проверка пройдена</small></span>
-      </div>
-      <NotebookPreview compact />
     </div>
   )
 }

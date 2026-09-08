@@ -9,7 +9,7 @@
    значки разбора — `src/solution/WrittenAnalysis.tsx`, предметы и классы —
    `src/CopyTask.tsx`. Ничего сверх этого страница не обещает. */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   ArrowRight,
   CameraPlus,
@@ -195,96 +195,6 @@ function CompareRow({ row, index }: { row: (typeof comparison)[number]; index: n
   )
 }
 
-/* Какой ролик играть. Ролики сняты в двух форматах: широкий 16:9 и
-   вертикальный 4:5 с суффиксом `-tall`. Раньше телефон получал широкий, и
-   `object-fit: cover` срезал ему бока вместе с половиной надписей. Порог
-   тот же, что у вёрстки первого экрана в LandingPage.css - 640 px. */
-const narrowScreen = '(max-width: 640px)'
-
-function useFilmName(base: string) {
-  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.matchMedia(narrowScreen).matches)
-
-  useEffect(() => {
-    const query = window.matchMedia(narrowScreen)
-    const update = () => setNarrow(query.matches)
-    update()
-    query.addEventListener('change', update)
-    return () => query.removeEventListener('change', update)
-  }, [])
-
-  return narrow ? `${base}-tall` : base
-}
-
-/* Ролик о продукте. Файл тяжёлый, поэтому до появления в кадре грузится
-   только постер: `preload="none"` плюс запуск по пересечению. */
-function PromoFilm() {
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const film = useFilmName('promo')
-
-  useEffect(() => {
-    const video = videoRef.current
-    if (!video || typeof IntersectionObserver === 'undefined') return
-
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) void video.play().catch(() => undefined)
-        else video.pause()
-      })
-    }, { threshold: 0.35 })
-
-    observer.observe(video)
-    return () => observer.disconnect()
-  }, [])
-
-  return (
-    <video
-      ref={videoRef}
-      // Смена формата - это другой файл: без key браузер остаётся на уже
-      // загруженном источнике и поворот телефона ничего не меняет.
-      key={film}
-      className="promo-film"
-      poster={`/${film}-poster.jpg`}
-      preload="none"
-      muted
-      loop
-      playsInline
-      // Ролик без звука и без сюжета, который можно упустить: он повторяет
-      // то, что рядом написано словами, поэтому обходится без подписей.
-      aria-label="Как выглядит решение задачи в Homework Copilot"
-    >
-      <source src={`/${film}.mp4`} type="video/mp4" />
-    </video>
-  )
-}
-
-/* Ролик первого экрана — отдельным блоком над заголовком, не подложкой под
-   текст: сам по себе он полон интерфейса и надписей, поверх него читать
-   ничего нельзя. Файл лёгкий (веб-версия ~1.4 МБ), грузится сразу и
-   запускается сам, приглушённый и зациклённый. При «уменьшении движения»
-   остаётся неподвижный постер. */
-function HeroFilm() {
-  const reduce = prefersReducedMotion()
-  const film = useFilmName('hero')
-
-  return (
-    <div className="hero-media" aria-hidden="true">
-      <video
-        key={film}
-        className="hero-video"
-        poster={`/${film}-poster.jpg`}
-        autoPlay={!reduce}
-        muted
-        loop
-        playsInline
-        preload="auto"
-      >
-        <source src={`/${film}.mp4`} type="video/mp4" />
-      </video>
-      <span className="hero-scrim" />
-    </div>
-  )
-}
-
 function LandingHeader({ signedIn, theme, onToggleTheme }: { signedIn: boolean; theme: Theme; onToggleTheme: () => void }) {
   const [compact, setCompact] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -370,13 +280,14 @@ function LandingHeader({ signedIn, theme, onToggleTheme }: { signedIn: boolean; 
   )
 }
 
-/* Числа первого экрана. Цена - `src/lib/solutionPricing.ts`, предметы и
-   классы - `src/CopyTask.tsx`, срок - карточка ожидания в `SolutionQueue`,
-   проход модели и проверка - `server/geometrySolutionEngine.ts`. */
+/* Числа первого экрана. Цена - `src/lib/solutionPricing.ts`: там пол в
+   400 копеек и потолок в 1200, поэтому здесь «от 4 ₽», а не одно число.
+   Предметы и классы - `src/CopyTask.tsx`, срок - карточка ожидания в
+   `SolutionQueue`, проход модели и проверка - `server/geometrySolutionEngine.ts`. */
 const heroMarks = [
-  { value: '5 ₽', note: 'за решение, любой предмет' },
-  { value: '14', note: 'предметов, 5-11 класс' },
-  { value: '15-70 с', note: 'обычно занимает разбор' },
+  { value: 'от 4 ₽', note: 'за решение: цена зависит от размера задачи' },
+  { value: '14', note: 'предметов, 5–11 класс' },
+  { value: '15–70 с', note: 'обычно занимает разбор' },
   { value: '0 ₽', note: 'если решение не получилось' },
 ]
 
@@ -469,11 +380,11 @@ const faqs = [
   },
   {
     question: 'Нужна ли регистрация?',
-    answer: 'Первое решение выдаётся без аккаунта — просто впиши условие и нажми «Решить». Аккаунт нужен со второго: решение привязывается к балансу и остаётся в истории. Войти можно через Google или по почте, и сразу после регистрации на счёте 20 ₽ — это ещё четыре решения.',
+    answer: 'Первое решение выдаётся без аккаунта — просто впиши условие и нажми «Решить». Аккаунт нужен со второго: решение привязывается к балансу и остаётся в истории. Войти можно через Google или по почте, и сразу после регистрации на счёте 20 ₽ — это ещё пять задач по минимальной цене.',
   },
   {
     question: 'Сколько это стоит?',
-    answer: 'Первое решение бесплатное и без регистрации. Дальше 5 ₽ за задачу, одинаково для всех предметов и обоих способов ввода. Ответ в ИИ-чате — от 20 копеек. Расписание бесплатное. Стартовых 20 ₽ хватает ещё на четыре решения.',
+    answer: 'Первое решение бесплатное и без регистрации. Дальше от 4 ₽ за задачу: цену считает сервер по размеру задачи — длинное условие, фотография и счётный предмет дороже, потолок 12 ₽. Цена показана до отправки, и списывается ровно она. Ответ в ИИ-чате — от 20 копеек. Расписание бесплатное.',
   },
   {
     question: 'А если решение окажется неверным?',
@@ -481,7 +392,7 @@ const faqs = [
   },
   {
     question: 'Сколько ждать решение?',
-    answer: 'Обычно от пятнадцати секунд до минуты: задача идёт через три-четыре прохода модели. Страницу можно закрыть — решение сохранится и будет ждать в разделе «Мои решения».',
+    answer: 'Обычно 15–70 секунд: задача уходит одним проходом сильной модели, а запись проверяется кодом по правилам предмета. Страницу можно закрыть — решение сохранится и будет ждать в разделе «Мои решения».',
   },
   {
     question: 'Что происходит с моими данными?',
@@ -565,16 +476,15 @@ export default function LandingPage() {
 
       <main className="landing-main">
         <section className="landing-hero" aria-labelledby="hero-title">
-          <HeroFilm />
           <div className="landing-shell hero-shell">
             <div className="hero-column">
             <div className="hero-copy">
               <p className="hero-eyebrow">Домашняя работа по фотографии</p>
-              <h1 id="hero-title">Сфоткал.<br />Списал.</h1>
+              <h1 id="hero-title">Сфоткал.<br />Понял. Сдал.</h1>
               <p className="hero-lead">
-                Приноси условие фотографией или текстом - получаешь готовую запись
-                для тетради: дано, ход решения, чертёж, ответ. Любой предмет
-                с 5 по 11 класс, учебник неважен.
+                Приноси условие фотографией или текстом — получаешь готовую запись
+                для тетради: дано, ход решения, чертёж, ответ. Любой предмет,
+                5–11 класс, учебник неважен.
               </p>
               <div className="hero-actions">
                 <a className="landing-primary-action" href={appPath}>
@@ -584,8 +494,8 @@ export default function LandingPage() {
                 <a className="landing-secondary-action" href="#how" onClick={scrollToHow}>Как это работает</a>
               </div>
               <ul className="hero-facts">
-                <li><Check size={15} weight="bold" aria-hidden="true" />После регистрации 20 ₽ на счёте - это четыре решения</li>
-                <li><Check size={15} weight="bold" aria-hidden="true" />Не решилась - деньги остаются на балансе</li>
+                <li><Check size={15} weight="bold" aria-hidden="true" />После регистрации 20 ₽ на счёте — это ещё пять задач по минимальной цене</li>
+                <li><Check size={15} weight="bold" aria-hidden="true" />Не решилась — деньги остаются на балансе</li>
               </ul>
             </div>
 
@@ -635,17 +545,6 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section className="landing-section landing-film" aria-labelledby="film-title">
-          <div className="landing-shell">
-            <Reveal className="section-head">
-              <h2 id="film-title">Двадцать секунд — и понятно, что это</h2>
-            </Reveal>
-            <Reveal className="film-frame" delay={80}>
-              <PromoFilm />
-            </Reveal>
-          </div>
-        </section>
-
         <section className="landing-section landing-how" id="how" aria-labelledby="how-title">
           <div className="landing-shell">
             <Reveal className="section-head">
@@ -655,7 +554,10 @@ export default function LandingPage() {
             <ol className="how-steps">
               {steps.map(({ icon: Icon, title, text }, index) => (
                 <Reveal as="li" key={title} className="how-step" delay={index * 90}>
-                  <Icon size={26} weight="duotone" aria-hidden="true" />
+                  <span className="how-step-index">
+                    <Icon size={20} weight="duotone" aria-hidden="true" />
+                    Шаг {index + 1}
+                  </span>
                   <h3>{title}</h3>
                   <p>{text}</p>
                 </Reveal>
@@ -666,8 +568,8 @@ export default function LandingPage() {
               <div className="how-proof-copy">
                 <h3>Готовая страница, а не абзац текста</h3>
                 <p>
-                  Так выглядит решение той самой задачи из первого экрана: условие разложено на «дано» и «найти»,
-                  чертёж построен по данным, каждый шаг записан отдельной строкой, ответ выделен.
+                  Ромб ABCD с диагоналями 10 и 24 см — реальная задача, решённая продуктом: условие разложено
+                  на «дано» и «найти», чертёж построен по данным, каждый шаг записан отдельной строкой, ответ выделен.
                 </p>
                 <a className="landing-inline-action" href={appPath}>
                   Попробовать на своей задаче
@@ -685,17 +587,18 @@ export default function LandingPage() {
               <h2 id="features-title">Сделано под то, как сдают домашку</h2>
             </Reveal>
 
-            <dl className="feature-list">
-              {features.map(({ title, text }, index) => (
+            <div className="feature-list">
+              {features.map(({ icon: Icon, title, text }, index) => (
                 <Reveal key={title} className="feature-row" delay={index * 60}>
-                  <dt>{title}</dt>
-                  <dd>{text}</dd>
+                  <Icon size={24} weight="duotone" aria-hidden="true" />
+                  <h3>{title}</h3>
+                  <p>{text}</p>
                 </Reveal>
               ))}
-            </dl>
+            </div>
 
             <Reveal className="subject-band" delay={60}>
-              <h3>14 предметов, с 5 по 11 класс</h3>
+              <h3>14 предметов, 5–11 класс</h3>
               <ul>
                 {subjects.map((subject) => <li key={subject}>{subject}</li>)}
               </ul>
@@ -721,7 +624,7 @@ export default function LandingPage() {
               <Reveal className="showcase-card" delay={70}>
                 <div className="showcase-copy">
                   <h3>ИИ-чат по домашке</h3>
-                  <p>Спросить, почему шаг именно такой. Три модели на выбор, ответ от 20 копеек, можно приложить фото.</p>
+                  <p>Спросить, почему шаг именно такой. Модель выбираешь сам, ответ от 20 копеек, можно приложить фото.</p>
                 </div>
                 <ChatPreview />
               </Reveal>
@@ -746,8 +649,12 @@ export default function LandingPage() {
             <div className="price-grid">
               <Reveal className="price-card is-primary">
                 <span className="price-label">Решение задачи</span>
-                <strong className="price-value">5 ₽</strong>
-                <p>Одна цена для всех предметов и для обоих способов ввода — фото и текста. Не решилось или не прошло проверку — деньги остаются на балансе.</p>
+                <strong className="price-value">от 4 ₽</strong>
+                <p>
+                  Цену считает сервер по размеру задачи: длинное условие, фотография и счётный предмет дороже,
+                  потолок — 12 ₽. Она показана до отправки, и списывается ровно она. Не решилось или не прошло
+                  проверку — деньги остаются на балансе.
+                </p>
                 <a className="landing-primary-action" href={appPath}>
                   {signedIn ? 'Открыть приложение' : 'Решить первую — бесплатно'}
                   <ArrowRight size={17} weight="bold" aria-hidden="true" />
@@ -800,7 +707,7 @@ export default function LandingPage() {
           <div className="landing-shell">
             <Reveal className="final-card">
               <h2 id="final-title">Задача на завтра? Начни с фотографии.</h2>
-              <p>Первое решение — без регистрации. Понравится — заведёшь аккаунт, и на счёт придут 20 ₽ ещё на четыре задачи.</p>
+              <p>Первое решение — без регистрации. Понравится — заведёшь аккаунт, и на счёт придут 20 ₽ ещё на пять задач.</p>
               <div className="final-actions">
                 <a className="landing-primary-action" href={appPath}>
                   {signedIn ? 'Открыть приложение' : 'Решить задачу'}

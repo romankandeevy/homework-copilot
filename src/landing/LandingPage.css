@@ -143,9 +143,9 @@
   gap: var(--space-4);
   height: var(--header-h);
   /* Полоса шапки идёт во всю ширину экрана, а её содержимое остаётся в той
-     же колонке, что и текст секций: боковой отступ добирает до края. Пока
-     шапка была шириной с колонку, развёрнутый во всю ширину ролик было
-     видно по бокам от неё, стоило странице прокрутиться. */
+     же колонке, что и текст секций: боковой отступ добирает до края.
+     Шапкой шириной с колонку подсветка первого экрана просвечивала по
+     бокам, стоило странице прокрутиться. */
   padding-inline: calc(max(0px, (100% - 84rem) / 2) + clamp(1.25rem, 4vw, 3.5rem));
   border-bottom: 1px solid transparent;
   background: var(--color-canvas);
@@ -316,44 +316,55 @@
 /* ─── Первый экран ─────────────────────────────────────────────────── */
 
 .landing-hero {
+  position: relative;
   display: flex;
   flex-direction: column;
   padding-bottom: clamp(3.5rem, 8vh, 6rem);
 }
 
-/* Ролик идёт своим блоком во всю ширину экрана, до самых боков, - независимо
-   от ширины текстовой колонки ниже. Без текста поверх: показываем его
-   открыто, а не гасим под подпись.
+/* Фон первого экрана рисует CSS, а не растр. До 8 сентября здесь стоял
+   минутный ролик 16,9 МБ с `autoplay preload="auto"`: он весил 99% страницы,
+   на телефоне уводил заголовок и кнопку за сгиб, а весь свой текст держал
+   пикселями внутри mp4 - не выделить, не перевести, не найти поиском.
+   Ролик снят целиком, вместе с вертикальной версией и постерами.
 
-   Высота не ограничивается отдельно - она чистая производная от ширины
-   через aspect-ratio, поэтому кадр не мнётся и не обрезается. Исходник
-   снят в 1280×720: на экранах шире апскейл неизбежен - это цена полного
-   разворота на всю ширину при таком исходнике, а не огрех кодирования. */
-.hero-media {
-  position: relative;
-  overflow: hidden;
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  background: oklch(12% 0 0);
-}
-
-.hero-video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.hero-scrim {
+   Осталось то, что и так было под ним: заголовок, лид, две кнопки и четыре
+   числа. Подсветка ниже - два мягких радиальных пятна и сетка в клетку,
+   намёк на тетрадный лист. Это ноль байтов сети и ноль кадров в секунду. */
+.landing-hero::before {
+  content: '';
   position: absolute;
-  inset: 0;
-  /* Только нижняя кромка гаснет в цвет страницы - плавный стык с текстом,
-     который идёт следом, а не подложка под надпись. */
-  background: linear-gradient(180deg, transparent 82%, var(--color-canvas) 100%);
+  inset: calc(-1 * var(--header-h)) 0 auto;
+  z-index: 0;
+  height: min(52rem, 90vh);
+  background:
+    radial-gradient(60% 55% at 18% 12%, var(--color-accent-soft) 0%, transparent 68%),
+    radial-gradient(45% 45% at 88% 0%, var(--color-accent-soft) 0%, transparent 70%);
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+.landing-hero::after {
+  content: '';
+  position: absolute;
+  inset: calc(-1 * var(--header-h)) 0 auto;
+  z-index: 0;
+  height: min(52rem, 90vh);
+  background-image:
+    linear-gradient(var(--color-border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--color-border) 1px, transparent 1px);
+  background-size: 2.5rem 2.5rem;
+  opacity: 0.28;
+  /* Клетка гаснет к низу и к бокам: иначе она спорит с текстом. */
+  mask-image: radial-gradient(70% 60% at 50% 20%, oklch(0% 0 0) 0%, transparent 75%);
+  pointer-events: none;
 }
 
 /* Текст слева, страница тетради справа. На узком экране колонка одна:
    лист уходит, потому что ниже он всё равно показан крупно. */
 .hero-shell {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 22rem);
   align-items: center;
@@ -458,6 +469,9 @@
   font-weight: var(--weight-display);
   line-height: 1;
   color: var(--color-text);
+  /* Число не ломается по строкам: «15-70» и «с» на разных строках читаются
+     как два разных числа. */
+  white-space: nowrap;
 }
 
 .hero-marks dd {
@@ -466,199 +480,6 @@
   font-size: var(--text-small);
   line-height: var(--leading-ui);
 }
-
-/* ─── Карточки сценария (тёмная панель, как в приложении) ──────────── */
-
-.stage-card {
-  --ink-strong: oklch(99% 0 0);
-  --ink-muted: oklch(80% 0 0);
-  --ink-subtle: oklch(68% 0 0);
-  --ink-line: oklch(32% 0 0);
-  --ink-raised: oklch(21% 0 0);
-  display: grid;
-  gap: var(--space-4);
-  padding: clamp(1.1rem, 2.2vw, 1.75rem);
-  border: 1px solid var(--ink-line);
-  border-radius: var(--radius-panel);
-  background: oklch(13% 0 0);
-  color: var(--ink-strong);
-  box-shadow: var(--shadow-overlay);
-}
-
-.stage-label {
-  font-family: var(--font-mono);
-  font-size: var(--text-micro);
-  font-weight: var(--weight-semibold);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--ink-subtle);
-}
-
-.stage-input {
-  min-height: 6.5rem;
-  padding: var(--space-4);
-  border-radius: var(--radius-surface);
-  background: var(--ink-raised);
-}
-
-.stage-input p {
-  margin: 0;
-  font-size: var(--text-body);
-  line-height: var(--leading-copy);
-}
-
-.stage-caret {
-  display: inline-block;
-  width: 2px;
-  height: 1.1em;
-  margin-left: 2px;
-  background: var(--color-accent);
-  vertical-align: -0.18em;
-  animation: stage-caret 1s steps(1) infinite;
-}
-
-@keyframes stage-caret {
-  0%, 50% { opacity: 1; }
-  50.01%, 100% { opacity: 0; }
-}
-
-.stage-controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.stage-chip {
-  display: inline-flex;
-  min-height: 2.5rem;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 0 var(--space-3);
-  border: 1px solid var(--ink-line);
-  border-radius: var(--radius-control);
-  color: var(--ink-muted);
-  font-size: var(--text-small);
-  font-weight: var(--weight-medium);
-}
-
-.stage-chip.is-muted { color: var(--ink-subtle); }
-
-.stage-submit {
-  display: inline-flex;
-  min-height: 2.5rem;
-  align-items: center;
-  gap: var(--space-2);
-  margin-left: auto;
-  padding: 0 var(--space-5);
-  border-radius: var(--radius-control);
-  background: var(--color-accent);
-  color: var(--color-on-accent);
-  font-size: var(--text-small);
-  font-weight: var(--weight-semibold);
-  transition: transform var(--motion-fast) var(--ease-out);
-}
-
-.stage-submit.is-pressed { transform: scale(0.97); }
-
-.stage-note {
-  margin: 0;
-  color: var(--ink-subtle);
-  font-size: var(--text-caption);
-}
-
-.stage-solving { align-content: center; min-height: 16rem; }
-
-.stage-solving-head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-}
-
-.stage-solving-head strong { display: block; font-size: var(--text-body); font-weight: var(--weight-semibold); }
-.stage-solving-head small { display: block; margin-top: 2px; color: var(--ink-subtle); font-size: var(--text-small); }
-
-.stage-spinner {
-  width: 2.25rem;
-  height: 2.25rem;
-  flex: 0 0 auto;
-  border: 3px solid var(--ink-line);
-  border-top-color: var(--color-accent);
-  border-radius: 50%;
-  animation: stage-spin 900ms linear infinite;
-}
-
-@keyframes stage-spin { to { transform: rotate(360deg); } }
-
-.stage-passes {
-  display: grid;
-  gap: var(--space-2);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.stage-passes li {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  color: var(--ink-subtle);
-  font-size: var(--text-small);
-  transition: color var(--motion-ui) var(--ease-out);
-}
-
-.stage-passes li i {
-  display: grid;
-  width: 1.25rem;
-  height: 1.25rem;
-  flex: 0 0 auto;
-  place-items: center;
-  border: 1px solid var(--ink-line);
-  border-radius: 50%;
-  transition: background var(--motion-ui) var(--ease-out), border-color var(--motion-ui) var(--ease-out);
-}
-
-.stage-passes li.is-done { color: var(--ink-strong); }
-
-.stage-passes li.is-done i {
-  border-color: var(--color-accent);
-  background: var(--color-accent);
-  color: var(--color-on-accent);
-}
-
-.stage-track {
-  display: block;
-  height: 3px;
-  overflow: hidden;
-  border-radius: var(--radius-pill);
-  background: var(--ink-line);
-}
-
-.stage-track i {
-  display: block;
-  width: 40%;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--color-accent);
-  animation: stage-track 1.4s var(--ease-standard) infinite;
-}
-
-@keyframes stage-track {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(250%); }
-}
-
-.stage-result { gap: var(--space-4); }
-
-.stage-result-head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.stage-result-head svg { color: var(--color-brand-accent); }
-.stage-result-head strong { display: block; font-size: var(--text-ui); font-weight: var(--weight-semibold); }
-.stage-result-head small { display: block; margin-top: 2px; color: var(--ink-subtle); font-size: var(--text-caption); }
 
 /* ─── Тетрадная страница ───────────────────────────────────────────── */
 
@@ -702,7 +523,10 @@
   position: relative;
   gap: clamp(0.5rem, 1.4vw, 0.85rem);
   padding: clamp(0.85rem, 2vw, 1.4rem) clamp(0.85rem, 2vw, 1.5rem) clamp(1rem, 2vw, 1.5rem) clamp(2.4rem, 6%, 3.4rem);
-  font-size: clamp(0.78rem, 1.05vw, 0.95rem);
+  /* Пол кегля - 14 px. Это главный довод витрины: развёрнутая запись в
+     тетради. На телефоне она набиралась 12,5 px и физически не читалась,
+     то есть довод был на странице и его как будто не было. */
+  font-size: clamp(0.875rem, 1.05vw, 0.95rem);
   line-height: 1.5;
 }
 
@@ -783,7 +607,7 @@
 .paper-solution strong { font-weight: 700; }
 .paper-answer { margin-top: 0.35rem; }
 
-.paper-page.is-compact .paper-body { font-size: clamp(0.72rem, 0.95vw, 0.86rem); }
+.paper-page.is-compact .paper-body { font-size: clamp(0.8125rem, 0.95vw, 0.86rem); }
 .paper-page.is-compact .paper-figure { max-width: 8.5rem; }
 
 /* ─── Сравнение с решебником ───────────────────────────────────────── */
@@ -858,21 +682,6 @@
 
 .compare-row[data-revealed='true'] .compare-underline { transform: scaleX(1); }
 
-/* ─── Ролик ────────────────────────────────────────────────────────── */
-
-.film-frame {
-  overflow: hidden;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-panel);
-  background: var(--color-surface-raised);
-}
-
-.promo-film {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-
 /* ─── Как это работает ─────────────────────────────────────────────── */
 
 .how-steps {
@@ -893,14 +702,21 @@
   border-top: 2px solid var(--color-text);
 }
 
+/* «Шаг 1 / 2 / 3» стоит словом. Три иконки подряд - камера, щит, карандаш -
+   последовательностью не читаются: порядок в них видит только тот, кто его
+   уже знает. */
 .how-step-index {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
   font-family: var(--font-mono);
   font-size: var(--text-caption);
   font-weight: var(--weight-semibold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--color-brand-accent);
 }
 
-.how-step > svg { color: var(--color-text); }
 .how-step p { margin: 0; color: var(--color-text-muted); font-size: var(--text-ui); }
 
 .how-proof {
@@ -921,31 +737,37 @@
 
 /* ─── Возможности ──────────────────────────────────────────────────── */
 
-/* Перечень, а не сетка одинаковых карточек: у этих пунктов разный вес,
-   и строка читается сверху вниз быстрее, чем шесть плиток. */
+/* Шесть пунктов подряд одной лентой строк читались как один длинный абзац:
+   к четвёртому глазу не за что зацепиться. Сетка карточек со значком даёт
+   каждому пункту границу и точку входа. */
 .feature-list {
   display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(1rem, 2vw, 1.5rem);
   margin: 0;
-  border-top: 1px solid var(--color-border);
 }
 
 .feature-row {
   display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.6fr);
-  gap: clamp(1rem, 3vw, 3rem);
-  align-items: baseline;
-  padding: clamp(1.25rem, 2.6vw, 1.9rem) 0;
-  border-bottom: 1px solid var(--color-border);
+  align-content: start;
+  gap: var(--space-3);
+  padding: clamp(1.25rem, 2.6vw, 1.75rem);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
 }
 
-.feature-row dt {
+.feature-row > svg { color: var(--color-brand-accent); }
+
+.feature-row h3 {
+  margin: 0;
   font-family: var(--font-display);
   font-size: clamp(1.05rem, 1.5vw, 1.3rem);
   font-weight: var(--weight-display);
   line-height: var(--leading-compact);
 }
 
-.feature-row dd {
+.feature-row p {
   margin: 0;
   color: var(--color-text-muted);
   font-size: var(--text-ui);
@@ -1356,7 +1178,6 @@
   .hero-shell { grid-template-columns: minmax(0, 1fr); }
   .hero-aside { display: none; }
   .how-proof { grid-template-columns: minmax(0, 1fr); }
-  .feature-row { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
   .faq-shell { grid-template-columns: minmax(0, 1fr); }
   .landing-faq .section-head { position: static; margin-bottom: var(--space-6); }
 }
@@ -1375,6 +1196,7 @@
   .compare-gdz::before { content: 'Решебник: '; color: var(--color-text-subtle); font-weight: var(--weight-semibold); }
   .compare-ours::before { content: 'Homework Copilot: '; font-weight: var(--weight-semibold); }
   .how-steps { grid-template-columns: minmax(0, 1fr); gap: var(--space-6); }
+  .feature-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .price-grid { grid-template-columns: minmax(0, 1fr); }
   .showcase-grid { grid-template-columns: minmax(0, 1fr); }
 }
@@ -1385,12 +1207,10 @@
   .landing-header.is-compact { height: 3.75rem; }
   .landing-header-actions .landing-primary-action { display: none; }
 
-  .hero-media { aspect-ratio: 4 / 5; }
+  .feature-list { grid-template-columns: minmax(0, 1fr); }
   .hero-marks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .hero-actions { flex-direction: column; align-items: stretch; }
   .hero-actions a { width: 100%; }
-  .stage-controls .stage-chip.is-muted { display: none; }
-  .stage-submit { margin-left: 0; flex: 1; }
   .paper-head { grid-template-columns: minmax(0, 1fr); }
   .paper-column { padding-bottom: 0.5rem; border-right: 0; border-bottom: 2px solid var(--paper-ink); }
   .paper-given { padding-right: 0; padding-bottom: 0; border-bottom: 0; }
@@ -1416,8 +1236,5 @@
   .reveal { opacity: 1; transform: none; transition: none; }
   .compare-row { opacity: 1; transition: none; }
   .compare-underline { transform: scaleX(1); transition: none; }
-  .stage-caret,
-  .stage-spinner,
-  .stage-track i { animation: none; }
   .landing-menu { animation: none; }
 }

@@ -74,13 +74,13 @@ export function TaskFormCard({ condition, pressed, submitting }: {
     <section className="copy-task" aria-labelledby="copy-task-title">
       <header className="copy-task-header">
         <div className="copy-task-heading">
-          <h1 id="copy-task-title">Списать задачу</h1>
+          <h1 id="copy-task-title">Решить задачу</h1>
           <p>Решение придёт готовым к переписыванию в тетрадь.</p>
         </div>
         <p className="copy-task-price">
           <strong>{taskPrice}</strong>
           <span>за решение</span>
-          <em>Зарегистрируйся: на счёт придут 20 ₽ — это ещё четыре решения</em>
+          <em>Зарегистрируйся: на счёт придут 20 ₽ — это ещё пять задач</em>
         </p>
       </header>
 

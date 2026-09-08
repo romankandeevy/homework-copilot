@@ -58,6 +58,8 @@ test.describe('недельное расписание', () => {
     await expect(friday).toHaveValue('Химия')
     const widths = await page.evaluate(() => ({ documentWidth: document.documentElement.scrollWidth, viewportWidth: window.innerWidth }))
     expect(widths.documentWidth).toBeLessThanOrEqual(widths.viewportWidth)
-    await expect(page.getByText('Сохраняется в этом браузере')).toBeVisible()
+    // Хранение только в браузере - предостережение, а не успех: смысл фразы
+    // в том, что при смене телефона расписания не будет.
+    await expect(page.getByText(/Только в этом браузере/)).toBeVisible()
   })
 })

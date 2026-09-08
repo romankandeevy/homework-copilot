@@ -3,6 +3,7 @@ import type { ChangeEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import {
+  CalendarBlank,
   Check,
   ImageSquare,
   MagicWand,
@@ -190,7 +191,10 @@ function scaleRectangle(rectangle: { left: number; top: number; width: number; h
   }
 }
 
-function SchedulePage({ userId = null, grade = 8 }: { userId?: string | null; grade?: number }) {
+/* Класс приходит из профиля и может не прийти вовсе. Подставлять восьмой
+   за того, кто про себя ничего не сообщал, нельзя: подпись «8 класс» над
+   пустой сеткой - выдуманный факт о человеке. */
+function SchedulePage({ userId = null, grade = null }: { userId?: string | null; grade?: number | null }) {
   const reduceMotion = useReducedMotion()
   const [entries, setEntries] = useState<ScheduleEntry[]>(loadSchedule)
   const [timeSlots, setTimeSlots] = useState<string[]>(() => loadTimeSlots(loadSchedule()))
@@ -578,11 +582,13 @@ function SchedulePage({ userId = null, grade = 8 }: { userId?: string | null; gr
         <div className="schedule-heading-copy">
           <div className="schedule-title-line">
             <h1 id="schedule-title">Расписание</h1>
-            <span>{grade} класс</span>
+            {grade ? <span>{grade} класс</span> : null}
           </div>
           <p>
             <span className="schedule-desktop-hint">Вся неделя перед глазами. Нажми на ячейку, чтобы изменить урок.</span>
-            <span className="schedule-mobile-hint">Выбери день и редактируй уроки без горизонтальной прокрутки.</span>
+            {/* «Без горизонтальной прокрутки» продавало отсутствие бага как
+                достоинство. Здесь пишем, что делать, а не чего не случится. */}
+            <span className="schedule-mobile-hint">Выбери день и впиши уроки. Или сфотографируй расписание - разберём само.</span>
           </p>
         </div>
         <div className="schedule-actions">
@@ -596,18 +602,39 @@ function SchedulePage({ userId = null, grade = 8 }: { userId?: string | null; gr
 
       <section className="schedule-workspace" aria-labelledby="schedule-editor-title">
         <header className="schedule-toolbar">
-          <div className={`schedule-save-state${saveState === 'error' ? ' is-error' : ''}`}>
+          <div className={`schedule-save-state${saveState === 'error' ? ' is-error' : ''}${saveState === 'local' ? ' is-local' : ''}`}>
             {saveState === 'loading' || saveState === 'saving'
               ? <SpinnerGap className="schedule-save-spinner" size={16} weight="bold" aria-hidden="true" />
-              : saveState === 'error'
+              : saveState === 'error' || saveState === 'local'
                 ? <WarningCircle size={16} weight="fill" aria-hidden="true" />
                 : <Check size={16} weight="bold" aria-hidden="true" />}
             <span id="schedule-editor-title">
-              {saveState === 'loading' ? 'Загружаем расписание из аккаунта' : saveState === 'saving' ? 'Сохраняем в аккаунте' : saveState === 'saved' ? 'Сохранено в аккаунте' : saveState === 'error' ? 'Не получилось сохранить в аккаунте' : 'Сохраняется в этом браузере'}
+              {/* «Сохраняется в этом браузере» - предупреждение, а не успех:
+                  сменишь телефон или почистишь кэш, и расписания нет.
+                  Галочка отсюда снята, значок и текст говорят одно и то же. */}
+              {saveState === 'loading' ? 'Загружаем расписание из аккаунта' : saveState === 'saving' ? 'Сохраняем в аккаунте' : saveState === 'saved' ? 'Сохранено в аккаунте' : saveState === 'error' ? 'Не получилось сохранить в аккаунте' : 'Только в этом браузере: войди, чтобы расписание осталось при смене телефона'}
             </span>
           </div>
           <span className="schedule-toolbar-meta">{timeSlots.length} {lessonWord(timeSlots.length)} · {weekdays.length} дней</span>
         </header>
+
+        {/* Пустая сетка притворялась заполненной: семь одинаковых строк
+            «Предмет / Кабинет» первые полсекунды читаются как расписание,
+            которое у человека уже есть. Пока не вписан ни один урок, сетку
+            предваряет прямая надпись о том, что она пустая, и то, с чего
+            начать. Исчезает сама, как только появился первый урок. */}
+        {entries.length === 0 && (
+          <div className="schedule-blank" role="status">
+            <CalendarBlank size={26} weight="duotone" aria-hidden="true" />
+            <div>
+              <strong>Расписание пустое</strong>
+              <p>
+                Строки ниже - заготовка на неделю: время звонков типовое, предметов ещё нет.
+                Впиши уроки в ячейки или сними расписание на камеру - разберём и подставим.
+              </p>
+            </div>
+          </div>
+        )}
 
         <div className="schedule-table-scroll" tabIndex={0} aria-label="Таблица расписания, на узком экране листается по горизонтали">
           <table className="schedule-week-table">

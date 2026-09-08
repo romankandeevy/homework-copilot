@@ -103,7 +103,10 @@ test.describe('адаптация под телефон', () => {
     // а индекс учебников удалён: раздел не мог наполниться и убран целиком.
     await expect(page.getByRole('tab')).toHaveCount(0)
     await expect(page.getByText('База решений')).toHaveCount(0)
-    await expect(page.getByRole('button', { name: /Войти, чтобы сохранять решения/ })).toBeVisible()
+    // Пустая история гостя - карточка с объяснением и двумя действиями,
+    // а не строка-ссылка над семьюстами пикселями пустоты.
+    await expect(page.getByRole('heading', { name: 'Здесь будут твои решения' })).toBeVisible()
+    await expect(page.locator('.route-empty').getByRole('button', { name: 'Войти' })).toBeVisible()
     await expectNoPageOverflow(page)
   })
 
@@ -120,7 +123,7 @@ test.describe('адаптация под телефон', () => {
     await page.goto('/app')
 
     const card = page.locator('.copy-task')
-    const title = card.getByRole('heading', { name: 'Списать задачу' })
+    const title = card.getByRole('heading', { name: 'Решить задачу' })
     // Выбора учебника в форме больше нет. Тот же токен текста карточки
     // держат условие и кнопка фотографии — по ним и проверяем инверсию.
     const condition = card.getByRole('textbox', { name: 'Условие задачи' })

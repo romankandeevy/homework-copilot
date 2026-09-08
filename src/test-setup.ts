@@ -32,3 +32,11 @@ if (typeof window !== 'undefined' && !window.matchMedia) {
     dispatchEvent: () => false,
   })
 }
+
+/* jsdom объявляет `window.scrollTo`, но при вызове печатает «Not implemented».
+   Переход между разделами приложения поднимает страницу наверх, и в тестах
+   это давало строку шума на каждый переход. Заглушка ничего не изображает:
+   прокрутки в jsdom нет вовсе. */
+if (typeof window !== 'undefined') {
+  window.scrollTo = () => {}
+}

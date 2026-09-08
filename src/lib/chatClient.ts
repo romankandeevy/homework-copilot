@@ -136,10 +136,38 @@ function readStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
 }
 
+/* Сообщение Postgres наружу не выходит.
+
+   8 сентября на проде гость открывал чат и читал `permission denied for
+   function list_chat_models` - строчными латинскими буквами, красным, на
+   экране семиклассника. Такие строки пишет база для журнала, а не для
+   человека: они не переводятся, ничего не подсказывают и выглядят поломкой
+   даже там, где сработала защита.
+
+   Наружу идут только те тексты, которые написали мы, - их видно по русским
+   буквам. Всё остальное заменяется общей фразой по коду ошибки, а сама
+   строка остаётся в консоли, где она и нужна - при разборе. */
+const cyrillic = /[а-яё]/i
+
+export function humanChatMessage(message: string, code: ChatErrorCode) {
+  if (message && cyrillic.test(message)) return message
+  return defaultErrorMessage(code)
+}
+
 function toChatError(error: { message: string; code?: string }): ChatError {
-  const message = error.message || 'Не получилось выполнить запрос'
-  if (isChatBackendMissing(error)) return new ChatError(message, 'backend_missing')
-  return new ChatError(message, chatErrorCodeFromMessage(message))
+  const raw = error.message || ''
+  if (isChatBackendMissing(error)) return new ChatError(humanChatMessage(raw, 'backend_missing'), 'backend_missing')
+  const code = chatErrorCodeFromPostgres(error.code) ?? chatErrorCodeFromMessage(raw)
+  if (raw && !cyrillic.test(raw)) console.warn('chat request failed', error.code ?? '', raw)
+  return new ChatError(humanChatMessage(raw, code), code)
+}
+
+/* Коды Postgres, которые у чата означают понятное человеку состояние.
+   `42501` - функция выдана только вошедшим, это не поломка, а «нужен вход». */
+function chatErrorCodeFromPostgres(code?: string): ChatErrorCode | null {
+  if (!code) return null
+  if (code === '42501' || code === 'PGRST301' || code === 'PGRST302') return 'unauthorized'
+  return null
 }
 
 function chatErrorCodeFromMessage(message: string): ChatErrorCode {
@@ -365,7 +393,9 @@ function applyFrame(frame: SseFrame, handlers: ChatStreamHandlers) {
 
   if (frame.event === 'error') {
     const message = payload ? readString(payload, 'message', 'Генерация не удалась') : 'Генерация не удалась'
-    throw new ChatError(message, chatErrorCodeFromMessage(message))
+    const code = chatErrorCodeFromMessage(message)
+    if (!cyrillic.test(message)) console.warn('chat stream error', message)
+    throw new ChatError(humanChatMessage(message, code), code)
   }
 
   if (!payload) return
@@ -416,7 +446,8 @@ async function readResponseError(response: Response) {
 
   // 404 без разбираемого тела — это отсутствующий маршрут, а не ошибка чата.
   const code = response.status === 404 && !message ? 'backend_missing' : chatErrorCodeFromStatus(response.status)
-  return new ChatError(message || defaultErrorMessage(code), code)
+  if (message && !cyrillic.test(message)) console.warn('chat http error', response.status, message)
+  return new ChatError(humanChatMessage(message, code), code)
 }
 
 function defaultErrorMessage(code: ChatErrorCode) {
@@ -425,6 +456,7 @@ function defaultErrorMessage(code: ChatErrorCode) {
   if (code === 'disabled') return 'Чат временно отключён'
   if (code === 'unauthorized') return 'Нужно войти в аккаунт'
   if (code === 'backend_missing') return 'Сервер чата ещё не подключён'
+  if (code === 'network') return 'Сервер чата не ответил. Попробуй ещё раз'
   return 'Не получилось получить ответ'
 }
 
