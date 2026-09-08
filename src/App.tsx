@@ -81,6 +81,7 @@ import type { SolutionJob } from './lib/solutionJobs'
 import { SolutionQueue } from './solution/SolutionQueue'
 import { SolutionVerificationPanel } from './solution/SolutionVerificationPanel'
 import { WrittenAnalysis } from './solution/WrittenAnalysis'
+import { SolutionCard } from './solution/SolutionCard'
 import { SiteFooter, SupportCenter, SupportLauncher } from './support/SupportCenter'
 import type { SupportCategory, SupportPrefill } from './support/SupportCenter'
 import './App.css'
@@ -131,8 +132,11 @@ type SolutionState = {
   source: HomeworkSource
 }
 
+/* Решение в списке. Само решение здесь целиком: карточка показывает
+   условие, первые строки записи и ответ, и всё это уже сохранено рядом. */
 type PersonalSolution = SolutionState & {
   time: string
+  solution: HomeworkSolution
 }
 
 const themeStorageKey = 'homework-copilot:theme'
@@ -629,19 +633,16 @@ function MySolutions({ items, onOpenAll, onOpenSolution }: { items: readonly Per
         <div><h2 id="my-solutions-title">Мои решения</h2><p>Только задачи, которые ты уже открыл или запросил в этом сеансе.</p></div>
         <button className="section-link" type="button" onClick={onOpenAll}>Все мои решения <ArrowRight size={17} weight="bold" aria-hidden="true" /></button>
       </header>
-      {items.length > 0 ? <div className="solution-list">
-        {items.map(({ textbookId, task, time, mode, source }) => {
-          const textbook = getTextbook(textbookId)
-          const Icon = textbook.icon
-          return (
-            <button type="button" key={`${textbookId}-${task}-${time}`} onClick={() => onOpenSolution({ textbookId, task, mode, source })}>
-              <Icon size={32} weight="duotone" aria-hidden="true" />
-              <span><small>{textbook.subject}</small><strong>{source === 'number' ? `№ ${task}` : task}</strong></span>
-              <time>{time}</time>
-              <ArrowRight size={18} weight="bold" aria-hidden="true" />
-            </button>
-          )
-        })}
+      {items.length > 0 ? <div className="solution-cards">
+        {items.map(({ textbookId, task, time, mode, source, solution }) => (
+          <SolutionCard
+            key={`${textbookId}-${task}-${time}`}
+            solution={solution}
+            subject={getTextbook(textbookId).subject}
+            time={time}
+            onOpen={() => onOpenSolution({ textbookId, task, mode, source })}
+          />
+        ))}
       </div> : <p className="collection-empty">Пока здесь пусто. Первое решение появится после запроса.</p>}
     </section>
   )
@@ -670,8 +671,13 @@ function SolutionsPage({
 }) {
   const [query, setQuery] = useState('')
   const normalizedQuery = query.trim().toLocaleLowerCase('ru')
-  const matches = (textbook: Textbook, task: string) => `${textbook.subject} ${task}`.toLocaleLowerCase('ru').includes(normalizedQuery)
-  const personalResults = personalSolutions.filter(({ textbookId, task }) => matches(getTextbook(textbookId, items), task))
+  // Ищется и по условию: карточка его показывает, значит по нему и находят.
+  const matches = (textbook: Textbook, task: string, condition: string) => (
+    `${textbook.subject} ${task} ${condition}`.toLocaleLowerCase('ru').includes(normalizedQuery)
+  )
+  const personalResults = personalSolutions.filter(({ textbookId, task, solution }) => (
+    matches(getTextbook(textbookId, items), task, solution.condition)
+  ))
   const hasSolutions = personalSolutions.length > 0
 
   return (
@@ -698,19 +704,16 @@ function SolutionsPage({
 
       {!user ? <GuestSolutionsNote onOpenAccount={onOpenAccount} />
         : personalResults.length > 0 ? (
-          <div className="solution-list route-solution-list">
-            {personalResults.map(({ textbookId, task, time, mode, source }) => {
-              const textbook = getTextbook(textbookId, items)
-              const Icon = textbook.icon
-              return (
-                <button type="button" key={`${textbookId}-${task}-${time}`} onClick={() => onOpenSolution({ textbookId, task, mode, source })}>
-                  <Icon size={32} weight="duotone" aria-hidden="true" />
-                  <span><small>{textbook.subject}</small><strong>{source === 'number' ? `№ ${task}` : task}</strong></span>
-                  <time>{time}</time>
-                  <ArrowRight size={18} weight="bold" aria-hidden="true" />
-                </button>
-              )
-            })}
+          <div className="solution-cards">
+            {personalResults.map(({ textbookId, task, time, mode, source, solution }) => (
+              <SolutionCard
+                key={`${textbookId}-${task}-${time}`}
+                solution={solution}
+                subject={getTextbook(textbookId, items).subject}
+                time={time}
+                onOpen={() => onOpenSolution({ textbookId, task, mode, source })}
+              />
+            ))}
           </div>
         ) : hasSolutions ? (
           <section className="route-empty" aria-labelledby="solutions-empty-title">
@@ -1222,6 +1225,7 @@ function HomePage() {
           task: solution.task,
           source: solution.source,
           time: new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' }).format(new Date(solution.createdAt)),
+          solution,
         }))
       : [],
     [user, visibleGeneratedSolutions],

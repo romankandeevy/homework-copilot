@@ -1,0 +1,219 @@
+/* Карточка решения в списке.
+
+   Сетка одной высоты: условие три строки, запись три, ответ две. Что не
+   влезло - многоточие по слову. Подошва с ответом у всех карточек на одном
+   уровне: глаз идёт по ряду и сравнивает ответы, не спотыкаясь.
+
+   Токены - из дизайн-системы (DESIGN.md), свои цвета здесь не заводятся. */
+
+.solution-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(17.5rem, 1fr));
+  gap: var(--space-3);
+}
+
+.solution-card {
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-surface);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color var(--motion-fast) var(--ease-out), transform var(--motion-fast) var(--ease-out);
+}
+
+.solution-card:hover { border-color: var(--color-border-strong); }
+
+.solution-card:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .solution-card:hover { transform: translateY(-1px); }
+}
+
+/* Голова: предмет, пометки о содержимом, время. */
+.solution-card-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: 0.8rem var(--space-4) 0;
+}
+
+.solution-card-subject {
+  overflow: hidden;
+  color: var(--color-accent);
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.06em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.solution-card-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex: none;
+  padding: 0.1rem 0.35rem;
+  border-radius: var(--radius-xs);
+  background: var(--color-surface-sunken);
+  color: var(--color-text-subtle);
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-semibold);
+  white-space: nowrap;
+}
+
+.solution-card-head time {
+  flex: none;
+  margin-left: auto;
+  color: var(--color-text-subtle);
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  white-space: nowrap;
+}
+
+/* Условие: ровно три строки, дальше многоточие по слову.
+
+   Обрезка стоит на вложенном элементе без отступов: у -webkit-box отступ
+   внутри показывает четвёртую строку насквозь. Короткое условие оставляет
+   место пустым - запись у всех карточек начинается на одной высоте. */
+.solution-card-condition {
+  display: block;
+  padding: 0.45rem var(--space-4) 0.8rem;
+}
+
+.solution-card-condition > span {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  min-height: calc(3 * 1.5em);
+  overflow: hidden;
+  font-size: var(--text-ui);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+/* Запись: три строки тетради. Та же клетка, что на листе; каждая строка -
+   одна строка с многоточием. Внизу справа - сколько осталось за краем. */
+.solution-card-preview {
+  display: grid;
+  grid-template-rows: 1fr auto;
+  gap: 0.3rem;
+  min-width: 0;
+  margin: 0 var(--space-4);
+  padding: 0.55rem 0.75rem 0.45rem;
+  border: 1px solid var(--color-border);
+  border-bottom: 0;
+  border-radius: var(--radius-control) var(--radius-control) 0 0;
+  background:
+    repeating-linear-gradient(to right, color-mix(in oklch, var(--color-accent) 12%, transparent) 0 1px, transparent 1px 1.05rem),
+    repeating-linear-gradient(to bottom, color-mix(in oklch, var(--color-accent) 12%, transparent) 0 1px, transparent 1px 1.05rem),
+    var(--color-surface-raised);
+}
+
+.solution-card-lines {
+  display: grid;
+  grid-auto-rows: 1.35rem;
+  align-content: start;
+  min-width: 0;
+  /* Три строки всегда, даже если шагов меньше. */
+  min-height: calc(3 * 1.35rem);
+  counter-reset: solution-card-step;
+}
+
+.solution-card-lines > span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.35rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  counter-increment: solution-card-step;
+}
+
+.solution-card-lines > span::before {
+  content: counter(solution-card-step) ') ';
+  color: var(--color-text-subtle);
+  font-weight: var(--weight-semibold);
+}
+
+/* Сочинение: абзацы без номеров, обрез тот же - по слову. */
+.solution-card-preview.is-prose .solution-card-lines > span::before { content: none; }
+.solution-card-preview.is-prose .solution-card-lines > span { text-indent: 0.9em; }
+
+/* Программа: моноширинный, отступы сохранены, обрез по строке. */
+.solution-card-preview.is-code .solution-card-lines > span::before { content: none; }
+
+.solution-card-preview.is-code .solution-card-lines > span {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  white-space: pre;
+  tab-size: 4;
+}
+
+.solution-card-more {
+  justify-self: end;
+  color: var(--color-text-subtle);
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-semibold);
+  white-space: nowrap;
+}
+
+/* Ответ: подошва. «Ответ:» подчёркнут, как на самом листе. Две строки,
+   дальше многоточие. */
+.solution-card-answer {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0 0.45rem;
+  align-items: baseline;
+  min-height: calc(0.7rem + 0.85rem + 2 * 1.25rem);
+  padding: 0.7rem var(--space-4) 0.85rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.solution-card-answer-label {
+  color: var(--color-text-subtle);
+  font-size: 0.8125rem;
+  font-weight: var(--weight-semibold);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  white-space: nowrap;
+}
+
+.solution-card-answer-value {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--color-strong);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25rem;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .solution-cards { grid-template-columns: 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .solution-card { transition: none; }
+}
