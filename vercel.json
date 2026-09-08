@@ -1,4 +1,5 @@
 {
+  "buildCommand": "npx playwright install chromium --only-shell && npm run build",
   "functions": {
     "api/solve.ts": {
       "includeFiles": "{server/**,src/lib/**,src/textbooks/**}",

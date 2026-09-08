@@ -111,8 +111,29 @@ function injectBody(html, markup) {
   return html.replace(pattern, (match, open, _current, close) => `${open}${markup}${close}`)
 }
 
+/* Отрисовка требует браузера, и это надо сказать вслух там, где его нет.
+
+   Первая же сборка на Vercel упала: `browserType.launch: Executable doesn't
+   exist`. Сборка Pages ставит хром сама (`.github/workflows/deploy-pages.yml`),
+   Vercel - через `buildCommand` в `vercel.json`. Если хрома всё-таки не
+   оказалось, сборка падает с внятным объяснением, а не со стеком Playwright:
+   молча отдать пустые страницы - ровно та поломка, ради которой этот скрипт
+   и написан. */
 const { server, port } = await startServer()
-const browser = await chromium.launch()
+
+let browser
+try {
+  browser = await chromium.launch()
+} catch (error) {
+  server.close()
+  console.error([
+    'Отрисовка страниц требует браузера. Поставь его перед сборкой:',
+    '  npx playwright install chromium --only-shell',
+    `Причина: ${error instanceof Error ? error.message : String(error)}`,
+  ].join('\n'))
+  process.exit(1)
+}
+
 const context = await browser.newContext({ viewport: { width: 1280, height: 900 } })
 
 /* Уведомление о хранении данных в готовую разметку попадать не должно:
