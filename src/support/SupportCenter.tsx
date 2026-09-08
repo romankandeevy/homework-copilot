@@ -167,10 +167,12 @@ function SiteFooter({ onOpenSupport, compact = false }: { onOpenSupport?: () => 
           <a href="/schedule">Расписание</a>
         </nav>
 
+        {/* «Написать в поддержку» стояло в подвале дважды: крупной кнопкой
+            в блоке «Помощь рядом» и строкой здесь, в двадцати сантиметрах
+            друг от друга. Кнопка выше заметнее, строка ушла. */}
         <nav className="site-footer-column" aria-label="Помощь">
           <h2>Помощь</h2>
-          {onOpenSupport ? <button type="button" onClick={onOpenSupport}>Написать в поддержку</button> : <a href="/support">Написать в поддержку</a>}
-          <a href="/support#faq">FAQ</a>
+          <a href="/support#faq">Частые вопросы</a>
         </nav>
 
         <nav className="site-footer-column site-footer-column-documents" aria-label="Документы">
