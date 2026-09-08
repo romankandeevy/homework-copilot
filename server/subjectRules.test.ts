@@ -138,7 +138,8 @@ describe('правила предмета', () => {
   })
 
   it('у незнакомого предмета остаются только общие правила', () => {
-    expect(subjectRuleQuestions('Танцы').map((rule) => rule.id)).toEqual(['explanation-explains', 'answer-answers-question'])
+    expect(subjectRuleQuestions('Танцы').map((rule) => rule.id))
+      .toEqual(['explanation-explains', 'impossibility-proved', 'parts-not-split', 'answer-answers-question'])
   })
 })
 
@@ -273,5 +274,72 @@ describe('лист самодостаточен', () => {
       answer: 'a = 4 − 2√3',
     }))
     expect(issues.some((issue) => issue.includes('разобран один'))).toBe(true)
+  })
+})
+
+/* Задача 788 с прода: «зная, что a < b, сравните».
+
+   Четыре пункта, метод во всех один, а на листе двенадцать строк - на
+   каждый пункт разность, знак и вывод отдельно. Тетрадь пронумеровала их
+   своими 1..12 поверх авторских а)-г). Последний пункт закрыт словами
+   «Сравнить невозможно» без единого примера. */
+describe('запись не раздувается и не объявляет невозможность', () => {
+  const task788 = (steps: string[], answer: string) => solution({
+    subject: 'Алгебра',
+    textbookId: 'algebra',
+    taskType: 'calculation',
+    condition: '788. Зная, что a < b, сравните числа: а) a - 1 и b + 6; б) a - 14 и b + 1; в) b + 5 и a - 8; г) a + 2 и b - 6.',
+    given: ['a < b'],
+    steps,
+    answer,
+  })
+
+  const split = [
+    'а) (a - 1) - (b + 6) = a - b - 7',
+    'Так как a < b, то a - b < 0, значит a - b - 7 < 0',
+    'a - 1 < b + 6',
+    'б) (a - 14) - (b + 1) = a - b - 15',
+    'Так как a - b < 0, то a - b - 15 < 0',
+    'a - 14 < b + 1',
+    'в) (b + 5) - (a - 8) = b - a + 13',
+    'Так как a < b, то b - a > 0, значит b - a + 13 > 0',
+    'b + 5 > a - 8',
+  ]
+
+  const compact = [
+    'а) (a - 1) - (b + 6) = a - b - 7 < 0, значит a - 1 < b + 6',
+    'б) (a - 14) - (b + 1) = a - b - 15 < 0, значит a - 14 < b + 1',
+    'в) (b + 5) - (a - 8) = b - a + 13 > 0, значит b + 5 > a - 8',
+  ]
+
+  it('ловит один и тот же ход, расписанный в каждом пункте', () => {
+    const issues = verifySubjectRules(task788(split, 'а) a - 1 < b + 6; б) a - 14 < b + 1; в) b + 5 > a - 8'))
+    expect(issues.some((issue) => issue.includes('один и тот же ход'))).toBe(true)
+  })
+
+  it('молчит, когда пункт занимает одну строку', () => {
+    const issues = verifySubjectRules(task788(compact, 'а) a - 1 < b + 6; б) a - 14 < b + 1; в) b + 5 > a - 8'))
+    expect(issues.some((issue) => issue.includes('один и тот же ход'))).toBe(false)
+  })
+
+  it('не принимает «сравнить невозможно» без примера', () => {
+    const issues = verifySubjectRules(task788(
+      [...compact, 'г) (a + 2) - (b - 6) = a - b + 8, знак может быть любым'],
+      'г) сравнить невозможно',
+    ))
+    expect(issues.some((issue) => issue.includes('Невозможность заявлена'))).toBe(true)
+  })
+
+  it('принимает её с двумя наборами чисел', () => {
+    const issues = verifySubjectRules(task788(
+      [
+        ...compact,
+        'г) (a + 2) - (b - 6) = a - b + 8, знак зависит от значений',
+        'при a = 0, b = 1: a + 2 = 2 > -5 = b - 6',
+        'при a = 0, b = 100: a + 2 = 2 < 94 = b - 6',
+      ],
+      'г) сравнить нельзя: знак разности меняется',
+    ))
+    expect(issues.some((issue) => issue.includes('Невозможность заявлена'))).toBe(false)
   })
 })

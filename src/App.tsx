@@ -139,6 +139,14 @@ type PersonalSolution = SolutionState & {
   solution: HomeworkSolution
 }
 
+/* Пункты задания вместо номеров.
+
+   Задание «сравните: а) … б) … в) …» приходит строками, размеченными
+   буквами. Своя нумерация поверх них - вторая шкала на том же листе. */
+function lettered(steps: readonly string[]) {
+  return steps.length > 1 && steps.every((step) => /^\s*[а-я]\s*\)/u.test(step))
+}
+
 const themeStorageKey = 'homework-copilot:theme'
 const selectedTextbookStorageKey = 'homework-copilot:selected-textbook'
 const dismissedJobsStorageKey = 'homework-copilot:dismissed-jobs-v1'
@@ -765,8 +773,11 @@ function UnderstandingPage({
     if (!source) return
 
     const value = [
+      /* Копию переписывают в тетрадь и сдают. Разбор «Что нужно понять» -
+         конспект для себя: он объясняет тему, а в работе для учителя ему
+         места нет. Раньше он уезжал в буфер вместе с записью, и ученик
+         сдавал вместе с решением наши пояснения. */
       'Условие: ' + source.condition,
-      ...(explanationLines.length > 0 ? ['Что нужно понять:', ...explanationLines.map((line) => '- ' + line)] : []),
       ...(source.given.length > 0
         ? ['Дано:', ...notebookBlocks(source.given, source.condition).flatMap((block) => (
             // В текстовой копии скобку рисует сам знак: система должна
@@ -945,10 +956,13 @@ function UnderstandingPage({
                   </div>
                 )
                 : (
-                  <ol>
+                  /* Нумерацию ставит страница. Но задание из пунктов уже
+                     размечено буквами: а), б), в). 8 сентября на проде
+                     задача 788 вышла листом «1) а) …  2) Так как …  4) б) …» -
+                     две нумерации поверх друг друга, и ни одна не читается.
+                     Там, где строки помечены буквами, счёт ведут буквы. */
+                  <ol className={lettered(generatedSolution.steps) ? 'is-lettered' : undefined}>
                     {keyed(generatedSolution.steps, (step) => step).map(({ key, item: step }) => (
-                      // Нумерацию ставит страница, поэтому свою — из модели —
-                      // с шага снимаем, чтобы не выходило «1) 1) …».
                       <li key={key}>{step.replace(/^\s*\d{1,2}[).]\s+/u, '')}</li>
                     ))}
                   </ol>

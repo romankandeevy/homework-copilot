@@ -46,6 +46,25 @@ function conditionMentions(solution: HomeworkSolution, pattern: RegExp) {
   return pattern.test(solution.condition.toLocaleLowerCase('ru-RU').replaceAll('ё', 'е'))
 }
 
+/* Трёхграммное сходство строк.
+
+   То же, чем движок сверяет условие, но местное: geometrySolutionEngine
+   импортирует этот файл, и обратный импорт замкнул бы круг. Нужно, чтобы
+   отличить «продолжение мысли» от «того же самого, переписанного ещё раз»:
+   буквы и числа в пунктах меняются, форма остаётся. */
+function similarity(left: string, right: string) {
+  const normalize = (value: string) => value.toLocaleLowerCase('ru-RU').replace(/[^a-zа-яё0-9]+/giu, '')
+  const grams = (value: string) => {
+    const normalized = normalize(value)
+    if (normalized.length < 3) return new Set([normalized])
+    return new Set(Array.from({ length: normalized.length - 2 }, (_, index) => normalized.slice(index, index + 3)))
+  }
+  const leftGrams = grams(left)
+  const rightGrams = grams(right)
+  const overlap = [...leftGrams].filter((entry) => rightGrams.has(entry)).length
+  return (2 * overlap) / Math.max(1, leftGrams.size + rightGrams.size)
+}
+
 function mentions(value: string, pattern: RegExp) {
   return pattern.test(value.toLocaleLowerCase('ru-RU').replaceAll('ё', 'е'))
 }
@@ -234,8 +253,70 @@ const explanationExplains: SubjectRule = {
   },
 }
 
+/* Невозможность доказывается, а не объявляется.
+
+   8 сентября на проде задача 788: «зная, что a < b, сравните a + 2 и
+   b - 6». Пункт закрыт строкой «Сравнить невозможно». Утверждение верное,
+   но у доски за него ставят ноль: невозможность - такое же утверждение,
+   как равенство, и показывается она примером. Достаточно двух наборов
+   чисел, дающих разный ответ: a = 0, b = 1 и a = 0, b = 100.
+
+   Ищем не слово, а подстановку: место, где буква получает числовое
+   значение. Одной мало - вся суть в том, что ответ меняется. */
+const impossibilityClaim = /невозможн|нельзя (?:сравнить|определить|найти|однозначно)|не удастся|не определ|любой знак|знак (?:может быть )?любой|зависит от знач/u
+
+const impossibilityProved: SubjectRule = {
+  id: 'impossibility-proved',
+  question: 'Если ответ - «сравнить нельзя» или «определить нельзя», показаны два набора чисел, дающих разный ответ?',
+  applies: (solution) => mentions(`${solution.answer} ${solution.steps.join(' ')}`, impossibilityClaim),
+  verify: (solution) => {
+    const examples = [...solution.steps, solution.answer]
+      .reduce((count, line) => count + [...line.matchAll(/[a-zа-я]\s*=\s*-?\d/giu)].length, 0)
+    return examples >= 2
+      ? null
+      : 'Невозможность заявлена, но не показана: приведи два набора конкретных чисел из условия, дающих разный ответ'
+  },
+}
+
+/* Один метод не переписывают в каждом пункте.
+
+   Та же задача 788: четыре пункта, в каждом разность, знак и вывод
+   отдельными строками - двенадцать строк, из которых новых мыслей четыре.
+   Тетрадь пронумеровала их своими 1..12 поверх авторских а)-г), и лист
+   стал нечитаемым.
+
+   Ловим не длину, а повтор формы: если пункты размечены буквами и вторые
+   строки разных пунктов совпадают по существу, значит расписан один и тот
+   же ход. */
+const partLabel = /^\s*([а-я])\s*\)/u
+
+const partsNotSplit: SubjectRule = {
+  id: 'parts-not-split',
+  question: 'Пункт задания занимает одну строку, если во всех пунктах делается одно и то же?',
+  applies: (solution) => solution.steps.filter((line) => partLabel.test(line)).length >= 2,
+  verify: (solution) => {
+    const groups: string[][] = []
+    for (const line of solution.steps) {
+      if (partLabel.test(line) || groups.length === 0) groups.push([line])
+      else groups[groups.length - 1].push(line)
+    }
+    const seconds = groups.filter((group) => group.length > 1).map((group) => group[1])
+    if (seconds.length < 2) return null
+
+    const alike = seconds.some((line, index) => seconds
+      .slice(index + 1)
+      .some((other) => similarity(line, other) >= 0.55))
+
+    return alike
+      ? 'Во всех пунктах расписан один и тот же ход: сожми каждый пункт в одну строку, начав её с его буквы'
+      : null
+  },
+}
+
 const commonRules: readonly SubjectRule[] = [
   explanationExplains,
+  impossibilityProved,
+  partsNotSplit,
   {
     id: 'answer-answers-question',
     question: 'Ответ отвечает на вопрос задачи, а не пересказывает условие?',
