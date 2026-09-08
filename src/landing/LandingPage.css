@@ -21,10 +21,13 @@
 }
 
 .landing-skip {
+  display: inline-flex;
   position: absolute;
   z-index: 60;
   top: var(--space-2);
   left: var(--space-2);
+  min-height: 2.75rem;
+  align-items: center;
   padding: var(--space-2) var(--space-4);
   border-radius: var(--radius-control);
   background: var(--color-strong);
@@ -119,8 +122,11 @@
 
 .landing-ghost-action:hover { color: var(--color-text); }
 
+/* Строка-ссылка внутри карточки. Рост добирается отступом: сама надпись
+   стоит там же, где стояла, а целиться в неё пальцем становится можно. */
 .landing-inline-action {
   width: fit-content;
+  min-height: 2.75rem;
   color: var(--color-brand-accent);
   font-size: var(--text-ui);
   font-weight: var(--weight-semibold);
@@ -174,6 +180,7 @@
 
 .landing-brand {
   display: inline-flex;
+  min-height: 2.75rem;
   align-items: center;
   /* Тот же зазор, что и в шапке приложения: знак не должен читаться первой
      буквой названия. */
