@@ -224,12 +224,20 @@ const silentSolverLimitMs = 300_000
    попасть сразу в подвал нового раздела. Заголовок «Мои решения» человек не
    видел вообще. Браузер сам скролл не трогает: адрес меняет `pushState`, а
    он ничего не прокручивает. Восстановление позиции по «назад» это не ломает:
-   `popstate` идёт своим путём и сюда не заходит. */
-function scrollRouteToTop() {
+   `popstate` идёт своим путём и сюда не заходит.
+
+   Прокручиваемых мест два, и это не придирка. На широком экране страницу
+   листает окно. На 980 пикселях и уже `.product-shell` становится высотой
+   ровно в экран с `overflow: hidden`, а лента уезжает внутрь
+   `.product-content` - то есть на телефоне, где разбор и нашёл эту находку,
+   `window.scrollTo` не делает ровным счётом ничего. Поднимаем оба. */
+function scrollRouteToTop(container: HTMLElement | null) {
   if (typeof window === 'undefined') return
   const reduce = typeof window.matchMedia === 'function'
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  window.scrollTo({ top: 0, left: 0, behavior: reduce ? 'auto' : 'smooth' })
+  const behavior: ScrollBehavior = reduce ? 'auto' : 'smooth'
+  window.scrollTo({ top: 0, left: 0, behavior })
+  container?.scrollTo({ top: 0, left: 0, behavior })
 }
 
 const applicationRoutes = [
@@ -1236,6 +1244,8 @@ function HomePage() {
   const emailConfirmationStarted = useRef(false)
   const accountTriggerRef = useRef<HTMLElement | null>(null)
   const supportReturnPathRef = useRef(currentApplicationPath() === '/support' ? '/app' : currentApplicationPath())
+  /* На узком экране ленту разделов листает не окно, а `.product-content`. */
+  const routeScrollRef = useRef<HTMLDivElement>(null)
   const textbookObjectUrlsRef = useRef<string[]>([])
   const visibleGeneratedSolutions = useMemo(
     () => generatedSolutions.filter((solution) => (
@@ -1694,7 +1704,7 @@ function HomePage() {
     if (currentApplicationPath() !== path) window.history.pushState({}, '', applicationPath(path))
     setSelectedSolution(solution)
     setActiveNavigation(label)
-    scrollRouteToTop()
+    scrollRouteToTop(routeScrollRef.current)
   }
   const openSolution = (state: SolutionState) => navigate('Решения', state)
 
@@ -2247,7 +2257,7 @@ function HomePage() {
   return (
     <main className="product-shell">
       <ProductTopbar theme={theme} activeLabel={activeNavigation} onNavigate={navigate} onToggleTheme={toggleTheme} user={user} account={account} onOpenAccount={openAccount} onOpenWallet={openWallet} />
-      <div className="product-content">
+      <div className="product-content" ref={routeScrollRef}>
         <div className="product-route">
           {activeNavigation === 'Главная' && <PageHeader account={account} />}
           {activeNavigation === 'Главная' ? (

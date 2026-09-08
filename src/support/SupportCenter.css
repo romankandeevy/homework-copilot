@@ -319,14 +319,11 @@
   padding: var(--space-5) max(clamp(1.5rem, 5vw, 4.5rem), 10rem) var(--space-5) clamp(1.5rem, 5vw, 4.5rem);
   border-top: 1px solid var(--footer-line);
   color: var(--footer-muted);
-  /* Моноширинный оставлен номеру года и знаку копирайта. Оговорка рядом -
-     обычная фраза, и набирать её как машинный вывод незачем. */
-  font-family: var(--font-mono);
+  /* Моноширинного здесь больше нет: ни копирайт, ни оговорка не выравнивают
+     столбцы цифр, а машинным шрифтом читаются как вывод программы. */
   font-size: var(--text-caption);
   line-height: var(--leading-ui);
 }
-
-.site-footer-disclaimer { font-family: var(--font-body); }
 
 /* Рабочий подвал: одна строка вместо одиннадцати ссылок и пяти документов. */
 .site-footer.is-compact {
@@ -371,10 +368,10 @@
 .site-footer-compact-links a:hover,
 .site-footer-compact-links button:hover { color: var(--footer-text); }
 
-.site-footer-compact-links > span {
-  color: var(--footer-muted);
-  font-family: var(--font-mono);
-}
+/* Моноширинный - для чисел, которые сравнивают глазами: сумм, времени,
+   идентификаторов. «© 2026 Homework Copilot» ничего не выравнивает, а
+   машинным шрифтом выглядит как строка из лога. */
+.site-footer-compact-links > span { color: var(--footer-muted); }
 
 .site-footer a:focus-visible,
 .site-footer button:focus-visible { outline: 2px solid var(--footer-accent); outline-offset: 4px; box-shadow: 0 0 0 4px var(--footer-canvas); }

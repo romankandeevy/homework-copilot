@@ -110,6 +110,30 @@ test.describe('адаптация под телефон', () => {
     await expectNoPageOverflow(page)
   })
 
+  /* Смена раздела начинается сверху.
+
+     Проверка стоит именно на телефоне, и это не перестраховка: на 980
+     пикселях и уже `.product-shell` становится высотой ровно в экран с
+     `overflow: hidden`, а лента уезжает внутрь `.product-content`. Значит
+     `window.scrollTo` здесь не делает ничего, и первая попытка починки была
+     бы молча пустой - на широком экране работает, на телефоне нет. */
+  test('переход в другой раздел начинается сверху, а не в подвале', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto('/app')
+
+    const scroller = page.locator('.product-content')
+    await scroller.evaluate((node) => { node.scrollTop = node.scrollHeight })
+    await expect.poll(() => scroller.evaluate((node) => node.scrollTop)).toBeGreaterThan(100)
+
+    await page.getByRole('navigation', { name: 'Основная навигация' })
+      .getByRole('link', { name: 'Расписание', exact: true }).click()
+    await expect(page).toHaveURL(/\/schedule$/)
+
+    // Прокрутка идёт плавно, поэтому ждём, а не читаем сразу.
+    await expect.poll(() => scroller.evaluate((node) => node.scrollTop)).toBe(0)
+    await expect(page.getByRole('heading', { name: 'Расписание' })).toBeInViewport()
+  })
+
   test('под формой нет карточек-ярлыков, а вход предложен строкой', async ({ page }) => {
     await page.setViewportSize({ width: 1920, height: 935 })
     await page.goto('/app')
