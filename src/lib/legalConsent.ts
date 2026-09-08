@@ -3,7 +3,7 @@ import type { Database } from './database.types'
 
 /* Дата действующей редакции. В базе она живёт в `private.current_legal_version()`
    и проставляется сервером — здесь копия только для показа на странице. */
-export const legalDocumentVersion = '2026-09-02'
+export const legalDocumentVersion = '2026-09-08'
 const pendingAcceptanceKey = 'homework-copilot:legal-acceptance-pending'
 
 type AcceptanceSource = 'email' | 'google'
