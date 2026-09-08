@@ -477,7 +477,10 @@
    экран. Колонки сами перестраиваются в две на узком экране. */
 .hero-marks {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  /* Колонки сами решают, сколько их поместится. Жёсткие три ломались на
+     320 пикселях: колонка выходила 78 пикселей, а слово «бесплатно» крупным
+     кеглем - полтораста, и страница уезжала вбок на 18 пикселей. */
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
   gap: clamp(1.25rem, 3vw, 2.5rem);
   max-width: 60rem;
   margin: clamp(2.5rem, 5vw, 3.5rem) 0 0;
@@ -487,7 +490,7 @@
 
 .hero-marks dt {
   font-family: var(--font-display);
-  font-size: clamp(1.75rem, 3vw, 2.5rem);
+  font-size: clamp(1.375rem, 6vw, 2.5rem);
   font-weight: var(--weight-display);
   line-height: 1;
   color: var(--color-text);
@@ -1212,7 +1215,7 @@
 
   .feature-list { grid-template-columns: minmax(0, 1fr); }
   .schedule-band { grid-template-columns: minmax(0, 1fr); }
-  .hero-marks { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
+  .hero-marks { gap: var(--space-4); }
   .hero-actions { flex-direction: column; align-items: stretch; }
   .hero-actions a { width: 100%; }
   .paper-head { grid-template-columns: minmax(0, 1fr); }

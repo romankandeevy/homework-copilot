@@ -166,6 +166,22 @@ test.describe('адаптация под телефон', () => {
     await expect(photoButton).toHaveCSS('color', 'rgb(0, 0, 0)')
   })
 
+  /* Витрину проверяем теми же ширинами, что и рабочую главную.
+
+     8 сентября первый экран получил слово «бесплатно» крупным кеглем в
+     строке чисел, и на 320 пикселях колонка выходила 78 пикселей, а слово -
+     полтораста: страница уезжала вбок на 18. На 375 всё было в порядке, и
+     проверка этого не видела. */
+  for (const viewport of phoneViewports) {
+    test(`витрина не переполняется на ${viewport.width}px`, async ({ page }) => {
+      await page.setViewportSize(viewport)
+      await page.goto('/')
+
+      await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+      await expectNoPageOverflow(page)
+    })
+  }
+
   for (const viewport of phoneViewports) {
     test(`главная не переполняется на ${viewport.width}px`, async ({ page }) => {
       await page.setViewportSize(viewport)
