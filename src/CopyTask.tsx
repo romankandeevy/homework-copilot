@@ -255,6 +255,10 @@ export default function CopyTask({
   }
 
   const many = entries.length > 1
+  /* Гость, у которого бесплатное решение ещё не потрачено: ему цену в шапке
+     не показываем. Право на бесплатный разбор считает база
+     (`public.claim_guest_solution`), здесь только то, что видно клиенту. */
+  const showsFreeOffer = !signedIn && !freeSolutionUsed
 
   return (
     <section className="copy-task" aria-labelledby="copy-task-title">
@@ -271,18 +275,28 @@ export default function CopyTask({
 
         {/* Цена стоит до ввода, а не после: узнать про оплату уже после того,
             как условие набрано, читается как подвох. Точная сумма зависит от
-            задачи, поэтому до ввода честно писать «от», а не среднее. */}
-        <p className="copy-task-price">
-          <strong>{total > 0 ? formatRubles(total) : `от ${formatRubles(minimumSolutionPriceKopecks)}`}</strong>
-          <span>{total > 0 ? (many ? `за ${taskCountLabel(filled.length)}` : 'за решение') : 'за решение'}</span>
-          {!signedIn && (
-            <em>
-              {freeSolutionUsed
-                ? 'Зарегистрируйся: на счёт придут 20 ₽ — это ещё пять решений'
-                : 'Первое решение — бесплатно и без регистрации'}
-            </em>
-          )}
-        </p>
+            задачи, поэтому до ввода честно писать «от», а не среднее.
+
+            Но у того, кто ещё не вошёл и не потратил бесплатное решение,
+            платить нечем и незачем: разбор 8 сентября нашёл здесь «от 4 ₽»
+            выше зелёного «первое решение бесплатно», то есть глаз ловил цену
+            раньше, чем узнавал, что первая задача ничего не стоит. Такому
+            человеку в шапке стоит только обещание, а цена ждёт под формой -
+            там же, где строка про то, от чего она зависит. */}
+        {showsFreeOffer ? (
+          <p className="copy-task-price is-free">
+            <strong>Бесплатно</strong>
+            <span>первая задача, без регистрации</span>
+          </p>
+        ) : (
+          <p className="copy-task-price">
+            <strong>{total > 0 ? formatRubles(total) : `от ${formatRubles(minimumSolutionPriceKopecks)}`}</strong>
+            <span>{total > 0 ? (many ? `за ${taskCountLabel(filled.length)}` : 'за решение') : 'за решение'}</span>
+            {!signedIn && (
+              <em>Зарегистрируйся: на счёт придут 20 ₽ — это ещё пять решений</em>
+            )}
+          </p>
+        )}
       </header>
 
       <form className="copy-task-form" aria-label="Задачи" onSubmit={submit}>
@@ -417,7 +431,9 @@ export default function CopyTask({
             <p className="task-entry-helper">
               {filled.length > 1
                 ? `Спишется ${formatRubles(total)} за ${taskCountLabel(filled.length)}. Не решится — деньги вернутся на баланс.`
-                : 'Цена зависит от задачи: длинное условие и фотография дороже. Не решится — деньги вернутся на баланс.'}
+                : showsFreeOffer
+                  ? `Первая задача бесплатна. Дальше от ${formatRubles(minimumSolutionPriceKopecks)}: цена зависит от задачи — длинное условие и фотография дороже.`
+                  : 'Цена зависит от задачи: длинное условие и фотография дороже. Не решится — деньги вернутся на баланс.'}
             </p>
           )}
       </form>
