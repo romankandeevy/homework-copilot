@@ -273,15 +273,21 @@ function LandingHeader({ signedIn, theme, onToggleTheme }: { signedIn: boolean; 
   )
 }
 
-/* Числа первого экрана. Цена - `src/lib/solutionPricing.ts`: там пол в
-   400 копеек и потолок в 1200, поэтому здесь «от 4 ₽», а не одно число.
+/* Числа первого экрана. Рублей здесь нет намеренно.
+
+   Разбор 8 сентября: на одном экране стояли «от 4 ₽», «после регистрации
+   20 ₽ - это ещё пять задач» и «первое решение бесплатно и без аккаунта».
+   Человек не понимал, что делать первым - регистрироваться ради двадцати
+   рублей или решать бесплатно, - и два обещания конкурировали. Обещание
+   первого экрана осталось одно: первая задача бесплатна. Всё про цену -
+   в секции «Цена», её источник `src/lib/solutionPricing.ts`.
+
    Предметы и классы - `src/CopyTask.tsx`, срок - карточка ожидания в
-   `SolutionQueue`, проход модели и проверка - `server/geometrySolutionEngine.ts`. */
+   `SolutionQueue`, право на бесплатное решение - `public.claim_guest_solution`. */
 const heroMarks = [
-  { value: 'от 4 ₽', note: 'за решение: цена зависит от размера задачи' },
+  { value: 'бесплатно', note: 'первая задача, без регистрации' },
   { value: '14', note: 'предметов, 5-11 класс' },
   { value: '15-70 с', note: 'обычно занимает разбор' },
-  { value: '0 ₽', note: 'если решение не получилось' },
 ]
 
 const steps = [
@@ -473,16 +479,19 @@ export default function LandingPage() {
                 для тетради: дано, ход решения, чертёж, ответ. Любой предмет,
                 5-11 класс, учебник неважен.
               </p>
+              {/* Действие на первом экране одно. «Как это работает» осталось
+                  строкой-ссылкой, а не второй кнопкой того же веса: это
+                  указатель вниз по странице, а не выбор, равный главному. */}
               <div className="hero-actions">
                 <a className="landing-primary-action" href={appPath}>
                   {signedIn ? 'Открыть приложение' : 'Решить задачу'}
                   <ArrowRight size={18} weight="bold" aria-hidden="true" />
                 </a>
-                <a className="landing-secondary-action" href="#how" onClick={scrollToHow}>Как это работает</a>
+                <a className="landing-quiet-action" href="#how" onClick={scrollToHow}>Как это работает</a>
               </div>
               <ul className="hero-facts">
-                <li><Check size={15} weight="bold" aria-hidden="true" />После регистрации 20 ₽ на счёте - это ещё пять задач по минимальной цене</li>
-                <li><Check size={15} weight="bold" aria-hidden="true" />Не решилась - деньги остаются на балансе</li>
+                <li><Check size={15} weight="bold" aria-hidden="true" />Регистрация нужна со второй задачи</li>
+                <li><Check size={15} weight="bold" aria-hidden="true" />Не решилась - платить не нужно</li>
               </ul>
             </div>
 

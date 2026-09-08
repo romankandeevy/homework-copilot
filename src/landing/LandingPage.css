@@ -92,6 +92,21 @@
 .landing-secondary-action:hover { border-color: var(--color-border-strong); background: var(--color-surface-raised); }
 .landing-secondary-action.is-quiet { background: transparent; }
 
+/* Указатель вниз по странице, а не второе действие: рамки нет, вес меньше.
+   Высота всё равно не ниже 44 пикселей - по нему целятся пальцем. */
+.landing-quiet-action {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  padding: 0 var(--space-2);
+  color: var(--color-accent);
+  font-size: var(--text-ui);
+  font-weight: var(--weight-semibold);
+  text-decoration: none;
+}
+
+.landing-quiet-action:hover { color: var(--color-accent-hover); text-decoration: underline; }
+
 .landing-ghost-action {
   min-height: 2.75rem;
   padding: 0 var(--space-3);
@@ -455,7 +470,7 @@
    экран. Колонки сами перестраиваются в две на узком экране. */
 .hero-marks {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: clamp(1.25rem, 3vw, 2.5rem);
   max-width: 60rem;
   margin: clamp(2.5rem, 5vw, 3.5rem) 0 0;
@@ -1190,7 +1205,7 @@
 
   .feature-list { grid-template-columns: minmax(0, 1fr); }
   .schedule-band { grid-template-columns: minmax(0, 1fr); }
-  .hero-marks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .hero-marks { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
   .hero-actions { flex-direction: column; align-items: stretch; }
   .hero-actions a { width: 100%; }
   .paper-head { grid-template-columns: minmax(0, 1fr); }
