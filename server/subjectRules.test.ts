@@ -141,3 +141,137 @@ describe('правила предмета', () => {
     expect(subjectRuleQuestions('Танцы').map((rule) => rule.id)).toEqual(['explanation-explains', 'answer-answers-question'])
   })
 })
+
+/* Лист сдают учителю без разбора, и он обязан читаться сам по себе.
+
+   Прогон 7 сентября: у семи точных предметов ответы верные, а запись
+   несдаваемая. Эти правила - ровно про те семь случаев. */
+describe('лист самодостаточен', () => {
+  it('ловит обозначение, которого никто не вводил', () => {
+    // Алгебра с параметром: «g(1) = -a < 0» при том, что g нигде нет.
+    const issues = verifySubjectRules(solution({
+      subject: 'Алгебра',
+      textbookId: 'algebra',
+      condition: 'Найти все значения параметра a, при которых уравнение имеет ровно три корня.',
+      taskType: 'calculation',
+      steps: ['x² - (4 + a)x + 3 = 0', 'g(1) = -a < 0, g(3) = -3a < 0 ⇒ 2 корня'],
+      answer: 'a = 4 − 2√3',
+    }))
+    expect(issues.some((issue) => issue.includes('g(...)'))).toBe(true)
+  })
+
+  it('молчит, когда обозначение введено строкой выше', () => {
+    const issues = verifySubjectRules(solution({
+      subject: 'Алгебра',
+      textbookId: 'algebra',
+      condition: 'Найти все значения параметра a, при которых уравнение имеет ровно три корня.',
+      taskType: 'calculation',
+      steps: ['g(x) = x² - (4 + a)x + 3', 'g(1) = -a < 0, g(3) = -3a < 0 ⇒ 2 корня'],
+      answer: 'a = 4 − 2√3',
+    }))
+    expect(issues.some((issue) => issue.includes('g(...)'))).toBe(false)
+  })
+
+  it('не требует вводить sin и C(n, k)', () => {
+    const issues = verifySubjectRules(solution({
+      taskType: 'calculation',
+      steps: ['C(9, 4) = 126', 'sin(30°) = 0,5, значит высота равна 6 см'],
+      answer: '126',
+    }))
+    expect(issues.some((issue) => issue.includes('использовано, но нигде не введено'))).toBe(false)
+  })
+
+  it('ловит комбинаторику из одной формулы без слов', () => {
+    // 7 сентября: весь лист - «A(8,4) = 8 · 7 · 6 · 5 = 1680». Откуда 8 и 4,
+    // на листе не сказано, всё рассуждение осталось в разборе.
+    const issues = verifySubjectRules(solution({
+      taskType: 'calculation',
+      condition: 'Из цифр 1-9 составляют пятизначные числа без повторяющихся цифр. Найти количество чисел, кратных 5.',
+      given: [],
+      steps: ['A(8,4) = 8 · 7 · 6 · 5 = 1680'],
+      answer: '1680',
+    }))
+    expect(issues).toContain('На листе только формула: скажи словами, что считает каждый множитель')
+  })
+
+  it('ловит направление без правила левой руки', () => {
+    const issues = verifySubjectRules(solution({
+      subject: 'Физика',
+      textbookId: 'physics',
+      taskType: 'calculation',
+      condition: 'Стержень скользит по рельсам, B = 0,80 Тл. Найти силу тока и направление силы Ампера.',
+      given: ['B = 0,80 Тл', 'R = 0,40 Ом'],
+      steps: ['F_A = I · B · L', 'Сила Ампера направлена вертикально вверх', 'I = 5 А'],
+      answer: 'I = 5 А, сила Ампера направлена вверх',
+    }))
+    expect(issues).toContain('Направление указано без обоснования: назови правило левой руки, Ленца или буравчика')
+  })
+
+  it('молчит, когда правило названо', () => {
+    const issues = verifySubjectRules(solution({
+      subject: 'Физика',
+      textbookId: 'physics',
+      taskType: 'calculation',
+      condition: 'Найти направление силы Ампера.',
+      given: ['B = 0,80 Тл'],
+      steps: ['По правилу левой руки сила Ампера направлена вертикально вверх'],
+      answer: 'вертикально вверх',
+    }))
+    expect(issues.some((issue) => issue.includes('правило левой руки'))).toBe(false)
+  })
+
+  it('ловит величину условия, потерянную в «Дано»', () => {
+    const issues = verifySubjectRules(solution({
+      subject: 'Физика',
+      textbookId: 'physics',
+      taskType: 'calculation',
+      condition: 'Стержень массой 0,20 кг, длиной 0,50 м, R = 0,40 Ом, g = 10 м/с². Найти скорость.',
+      given: ['m = 0,20 кг', 'L = 0,50 м', 'R = 0,40 Ом'],
+      steps: ['По правилу левой руки сила Ампера направлена вверх', 'v = 5 м/с'],
+      answer: 'v = 5 м/с',
+    }))
+    expect(issues.some((issue) => issue.includes('В «Дано» нет величины'))).toBe(true)
+  })
+
+  it('требует программу в своём поле, а не в строках решения', () => {
+    // 7 сентября: «Python: count = {0:1}; s = 0; ans = 0» - код втиснут в
+    // строку тетради, где нет ни отступов, ни переносов.
+    const issues = verifySubjectRules(solution({
+      subject: 'Информатика',
+      textbookId: 'informatics',
+      taskType: 'calculation',
+      condition: 'Посчитать количество подмассивов с суммой, кратной k. Решение на Python.',
+      given: [],
+      steps: ['Python: count = {0:1}; s = 0; ans = 0', 'Ответ на тесте: 6'],
+      answer: '6',
+    }))
+    expect(issues.some((issue) => issue.includes('Программа не приложена'))).toBe(true)
+  })
+
+  it('молчит, когда программа лежит в code', () => {
+    const issues = verifySubjectRules(solution({
+      subject: 'Информатика',
+      textbookId: 'informatics',
+      taskType: 'calculation',
+      condition: 'Посчитать количество подмассивов с суммой, кратной k. Решение на Python.',
+      given: [],
+      steps: ['Идея: одинаковые остатки префиксных сумм дают подмассив, кратный k', 'На тесте получается 6'],
+      code: { language: 'python', text: 'count = {0: 1}\ns = 0\nans = 0' },
+      answer: '6',
+    }))
+    expect(issues.some((issue) => issue.includes('Программа не приложена'))).toBe(false)
+  })
+
+  it('ловит разбор одного случая, когда условие просит обосновать все', () => {
+    const issues = verifySubjectRules(solution({
+      subject: 'Алгебра',
+      textbookId: 'algebra',
+      taskType: 'calculation',
+      condition: 'Найти все значения a, при которых уравнение имеет три корня. Обосновать количество корней при разных a.',
+      given: [],
+      steps: ['g(x) = x² - 4x + 3', 'D = 0 ⇒ a = 4 - 2√3'],
+      answer: 'a = 4 − 2√3',
+    }))
+    expect(issues.some((issue) => issue.includes('разобран один'))).toBe(true)
+  })
+})

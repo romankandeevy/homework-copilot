@@ -330,3 +330,36 @@ test('task 5 is a compact checked drawing on mobile, not a text wall', async ({ 
   await page.screenshot({ path: testInfo.outputPath('task-5-mobile.png'), fullPage: true })
   expect(failures).toEqual({ consoleErrors: [], pageErrors: [], failedResponses: [], failedRequests: [] })
 })
+
+/* Программа на листе.
+
+   7 сентября на проде информатика вернула код на Python, втиснутый в две
+   строки тетради: «Python: count = {0:1}; s = 0; ans = 0». В строке тетради
+   нет ни отступов, ни переносов, ни моноширинного шрифта - класть код было
+   некуда. Теперь у него своё поле и свой блок. */
+test('программа лежит отдельным блоком и не растягивает лист', async ({ page }) => {
+  const failures = trackRuntimeFailures(page)
+  await page.setViewportSize({ width: 390, height: 844 })
+  const condition = 'Проведите три прямые так, чтобы каждые две из них пересекались. Обозначьте все точки пересечения этих прямых. Сколько получилось точек? Рассмотрите все возможные случаи.'
+  await seedSolution(page, {
+    ...solution('3', condition),
+    code: {
+      language: 'python',
+      text: 'count = {0: 1}\ns = 0\nans = 0\nfor x in arr:\n    s = (s + x) % k\n    ans += count.get(s, 0)\n    count[s] = count.get(s, 0) + 1',
+    },
+  })
+  await mockTaskLookup(page)
+
+  await page.goto('/solutions/geometry/3')
+
+  await expect(page.getByRole('heading', { name: 'Решение № 3' })).toBeVisible()
+  const code = page.locator('.notebook-sheet-code')
+  await expect(code).toHaveCount(1)
+  await expect(code.getByRole('heading', { name: 'Программа' })).toBeVisible()
+  // Отступы и переносы сохранены: их-то ради блок и заводили.
+  await expect(code.locator('pre code')).toContainText('    s = (s + x) % k')
+
+  // Длинная строка прокручивается внутри блока, страница по ширине стоит.
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
+  expect(failures).toEqual({ consoleErrors: [], pageErrors: [], failedResponses: [], failedRequests: [] })
+})

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { evaluateExpression, verifyWorksheet, verifyWorksheetDerivation } from './worksheet.ts'
+import { evaluateExpression, verifyAnswerDerivation, verifyWorksheet, verifyWorksheetDerivation } from './worksheet.ts'
 
 /* Живой отказ 6 сентября: обе модели уронили ровно один множитель в
    переборе случаев, а сложили правильно. Проверка формата такого не видит,
@@ -109,5 +109,67 @@ describe('происхождение чисел', () => {
 
   it('пустой черновик проверять нечего', () => {
     expect(verifyWorksheetDerivation([], condition)).toEqual([])
+  })
+})
+
+/* Ответ появляется на глазах у ученика, а не готовым.
+
+   7 сентября на проде химия отдала «V(NO₂) = 2,1 л». Число верное, а лист
+   обрывается на «n(Cu) = 3/64 моль»: строки, где 3/64 превращается в 2,1,
+   нет ни в решении, ни в черновике. Ученик такое у доски не выведет. */
+describe('происхождение ответа', () => {
+  const condition = 'Смесь Mg, Al, Cu массой 15,0 г + избыток HCl → 13,44 л H₂, остаток 3,0 г. Найти массовые доли и объём NO₂. Vm = 22,4.'
+  const given = ['m(смеси) = 15,0 г', 'V(H₂) = 13,44 л', 'm(остатка) = 3,0 г']
+  const steps = [
+    'm(Cu) = 3,0 г, w(Cu) = 3,0 / 15,0 = 0,20 (20%)',
+    'w(Mg) = 4,8 / 15,0 = 0,32 (32%)',
+    'w(Al) = 7,2 / 15,0 = 0,48 (48%)',
+    'n(Cu) = 3,0 / 64 = 3/64 моль',
+  ]
+
+  it('ловит объём, который никто не выводил', () => {
+    const issues = verifyAnswerDerivation(
+      'w(Mg) = 32%, w(Al) = 48%, w(Cu) = 20%, V(NO₂) = 2,1 л',
+      [],
+      condition,
+      given,
+      steps,
+    )
+    expect(issues).toHaveLength(1)
+    expect(issues[0]).toContain('2,1')
+  })
+
+  it('молчит, когда вывод дописан на лист', () => {
+    expect(verifyAnswerDerivation(
+      'w(Mg) = 32%, w(Al) = 48%, w(Cu) = 20%, V(NO₂) = 2,1 л',
+      [],
+      condition,
+      given,
+      [...steps, 'V(NO₂) = 2 · 3/64 · 22,4 = 2,1 л'],
+    )).toEqual([])
+  })
+
+  it('принимает долю, записанную процентами', () => {
+    // На листе 0,32, в ответе 32 % - это одно и то же число.
+    expect(verifyAnswerDerivation('w(Mg) = 32%', [], 'Найти массовую долю магния.', [], ['w(Mg) = 4,8 / 15,0 = 0,32'])).toEqual([])
+  })
+
+  it('принимает округление', () => {
+    // Астрономия: посчитано 10^0,536 = 3,4356, в ответе стоит 3,42.
+    expect(verifyAnswerDerivation(
+      'L/L☉ = 3,42',
+      [{ label: 'светимость', expression: '10^0.536', value: '3.4356' }],
+      'Найти светимость.',
+      [],
+      [],
+    )).toEqual([])
+  })
+
+  it('не придирается к счётному ответу до дюжины', () => {
+    expect(verifyAnswerDerivation('12 сторон', [], 'Сколько сторон имеет многоугольник?', [], ['n = 12'])).toEqual([])
+  })
+
+  it('принимает число, взятое прямо из условия', () => {
+    expect(verifyAnswerDerivation('AB = 13 см', [], 'В треугольнике AB = 13 см. Найти AB.', [], [])).toEqual([])
   })
 })

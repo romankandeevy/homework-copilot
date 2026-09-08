@@ -8,7 +8,7 @@ web
 
 ## Users
 
-Students who want to copy school homework, currently represented by an 8th-grade use case. They expect the shortest possible path from a task number to a finished solution that can be rewritten into a notebook.
+Students in grades 7-11 who want to copy school homework, plus university students bringing coursework. They expect the shortest possible path from a task to a finished solution that can be rewritten into a notebook. The stated grade decides which methods a solution may use: a correct answer obtained by a method the class has not covered cannot be handed in.
 
 ## Product Purpose
 

@@ -1571,6 +1571,36 @@
   font-weight: 700;
 }
 
+/* Программа на листе.
+
+   Строка тетради программу не держит: в ней нет ни отступов, ни переносов,
+   ни моноширинного шрифта. У кода свой блок - на клетчатой бумаге он лежит
+   как распечатка, вклеенная в тетрадь: светлая подложка, рамка, свой шрифт.
+   Длинная строка прокручивается внутри блока, лист по ширине не растягивая:
+   иначе поехала бы вся страница. */
+.notebook-sheet-code {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+}
+
+.notebook-sheet-code pre {
+  margin: 0;
+  padding: 0.6rem 0.75rem;
+  overflow-x: auto;
+  border: 1px solid color-mix(in srgb, currentcolor 25%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, currentcolor 5%, transparent);
+}
+
+.notebook-sheet-code code {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.85em;
+  line-height: 1.5;
+  white-space: pre;
+  tab-size: 4;
+}
+
 /* Развёрнутый ответ: абзацы с красной строки, как в тетради по литературе. */
 .notebook-sheet-prose {
   display: grid;

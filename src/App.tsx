@@ -778,6 +778,9 @@ function UnderstandingPage({
       // Копия уходит в тетрадь той же записью, что и на листе: с номерами
       // шагов и без модельной нумерации внутри строки.
       ...source.steps.map((step, index) => `${index + 1}) ${step.replace(/^\s*\d{1,2}[).]\s*/u, '')}`),
+      // Программа копируется отдельным блоком и без нумерации: её вставляют
+      // в редактор и запускают, а не переписывают в тетрадь построчно.
+      ...(source.code?.text ? ['', 'Программа:', source.code.text] : []),
       ...(source.answer ? ['Ответ: ' + source.answer] : []),
     ].join('\n')
 
@@ -948,6 +951,19 @@ function UnderstandingPage({
                   </ol>
                 )}
             </section>
+            {/* Программа - не строка тетради.
+
+                7 сентября информатика вернула код на Python, втиснутый в две
+                строки листа: «Python: count = {0:1}; s = 0; ans = 0». Класть
+                его было некуда. Теперь у него своё поле и свой блок:
+                моноширинный, с отступами, с прокруткой внутри себя - лист по
+                ширине он не растягивает. */}
+            {generatedSolution.code?.text && (
+              <section className="notebook-sheet-code">
+                <h2>Программа</h2>
+                <pre><code>{generatedSolution.code.text}</code></pre>
+              </section>
+            )}
             {generatedSolution.analysis && (
               <section className="notebook-sheet-analysis">
                 <WrittenAnalysis analysis={generatedSolution.analysis} />

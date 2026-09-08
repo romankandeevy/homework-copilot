@@ -407,3 +407,82 @@ export function verifyWorksheet(lines: readonly WorksheetLine[]): string[] {
 function formatComputed(value: number) {
   return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(6)))
 }
+
+/* Откуда взялся сам ответ.
+
+   7 сентября на проде химия отдала «V(NO₂) = 2,1 л» - число верное, а в
+   решении его нет: лист обрывается на «n(Cu) = 3/64 моль», и ни одной
+   строки, где 3/64 превращается в 2,1, не написано. Ответ появился
+   готовым. Ученик, переписав такое в тетрадь, у доски его не выведет.
+
+   Проверка происхождения (verifyWorksheetDerivation) сюда не доставала:
+   она смотрит числа внутри выражений черновика, а ответ - вообще не
+   черновик. Между тем ответ и есть то, ради чего задачу решали.
+
+   Целые числа до дюжины пропускаем по той же причине, что и там: «12
+   сторон», «5 корней» считаются на пальцах и вывода не требуют. А вот
+   дробное число в ответе - всегда результат счёта, и оно обязано быть
+   получено на глазах у ученика.
+
+   Сравниваем числами, а не строками: ответ округляют («≈ 3,42» при
+   посчитанных 3,4356), доли пишут процентами («32 %» при посчитанных
+   0,32). Строгое совпадение отвергало бы верные решения. */
+function knownValues(
+  worksheet: readonly WorksheetLine[],
+  condition: string,
+  given: readonly string[],
+  steps: readonly string[],
+) {
+  const values: number[] = []
+  const add = (raw: string) => {
+    const size = Number(raw)
+    if (Number.isFinite(size)) values.push(Math.abs(size))
+  }
+  for (const number of numbersIn(condition)) add(number)
+  for (const line of given) for (const number of numbersIn(line)) add(number)
+  /* Строки решения - тоже вывод, и главный: их ученик и читает. Черновик
+     ему не показывают вовсе. Число, посчитанное на листе, выведено. */
+  for (const line of steps) for (const number of numbersIn(line)) add(number)
+  for (const line of worksheet) {
+    const value = parseWorksheetValue(line.value)
+    if (value !== null) values.push(Math.abs(value))
+    for (const number of numbersIn(line.value)) add(number)
+  }
+  return values
+}
+
+export function verifyAnswerDerivation(
+  answer: string,
+  worksheet: readonly WorksheetLine[],
+  condition: string,
+  given: readonly string[],
+  steps: readonly string[],
+): string[] {
+  const known = knownValues(worksheet, condition, given, steps)
+  const percent = answer.includes('%')
+  const issues: string[] = []
+
+  for (const raw of numbersIn(answer)) {
+    const size = Number(raw)
+    if (!Number.isFinite(size)) continue
+    if (schoolConstants.has(raw)) continue
+    if (Number.isInteger(size) && size < traceableFrom) continue
+
+    // Доля и проценты - одно и то же число в двух записях.
+    const wanted = percent ? [size, size / 100, size * 100] : [size]
+    const found = known.some((value) => wanted.some((target) => {
+      const scale = Math.max(Math.abs(target), value, 1)
+      return Math.abs(value - Math.abs(target)) <= scale * 1e-2
+    }))
+    if (!found) {
+      // В замечание число возвращается школьной записью: numbersIn переводит
+      // запятую в точку для счёта, а модель читает наш текст как тетрадный.
+      issues.push(
+        `Ответ ${raw.replace('.', ',')} нигде не выведен: ни в условии, ни в решении этого числа нет. `
+        + 'Допиши на лист вычисление, из которого оно получается',
+      )
+    }
+  }
+
+  return [...new Set(issues)].slice(0, 2)
+}

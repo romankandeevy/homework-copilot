@@ -34,6 +34,8 @@ export type SubjectRule = {
    выражение молча переставало находить «12 км». Вместо неё запрет на
    продолжение буквой, чтобы «м» не срабатывало внутри «минут». */
 const unitPattern = /\d[\d\s.,]*\s*(?:км\/ч|м\/с|г\/моль|моль|мин|сут|руб|мм|мл|мг|км|кг|дм|см|°C|Дж|Вт|Ом|Па|м|г|т|л|с|ч|Н|В|А|°|%|₽)(?![а-яёa-z])/iu
+// То же выражение для перебора всех величин условия, а не первой попавшейся.
+const numberWithUnitPattern = new RegExp(unitPattern.source, 'giu')
 const numberPattern = /\d/u
 
 function text(solution: HomeworkSolution) {
@@ -102,6 +104,118 @@ const formulaBeforeNumbers: SubjectRule = {
   applies: (solution) => solution.taskType === 'calculation',
 }
 
+/* Обозначение вводится раньше, чем используется.
+
+   7 сентября на проде алгебра с параметром: в решении стояло
+   «g(1) = -a < 0, g(3) = -3a < 0» - и функции g в записи нет нигде. Модель
+   держала её в уме, а ученик читает лист с начала и упирается в букву,
+   которая взялась ниоткуда. Такую запись у доски не защитить.
+
+   Ищем обращения вида «буква(аргумент)» и требуем, чтобы раньше по листу
+   стояла строка, где эта буква определена. Известные функции и обозначения
+   комбинаторики сюда не входят: sin, lg, C(n,k) вводить не надо. */
+const knownFunctionNames = new Set([
+  'sin', 'cos', 'tg', 'ctg', 'sec', 'cosec', 'arcsin', 'arccos', 'arctg',
+  'lg', 'ln', 'log', 'exp', 'abs', 'min', 'max', 'sh', 'ch',
+  'A', 'C', 'P', 'V', 'S', 'M', 'm', 'n', 'w', 'Q', 'R', 'I', 'U', 'E', 'F', 'T', 'N', 'k', 'd', 'p',
+])
+
+const symbolIntroduced: SubjectRule = {
+  id: 'symbol-introduced',
+  question: 'Каждое введённое обозначение - функция g(x), вспомогательная величина - определено раньше, чем использовано?',
+  applies: (solution) => solution.steps.length > 0,
+  verify: (solution) => {
+    const used = new Map<string, number>()
+    solution.steps.forEach((line, index) => {
+      for (const match of line.matchAll(/(?<![\p{L}\d])([a-zA-Zа-яёА-ЯЁ])\s*\(/gu)) {
+        const name = match[1]
+        if (knownFunctionNames.has(name)) continue
+        if (!used.has(name)) used.set(name, index)
+      }
+    })
+    for (const [name, firstUse] of used) {
+      /* Определением считаем строку, где функция задана от буквы -
+         «g(x) = x² + 1» - или введена словом: «Пусть g(x)», «обозначим
+         g(x)». Подстановка числа определением не является: «g(1) = -a»
+         сообщает значение, а не говорит, что такое g. Ровно так и вышло
+         7 сентября - лист начинался с подстановки. */
+      const defined = solution.steps.slice(0, firstUse + 1).some((line) => (
+        new RegExp(`${name}\\s*\\(\\s*[a-zа-яё][^)]*\\)\\s*(?:=|:=|-)`, 'iu').test(line)
+        || new RegExp(`(?:пусть|обознач\\p{L}*|введ[её]м|положим)\\s+${name}\\s*\\(`, 'iu').test(line)
+      ))
+      if (!defined) return `Обозначение ${name}(...) использовано, но нигде не введено: определи его строкой до первого применения`
+    }
+    return null
+  },
+}
+
+/* Задание выполняется целиком.
+
+   Условие алгебры 7 сентября просило «найти все значения параметра a... и
+   обосновать количество корней при разных a». Найдено было одно значение,
+   разбора остальных случаев на листе нет вовсе - половина задания не
+   выполнена, а решение прошло как верное. */
+const casesAnalysed: SubjectRule = {
+  id: 'cases-analysed',
+  question: 'Если условие просит обосновать или исследовать - разобраны все случаи, а не только искомый?',
+  applies: (solution) => conditionMentions(
+    solution,
+    /обоснуй|обоснова|исследуй|исследова|при каких|при разных|в зависимости от|сколько корней|количество корней/u,
+  ),
+  verify: (solution) => {
+    const caseLines = solution.steps.filter((line) => /(?:^|[\s(])(?:при|если)\s+[a-zа-яё]/iu.test(line))
+    return caseLines.length >= 2
+      ? null
+      : 'Условие просит разобрать случаи, а разобран один: выпиши, сколько корней получается при каждом промежутке значений параметра'
+  },
+}
+
+/* Множители названы словами.
+
+   7 сентября комбинаторика вышла листом из одной строки:
+   «A(8,4) = 8 · 7 · 6 · 5 = 1680». Ответ верный, а откуда 8 и откуда 4 -
+   на листе не сказано, всё рассуждение осталось в разборе. Разбор ученик
+   учителю не сдаёт: он сдаёт лист. */
+const factorsExplained: SubjectRule = {
+  id: 'factors-explained',
+  question: 'На листе словами сказано, что считает каждый множитель или сочетание?',
+  applies: (solution) => solution.taskType === 'calculation'
+    && solution.steps.some((line) => /[ACP]\s*\(|!/u.test(line)),
+  verify: (solution) => (solution.steps.some((line) => /[а-яё]{3,}/iu.test(line))
+    ? null
+    : 'На листе только формула: скажи словами, что считает каждый множитель'),
+}
+
+/* Направление обосновано правилом.
+
+   7 сентября физика назвала силу Ампера направленной вверх - верно, - но
+   без правила левой руки. В школе на доске спрашивают именно правило, и
+   ответ без него не принимают. */
+const directionJustified: SubjectRule = {
+  id: 'direction-justified',
+  question: 'Направление силы или тока обосновано правилом левой руки, Ленца или буравчика?',
+  applies: (solution) => conditionMentions(solution, /направлени|куда направлен|в какую сторону/u),
+  verify: (solution) => (mentions(text(solution), /правил\p{L}*\s+(?:лев|прав)\p{L}*\s+рук|правил\p{L}*\s+ленца|буравчик|правил\p{L}*\s+винта/u)
+    ? null
+    : 'Направление указано без обоснования: назови правило левой руки, Ленца или буравчика'),
+}
+
+/* Программа лежит в своём поле, а не в строке тетради.
+
+   7 сентября информатика вернула решение, в котором код на Python втиснут
+   в две строки тетради: «Python: count = {0:1}; s = 0; ans = 0». В строке
+   тетради нет ни отступов, ни переносов, ни моноширинного шрифта - в ней
+   программы не бывает. Поле для кода появилось 8 сентября; правило следит,
+   чтобы модель клала программу туда. */
+const codeProvided: SubjectRule = {
+  id: 'code-provided',
+  question: 'Программа положена в поле code целиком, а не втиснута в строки решения?',
+  applies: (solution) => conditionMentions(solution, /python|паскал|pascal|c\+\+|java|программ|код|напиш\p{L}*\s+функци/u),
+  verify: (solution) => (solution.code?.text.trim()
+    ? null
+    : 'Программа не приложена: положи её целиком в поле code, а в решение - разбор алгоритма словами'),
+}
+
 /* Разбор перед решением.
 
    Это не украшение записи, а то, чем продукт отличается от списывания:
@@ -137,11 +251,11 @@ const commonRules: readonly SubjectRule[] = [
 ]
 
 const rulesBySubject: Record<string, readonly SubjectRule[]> = {
-  mathematics: [numericAnswer, answerUnits, stepsShowWork, {
+  mathematics: [numericAnswer, answerUnits, stepsShowWork, factorsExplained, symbolIntroduced, {
     id: 'check-by-substitution',
     question: 'Найденное значение подставлено обратно и условие сошлось?',
   }],
-  algebra: [numericAnswer, answerUnits, stepsShowWork, {
+  algebra: [numericAnswer, answerUnits, stepsShowWork, symbolIntroduced, casesAnalysed, {
     id: 'roots-checked',
     question: 'Все корни найдены и посторонние отброшены с указанием причины?',
   }, {
@@ -167,15 +281,41 @@ const rulesBySubject: Record<string, readonly SubjectRule[]> = {
     question: 'Числа из условия подписаны у нужных отрезков и углов чертежа?',
     applies: (solution) => solution.diagram.kind !== 'none' && /\d/u.test(solution.condition),
   }],
-  physics: [numericAnswer, answerUnits, formulaBeforeNumbers, {
+  physics: [numericAnswer, answerUnits, formulaBeforeNumbers, directionJustified, {
     id: 'si-units',
-    question: 'Все величины в «Дано» переведены в СИ?',
-    verify: (solution) => (solution.given.length > 0 ? null : 'Раздел «Дано» пуст'),
+    question: 'Все величины в «Дано» переведены в СИ и выписаны все числа из условия?',
+    /* «Дано» собирает все числовые величины условия.
+
+       7 сентября на проде задача про стержень на рельсах пришла с «Дано»
+       из четырёх строк, а g = 10 м/с² в нём не было - хотя в условии оно
+       задано и в решении использовано. Ученик перепишет «Дано» с листа и
+       у доски не сможет сказать, откуда взялось 10. */
+    verify: (solution) => {
+      if (solution.given.length === 0) return 'Раздел «Дано» пуст'
+      const given = solution.given.join(' ')
+      const missing = [...solution.condition.matchAll(numberWithUnitPattern)]
+        .map((match) => match[0].trim())
+        .filter((value) => {
+          const number = value.match(/\d+(?:[.,]\d+)?/u)?.[0]
+          return number ? !given.includes(number) : false
+        })
+      return missing.length > 0
+        ? `В «Дано» нет величины ${missing[0]} из условия: выпиши все заданные числа`
+        : null
+    },
   }, {
     id: 'answer-plausible',
     question: 'Порядок величины в ответе разумен для школьной задачи?',
   }],
   chemistry: [{
+    /* Электронный баланс кодом не проверить: расставленные коэффициенты
+       разбирать пришлось бы полноценным разбором формул. Оставляем
+       вопросом модели - отвергать решение за то, чего мы не умеем
+       проверить, нельзя (AGENTS.md). */
+    id: 'electron-balance',
+    question: 'Для реакции с концентрированной HNO₃, H₂SO₄, KMnO₄ или K₂Cr₂O₇ записан электронный баланс?',
+    applies: (solution) => conditionMentions(solution, /hno₃|hno3|h₂so₄|h2so4|kmno₄|kmno4|k₂cr₂o₇|k2cr2o7|окислит|восстановит/u),
+  }, {
     id: 'equation-balanced',
     question: 'Уравнение реакции уравнено — коэффициенты расставлены?',
     applies: (solution) => conditionMentions(solution, /реакц|уравнени|горени|раствор/u),
@@ -189,7 +329,7 @@ const rulesBySubject: Record<string, readonly SubjectRule[]> = {
     id: 'terms-named',
     question: 'Названы термины и процессы, а не бытовые описания?',
   }],
-  informatics: [{
+  informatics: [codeProvided, {
     id: 'base-marked',
     question: 'У чисел в непривычной системе счисления подписано основание?',
     applies: (solution) => conditionMentions(solution, /систем счислени|двоичн|восьмеричн|шестнадцатеричн/u),
