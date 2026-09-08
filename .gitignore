@@ -58,3 +58,4 @@ photo-prod-mobile-clean.png
 
 # Локальные прогоны против прода
 *.local.mjs
+scratch-*.py
