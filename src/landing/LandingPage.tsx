@@ -518,29 +518,6 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section className="landing-section landing-compare" aria-labelledby="compare-title">
-          <div className="landing-shell">
-            <Reveal className="section-head">
-              <h2 id="compare-title">Решебник ищет задачу. Мы её решаем.</h2>
-              <p className="section-lead">
-                ГДЗ - это заранее собранные ответы к конкретным изданиям. Пока твоя задача оттуда,
-                всё сходится. Стоит появиться карточке от учителя или своему варианту - искать негде.
-              </p>
-            </Reveal>
-
-            <div className="compare-table" role="table" aria-label="Решебник и Homework Copilot">
-              <div className="compare-head" role="row">
-                <span role="columnheader" />
-                <span role="columnheader">Решебник</span>
-                <span role="columnheader" className="is-ours">Homework&nbsp;Copilot</span>
-              </div>
-              {comparison.map((row, index) => (
-                <CompareRow key={row.question} row={row} index={index} />
-              ))}
-            </div>
-          </div>
-        </section>
-
         <section className="landing-section landing-how" id="how" aria-labelledby="how-title">
           <div className="landing-shell">
             <Reveal className="section-head">
@@ -612,6 +589,33 @@ export default function LandingPage() {
                 {subjects.map((subject) => <li key={subject}>{subject}</li>)}
               </ul>
             </Reveal>
+          </div>
+        </section>
+
+        {/* Сравнение с решебником - оборона от конкурента, и до 8 сентября
+            она стояла вторым экраном: человек ещё не понял, что делает
+            сервис, а ему уже объясняли, чем он лучше чужого. Сначала
+            продукт, потом отстройка. */}
+        <section className="landing-section landing-compare" aria-labelledby="compare-title">
+          <div className="landing-shell">
+            <Reveal className="section-head">
+              <h2 id="compare-title">Решебник ищет задачу. Мы её решаем.</h2>
+              <p className="section-lead">
+                ГДЗ - это заранее собранные ответы к конкретным изданиям. Пока твоя задача оттуда,
+                всё сходится. Стоит появиться карточке от учителя или своему варианту - искать негде.
+              </p>
+            </Reveal>
+
+            <div className="compare-table" role="table" aria-label="Решебник и Homework Copilot">
+              <div className="compare-head" role="row">
+                <span role="columnheader" />
+                <span role="columnheader">Решебник</span>
+                <span role="columnheader" className="is-ours">Homework&nbsp;Copilot</span>
+              </div>
+              {comparison.map((row, index) => (
+                <CompareRow key={row.question} row={row} index={index} />
+              ))}
+            </div>
           </div>
         </section>
 
