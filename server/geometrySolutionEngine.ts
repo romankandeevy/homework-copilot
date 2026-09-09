@@ -301,10 +301,11 @@ const numberLineSchema = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['label', 'variable', 'marks', 'regions'],
+        required: ['label', 'variable', 'answer', 'marks', 'regions'],
         properties: {
           label: { type: 'string', description: 'Заголовок прямой: «а)», «б)». Пусто, если пункт один.' },
           variable: { type: 'string', description: 'Имя переменной у стрелки: «x».' },
+          answer: { type: 'string', description: 'Ответ этого пункта промежутком: «x ∈ (-2,5; +∞)».' },
           marks: {
             type: 'array',
             minItems: 0,
@@ -715,7 +716,9 @@ const authorInstructions = [
   // чертежа: и автор, и рецензент решили, что записанных промежутков
   // достаточно, - чертёж требовало само условие.
   'Множество решений неравенства на координатной прямой - это diagram.kind=number-line и numberLine.enabled=true; scene и schematic тогда пустые.',
-  'Прямых столько, сколько пунктов в задании: у каждой label - «а)», «б)», variable - буква переменной. У одного пункта label пустой.',
+  'Прямых столько, сколько пунктов в задании: у каждой label - «а)», «б)», variable - буква переменной, answer - ответ этого пункта промежутком («x ∈ (-2,5; +∞)»). У одного пункта label пустой.',
+  'Неравенство и уравнение решаются столбиком: исходная строка, затем каждое равносильное преобразование своей строкой под ней, последняя строка - найденное множество. Ничего не сокращай и не сливай в одну строку.',
+  'Где обе части умножали или делили, ставь в конце строки школьную пометку через прямую черту: «-7x < -2 |·(-1)», «2x > -5 |:2». Пометка стоит у той строки, к которой относится действие.',
   'marks - границы промежутков числом: value=-2.5 для -2,5, label - тетрадная запись подписи («-2,5», «2/7»), filled=true у нестрогого неравенства (≤, ≥) и false у строгого.',
   'regions - закрашенные промежутки: fromInfinity=true, если множество уходит в -∞, toInfinity=true - если в +∞. Для x > -2,5 это одна region с from=-2.5, toInfinity=true.',
   'Условие «изобразите на координатной прямой», «отметьте на числовой прямой», «покажите множество решений» требует diagramRequired=true и number-line: одних скобок промежутка в ответе недостаточно.',
@@ -1202,6 +1205,7 @@ function normalizeNumberLine(value: unknown): HomeworkNumberLine | null {
     return [{
       label: normalizeNotebookNotation(line.label, 8),
       variable: normalizeNotebookNotation(line.variable, 4) || 'x',
+      answer: normalizeNotebookNotation(line.answer, 60),
       marks,
       regions,
     }]

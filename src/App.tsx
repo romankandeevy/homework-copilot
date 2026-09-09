@@ -35,6 +35,8 @@ import type { TaskSubmission } from './CopyTask'
 import { applicationPath, currentApplicationPath } from './lib/appPath'
 import { keyed } from './lib/listKeys'
 import { NotebookDiagram } from './notebook/NotebookDiagram'
+import { NumberLineFigure } from './notebook/geometry/NumberLineScene'
+import { numberLineParts } from './notebook/numberLineParts'
 import { notebookBlocks } from './notebook/systemOfEquations'
 import LegalPage from './LegalPage'
 import PrivacyNotice from './PrivacyNotice'
@@ -922,6 +924,10 @@ function UnderstandingPage({
   )
 
   if (generatedSolution) {
+    /* Задание из пунктов а)-г) с координатными прямыми верстается по
+       пунктам: столбик преобразований слева, ответ и прямая справа. Если
+       разложить решение по пунктам не вышло, лист остаётся прежним. */
+    const solutionParts = numberLineParts(generatedSolution)
     return (
       <section className="route-page solution-view" aria-labelledby="understanding-page-title">
         <header className="route-page-header">
@@ -980,7 +986,10 @@ function UnderstandingPage({
             {/* Чертёж стоит там же, где в тетради: справа от «Дано» и
                 «Найти», до хода решения. Раньше он существовал только на
                 SVG-листе геометрии, и у остальных предметов пропадал совсем. */}
-            <NotebookDiagram diagram={generatedSolution.diagram} />
+            {/* Прямые пунктов уходят к своим пунктам решения, а не стоят
+                общим блоком в шапке: в тетради каждая прямая нарисована
+                напротив своего пункта, рядом с его ответом. */}
+            {solutionParts.length === 0 && <NotebookDiagram diagram={generatedSolution.diagram} />}
             </div>
             <span className="notebook-sheet-divider" aria-hidden="true" />
             <section className="notebook-sheet-steps">
@@ -992,7 +1001,25 @@ function UnderstandingPage({
                   Сочинение по литературе на четыре абзаца, разложенное по
                   пунктам «1) 2) 3)», читается как план, а не как ответ.
                   Форму даёт контракт: по ней же сервер меряет длину строк. */}
-              {homeworkSolutionForm(generatedSolution.subject, generatedSolution.taskType) === 'essay'
+              {solutionParts.length > 0
+                ? (
+                  <div className="notebook-parts">
+                    {keyed(solutionParts, (part) => `part-${part.label}`).map(({ key, item: part }) => (
+                      <div className="notebook-part" key={key}>
+                        <div className="notebook-part-steps">
+                          {keyed(part.steps, (step) => step).map(({ key: stepKey, item: step }) => (
+                            <p key={stepKey}>{step}</p>
+                          ))}
+                        </div>
+                        <div className="notebook-part-figure">
+                          {part.answer && <p className="notebook-part-answer">Ответ: {part.answer}</p>}
+                          <NumberLineFigure line={part.line} description={generatedSolution.diagram.description} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )
+                : homeworkSolutionForm(generatedSolution.subject, generatedSolution.taskType) === 'essay'
                 ? (
                   <div className="notebook-sheet-prose">
                     {keyed(generatedSolution.steps, (step) => step).map(({ key, item: step }) => (

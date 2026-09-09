@@ -472,12 +472,14 @@ describe('geometry solution quality gate', () => {
         {
           label: 'а)',
           variable: 'x',
+          answer: 'x ∈ (-2,5; +∞)',
           marks: [{ value: -2.5, label: '-2,5', filled: false }],
           regions: [{ from: -2.5, to: null }],
         },
         {
           label: 'в)',
           variable: 'x',
+          answer: 'x ∈ [0; +∞)',
           marks: [{ value: 0, label: '0', filled: true }],
           regions: [{ from: 0, to: null }],
         },

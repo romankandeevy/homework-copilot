@@ -91,6 +91,8 @@ export type HomeworkNumberLine = {
     label: string
     /** Имя переменной у стрелки: «x». */
     variable: string
+    /** Ответ этого пункта: «x ∈ (-2,5; +∞)». Пишется над его прямой. */
+    answer: string
     /** Границы промежутков: закрашенная точка - строгое неравенство не входит. */
     marks: Array<{
       value: number

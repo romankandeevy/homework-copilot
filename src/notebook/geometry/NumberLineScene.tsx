@@ -1,4 +1,3 @@
-import { useId } from 'react'
 import type { HomeworkNumberLine } from '../../lib/homeworkContract'
 import { geometryNotebookLayoutV1 as layout } from '../layouts/geometryNotebookLayoutV1'
 import { keyed } from '../../lib/listKeys'
@@ -56,15 +55,21 @@ function scaleOf(line: Line, left: number, right: number) {
    точка. Со стороны бесконечности уголок обрывается вместе с осью, как в
    тетради. Штрихи режутся по прямоугольнику уголка, поэтому не торчат за
    его края. */
-function NumberLineRegion({ from, to, y, closedLeft, closedRight, clipId }: {
+function NumberLineRegion({ from, to, y, closedLeft, closedRight }: {
   from: number
   to: number
   y: number
   closedLeft: boolean
   closedRight: boolean
-  clipId: string
 }) {
   const top = y - capHeight
+  /* Имя клипа собирается из собственных координат уголка.
+
+     На листе с четырьмя пунктами каждая прямая - отдельная картинка, и
+     счётчик useId у всех начинался заново: id совпадали, браузер брал
+     первый clipPath документа, и штриховку остальных резал чужой
+     прямоугольник - под уголком оставалась пустая рамка. */
+  const clipId = `nl-${Math.round(from)}-${Math.round(to)}-${Math.round(y)}`
   const cap = [
     closedLeft ? `M ${from} ${y} L ${from} ${top}` : `M ${from} ${top}`,
     `L ${to} ${top}`,
@@ -90,15 +95,18 @@ function NumberLineRegion({ from, to, y, closedLeft, closedRight, clipId }: {
   )
 }
 
-function NumberLineRow({ line, y }: { line: Line; y: number }) {
-  const left = sceneLayout.x + sceneLayout.padding + gutterLeft
-  const right = sceneLayout.x + sceneLayout.width - sceneLayout.padding - gutterRight
+function NumberLineRow({ line, y, left, right, showLabel = true }: {
+  line: Line
+  y: number
+  left: number
+  right: number
+  showLabel?: boolean
+}) {
   const at = scaleOf(line, left, right)
   /* Уголок не заходит на остриё стрелки: иначе конец оси распухает и
      стрелка читается не как направление, а как часть штриховки. */
   const clamp = (value: number) => Math.min(Math.max(value, left), right - arrowLength)
-  const clipPrefix = useId()
-  const label = line.label.trim()
+  const label = showLabel ? line.label.trim() : ''
   const variable = line.variable.trim() || 'x'
 
   return (
@@ -112,7 +120,7 @@ function NumberLineRow({ line, y }: { line: Line; y: number }) {
         d={`M ${right - arrowLength} ${y - arrowLength / 2} L ${right} ${y} L ${right - arrowLength} ${y + arrowLength / 2}`}
       />
       <text className="diagram-axis-label" textAnchor="start" x={right + 12} y={y + 14}>{variable}</text>
-      {keyed(line.regions, (region) => `region-${region.from}-${region.to}`).map(({ key, item: region }, index) => {
+      {keyed(line.regions, (region) => `region-${region.from}-${region.to}`).map(({ key, item: region }) => {
         const from = clamp(region.from === null ? left : at(region.from))
         const to = clamp(region.to === null ? right : at(region.to))
         if (to - from < 1) return null
@@ -123,7 +131,6 @@ function NumberLineRow({ line, y }: { line: Line; y: number }) {
             y={y}
             closedLeft={region.from !== null}
             closedRight={region.to !== null}
-            clipId={`${clipPrefix}-${index}`}
             key={key}
           />
         )
@@ -139,7 +146,7 @@ function NumberLineRow({ line, y }: { line: Line; y: number }) {
               r={pointRadius}
             />
             {mark.label.trim() && (
-              <text className="diagram-tick-label" textAnchor="middle" x={x} y={y + 44}>{mark.label.trim()}</text>
+              <text className="diagram-tick-label" textAnchor="middle" x={x} y={y + 40}>{mark.label.trim()}</text>
             )}
           </g>
         )
@@ -160,8 +167,57 @@ export function NumberLineScene({ numberLine, description }: { numberLine: Homew
   return (
     <g className="geometry-diagram number-line" role="img" aria-label={description || 'Координатная прямая'}>
       {keyed(lines, (line) => `line-${line.label}`).map(({ key, item: line }, index) => (
-        <NumberLineRow line={line} y={top + step * index} key={key} />
+        <NumberLineRow
+          line={line}
+          y={top + step * index}
+          left={sceneLayout.x + sceneLayout.padding + gutterLeft}
+          right={sceneLayout.x + sceneLayout.width - sceneLayout.padding - gutterRight}
+          key={key}
+        />
       ))}
     </g>
+  )
+}
+
+
+/* Прямая одного пункта - отдельная картинка.
+
+   В тетради прямая стоит не общим блоком наверху, а напротив своего
+   пункта, рядом с его ответом. Поэтому у пункта своя картинка со своим
+   окном: подпись «а)» там уже стоит в строке решения, и на самой прямой
+   она не нужна. */
+const figureBox = { width: 460, height: 126, padding: 18, axisY: 66 }
+
+export function NumberLineFigure({ line, description }: { line: Line; description: string }) {
+  return (
+    <svg
+      className="notebook-number-line"
+      viewBox={`0 0 ${figureBox.width} ${figureBox.height}`}
+      preserveAspectRatio="xMidYMid meet"
+      role="img"
+      aria-label={description || `Множество решений: ${line.answer || line.label}`}
+    >
+      <g className="geometry-diagram number-line">
+        <NumberLineRow
+          line={line}
+          y={figureBox.axisY}
+          left={figureBox.padding}
+          right={figureBox.width - figureBox.padding - 26}
+          showLabel={false}
+        />
+      </g>
+      {/* Своя картинка - свои стили: правила чертежа живут в <style> листа,
+          а прямая пункта стоит отдельным svg внутри строк решения. */}
+      <style>{`
+        .notebook-number-line .geometry-diagram { opacity: ${layout.strokes.pencilOpacity}; }
+        .notebook-number-line .diagram-axis { fill: none; stroke: ${layout.colors.pencil}; stroke-width: ${layout.strokes.marker * 0.6}px; stroke-linecap: round; stroke-linejoin: round; }
+        .notebook-number-line .diagram-axis-label { fill: ${layout.colors.pencil}; font-family: ${layout.typography.family}; font-weight: ${layout.typography.weight}; font-size: 22px; }
+        .notebook-number-line .diagram-tick-label { fill: ${layout.colors.pencil}; font-family: ${layout.typography.family}; font-weight: ${layout.typography.weight}; font-size: 19px; }
+        .notebook-number-line .number-line-cap { fill: none; stroke: ${layout.colors.pencil}; stroke-width: ${layout.strokes.marker * 0.6}px; stroke-linecap: round; stroke-linejoin: round; }
+        .notebook-number-line .number-line-hatch { fill: none; stroke: ${layout.colors.pencil}; stroke-width: ${layout.strokes.marker * 0.5}px; stroke-linecap: round; }
+        .notebook-number-line .number-line-point-filled { fill: ${layout.colors.pencil}; stroke: ${layout.colors.pencil}; stroke-width: ${layout.strokes.marker * 0.6}px; }
+        .notebook-number-line .number-line-point-hollow { fill: ${layout.colors.paper}; stroke: ${layout.colors.pencil}; stroke-width: ${layout.strokes.marker * 0.6}px; }
+      `}</style>
+    </svg>
   )
 }
