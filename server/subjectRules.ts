@@ -100,11 +100,20 @@ const answerUnits: SubjectRule = {
   verify: (solution) => (unitPattern.test(solution.answer) ? null : 'В ответе нет единицы измерения'),
 }
 
+/* Вычисление - это выкладка, а не обязательно знак «равно».
+
+   9 сентября неравенства 862 дважды не дошли до ученика: правило искало в
+   строках «=», а решение неравенства записывается знаками «>», «<», «≤».
+   Модель обходила его, вписывая «= -5» в середину цепочки, - отсюда же
+   росла лента через ⇒. Считаем выкладкой строку, где знак сравнения стоит
+   между записями с числом или переменной. */
+const workLine = /[=<>≤≥≠][^=<>≤≥≠]*[0-9a-zа-яё(√]/iu
+
 const stepsShowWork: SubjectRule = {
   id: 'steps-show-work',
-  question: 'В решении есть сами вычисления со знаком равенства, а не только вывод?',
+  question: 'В решении есть сами выкладки - равенства или неравенства с числами, а не только вывод?',
   applies: (solution) => solution.taskType === 'calculation',
-  verify: (solution) => (solution.steps.some((line) => line.includes('=')) ? null : 'В решении нет ни одного вычисления'),
+  verify: (solution) => (solution.steps.some((line) => workLine.test(line)) ? null : 'В решении нет ни одного вычисления'),
 }
 
 const latinPointLabels: SubjectRule = {

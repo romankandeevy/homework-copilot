@@ -325,6 +325,34 @@ describe('запись не раздувается и не объявляет н
   /* Неравенства 862 с прода 9 сентября: ход в пункте - три равносильных
      преобразования, и сжатие в строку дало ленту через ⇒. Столбик из
      выкладок правило трогать не должно. */
+  /* 9 сентября неравенства 862 дважды не дошли до ученика: правило искало
+     «=», а решение неравенства пишется знаками «>», «<», «≤». */
+  it('считает выкладкой строку неравенства без знака равенства', () => {
+    const issues = verifySubjectRules(solution({
+      subject: 'Алгебра',
+      textbookId: 'algebra',
+      taskType: 'calculation',
+      condition: '862. Решите неравенство: а) 6 + 2x > 1.',
+      given: [],
+      steps: ['а) 6 + 2x > 1', '2x > -5', 'x > -2,5', 'x ∈ (-2,5; +∞)'],
+      answer: 'а) x ∈ (-2,5; +∞)',
+    }))
+    expect(issues.some((issue) => issue.includes('нет ни одного вычисления'))).toBe(false)
+  })
+
+  it('всё ещё ловит вывод без единой выкладки', () => {
+    const issues = verifySubjectRules(solution({
+      subject: 'Алгебра',
+      textbookId: 'algebra',
+      taskType: 'calculation',
+      condition: '862. Решите неравенство: а) 6 + 2x > 1.',
+      given: [],
+      steps: ['Переносим слагаемые и делим обе части', 'Получаем ответ'],
+      answer: 'а) x ∈ (-2,5; +∞)',
+    }))
+    expect(issues.some((issue) => issue.includes('нет ни одного вычисления'))).toBe(true)
+  })
+
   it('молчит, когда пункт - столбик выкладок без слов', () => {
     const issues = verifySubjectRules(solution({
       subject: 'Алгебра',
