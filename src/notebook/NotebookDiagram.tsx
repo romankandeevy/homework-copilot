@@ -192,11 +192,12 @@ export function NotebookDiagram({ diagram }: { diagram: GeometryDiagramSpec }) {
              как у видимых рёбер, пунктир чаще, чем у вспомогательной линии. */
           .diagram-hidden { stroke-width: ${strokes.triangle}px; stroke-dasharray: 6 5; }
           .diagram-vertex,.diagram-angle-label { fill: ${colors.pencil}; font-size: ${typography.bodySize}px; }
-          /* Координатная прямая: множество решений - жирный луч поверх тонкой
-             оси, граница - кружок. Выколотая точка закрашена бумагой, а не
-             прозрачна: под ней проходит сама ось, и сквозь неё точка
-             читалась бы как перечёркнутая. */
-          .number-line-region { fill: none; stroke: ${colors.pencil}; stroke-width: ${strokes.triangle * 2.1}px; stroke-linecap: butt; }
+          /* Координатная прямая: множество решений забрано уголком и
+             заштриховано наискось, как чертят в тетради. Выколотая точка
+             закрашена бумагой, а не прозрачна: под ней проходит сама ось,
+             и сквозь неё точка читалась бы как перечёркнутая. */
+          .number-line-cap { fill: none; stroke: ${colors.pencil}; stroke-width: ${strokes.marker}px; stroke-linecap: round; stroke-linejoin: round; }
+          .number-line-hatch { fill: none; stroke: ${colors.pencil}; stroke-width: ${strokes.marker * 0.8}px; stroke-linecap: round; }
           .number-line-point-filled { fill: ${colors.pencil}; stroke: ${colors.pencil}; stroke-width: ${strokes.marker}px; }
           .number-line-point-hollow { fill: ${colors.paper}; stroke: ${colors.pencil}; stroke-width: ${strokes.marker}px; }
           .diagram-caption { fill: ${colors.pencil}; font-size: ${typography.goalSize}px; }

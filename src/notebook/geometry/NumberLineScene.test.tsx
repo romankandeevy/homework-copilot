@@ -36,6 +36,7 @@ describe('NumberLineScene', () => {
 
     expect(container.querySelectorAll('.number-line-row')).toHaveLength(3)
     expect(container.querySelectorAll('.number-line-region')).toHaveLength(3)
+    expect(container.querySelectorAll('.number-line-hatch').length).toBeGreaterThan(3)
     expect(container.textContent).toContain('а)')
     expect(container.textContent).toContain('-2,5')
   })
@@ -49,20 +50,25 @@ describe('NumberLineScene', () => {
     expect(container.querySelectorAll('.number-line-point-filled')).toHaveLength(1)
   })
 
-  it('луч в бесконечность доходит до стрелки, но не закрашивает её', () => {
+  it('уголок закрыт стенкой у точки и открыт со стороны бесконечности', () => {
     const { container } = render(<svg>
       <NumberLineScene numberLine={{ lines: [inequalities.lines[0]] }} description="" />
     </svg>)
 
     const axis = container.querySelector('path.diagram-axis')?.getAttribute('d') ?? ''
-    const region = container.querySelector('.number-line-region')?.getAttribute('d') ?? ''
-    const end = (path: string) => Number(path.split('L')[1].trim().split(' ')[0])
-    const start = (path: string) => Number(path.split('M')[1].trim().split(' ')[0])
+    const cap = container.querySelector('.number-line-cap')?.getAttribute('d') ?? ''
+    const axisEnd = Number(axis.split('L')[1].trim().split(' ')[0])
+    const axisStart = Number(axis.split('M')[1].trim().split(' ')[0])
+    const capPoints = [...cap.matchAll(/([ML]) (-?[\d.]+) (-?[\d.]+)/gu)]
 
-    expect(end(region)).toBeLessThan(end(axis))
-    expect(end(region)).toBeGreaterThan(end(axis) - 20)
-    // Выколотая точка стоит внутри оси, а не на её краю.
-    expect(start(region)).toBeGreaterThan(start(axis) + 20)
+    // Стенка у -2,5: путь начинается на оси и идёт вверх той же вертикалью.
+    expect(capPoints[0][1]).toBe('M')
+    expect(Number(capPoints[0][2])).toBeCloseTo(Number(capPoints[1][2]), 5)
+    expect(Number(capPoints[1][3])).toBeLessThan(Number(capPoints[0][3]))
+    // Луч уходит вправо до стрелки и там обрывается без стенки.
+    expect(capPoints).toHaveLength(3)
+    expect(Number(capPoints[2][2])).toBeLessThan(axisEnd)
+    expect(Number(capPoints[0][2])).toBeGreaterThan(axisStart + 20)
   })
 
   it('пустая прямая не рисуется', () => {
