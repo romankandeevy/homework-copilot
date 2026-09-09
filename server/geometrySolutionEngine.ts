@@ -18,6 +18,7 @@ import type {
   HomeworkDecisionSummary,
   HomeworkDiagram,
   HomeworkDiagramScene,
+  HomeworkNumberLine,
   HomeworkSceneAxes,
   HomeworkSchematic,
   HomeworkSolution,
@@ -282,6 +283,65 @@ const schematicSchema = {
   },
 } as const
 
+/* Координатная прямая: по одной на пункт задания.
+
+   Границы промежутка и сами промежутки задаются числами, а не картинкой:
+   выколотая точка, закрашенная точка и жирный луч - дело листа. Бесконечность
+   передаётся флагом, а не числом: -∞ в JSON записать нечем. */
+const numberLineSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['enabled', 'lines'],
+  properties: {
+    enabled: { type: 'boolean', description: 'true - чертёж является координатной прямой с множеством решений.' },
+    lines: {
+      type: 'array',
+      minItems: 0,
+      maxItems: 6,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['label', 'variable', 'marks', 'regions'],
+        properties: {
+          label: { type: 'string', description: 'Заголовок прямой: «а)», «б)». Пусто, если пункт один.' },
+          variable: { type: 'string', description: 'Имя переменной у стрелки: «x».' },
+          marks: {
+            type: 'array',
+            minItems: 0,
+            maxItems: 6,
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['value', 'label', 'filled'],
+              properties: {
+                value: { type: 'number', description: 'Число - граница промежутка: -2,5 передаётся как -2.5.' },
+                label: { type: 'string', description: 'Подпись под точкой в тетрадной записи: «-2,5», «2/7».' },
+                filled: { type: 'boolean', description: 'true - точка входит в множество (≤, ≥) и рисуется закрашенной; false - выколотая.' },
+              },
+            },
+          },
+          regions: {
+            type: 'array',
+            minItems: 0,
+            maxItems: 6,
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['from', 'to', 'fromInfinity', 'toInfinity'],
+              properties: {
+                from: { type: 'number', description: 'Левый конец закрашенного промежутка. Не важен при fromInfinity=true.' },
+                to: { type: 'number', description: 'Правый конец закрашенного промежутка. Не важен при toInfinity=true.' },
+                fromInfinity: { type: 'boolean', description: 'true - промежуток уходит в -∞.' },
+                toInfinity: { type: 'boolean', description: 'true - промежуток уходит в +∞.' },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+} as const
+
 const diagramSchema = {
   type: 'object',
   additionalProperties: false,
@@ -297,9 +357,10 @@ const diagramSchema = {
     'exteriorAngle',
     'scene',
     'schematic',
+    'numberLine',
   ],
   properties: {
-    kind: { type: 'string', enum: ['construction', 'schematic', 'none'] },
+    kind: { type: 'string', enum: ['construction', 'schematic', 'number-line', 'none'] },
     description: { type: 'string' },
     vertices: { type: 'array', minItems: 0, maxItems: 18, items: { type: 'string' } },
     apexAngle: { type: 'string' },
@@ -310,6 +371,7 @@ const diagramSchema = {
     exteriorAngle: { type: 'string' },
     scene: sceneSchema,
     schematic: schematicSchema,
+    numberLine: numberLineSchema,
   },
 } as const
 
@@ -645,6 +707,15 @@ const authorInstructions = [
   // Схемы физики и химии: значки из библиотеки, а не координаты.
   'Схема цепи, силы на теле, ход лучей, установка для опыта - это diagram.kind=schematic и schematic.enabled=true; scene тогда пустая. Элементы - только из библиотеки symbol: battery, resistor, lamp, switch, ammeter, voltmeter, capacitor, node, bell, motor; body, incline, ground, wall, spring, pulley, rope, vector; lens-converging, lens-diverging, mirror, ray, object-arrow, eye, prism; beaker, flask, test-tube, burner, tube, gas-bubbles, funnel, thermometer, arrow, text.',
   'schematic.kind: circuit - электрическая цепь, forces - силы на теле, optics - лучи и приборы, setup - химическая или физическая установка.',
+  // Координатная прямая. 9 сентября неравенства «решите и изобразите на
+  // координатной прямой множество решений» ушли ученику без единого
+  // чертежа: и автор, и рецензент решили, что записанных промежутков
+  // достаточно, - чертёж требовало само условие.
+  'Множество решений неравенства на координатной прямой - это diagram.kind=number-line и numberLine.enabled=true; scene и schematic тогда пустые.',
+  'Прямых столько, сколько пунктов в задании: у каждой label - «а)», «б)», variable - буква переменной. У одного пункта label пустой.',
+  'marks - границы промежутков числом: value=-2.5 для -2,5, label - тетрадная запись подписи («-2,5», «2/7»), filled=true у нестрогого неравенства (≤, ≥) и false у строгого.',
+  'regions - закрашенные промежутки: fromInfinity=true, если множество уходит в -∞, toInfinity=true - если в +∞. Для x > -2,5 это одна region с from=-2.5, toInfinity=true.',
+  'Условие «изобразите на координатной прямой», «отметьте на числовой прямой», «покажите множество решений» требует diagramRequired=true и number-line: одних скобок промежутка в ответе недостаточно.',
   'Элемент ставится центром в поле 0..100 (y вниз); значок занимает 10×10, поэтому элементы не ближе 12 друг к другу. rotation 0 - горизонтально, 90 - вертикально. У vector, ray, arrow rotation - направление стрелки (0 вправо, 90 вниз, 270 вверх), length - длина; у incline, rope, tube, ground, wall, mirror, lens - length.',
   'Цепь рисуй прямоугольником: элементы по сторонам, соединения kind=wire между соседями по контуру, чтобы каждый элемент имел два провода и цепь замкнулась. Источник - battery, подпись «ε» или «U». Подписи элементов - короткие имена «R₁», «R₂», «U»: значения уже стоят в «Дано», а две длинные подписи на одной стороне контура налезают друг на друга.',
   'Силы: body в центре, ground или incline под ним, каждая сила - vector с anchor=id тела и подписью «mg», «N», «F тр». Стрелку рисует лист от центра тела, поэтому её x и y ставь равными координатам тела и не разноси их: правило «не ближе 12 единиц» к паре «сила и её тело» не относится. Ход лучей: object-arrow, линза или зеркало, лучи ray, изображение - object-arrow пунктиром не задаётся, ставь второй object-arrow с подписью.',
@@ -1064,12 +1135,15 @@ function normalizeDiagram(value: unknown): HomeworkDiagram {
     : {}
   const scene = normalizeScene(candidate.scene)
   const schematic = normalizeSchematic(candidate.schematic)
+  const numberLine = normalizeNumberLine(candidate.numberLine)
   const rawKind = text(candidate.kind, 50)
   const kind = rawKind === 'schematic' && schematic
     ? 'schematic'
-    : rawKind === 'construction' && (scene.points.length > 0 || (scene.axes && scene.objects.length > 0))
-      ? 'construction'
-      : 'none'
+    : rawKind === 'number-line' && numberLine
+      ? 'number-line'
+      : rawKind === 'construction' && (scene.points.length > 0 || (scene.axes && scene.objects.length > 0))
+        ? 'construction'
+        : 'none'
   const auxiliaryKind = text(candidate.auxiliaryKind, 20)
 
   return {
@@ -1086,7 +1160,55 @@ function normalizeDiagram(value: unknown): HomeworkDiagram {
     ...(text(candidate.exteriorAngle, 16) ? { exteriorAngle: text(candidate.exteriorAngle, 16) } : {}),
     scene: kind === 'construction' ? scene : emptyScene(),
     ...(kind === 'schematic' && schematic ? { schematic } : {}),
+    ...(kind === 'number-line' && numberLine ? { numberLine } : {}),
   }
+}
+
+/* Координатная прямая: числа обязаны быть числами, а бесконечность -
+   флагом. Прямая без границ и без закрашенных промежутков - пустой лист:
+   такая прямая не чертёж, а линия поперёк страницы. */
+function normalizeNumberLine(value: unknown): HomeworkNumberLine | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const raw = value as Record<string, unknown>
+  if (raw.enabled !== true) return null
+  const lines = (Array.isArray(raw.lines) ? raw.lines : []).flatMap((entry) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return []
+    const line = entry as Record<string, unknown>
+    const marks = (Array.isArray(line.marks) ? line.marks : []).flatMap((item) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return []
+      const mark = item as Record<string, unknown>
+      const point = number(mark.value)
+      if (!Number.isFinite(point)) return []
+      return [{
+        value: point,
+        label: normalizeNotebookNotation(mark.label, 12) || formatNumberLineValue(point),
+        filled: mark.filled === true,
+      }]
+    }).slice(0, 6)
+    const regions = (Array.isArray(line.regions) ? line.regions : []).flatMap((item) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return []
+      const region = item as Record<string, unknown>
+      const from = region.fromInfinity === true ? null : number(region.from)
+      const to = region.toInfinity === true ? null : number(region.to)
+      if (from !== null && !Number.isFinite(from)) return []
+      if (to !== null && !Number.isFinite(to)) return []
+      if (from !== null && to !== null && to <= from) return []
+      return [{ from, to }]
+    }).slice(0, 6)
+    if (marks.length === 0 && regions.length === 0) return []
+    return [{
+      label: normalizeNotebookNotation(line.label, 8),
+      variable: normalizeNotebookNotation(line.variable, 4) || 'x',
+      marks,
+      regions,
+    }]
+  }).slice(0, 6)
+  return lines.length > 0 ? { lines } : null
+}
+
+/** Число под точкой пишется по-тетрадному: -2.5 - это «-2,5». */
+function formatNumberLineValue(value: number) {
+  return String(Number(value.toFixed(4))).replace('.', ',')
 }
 
 /* Схема: элементы только из библиотеки, идентификаторы уникальны,
@@ -1958,9 +2080,21 @@ function conditionAsksForSchematic(condition: string) {
   return /схем\p{L}*\s+(?:электрическ\p{L}*\s+)?цеп|изобраз\p{L}*\s+(?:все\s+)?сил|покаж\p{L}*\s+(?:все\s+)?сил|ход\s+луч|построй\p{L}*\s+изображени|нарису\p{L}*\s+(?:схем|прибор|установк)|начерт\p{L}*\s+(?:схем|цеп)/iu.test(condition)
 }
 
+/* Задача про координатную прямую.
+
+   «Изобразите на координатной прямой множество его решений», «отметьте на
+   числовой прямой» - школьный ответ здесь наполовину чертёж: луч со
+   стрелкой и выколотая или закрашенная граница. 9 сентября четыре
+   неравенства с прода ушли ученику без него. */
+function conditionAsksForNumberLine(condition: string) {
+  return /(?:координатн\p{L}*|числов\p{L}*)\s+(?:прям|ос)\p{L}*/iu.test(condition)
+    && !conditionAsksForGraph(condition)
+}
+
 function conditionRequiresDiagram(solution: HomeworkSolution) {
   if (conditionAsksForGraph(solution.condition)) return true
   if (conditionAsksForSchematic(solution.condition)) return true
+  if (conditionAsksForNumberLine(solution.condition)) return true
   return /геометр/iu.test(solution.subject)
     && (solution.taskType === 'construction'
       || solution.goal.title === 'Построить'
@@ -1984,6 +2118,35 @@ function uppercasePointLabels(value: string) {
    хотя бы одна стрелка и тело; у лучей - хотя бы один луч и оптический
    прибор. Всё остальное - на совести модели: библиотека значков жёсткая,
    а нарисовать значок неправильно лист не умеет. */
+/* Проверка координатной прямой.
+
+   Прямая без закрашенного промежутка ничего не показывает, а промежуток,
+   не упирающийся ни в одну отмеченную границу, - линия мимо ответа: у
+   конечного конца обязана стоять точка, иначе непонятно, входит она в
+   множество или нет. */
+function numberLineIssues(numberLine: HomeworkNumberLine | undefined) {
+  const issues: string[] = []
+  if (!numberLine || numberLine.lines.length === 0) return ['Координатная прямая пуста']
+  for (const line of numberLine.lines) {
+    const where = line.label ? `${line.label} ` : ''
+    if (line.regions.length === 0) {
+      issues.push(`${where}на координатной прямой не закрашен ни один промежуток`)
+      continue
+    }
+    if (line.marks.length === 0) {
+      issues.push(`${where}у промежутка нет отмеченной границы`)
+      continue
+    }
+    const marked = line.marks.map((mark) => mark.value)
+    const ends = line.regions.flatMap((region) => [region.from, region.to]).filter((end) => end !== null)
+    const loose = ends.filter((end) => !marked.some((value) => Math.abs(value - end) < 1e-9))
+    if (loose.length > 0) {
+      issues.push(`${where}конец промежутка ${formatNumberLineValue(loose[0])} не отмечен точкой на прямой`)
+    }
+  }
+  return issues
+}
+
 function schematicIssues(schematic: HomeworkSchematic | undefined) {
   const issues: string[] = []
   if (!schematic || schematic.elements.length === 0) return ['Схема пуста']
@@ -2214,9 +2377,11 @@ function buildVerification(
       {
         label: 'Чертёж',
         passed: diagramPassed,
-        note: scene
-          ? `${scene.points.length} точек · ${scene.objects.length} объектов · ${scene.constraints.length} связей`
-          : diagramPassed ? 'Чертёж не требуется' : 'Обязательный чертёж отсутствует',
+        note: solution.diagram.kind === 'number-line'
+          ? `координатная прямая · ${solution.diagram.numberLine?.lines.length ?? 0} шт.`
+          : scene
+            ? `${scene.points.length} точек · ${scene.objects.length} объектов · ${scene.constraints.length} связей`
+            : diagramPassed ? 'Чертёж не требуется' : 'Обязательный чертёж отсутствует',
       },
       {
         label: 'Запись в тетради',
@@ -2469,6 +2634,15 @@ export function validateSolutionQuality(solution: HomeworkSolution) {
   if (solution.diagram.kind === 'schematic') {
     if (solution.diagram.description.trim().length < 8) issues.push('У чертежа нет понятного описания')
     issues.push(...schematicIssues(solution.diagram.schematic))
+  }
+  if (solution.diagram.kind === 'number-line') {
+    issues.push(...numberLineIssues(solution.diagram.numberLine))
+  }
+  if (conditionAsksForNumberLine(solution.condition) && solution.diagram.kind !== 'number-line') {
+    issues.push(
+      'Условие просит изобразить множество решений на координатной прямой:'
+      + ' нужен diagram.kind=number-line и numberLine.enabled=true, а не пустой чертёж',
+    )
   }
   if (conditionAsksForSchematic(solution.condition) && solution.diagram.kind === 'construction') {
     issues.push('Здесь нужна схема из условных обозначений: diagram.kind=schematic и schematic.enabled=true, а не геометрическая сцена')

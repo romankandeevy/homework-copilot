@@ -1,6 +1,7 @@
 import { geometryNotebookLayoutV1 as layout } from './layouts/geometryNotebookLayoutV1'
 import { GeometryScene } from './geometry/GeometryScene'
 import { SchematicScene } from './geometry/SchematicScene'
+import { NumberLineScene } from './geometry/NumberLineScene'
 import type { GeometryDiagramSpec } from './geometry/types'
 
 /* Чертёж отдельно от листа.
@@ -24,6 +25,9 @@ export function TriangleDiagram({ diagram }: { diagram: GeometryDiagramSpec }) {
   }
   if (diagram.kind === 'schematic') {
     return diagram.schematic ? <SchematicScene schematic={diagram.schematic} description={diagram.description} /> : null
+  }
+  if (diagram.kind === 'number-line') {
+    return diagram.numberLine ? <NumberLineScene numberLine={diagram.numberLine} description={diagram.description} /> : null
   }
 
   if (diagram.kind === 'three-point-extended-lines') {
@@ -163,6 +167,7 @@ export function NotebookDiagram({ diagram }: { diagram: GeometryDiagramSpec }) {
   if (diagram.kind === 'none') return null
   if (diagram.kind === 'construction' && !diagram.scene) return null
   if (diagram.kind === 'schematic' && !diagram.schematic) return null
+  if (diagram.kind === 'number-line' && !diagram.numberLine) return null
 
   return (
     <figure className="notebook-sheet-diagram">
@@ -187,6 +192,13 @@ export function NotebookDiagram({ diagram }: { diagram: GeometryDiagramSpec }) {
              как у видимых рёбер, пунктир чаще, чем у вспомогательной линии. */
           .diagram-hidden { stroke-width: ${strokes.triangle}px; stroke-dasharray: 6 5; }
           .diagram-vertex,.diagram-angle-label { fill: ${colors.pencil}; font-size: ${typography.bodySize}px; }
+          /* Координатная прямая: множество решений - жирный луч поверх тонкой
+             оси, граница - кружок. Выколотая точка закрашена бумагой, а не
+             прозрачна: под ней проходит сама ось, и сквозь неё точка
+             читалась бы как перечёркнутая. */
+          .number-line-region { fill: none; stroke: ${colors.pencil}; stroke-width: ${strokes.triangle * 2.1}px; stroke-linecap: butt; }
+          .number-line-point-filled { fill: ${colors.pencil}; stroke: ${colors.pencil}; stroke-width: ${strokes.marker}px; }
+          .number-line-point-hollow { fill: ${colors.paper}; stroke: ${colors.pencil}; stroke-width: ${strokes.marker}px; }
           .diagram-caption { fill: ${colors.pencil}; font-size: ${typography.goalSize}px; }
         `}</style>
       </svg>

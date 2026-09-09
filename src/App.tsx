@@ -2101,8 +2101,12 @@ function HomePage() {
     grade?: string
   }) => {
     const textbook = getTextbook(submission.textbookId, availableTextbooks)
+    /* Имя задачи для фотографии - «photo-» и ключ запроса без приставки
+       «solution-». Прежде хвост в 44 знака резался от всего ключа, а он
+       ровно на знак длиннее: в базу и в адрес страницы уходило
+       «photo-olution-<uuid>» с откушенной буквой. */
     const resolvedTask = submission.source === 'photo'
-      ? 'photo-' + submission.idempotencyKey.replace(/[^a-z0-9-]/gi, '').slice(-44)
+      ? 'photo-' + submission.idempotencyKey.replace(/^solution-/, '').replace(/[^a-z0-9-]/gi, '').slice(-44)
       : submission.task
     const solutionPrice = getSolutionPrice()
 

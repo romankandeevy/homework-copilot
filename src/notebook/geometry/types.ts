@@ -1,4 +1,4 @@
-import type { HomeworkDiagramKind, HomeworkDiagramScene, HomeworkSchematic } from '../../lib/homeworkContract'
+import type { HomeworkDiagramKind, HomeworkDiagramScene, HomeworkNumberLine, HomeworkSchematic } from '../../lib/homeworkContract'
 
 export type GeometryDiagramSpec = {
   kind: HomeworkDiagramKind
@@ -13,6 +13,7 @@ export type GeometryDiagramSpec = {
   exteriorAngle?: string
   scene?: HomeworkDiagramScene
   schematic?: HomeworkSchematic
+  numberLine?: HomeworkNumberLine
 }
 
 export type GeometryNotebookPageSpec = {

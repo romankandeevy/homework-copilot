@@ -453,6 +453,60 @@ describe('geometry solution quality gate', () => {
     expect(geometry.some((issue) => issue.includes('kind=schematic'))).toBe(true)
   })
 
+  /* Координатная прямая. 9 сентября решение неравенств а-г с прода ушло
+     ученику без чертежа: условие просило изобразить множество решений на
+     координатной прямой, а модель сочла достаточными скобки промежутков. */
+  it('требует координатную прямую там, где её просит условие', () => {
+    const base = {
+      ...taskFiveSolution,
+      subject: 'Алгебра',
+      taskType: 'calculation' as const,
+      condition: 'Решите неравенство и изобразите на координатной прямой множество его решений: а) 6 + 2x > 1; в) 1 - 0,4x ≤ 1.',
+      given: [],
+      steps: ['а) 6 + 2x > 1; 2x > -5; x > -2,5', 'в) 1 - 0,4x ≤ 1; -0,4x ≤ 0; x ≥ 0'],
+      answer: 'а) x ∈ (-2,5; +∞); в) x ∈ [0; +∞)',
+      quality: { ...taskFiveSolution.quality!, diagramRequired: true },
+    }
+    const numberLine = {
+      lines: [
+        {
+          label: 'а)',
+          variable: 'x',
+          marks: [{ value: -2.5, label: '-2,5', filled: false }],
+          regions: [{ from: -2.5, to: null }],
+        },
+        {
+          label: 'в)',
+          variable: 'x',
+          marks: [{ value: 0, label: '0', filled: true }],
+          regions: [{ from: 0, to: null }],
+        },
+      ],
+    }
+    const good = validateSolutionQuality({
+      ...base,
+      diagram: { kind: 'number-line', description: 'Множества решений на координатной прямой', vertices: [], numberLine },
+    })
+    expect(good.filter((issue) => /прям|чертёж|промежут/iu.test(issue))).toEqual([])
+
+    const missing = validateSolutionQuality({
+      ...base,
+      diagram: { kind: 'none', description: '', vertices: [] },
+    })
+    expect(missing.some((issue) => issue.includes('number-line'))).toBe(true)
+
+    const loose = validateSolutionQuality({
+      ...base,
+      diagram: {
+        kind: 'number-line',
+        description: 'Множества решений',
+        vertices: [],
+        numberLine: { lines: [{ ...numberLine.lines[0], marks: [{ value: 3, label: '3', filled: false }] }] },
+      },
+    })
+    expect(loose.some((issue) => issue.includes('не отмечен точкой'))).toBe(true)
+  })
+
   it('ловит подставленный ответ в «Дано» качественного вопроса', () => {
     const issues = validateSolutionQuality({
       ...taskFiveSolution,
