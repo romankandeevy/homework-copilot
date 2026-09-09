@@ -517,11 +517,11 @@ describe('geometry solution quality gate', () => {
       taskType: 'calculation' as const,
       condition: '862. Решите неравенство: а) 6 + 2x > 1.',
       given: [],
-      steps: ['а) 6 + 2x > 1 ⇒ 2x > -5 ⇒ x > -2,5 ⇒ x ∈ (-2,5; +∞)'],
+      steps: ['а) 6 + 2x > 1 ⇒ 2x > -5, откуда x > -2,5, т. е. x ∈ (-2,5; +∞)'],
       answer: 'а) x ∈ (-2,5; +∞)',
       diagram: { kind: 'none', description: '', vertices: [] },
     })
-    expect(chained.some((issue) => issue.includes('склеены в одну строку'))).toBe(true)
+    expect(chained.some((issue) => issue.includes('стоит ⇒'))).toBe(true)
 
     const column = validateSolutionQuality({
       ...taskFiveSolution,
@@ -533,7 +533,7 @@ describe('geometry solution quality gate', () => {
       answer: 'а) x ∈ (-2,5; +∞)',
       diagram: { kind: 'none', description: '', vertices: [] },
     })
-    expect(column.some((issue) => issue.includes('склеены в одну строку'))).toBe(false)
+    expect(column.some((issue) => issue.includes('стоит ⇒'))).toBe(false)
   })
 
   it('ловит подставленный ответ в «Дано» качественного вопроса', () => {
