@@ -507,6 +507,35 @@ describe('geometry solution quality gate', () => {
     expect(loose.some((issue) => issue.includes('не отмечен точкой'))).toBe(true)
   })
 
+  /* Лента через стрелки. 9 сентября запись неравенств с прода уместилась
+     в четыре строки только потому, что каждый пункт был склеен в цепочку
+     «⇒ ... ⇒ ...» - в тетради так не пишут. */
+  it('ловит преобразования, склеенные в строку через ⇒', () => {
+    const chained = validateSolutionQuality({
+      ...taskFiveSolution,
+      subject: 'Алгебра',
+      taskType: 'calculation' as const,
+      condition: '862. Решите неравенство: а) 6 + 2x > 1.',
+      given: [],
+      steps: ['а) 6 + 2x > 1 ⇒ 2x > -5 ⇒ x > -2,5 ⇒ x ∈ (-2,5; +∞)'],
+      answer: 'а) x ∈ (-2,5; +∞)',
+      diagram: { kind: 'none', description: '', vertices: [] },
+    })
+    expect(chained.some((issue) => issue.includes('склеены в одну строку'))).toBe(true)
+
+    const column = validateSolutionQuality({
+      ...taskFiveSolution,
+      subject: 'Алгебра',
+      taskType: 'calculation' as const,
+      condition: '862. Решите неравенство: а) 6 + 2x > 1.',
+      given: [],
+      steps: ['а) 6 + 2x > 1', '2x > 1 - 6 = -5', 'x > -5 / 2 = -2,5', 'x ∈ (-2,5; +∞)'],
+      answer: 'а) x ∈ (-2,5; +∞)',
+      diagram: { kind: 'none', description: '', vertices: [] },
+    })
+    expect(column.some((issue) => issue.includes('склеены в одну строку'))).toBe(false)
+  })
+
   it('ловит подставленный ответ в «Дано» качественного вопроса', () => {
     const issues = validateSolutionQuality({
       ...taskFiveSolution,

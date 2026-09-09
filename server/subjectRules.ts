@@ -302,6 +302,21 @@ const partsNotSplit: SubjectRule = {
     }
     const seconds = groups.filter((group) => group.length > 1).map((group) => group[1])
     if (seconds.length < 2) return null
+    /* Столбик выкладок - не раздувание.
+
+       9 сентября правило вышло боком: у неравенств а-г ход в пункте - три
+       равносильных преобразования подряд, сжать их в строку иначе как
+       лентой через ⇒ нельзя, и модель написала «2x > -5 ⇒ x > -2,5 ⇒
+       x ∈ (-2,5; +∞)». Столбик из трёх чисто символьных строк - это и есть
+       тетрадная запись неравенства.
+
+       Раздувание задачи 788 выглядит иначе: там на пункт одно вычисление, а
+       следующие строки - словесный вывод «Так как a < b, то ..., значит
+       ...». Поэтому граница проходит по словам: пункт из одних выкладок
+       остаётся столбиком, пункт с рассуждением сжимается в строку. */
+    const symbolicColumn = (group: readonly string[]) => group.length > 2
+      && group.every((line) => (line.match(/[а-яё]{2,}/giu)?.length ?? 0) <= 1)
+    if (groups.some(symbolicColumn)) return null
 
     const alike = seconds.some((line, index) => seconds
       .slice(index + 1)
