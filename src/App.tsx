@@ -145,8 +145,18 @@ type PersonalSolution = SolutionState & {
 
    Задание «сравните: а) … б) … в) …» приходит строками, размеченными
    буквами. Своя нумерация поверх них - вторая шкала на том же листе. */
+const partLabelPattern = /^\s*[а-я]\s*\)/u
+
+/* Задание размечено буквами, если с буквы начинаются хотя бы два пункта.
+
+   Раньше требовалось, чтобы с буквы начиналась каждая строка. Когда
+   пункт стал столбиком - «а) 0,7x - 7 > 0», под ним «0,7x > 7 |:0,7» -
+   строки без буквы снова включили нумерацию, и задача 863 вышла листом
+   «1) а) …  2) 0,7x > 7  3) x > 10»: номера поверх букв. */
 function lettered(steps: readonly string[]) {
-  return steps.length > 1 && steps.every((step) => /^\s*[а-я]\s*\)/u.test(step))
+  return steps.length > 1
+    && partLabelPattern.test(steps[0])
+    && steps.filter((step) => partLabelPattern.test(step)).length >= 2
 }
 
 const themeStorageKey = 'homework-copilot:theme'
@@ -670,7 +680,7 @@ function MySolutions({ items, onOpenAll, onOpenSolution }: { items: readonly Per
           <SolutionCard
             key={`${textbookId}-${task}-${time}`}
             solution={solution}
-            subject={getTextbook(textbookId).subject}
+            subject={solution.subject || getTextbook(textbookId).subject}
             time={time}
             onOpen={() => onOpenSolution({ textbookId, task, mode, source })}
           />
@@ -764,7 +774,7 @@ function SolutionsPage({
               <SolutionCard
                 key={`${textbookId}-${task}-${time}`}
                 solution={solution}
-                subject={getTextbook(textbookId, items).subject}
+                subject={solution.subject || getTextbook(textbookId, items).subject}
                 time={time}
                 onOpen={() => onOpenSolution({ textbookId, task, mode, source })}
               />
@@ -978,10 +988,16 @@ function UnderstandingPage({
                   : <p key={key}>{block.line}</p>))}
               </section>
             )}
-            <section className="notebook-sheet-goal">
-              <h2>{generatedSolution.goal.title}:</h2>
-              <p>{generatedSolution.goal.text}</p>
-            </section>
+            {/* «Найти» без «Дано» в тетради не пишут: пример и неравенство
+                записывают сразу решением. 863 вышла с «Найти: Определить
+                значения x для каждого из четырёх условий» - строкой ни о чём
+                над столбиком. «Доказать» и «Построить» остаются всегда. */}
+            {(generatedSolution.given.length > 0 || generatedSolution.goal.title !== 'Найти') && (
+              <section className="notebook-sheet-goal">
+                <h2>{generatedSolution.goal.title}:</h2>
+                <p>{generatedSolution.goal.text}</p>
+              </section>
+            )}
             </div>
             {/* Чертёж стоит там же, где в тетради: справа от «Дано» и
                 «Найти», до хода решения. Раньше он существовал только на
@@ -1033,7 +1049,14 @@ function UnderstandingPage({
                      Там, где строки помечены буквами, счёт ведут буквы. */
                   <ol className={lettered(generatedSolution.steps) ? 'is-lettered' : undefined}>
                     {keyed(generatedSolution.steps, (step) => step).map(({ key, item: step }) => (
-                      <li key={key}>{step.replace(/^\s*\d{1,2}[).]\s+/u, '')}</li>
+                      /* Строка без буквы - продолжение пункта: в тетради она
+                         стоит под выражением, а не под буквой. */
+                      <li
+                        className={lettered(generatedSolution.steps) && !partLabelPattern.test(step) ? 'is-continued' : undefined}
+                        key={key}
+                      >
+                        {step.replace(/^\s*\d{1,2}[).]\s+/u, '')}
+                      </li>
                     ))}
                   </ol>
                 )}

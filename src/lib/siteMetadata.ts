@@ -109,7 +109,12 @@ export function getSeoMetadata(pathname: string, task?: string): SeoMetadata {
   const path = normalizePath(pathname)
   if (/^\/solutions\/[^/]+\/[^/]+$/i.test(path)) {
     return {
-      title: task ? `Решение задачи № ${task} - Homework Copilot` : 'Решение задачи - Homework Copilot',
+      /* Номер - только настоящий номер из учебника. У задачи по фото в
+         адресе служебный ключ, и вкладка называлась «Решение задачи №
+         photo-9807d724-…»; у задачи текстом там начало условия. */
+      title: task && /^\d{1,4}(\.\d{1,3}){0,2}$/u.test(task)
+        ? `Решение задачи № ${task} - Homework Copilot`
+        : 'Решение задачи - Homework Copilot',
       description: 'Личное решение задачи в Homework Copilot.',
       path,
       robots: 'noindex, nofollow',

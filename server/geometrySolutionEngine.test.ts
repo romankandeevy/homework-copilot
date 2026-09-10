@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { homeworkSolutionEngineVersion } from '../src/lib/homeworkContract.ts'
 import type { HomeworkAnnotatedLine, HomeworkSolution, HomeworkWrittenAnalysis } from '../src/lib/homeworkContract.ts'
-import { analysisRepeatsSteps, answersAgree, clampNotebookLine, isCurrentReviewedSolution, normalizeNotebookNotation, validateSolutionQuality } from './geometrySolutionEngine.ts'
+import { analysisRepeatsSteps, answersAgree, clampNotebookLine, isCurrentReviewedSolution, normalizeNotebookNotation, resolveSubject, validateSolutionQuality } from './geometrySolutionEngine.ts'
 
 const taskFiveSolution: HomeworkSolution = {
   engineVersion: homeworkSolutionEngineVersion,
@@ -543,6 +543,30 @@ describe('geometry solution quality gate', () => {
       diagram: { kind: 'none', description: '', vertices: [] },
     })
     expect(column.some((issue) => issue.includes('стоит ⇒'))).toBe(false)
+  })
+
+  /* Задача 863 пришла с предметом «Геометрия»: его выбирает ученик.
+     По условию без единой фигуры, зато с x и неравенством, это алгебра. */
+  it('переназначает геометрию без фигур на алгебру, но не трогает настоящую геометрию', () => {
+    const algebra = '863. При каких значениях x двучлен 0,7x - 7 принимает: а) положительные значения; б) отрицательные значения?'
+    expect(resolveSubject('Геометрия', algebra)).toBe('Алгебра')
+    expect(resolveSubject('Геометрия', 'В треугольнике ABC угол C равен 90°. Найдите AB, если x > 0.')).toBe('Геометрия')
+    expect(resolveSubject('Геометрия', 'Точки A и B лежат на прямой AB. Сколько отрезков?')).toBe('Геометрия')
+    expect(resolveSubject('Физика', algebra)).toBe('Физика')
+  })
+
+  it('ловит один итог, записанный двумя строками', () => {
+    const issues = validateSolutionQuality({
+      ...taskFiveSolution,
+      subject: 'Алгебра',
+      taskType: 'calculation' as const,
+      condition: '863. При каких значениях x двучлен 0,7x - 7 принимает значения, меньшие -1?',
+      given: [],
+      steps: ['0,7x - 7 < -1', '0,7x < -1 + 7', '0,7x < 6 |:0,7', 'x < 60/7', 'x < 8 4/7'],
+      answer: 'x < 8 4/7',
+      diagram: { kind: 'none', description: '', vertices: [] },
+    })
+    expect(issues.some((issue) => issue.includes('двумя строками'))).toBe(true)
   })
 
   it('ловит подставленный ответ в «Дано» качественного вопроса', () => {
