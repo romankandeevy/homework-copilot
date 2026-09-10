@@ -189,8 +189,8 @@ export function NumberLineFigure({ line, description }: { line: Line; descriptio
       <style>{`
         .notebook-number-line .geometry-diagram { opacity: ${layout.strokes.pencilOpacity}; }
         .notebook-number-line .diagram-axis { fill: none; stroke: ${layout.colors.ink}; stroke-width: ${layout.strokes.marker}px; stroke-linecap: round; stroke-linejoin: round; }
-        .notebook-number-line .diagram-axis-label { fill: ${layout.colors.ink}; font-family: ${layout.typography.family}; font-weight: ${layout.typography.weight}; font-size: 26px; }
-        .notebook-number-line .diagram-tick-label { fill: ${layout.colors.ink}; font-family: ${layout.typography.family}; font-weight: ${layout.typography.weight}; font-size: 24px; }
+        .notebook-number-line .diagram-axis-label { fill: ${layout.colors.ink}; font-family: ${layout.typography.family}; font-weight: ${layout.typography.weight}; font-size: 30px; }
+        .notebook-number-line .diagram-tick-label { fill: ${layout.colors.ink}; font-family: ${layout.typography.family}; font-weight: ${layout.typography.weight}; font-size: 28px; }
         .notebook-number-line .number-line-hatch { fill: none; stroke: ${layout.colors.ink}; stroke-width: ${layout.strokes.marker * 0.8}px; stroke-linecap: round; }
         .notebook-number-line .number-line-point-filled { fill: ${layout.colors.ink}; stroke: ${layout.colors.ink}; stroke-width: ${layout.strokes.marker}px; }
         .notebook-number-line .number-line-point-hollow { fill: ${layout.colors.paper}; stroke: ${layout.colors.ink}; stroke-width: ${layout.strokes.marker}px; }
