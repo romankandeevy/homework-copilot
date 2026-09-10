@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { HomeworkSolution } from '../src/lib/homeworkContract.ts'
-import { subjectRuleQuestions, verifySubjectRules } from './subjectRules.ts'
+import { subjectRuleQuestions, subjectFormatPrompt, verifySubjectRules } from './subjectRules.ts'
 
 /* Правила предмета — это рецензент.
 
@@ -413,5 +413,40 @@ describe('запись не раздувается и не объявляет н
       'г) сравнить нельзя: знак разности меняется',
     ))
     expect(issues.some((issue) => issue.includes('Невозможность заявлена'))).toBe(false)
+  })
+})
+
+/* Образец записи по предмету из разбора решебников 10 сентября. Общие
+   правила главнее образца, и он говорит об этом первой строкой. */
+describe('образец записи предмета', () => {
+  it('даёт физике «Дано - СИ - Найти» и ставит общие правила выше образца', () => {
+    const physics = subjectFormatPrompt('Физика')
+    expect(physics.split('\n')[0]).toContain('действуют общие правила')
+    expect(physics).toContain('СИ')
+    expect(physics).toContain('t - ?')
+  })
+
+  it('не учит тому, что у нас запрещено', () => {
+    const all = ['Математика', 'Алгебра', 'Геометрия', 'Физика', 'Химия', 'Биология', 'Информатика', 'Русский язык',
+      'Литература', 'Английский язык', 'История', 'Обществознание', 'География', 'Астрономия']
+      .map((subject) => subjectFormatPrompt(subject)).join('\n')
+    expect(all).not.toMatch(/\*\*|\$|\\frac|H2O|м\/с2|⊿|не_/u)
+  })
+
+  it('требует закрыть доказательство строкой «Что и требовалось доказать»', () => {
+    const proof = (steps: string[]) => solution({
+      subject: 'Геометрия',
+      textbookId: 'geometry',
+      taskType: 'proof',
+      condition: 'Докажите, что у параллелограмма противолежащие стороны равны.',
+      given: ['ABCD - параллелограмм'],
+      goal: { title: 'Доказать', text: 'AB = CD, BC = AD' },
+      steps,
+      answer: '',
+    })
+    const open = verifySubjectRules(proof(['△ABC = △CDA (по второму признаку)', 'AB = CD, BC = AD']))
+    expect(open.some((issue) => issue.includes('Что и требовалось доказать'))).toBe(true)
+    const closed = verifySubjectRules(proof(['△ABC = △CDA (по второму признаку)', 'AB = CD, BC = AD', 'Что и требовалось доказать.']))
+    expect(closed.some((issue) => issue.includes('Что и требовалось доказать'))).toBe(false)
   })
 })

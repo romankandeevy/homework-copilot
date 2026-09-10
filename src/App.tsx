@@ -878,8 +878,17 @@ function UnderstandingPage({
     return () => window.clearTimeout(timer)
   }, [copied])
 
+  /* Развёрнутый ответ - образец, а не текст для сдачи: одинаковое
+     сочинение у половины класса учитель заметит сразу. Решебники
+     помечают такие ответы так же. */
+  const essayAnswer = Boolean(generatedSolution)
+    && homeworkSolutionForm(generatedSolution?.subject ?? '', generatedSolution?.taskType) === 'essay'
   const disclaimer = (
-    <p className="solution-disclaimer">Решение помогает разобраться. Проверь ответ перед сдачей.</p>
+    <p className="solution-disclaimer">
+      {essayAnswer
+        ? 'Это образец ответа: перепиши его своими словами. Проверь факты перед сдачей.'
+        : 'Решение помогает разобраться. Проверь ответ перед сдачей.'}
+    </p>
   )
 
   /* Разбор идёт до готовой записи, а не после неё.

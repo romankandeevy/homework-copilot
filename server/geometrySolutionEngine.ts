@@ -39,7 +39,7 @@ import {
   defaultHomeworkModels,
   homeworkModelsForSubject,
 } from './homeworkModels.ts'
-import { subjectRuleQuestions, verifySubjectRules } from './subjectRules.ts'
+import { subjectFormatPrompt, subjectRuleQuestions, verifySubjectRules } from './subjectRules.ts'
 import { verifyGradeLevel } from './gradeRules.ts'
 import { verifyAnswerDerivation, verifyWorksheet, verifyWorksheetDerivation } from './worksheet.ts'
 import type { WorksheetLine } from './worksheet.ts'
@@ -1878,6 +1878,9 @@ function subjectRulesPrompt(subject: string) {
 
 function engineMessage(request: SolveHomeworkRequest, extra = '') {
   const rulesBlock = subjectRulesPrompt(request.subject)
+  // Образец записи предмета идёт после правил: общие правила главнее, и
+  // образец сам говорит об этом первой строкой.
+  const formatBlock = subjectFormatPrompt(request.subject)
 
   if (request.source === 'photo' && request.imageDataUrl) {
     // Предмет и класс приходят из формы, а не с изображения, и на фото-пути
@@ -1885,6 +1888,7 @@ function engineMessage(request: SolveHomeworkRequest, extra = '') {
     const photoPrompt = [
       `Предмет: ${request.subject}. Класс: ${request.grade}.`,
       rulesBlock,
+      formatBlock,
       /* Текст рядом с фотографией - пометка, а не условие. Ученик пишет
          «реши задачу 1 сверху» или «нужно только б)», и подставлять это как
          условие нельзя: 6 сентября модель разобрала именно подпись, а не
@@ -1921,6 +1925,7 @@ function engineMessage(request: SolveHomeworkRequest, extra = '') {
   const prompt = [
     `Предмет: ${request.subject}. Класс: ${request.grade}.`,
     rulesBlock,
+    formatBlock,
     bookLine,
     editionLine,
     sourceHint,
