@@ -53,25 +53,25 @@ describe('NumberLineScene', () => {
     expect(container.querySelectorAll('.number-line-point-filled')).toHaveLength(1)
   })
 
-  it('уголок закрыт стенкой у точки и открыт со стороны бесконечности', () => {
+  /* Образец 10 сентября: штрихи растут от оси и обрываются у точки,
+     без крышки над штриховкой. */
+  it('штрихует над осью от точки до стрелки, без крышки', () => {
     const { container } = render(<svg>
       <NumberLineScene numberLine={{ lines: [inequalities.lines[0]] }} description="" />
     </svg>)
 
     const axis = container.querySelector('path.diagram-axis')?.getAttribute('d') ?? ''
-    const cap = container.querySelector('.number-line-cap')?.getAttribute('d') ?? ''
-    const axisEnd = Number(axis.split('L')[1].trim().split(' ')[0])
     const axisStart = Number(axis.split('M')[1].trim().split(' ')[0])
-    const capPoints = [...cap.matchAll(/([ML]) (-?[\d.]+) (-?[\d.]+)/gu)]
+    const axisEnd = Number(axis.split('L')[1].trim().split(' ')[0])
+    const band = container.querySelector('.number-line-region clipPath rect')
+    const bandFrom = Number(band?.getAttribute('x'))
+    const bandTo = bandFrom + Number(band?.getAttribute('width'))
+    const point = Number(container.querySelector('.number-line-point-hollow')?.getAttribute('cx'))
 
-    // Стенка у -2,5: путь начинается на оси и идёт вверх той же вертикалью.
-    expect(capPoints[0][1]).toBe('M')
-    expect(Number(capPoints[0][2])).toBeCloseTo(Number(capPoints[1][2]), 5)
-    expect(Number(capPoints[1][3])).toBeLessThan(Number(capPoints[0][3]))
-    // Луч уходит вправо до стрелки и там обрывается без стенки.
-    expect(capPoints).toHaveLength(3)
-    expect(Number(capPoints[2][2])).toBeLessThan(axisEnd)
-    expect(Number(capPoints[0][2])).toBeGreaterThan(axisStart + 20)
+    expect(container.querySelector('.number-line-cap')).toBeNull()
+    expect(bandFrom).toBeCloseTo(point, 5)
+    expect(bandFrom).toBeGreaterThan(axisStart + 20)
+    expect(bandTo).toBeLessThan(axisEnd)
   })
 
   it('пустая прямая не рисуется', () => {

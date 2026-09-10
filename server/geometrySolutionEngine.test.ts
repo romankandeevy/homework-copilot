@@ -491,6 +491,13 @@ describe('geometry solution quality gate', () => {
     })
     expect(good.filter((issue) => /прям|чертёж|промежут/iu.test(issue))).toEqual([])
 
+    const explained = validateSolutionQuality({
+      ...base,
+      steps: ['а) 6 + 2x > 1', '2x > -5 (переносим 6 с другим знаком)', 'x > -2,5', 'в) 1 - 0,4x ≤ 1', '-0,4x ≤ 0', 'x ≥ 0'],
+      diagram: { kind: 'number-line', description: 'Множества решений на координатной прямой', vertices: [], numberLine },
+    })
+    expect(explained.some((issue) => issue.includes('пояснение словами'))).toBe(true)
+
     const missing = validateSolutionQuality({
       ...base,
       diagram: { kind: 'none', description: '', vertices: [] },

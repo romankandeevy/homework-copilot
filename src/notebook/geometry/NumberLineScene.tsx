@@ -6,11 +6,9 @@ import { keyed } from '../../lib/listKeys'
 
    Школьный ответ к неравенству - не только промежуток в скобках, но и
    картинка: ось со стрелкой, выколотая или закрашенная точка на границе и
-   множество решений, забранное сверху уголком и заштрихованное наискось.
-   Именно так это чертят в тетради: не жирная линия поверх оси, а «крышка»
-   от граничной точки вверх и вдоль луча, а под ней штриховка. Пунктов в
-   задании обычно четыре, поэтому прямых на чертеже столько же и стоят они
-   друг под другом, как в тетради.
+   множество решений, заштрихованное косыми штрихами прямо над осью. Без
+   жирной линии поверх оси и без «крышки» над штриховкой: 10 сентября
+   образец из тетради - штрихи растут от самой оси и обрываются у точки.
 
    Масштаб у каждой прямой свой: числа пунктов между собой не связаны, и
    общая шкала на -2,5 и 2/7 сжала бы обе картинки в точку у нуля. */
@@ -26,10 +24,11 @@ const pointRadius = 11
 const arrowLength = 16
 const maxLineHeight = 132
 
-/* Уголок над множеством решений: высота крышки и шаг штриховки. Штрихи
-   идут под 45°, как рисуют от руки. */
-const capHeight = 30
-const hatchStep = 14
+/* Штриховка над множеством решений: высота штриха, его наклон и шаг.
+   Штрих наклонён влево - «\», как рисуют от руки правой рукой. */
+const hatchHeight = 40
+const hatchLean = 24
+const hatchStep = 16
 
 type Line = HomeworkNumberLine['lines'][number]
 
@@ -49,48 +48,35 @@ function scaleOf(line: Line, left: number, right: number) {
   return (value: number) => left + ((value - from) / (to - from)) * (right - left)
 }
 
-/* Множество решений: уголок над лучом и штриховка под ним.
+/* Множество решений: косые штрихи над осью.
 
-   Вертикальная стенка ставится только у конечного конца - там, где стоит
-   точка. Со стороны бесконечности уголок обрывается вместе с осью, как в
-   тетради. Штрихи режутся по прямоугольнику уголка, поэтому не торчат за
-   его края. */
-function NumberLineRegion({ from, to, y, closedLeft, closedRight }: {
-  from: number
-  to: number
-  y: number
-  closedLeft: boolean
-  closedRight: boolean
-}) {
-  const top = y - capHeight
-  /* Имя клипа собирается из собственных координат уголка.
+   Штрих растёт от оси вверх и влево. Штрихи режутся по полосе над самим
+   промежутком, поэтому не заходят за граничную точку: где кончается
+   штриховка, там кончается и множество. */
+function NumberLineRegion({ from, to, y }: { from: number; to: number; y: number }) {
+  const top = y - hatchHeight
+  /* Имя клипа собирается из собственных координат полосы.
 
      На листе с четырьмя пунктами каждая прямая - отдельная картинка, и
      счётчик useId у всех начинался заново: id совпадали, браузер брал
      первый clipPath документа, и штриховку остальных резал чужой
-     прямоугольник - под уголком оставалась пустая рамка. */
+     прямоугольник. */
   const clipId = `nl-${Math.round(from)}-${Math.round(to)}-${Math.round(y)}`
-  const cap = [
-    closedLeft ? `M ${from} ${y} L ${from} ${top}` : `M ${from} ${top}`,
-    `L ${to} ${top}`,
-    closedRight ? `L ${to} ${y}` : '',
-  ].join(' ')
   const strokes: string[] = []
-  for (let x = from - capHeight; x < to; x += hatchStep) {
-    strokes.push(`M ${x} ${y} L ${x + capHeight} ${top}`)
+  for (let x = from; x < to + hatchLean; x += hatchStep) {
+    strokes.push(`M ${x} ${y} L ${x - hatchLean} ${top}`)
   }
 
   return (
     <g className="number-line-region">
       <clipPath id={clipId}>
-        <rect x={from} y={top} width={to - from} height={capHeight} />
+        <rect x={from} y={top - 2} width={to - from} height={hatchHeight + 2} />
       </clipPath>
       <g clipPath={`url(#${clipId})`}>
         {keyed(strokes, (stroke) => stroke).map(({ key, item: stroke }) => (
           <path className="number-line-hatch" d={stroke} key={key} />
         ))}
       </g>
-      <path className="number-line-cap" d={cap} />
     </g>
   )
 }
@@ -103,8 +89,8 @@ function NumberLineRow({ line, y, left, right, showLabel = true }: {
   showLabel?: boolean
 }) {
   const at = scaleOf(line, left, right)
-  /* Уголок не заходит на остриё стрелки: иначе конец оси распухает и
-     стрелка читается не как направление, а как часть штриховки. */
+  /* Штриховка не заходит на остриё стрелки: иначе стрелка читается не
+     как направление, а как часть штриховки. */
   const clamp = (value: number) => Math.min(Math.max(value, left), right - arrowLength)
   const label = showLabel ? line.label.trim() : ''
   const variable = line.variable.trim() || 'x'
@@ -125,14 +111,7 @@ function NumberLineRow({ line, y, left, right, showLabel = true }: {
         const to = clamp(region.to === null ? right : at(region.to))
         if (to - from < 1) return null
         return (
-          <NumberLineRegion
-            from={from}
-            to={to}
-            y={y}
-            closedLeft={region.from !== null}
-            closedRight={region.to !== null}
-            key={key}
-          />
+          <NumberLineRegion from={from} to={to} y={y} key={key} />
         )
       })}
       {keyed(line.marks, (mark) => `mark-${mark.value}`).map(({ key, item: mark }) => {
@@ -182,11 +161,10 @@ export function NumberLineScene({ numberLine, description }: { numberLine: Homew
 
 /* Прямая одного пункта - отдельная картинка.
 
-   В тетради прямая стоит не общим блоком наверху, а напротив своего
-   пункта, рядом с его ответом. Поэтому у пункта своя картинка со своим
-   окном: подпись «а)» там уже стоит в строке решения, и на самой прямой
-   она не нужна. */
-const figureBox = { width: 460, height: 126, padding: 18, axisY: 66 }
+   В тетради прямая стоит не общим блоком наверху, а под своим пунктом,
+   над его ответом. Поэтому у пункта своя картинка со своим окном: подпись
+   «а)» там уже стоит в строке решения, и на самой прямой она не нужна. */
+const figureBox = { width: 720, height: 128, padding: 18, axisY: 72 }
 
 export function NumberLineFigure({ line, description }: { line: Line; description: string }) {
   return (
@@ -210,13 +188,12 @@ export function NumberLineFigure({ line, description }: { line: Line; descriptio
           а прямая пункта стоит отдельным svg внутри строк решения. */}
       <style>{`
         .notebook-number-line .geometry-diagram { opacity: ${layout.strokes.pencilOpacity}; }
-        .notebook-number-line .diagram-axis { fill: none; stroke: ${layout.colors.pencil}; stroke-width: ${layout.strokes.marker * 0.6}px; stroke-linecap: round; stroke-linejoin: round; }
-        .notebook-number-line .diagram-axis-label { fill: ${layout.colors.pencil}; font-family: ${layout.typography.family}; font-weight: ${layout.typography.weight}; font-size: 22px; }
-        .notebook-number-line .diagram-tick-label { fill: ${layout.colors.pencil}; font-family: ${layout.typography.family}; font-weight: ${layout.typography.weight}; font-size: 19px; }
-        .notebook-number-line .number-line-cap { fill: none; stroke: ${layout.colors.pencil}; stroke-width: ${layout.strokes.marker * 0.6}px; stroke-linecap: round; stroke-linejoin: round; }
-        .notebook-number-line .number-line-hatch { fill: none; stroke: ${layout.colors.pencil}; stroke-width: ${layout.strokes.marker * 0.5}px; stroke-linecap: round; }
-        .notebook-number-line .number-line-point-filled { fill: ${layout.colors.pencil}; stroke: ${layout.colors.pencil}; stroke-width: ${layout.strokes.marker * 0.6}px; }
-        .notebook-number-line .number-line-point-hollow { fill: ${layout.colors.paper}; stroke: ${layout.colors.pencil}; stroke-width: ${layout.strokes.marker * 0.6}px; }
+        .notebook-number-line .diagram-axis { fill: none; stroke: ${layout.colors.ink}; stroke-width: ${layout.strokes.marker}px; stroke-linecap: round; stroke-linejoin: round; }
+        .notebook-number-line .diagram-axis-label { fill: ${layout.colors.ink}; font-family: ${layout.typography.family}; font-weight: ${layout.typography.weight}; font-size: 26px; }
+        .notebook-number-line .diagram-tick-label { fill: ${layout.colors.ink}; font-family: ${layout.typography.family}; font-weight: ${layout.typography.weight}; font-size: 24px; }
+        .notebook-number-line .number-line-hatch { fill: none; stroke: ${layout.colors.ink}; stroke-width: ${layout.strokes.marker * 0.8}px; stroke-linecap: round; }
+        .notebook-number-line .number-line-point-filled { fill: ${layout.colors.ink}; stroke: ${layout.colors.ink}; stroke-width: ${layout.strokes.marker}px; }
+        .notebook-number-line .number-line-point-hollow { fill: ${layout.colors.paper}; stroke: ${layout.colors.ink}; stroke-width: ${layout.strokes.marker}px; }
       `}</style>
     </svg>
   )

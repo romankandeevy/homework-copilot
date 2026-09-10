@@ -925,7 +925,7 @@ function UnderstandingPage({
 
   if (generatedSolution) {
     /* Задание из пунктов а)-г) с координатными прямыми верстается по
-       пунктам: столбик преобразований слева, ответ и прямая справа. Если
+       пунктам: столбик преобразований, под ним прямая, под ней ответ. Если
        разложить решение по пунктам не вышло, лист остаётся прежним. */
     const solutionParts = numberLineParts(generatedSolution)
     return (
@@ -1011,10 +1011,8 @@ function UnderstandingPage({
                             <p key={stepKey}>{step}</p>
                           ))}
                         </div>
-                        <div className="notebook-part-figure">
-                          {part.answer && <p className="notebook-part-answer">Ответ: {part.answer}</p>}
-                          <NumberLineFigure line={part.line} description={generatedSolution.diagram.description} />
-                        </div>
+                        <NumberLineFigure line={part.line} description={generatedSolution.diagram.description} />
+                        {part.answer && <p className="notebook-part-answer">Ответ: {part.answer}</p>}
                       </div>
                     ))}
                   </div>
