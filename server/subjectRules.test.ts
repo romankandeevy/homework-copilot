@@ -375,6 +375,25 @@ describe('запись не раздувается и не объявляет н
     expect(issues.some((issue) => issue.includes('один и тот же ход'))).toBe(false)
   })
 
+  /* Задача 863: вопрос «при каких значениях», а в ответе последние строки
+     расчёта. Ответ обязан отвечать на вопрос его же словами. */
+  it('требует ответа на вопрос задачи, а не последней строки расчёта', () => {
+    const task863 = (answer: string) => solution({
+      subject: 'Алгебра',
+      textbookId: 'algebra',
+      taskType: 'calculation',
+      condition: '863. При каких значениях x двучлен 0,7x - 7 принимает: а) положительные значения; б) отрицательные значения?',
+      given: [],
+      steps: ['а) 0,7x - 7 > 0', '0,7x > 7 |:0,7', 'x > 10', 'б) 0,7x - 7 < 0', '0,7x < 7 |:0,7', 'x < 10'],
+      answer,
+    })
+    const bare = verifySubjectRules(task863('а) x > 10; б) x < 10'))
+    expect(bare.some((issue) => issue.includes('не отвечает на вопрос'))).toBe(true)
+
+    const answered = verifySubjectRules(task863('Неравенства удовлетворяются при таких значениях x: а) x > 10; б) x < 10'))
+    expect(answered.some((issue) => issue.includes('не отвечает на вопрос'))).toBe(false)
+  })
+
   it('не принимает «сравнить невозможно» без примера', () => {
     const issues = verifySubjectRules(task788(
       [...compact, 'г) (a + 2) - (b - 6) = a - b + 8, знак может быть любым'],
