@@ -30,6 +30,8 @@ export const diagramOps = [
   // окружности
   'circle',
   'circle-radius',
+  'inscribed-polygon',
+  'tangent-line',
   // треугольники
   'triangle',
   'triangle-isosceles',
@@ -63,6 +65,7 @@ export const diagramOps = [
   'mark-parallel',
   'mark-right-angle',
   'mark-angle',
+  'mark-equal-angle',
 ] as const
 
 export type DiagramOp = typeof diagramOps[number]
@@ -98,6 +101,8 @@ export const diagramPlanInstructions = [
   'point-on-segment [P] ← args [A, B], values [доля от A, 0<t<1]; point-on-line [P] ← args [A, B], values [t] (t<0 или t>1 — точка вне отрезка); midpoint [M] ← args [A, B]; point-on-circle [P] ← args [O, Q], values [угол].',
   'Команды линий: segment, line, ray ← args [A, B]; polyline, polygon ← args — цепочка точек. Подпись прямой задаётся полем label.',
   'Окружности: circle ← args [O, P] — центр O через точку P; circle-radius [P] ← args [O], values [радиус] — созданная точка P лежит на окружности, обычно hidden=true.',
+  'Вписанный многоугольник: inscribed-polygon [A, B, C] или [A, B, C, D] ← args [O, P] - вершины на окружности с центром O через P; values пусты - правильный многоугольник, иначе по углу на каждую вершину, отсчитанному от луча OP против часовой стрелки.',
+  'Касательная: tangent-line [K] или [K, L] ← args [P, O, Q] - касательные из точки P к окружности с центром O через Q, K и L - точки касания. Если P лежит на окружности, строится касательная в точке P, а K - техническая точка на ней.',
   'Треугольники: triangle, triangle-isosceles, triangle-right, triangle-equilateral ← names [A, B, C]. Средняя буква — вершина: у равнобедренного при ней равные стороны BA = BC и основание AC, у прямоугольного при ней прямой угол.',
   'values треугольников: triangle [AB, BC, CA]; triangle-isosceles [основание AC, боковая сторона]; triangle-right [катет AB, катет BC]; triangle-equilateral [сторона].',
   'Четырёхугольники ← names [A, B, C, D] в порядке обхода: parallelogram [AB, AD, угол при A]; rectangle [AB, AD]; square [сторона]; rhombus [сторона, угол при A]; trapezoid [AB, DC, высота] — основания AB ∥ DC.',
@@ -108,7 +113,7 @@ export const diagramPlanInstructions = [
   'Окружности треугольника: incircle [O] ← args [A, B, C] — вписанная; circumcircle [O] ← args [A, B, C] — описанная.',
   'Тела: box ← names [A, B, C, D, A₁, B₁, C₁, D₁], values [длина, высота, глубина] - прямоугольный параллелепипед, ABCD нижнее основание, A₁ над A; для куба задай все три числа одинаковыми. prism ← names [A, B, C, A₁, B₁, C₁], values [сторона основания, высота, глубина] - треугольная призма.',
   'Тело чертится кабинетной проекцией: сервер сам считает вершины, сам решает, какие три ребра закрыты, и чертит их пунктиром. Середины рёбер, точки на рёбрах и пересечения на теле стройте обычными командами - midpoint, point-on-segment, intersection - они работают на чертеже тела так же, как на плоском.',
-  'Пометки: mark-equal ← args [A, B, C, D] (AB = CD); mark-parallel ← args [A, B, C, D]; mark-right-angle ← args [A, B, C] (прямой угол при B); mark-angle ← args [A, B, C] с подписью в label.',
+  'Пометки: mark-equal ← args [A, B, C, D] (AB = CD); mark-parallel ← args [A, B, C, D]; mark-right-angle ← args [A, B, C] (прямой угол при B); mark-angle ← args [A, B, C] с подписью в label; mark-equal-angle ← args [A, B, C, D, E, F] (∠ABC = ∠DEF) - равные углы одинаковыми дугами, у второй пары равных углов дуги двойные.',
   'На чертеже тела пометки равенства и прямого угла не ставь: проекция длин и углов не сохраняет, и сервер отвергнет план как неверный. Равные рёбра показывай подписью.',
   'Пометка — это утверждение: сервер проверяет её численно и отклоняет план, если она неверна.',
 ].join(' ')
@@ -261,7 +266,9 @@ const tolerance = {
   onCircle: 0.03,
 }
 
-const sceneLimits = { points: 18, objects: 24, marks: 16, constraints: 24 }
+// Сечение многогранника или вписанный многоугольник с построениями в 18
+// точек не укладывались: лимит должен резать избыточный план, а не задачу.
+const sceneLimits = { points: 24, objects: 32, marks: 20, constraints: 32 }
 
 class DiagramPlanError extends Error {}
 
@@ -601,6 +608,60 @@ function runCommand(state: BuildState, command: DiagramCommand) {
     return
   }
 
+  if (op === 'inscribed-polygon') {
+    const count = Math.min(command.names.length, 4)
+    if (count < 3) throw new DiagramPlanError('inscribed-polygon: нужно три или четыре вершины')
+    const [center, through] = takeArgs(state, command, 2)
+    const radius = gap(center.position, through.position)
+    if (radius === 0) throw new DiagramPlanError('inscribed-polygon: вырожденная окружность')
+    /* Без чисел - правильный многоугольник, стоящий прямо: основание
+       горизонтально, обход по часовой стрелке от нижней левой вершины. */
+    const vertices = command.values.length === 0
+      ? Array.from({ length: count }, (_, index) => {
+          const degrees = 270 - 180 / count - index * (360 / count)
+          return add(center.position, mul(vec(Math.cos((degrees * Math.PI) / 180), Math.sin((degrees * Math.PI) / 180)), radius))
+        })
+      : takeValues(command, Array.from({ length: count }, () => 0))
+          .map((degrees) => add(center.position, rotate(sub(through.position, center.position), degrees)))
+    const points = command.names.slice(0, count).map((name, index) => definePoint(state, name, vertices[index], visible))
+    addObject(state, { kind: 'polygon', points: points.map((point) => point.id), label: command.label, auxiliary: command.auxiliary })
+    for (const point of points) addConstraint(state, 'on-circle', [point.id, center.id, through.id])
+    return
+  }
+
+  if (op === 'tangent-line') {
+    const [from, center, through] = takeArgs(state, command, 3)
+    const radius = gap(center.position, through.position)
+    if (radius === 0) throw new DiagramPlanError('tangent-line: вырожденная окружность')
+    const offset = sub(from.position, center.position)
+    const span = length(offset)
+
+    if (Math.abs(span - radius) <= radius * 0.01) {
+      // Точка на окружности: касательная через неё перпендикулярна радиусу.
+      const direction = mul(unit(rotate(offset, 90)), radius)
+      const name = command.names[0] ?? technicalName(state)
+      const anchor = definePoint(state, name, add(from.position, direction), command.names.length > 0 && visible)
+      state.lineAnchors.push({ id: anchor.id, origin: from.position, direction })
+      addObject(state, { kind: 'line', points: [from.id, anchor.id], label: command.label, auxiliary: command.auxiliary })
+      addConstraint(state, 'on-circle', [from.id, center.id, through.id])
+      addConstraint(state, 'perpendicular', [center.id, from.id, from.id, anchor.id])
+      return
+    }
+    if (span < radius) throw new DiagramPlanError(`tangent-line: точка ${from.id} внутри окружности, касательных из неё нет`)
+
+    takeNames(command, 1)
+    // Радиус в точку касания перпендикулярен касательной: cos θ = r / |OP|.
+    const turn = (Math.acos(radius / span) * 180) / Math.PI
+    const directions = [rotate(unit(offset), turn), rotate(unit(offset), -turn)]
+    command.names.slice(0, 2).forEach((name, index) => {
+      const touch = definePoint(state, name, add(center.position, mul(directions[index], radius)), visible)
+      addObject(state, { kind: 'segment', points: [from.id, touch.id], label: index === 0 ? command.label : '', auxiliary: command.auxiliary })
+      addConstraint(state, 'on-circle', [touch.id, center.id, through.id])
+      addConstraint(state, 'perpendicular', [center.id, touch.id, from.id, touch.id])
+    })
+    return
+  }
+
   if (op === 'triangle') {
     const [ab, bc, ca] = takeValues(command, [52, 58, 70])
     placeTriangle(state, command, triangleBySides(ab, bc, ca))
@@ -925,11 +986,24 @@ function runCommand(state: BuildState, command: DiagramCommand) {
       // Числовая подпись угла — тоже утверждение: сверяем её с построением.
       const measured = angleBetween(a.position, b.position, c.position)
       const expected = Number(declared[1].replace(',', '.'))
-      if (!Number.isFinite(measured) || Math.abs(measured - expected) > 1) {
+      // Полградуса пропускают подпись, округлённую до целого; дальше - ошибка.
+      const allowed = Math.max(0.5, expected * 0.005) + 1e-6
+      if (!Number.isFinite(measured) || Math.abs(measured - expected) > allowed) {
         throw new DiagramPlanError(`mark-angle: угол ${a.id}${b.id}${c.id} равен ${measured.toFixed(1)}°, а подписан как ${expected}°`)
       }
     }
     addMark(state, { kind: 'angle', points: [a.id, b.id, c.id], label: command.label })
+    return
+  }
+
+  if (op === 'mark-equal-angle') {
+    const [a, b, c, d, e, f] = takeArgs(state, command, 6)
+    const first = angleBetween(a.position, b.position, c.position)
+    const second = angleBetween(d.position, e.position, f.position)
+    if (!Number.isFinite(first) || !Number.isFinite(second) || Math.abs(first - second) > 0.5) {
+      throw new DiagramPlanError(`mark-equal-angle: ∠${a.id}${b.id}${c.id} = ${first.toFixed(1)}°, а ∠${d.id}${e.id}${f.id} = ${second.toFixed(1)}° - углы не равны`)
+    }
+    addMark(state, { kind: 'equal-angle', points: [a.id, b.id, c.id, d.id, e.id, f.id], label: '' })
     return
   }
 
@@ -1070,6 +1144,28 @@ function constraintIssue(constraint: SceneConstraint, positions: Map<string, Vec
   return ''
 }
 
+/* Пересекает ли ломаная сама себя.
+
+   Модель может перечислить вершины многоугольника не по обходу, и ABCD
+   выходит «бабочкой»: связи между точками при этом выполняются, ломается
+   только контур. Смежные звенья делят вершину и не считаются. */
+export function chainSelfCrossing(chain: readonly Vec[], closed: boolean) {
+  const edges = chain.slice(0, -1).map((start, index) => [start, chain[index + 1]] as const)
+  if (closed && chain.length > 2) edges.push([chain[chain.length - 1], chain[0]])
+  const side = (value: number) => (value > 1e-6 ? 1 : value < -1e-6 ? -1 : 0)
+  for (let index = 0; index < edges.length; index += 1) {
+    for (let other = index + 2; other < edges.length; other += 1) {
+      if (closed && index === 0 && other === edges.length - 1) continue
+      const [a, b] = edges[index]
+      const [c, d] = edges[other]
+      const first = side(cross(sub(b, a), sub(c, a))) * side(cross(sub(b, a), sub(d, a)))
+      const second = side(cross(sub(d, c), sub(a, c))) * side(cross(sub(d, c), sub(b, c)))
+      if (first < 0 && second < 0) return true
+    }
+  }
+  return false
+}
+
 function verifyScene(state: BuildState) {
   const issues: string[] = []
   const positions = new Map(state.points.map((point) => [point.id, point.position]))
@@ -1100,7 +1196,14 @@ function verifyScene(state: BuildState) {
   }
 
   for (const object of state.objects) {
-    if (object.points.some((id) => !positions.has(id))) issues.push(`${object.kind}: ссылка на отсутствующую точку`)
+    if (object.points.some((id) => !positions.has(id))) {
+      issues.push(`${object.kind}: ссылка на отсутствующую точку`)
+      continue
+    }
+    if ((object.kind === 'polygon' || object.kind === 'polyline') && object.points.length >= 4
+      && chainSelfCrossing(object.points.map((id) => positions.get(id) as Vec), object.kind === 'polygon')) {
+      issues.push(`${object.kind} ${object.points.join('')}: контур пересекает сам себя - вершины перечислены не по порядку обхода`)
+    }
   }
 
   for (const constraint of state.constraints) {

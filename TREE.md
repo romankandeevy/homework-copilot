@@ -17,6 +17,7 @@ homework Copilot/
 │   ├── homeworkSolver.ts    — HTTP решателя: оплата, стадии, сохранение решения
 │   ├── subjectRules.ts      — правила предмета, они же рецензент
 │   ├── gradeRules.ts        — приём решения по ступени: школа против вуза
+│   ├── conditionGuard.ts    — признаки попытки переопределить промпт внутри условия
 │   ├── chat.ts / chatProviders.ts — ИИ-чат: квоты, списание, два протокола шлюза
 │   └── support.ts           — обращения, мост в Telegram
 ├── src/

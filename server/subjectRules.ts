@@ -25,6 +25,8 @@ export type SubjectRule = {
   applies?: (solution: HomeworkSolution) => boolean
   /** Проверка кодом. Возвращает замечание или null. Нет проверки — правило только в промпте. */
   verify?: (solution: HomeworkSolution) => string | null
+  /** След выполненного правила в записи. Нужен правилам без verify: по нему сверяется ответ модели в ruleChecks. */
+  evidence?: RegExp
 }
 
 /* Число с единицей измерения.
@@ -130,6 +132,7 @@ const formulaBeforeNumbers: SubjectRule = {
   id: 'formula-before-numbers',
   question: 'Формула записана буквами до подстановки чисел?',
   applies: (solution) => solution.taskType === 'calculation',
+  evidence: /\p{L}\s*=\s*[\p{L}(√]/u,
 }
 
 /* Обозначение вводится раньше, чем используется.
@@ -395,6 +398,7 @@ const rulesBySubject: Record<string, readonly SubjectRule[]> = {
   mathematics: [numericAnswer, answerUnits, stepsShowWork, factorsExplained, symbolIntroduced, {
     id: 'check-by-substitution',
     question: 'Найденное значение подставлено обратно и условие сошлось?',
+    evidence: /провер|подстав|верно|сходится|✓/u,
   }],
   algebra: [numericAnswer, answerUnits, stepsShowWork, symbolIntroduced, casesAnalysed, {
     id: 'roots-checked',
@@ -403,6 +407,7 @@ const rulesBySubject: Record<string, readonly SubjectRule[]> = {
     id: 'domain-checked',
     question: 'Область допустимых значений выписана, если есть дробь, корень или логарифм?',
     applies: (solution) => conditionMentions(solution, /\/|дроб|корен|корн|логарифм|√/u),
+    evidence: /одз|допустим|≠/u,
   }, {
     id: 'identity-named',
     question: 'Названо преобразование или формула, по которой сделан каждый переход?',
@@ -419,6 +424,7 @@ const rulesBySubject: Record<string, readonly SubjectRule[]> = {
   }, {
     id: 'theorem-named',
     question: 'Названа теорема или признак, по которому сделан каждый вывод?',
+    evidence: /теорем|признак|свойств|по определени|аксиом|следстви|формул/u,
   }, {
     id: 'drawing-matches-condition',
     question: 'На чертеже есть все объекты и подписи из условия?',
@@ -465,6 +471,7 @@ const rulesBySubject: Record<string, readonly SubjectRule[]> = {
     id: 'electron-balance',
     question: 'Для реакции с концентрированной HNO₃, H₂SO₄, KMnO₄ или K₂Cr₂O₇ записан электронный баланс?',
     applies: (solution) => conditionMentions(solution, /hno₃|hno3|h₂so₄|h2so4|kmno₄|kmno4|k₂cr₂o₇|k2cr2o7|окислит|восстановит/u),
+    evidence: /ē|e⁻|электрон|окисл|восстан/u,
   }, {
     id: 'equation-balanced',
     question: 'Уравнение реакции уравнено — коэффициенты расставлены?',
@@ -474,6 +481,7 @@ const rulesBySubject: Record<string, readonly SubjectRule[]> = {
     id: 'molar-mass',
     question: 'Молярные массы взяты из таблицы и подписаны?',
     applies: (solution) => conditionMentions(solution, /масс|моль|доля/u),
+    evidence: /m\s*\(|г\/моль/u,
   }, numericAnswer],
   biology: [{
     id: 'terms-named',
@@ -483,6 +491,7 @@ const rulesBySubject: Record<string, readonly SubjectRule[]> = {
     id: 'base-marked',
     question: 'У чисел в непривычной системе счисления подписано основание?',
     applies: (solution) => conditionMentions(solution, /систем счислени|двоичн|восьмеричн|шестнадцатеричн/u),
+    evidence: /[₀-₉]|_\s*\d|основани/u,
   }, stepsShowWork],
   russian: [{
     id: 'morphemes-complete',
@@ -643,4 +652,23 @@ export function verifySubjectRules(solution: HomeworkSolution): string[] {
   }
 
   return [...new Set(issues)]
+}
+
+/* Сверка ответа модели на вопросы правил с самой записью.
+
+   Правило без verify кодом не проверяется, и модель могла ответить
+   «ОДЗ выписана» в ruleChecks, не написав о ней ни строки. Где у правила
+   есть явный след в записи, заявленное «выполнено» без этого следа -
+   такое же нарушение, как прямая ошибка. */
+export function verifyRuleClaims(
+  solution: HomeworkSolution,
+  checks: readonly { rule: string; passed: boolean }[],
+): string[] {
+  const claimed = new Set(checks.filter((check) => check.passed).map((check) => check.rule.trim()))
+  const written = `${solution.steps.join(' ')} ${solution.answer}`.toLocaleLowerCase('ru-RU').replaceAll('ё', 'е')
+  return subjectRules(solution.subject)
+    .filter((rule) => rule.evidence && !rule.verify && claimed.has(rule.id))
+    .filter((rule) => !rule.applies || rule.applies(solution))
+    .filter((rule) => !rule.evidence?.test(written))
+    .map((rule) => `Правило «${rule.id}» отмечено выполненным, но в записи этого не видно: ${rule.question}`)
 }

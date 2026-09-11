@@ -152,7 +152,9 @@ export function homeworkSolutionForm(subject: string, taskType: HomeworkTaskType
 export const homeworkSceneObjectKinds = ['line', 'segment', 'ray', 'circle', 'polyline', 'polygon', 'curve'] as const
 export type HomeworkSceneObjectKind = typeof homeworkSceneObjectKinds[number]
 
-export const homeworkSceneMarkKinds = ['angle', 'right-angle', 'equal-segment', 'parallel'] as const
+/* «equal-angle» - два равных угла ABC и DEF, шесть точек. Равенство
+   показывают одинаковым числом дуг: у второй такой пары дуги двойные. */
+export const homeworkSceneMarkKinds = ['angle', 'right-angle', 'equal-segment', 'parallel', 'equal-angle'] as const
 export type HomeworkSceneMarkKind = typeof homeworkSceneMarkKinds[number]
 
 export const homeworkSceneConstraintKinds = [

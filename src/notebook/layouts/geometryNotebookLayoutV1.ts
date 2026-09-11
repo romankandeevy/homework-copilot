@@ -75,6 +75,7 @@ export const geometryNotebookLayoutV1 = {
         lineLabelOffsetY: 34,
         lineExtensionFactor: 5,
         angleRadius: 31,
+        equalAngleArcGap: 6,
         rightAngleSize: 24,
         equalSegmentTickHalf: 10,
         parallelMarkHalf: 12,

@@ -60,6 +60,63 @@ export const approvedGeometryNotebookLayoutV1Fixture: GeometryNotebookPageSpec =
   answer: 'AB = 13 см',
 }
 
+/* Тело со скрытыми рёбрами: куб ABCDA₁B₁C₁D₁ так, как его строит
+   diagramBuilder (кабинетная проекция, box 50×50×50). Закрыта вершина D,
+   её три ребра - пунктиром.
+
+   В geometryFixtures не входит: тот список обходят снимки тетради, а новый
+   снимок заводится только с согласованием. До тех пор этот лист проверяет
+   юнит-тест: 11 сентября выяснилось, что стиля у скрытого ребра на
+   странице не было вовсе и куб выходил без задних рёбер. */
+export const solidGeometryFixture: GeometryNotebookPageSpec = {
+  id: 'solid-cube-hidden-edges',
+  number: '1',
+  condition: 'Ребро куба ABCDA₁B₁C₁D₁ равно 4 см. Найдите диагональ куба AC₁.',
+  given: ['куб ABCDA₁B₁C₁D₁', 'AB = 4 см'],
+  goal: { title: 'Найти', text: 'AC₁' },
+  diagram: {
+    kind: 'construction',
+    description: 'Куб ABCDA₁B₁C₁D₁, скрытые рёбра при вершине D пунктиром, диагональ AC₁.',
+    vertices: ['A', 'B', 'C', 'D', 'A₁', 'B₁', 'C₁', 'D₁'],
+    scene: {
+      points: [
+        { id: 'A', label: 'A', x: 8, y: 92, visible: true },
+        { id: 'B', label: 'B', x: 70.06, y: 92, visible: true },
+        { id: 'C', label: 'C', x: 92, y: 70.06, visible: true },
+        { id: 'D', label: 'D', x: 29.94, y: 70.06, visible: true },
+        { id: 'A₁', label: 'A₁', x: 8, y: 29.94, visible: true },
+        { id: 'B₁', label: 'B₁', x: 70.06, y: 29.94, visible: true },
+        { id: 'C₁', label: 'C₁', x: 92, y: 8, visible: true },
+        { id: 'D₁', label: 'D₁', x: 29.94, y: 8, visible: true },
+      ],
+      objects: [
+        { kind: 'segment', points: ['A', 'B'], label: '', auxiliary: false },
+        { kind: 'segment', points: ['B', 'C'], label: '', auxiliary: false },
+        { kind: 'segment', points: ['C', 'D'], label: '', auxiliary: false, hidden: true },
+        { kind: 'segment', points: ['D', 'A'], label: '', auxiliary: false, hidden: true },
+        { kind: 'segment', points: ['A₁', 'B₁'], label: '', auxiliary: false },
+        { kind: 'segment', points: ['B₁', 'C₁'], label: '', auxiliary: false },
+        { kind: 'segment', points: ['C₁', 'D₁'], label: '', auxiliary: false },
+        { kind: 'segment', points: ['D₁', 'A₁'], label: '', auxiliary: false },
+        { kind: 'segment', points: ['A', 'A₁'], label: '', auxiliary: false },
+        { kind: 'segment', points: ['B', 'B₁'], label: '', auxiliary: false },
+        { kind: 'segment', points: ['C', 'C₁'], label: '', auxiliary: false },
+        { kind: 'segment', points: ['D', 'D₁'], label: '', auxiliary: false, hidden: true },
+        { kind: 'segment', points: ['A', 'C₁'], label: '', auxiliary: true },
+      ],
+      marks: [],
+      constraints: [],
+    },
+  },
+  solution: [
+    'AC = AB·√2 = 4√2 см (диагональ квадрата)',
+    'CC₁ ⟂ (ABC), △ACC₁ - прямоугольный',
+    'AC₁² = AC² + CC₁² = 32 + 16 = 48',
+    'AC₁ = √48 = 4√3 см',
+  ],
+  answer: 'AC₁ = 4√3 см',
+}
+
 export const geometryFixtures: readonly GeometryNotebookPageSpec[] = [
   approvedGeometryNotebookLayoutV1Fixture,
   ...verifiedTextbookTasks

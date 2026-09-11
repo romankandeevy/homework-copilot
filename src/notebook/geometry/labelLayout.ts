@@ -26,9 +26,18 @@ export type Segment = readonly [{ x: number; y: number }, { x: number; y: number
    в тестах. Доля 0,55 от кегля - средняя ширина знака этого шрифта:
    заниженная оценка хуже завышенной, поэтому берём с запасом. */
 const averageGlyphRatio = 0.55
+// Индекс «₁» набран мельче буквы: считать его полным знаком значит
+// отодвигать «T₁» и «A₁» от соседей дальше, чем нужно.
+const subscriptGlyphRatio = 0.35
+const subscriptGlyph = /[₀-₉ₐ-ₜ]/u
+
+export function labelWidth(label: string, fontSize: number) {
+  const units = [...label].reduce((sum, glyph) => sum + (subscriptGlyph.test(glyph) ? subscriptGlyphRatio : averageGlyphRatio), 0)
+  return Math.max(averageGlyphRatio, units) * fontSize
+}
 
 export function labelRect(x: number, y: number, label: string, fontSize: number, anchor: Anchor = 'start'): LabelRect {
-  const width = Math.max(1, label.length) * fontSize * averageGlyphRatio
+  const width = labelWidth(label, fontSize)
   const height = fontSize
   const left = anchor === 'end' ? x - width : anchor === 'middle' ? x - width / 2 : x
   // y текста в SVG - базовая линия: прямоугольник поднимаем над ней.

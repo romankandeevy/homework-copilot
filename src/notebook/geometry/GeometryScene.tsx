@@ -338,6 +338,28 @@ function AngleMark({ points, label }: { points: readonly Point[]; label: string 
   </>
 }
 
+function arcPath(points: readonly Point[], radius: number) {
+  const [first, vertex, second] = points
+  if (!first || !vertex || !second) return ''
+  const firstUnit = unit(vertex, first)
+  const secondUnit = unit(vertex, second)
+  if (!firstUnit || !secondUnit) return ''
+  const sweep = firstUnit.x * secondUnit.y - firstUnit.y * secondUnit.x >= 0 ? 1 : 0
+  return `M ${vertex.x + firstUnit.x * radius} ${vertex.y + firstUnit.y * radius} A ${radius} ${radius} 0 0 ${sweep} ${vertex.x + secondUnit.x * radius} ${vertex.y + secondUnit.y * radius}`
+}
+
+/* Равные углы - одинаковым числом дуг, как в тетради: первая пара равных
+   углов одной дугой, вторая - двумя, третья - тремя. Число дуг и есть
+   подпись, буквами поверх чертежа равенство не пишут. */
+function EqualAngleMark({ points, arcs }: { points: readonly Point[]; arcs: number }) {
+  const paths = [points.slice(0, 3), points.slice(3, 6)].flatMap((angle) => (
+    Array.from({ length: arcs }, (_, index) => arcPath(angle, sceneLayout.angleRadius + index * sceneLayout.equalAngleArcGap))
+  )).filter(Boolean)
+  return <>
+    {keyed(paths, (path) => path).map(({ key, item: path }) => <path className="diagram-mark" d={path} key={key} />)}
+  </>
+}
+
 function rightAngleCorners(points: readonly Point[]) {
   const [first, vertex, second] = points
   if (!first || !vertex || !second) return null
@@ -627,6 +649,10 @@ export function GeometryScene({ scene, description }: { scene: HomeworkDiagramSc
     return { ...place, anchor: 'start' as const }
   })
 
+  const equalAngleArcs = new Map(scene.marks
+    .filter((mark) => mark.kind === 'equal-angle')
+    .map((mark, index) => [mark, Math.min(index + 1, 3)] as const))
+
   const vertexPlaces = new Map(points.filter((point) => point.visible).map((point) => {
     const text = point.label || point.id
     const place = labelPlacement(point, center, points, edges, labels, text)
@@ -683,6 +709,7 @@ export function GeometryScene({ scene, description }: { scene: HomeworkDiagramSc
           if (mark.kind === 'angle') return <AngleMark points={markPoints} label={label} key={key} />
           if (mark.kind === 'right-angle') return <RightAngleMark points={markPoints} label={label} key={key} />
           if (mark.kind === 'equal-segment') return <EqualSegmentMark points={markPoints} label={label} key={key} />
+          if (mark.kind === 'equal-angle') return <EqualAngleMark points={markPoints} arcs={equalAngleArcs.get(mark) ?? 1} key={key} />
           return <ParallelMark points={markPoints} label={label} key={key} />
         })}
         {points.filter((point) => point.visible).map((point) => {

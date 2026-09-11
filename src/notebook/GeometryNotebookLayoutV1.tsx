@@ -216,6 +216,7 @@ function NotebookSheet({ spec, segment }: { spec: GeometryNotebookPageSpec; segm
           .diagram-tick-label { font-size: ${Math.round(typography.bodySize * 0.72)}px; }
           .diagram-mark,.diagram-angle-arc { stroke-width: ${strokes.marker}px; }
           .diagram-auxiliary { stroke-width: ${strokes.marker}px; stroke-dasharray: 10 7; }
+          .diagram-hidden { fill: none; stroke: ${colors.pencil}; stroke-width: ${strokes.triangle}px; stroke-dasharray: 6 5; stroke-linecap: round; stroke-linejoin: round; }
           .diagram-vertex,.diagram-angle-label { fill: ${colors.pencil}; font-size: ${typography.bodySize}px; }
           .number-line-hatch { fill: none; stroke: ${colors.pencil}; stroke-width: ${strokes.marker * 0.8}px; stroke-linecap: round; }
           .number-line-point-filled { fill: ${colors.pencil}; stroke: ${colors.pencil}; stroke-width: ${strokes.marker}px; }

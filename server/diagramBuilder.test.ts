@@ -479,3 +479,270 @@ describe('тела', () => {
     expect(built.scene.objects.filter((object) => object.hidden)).toHaveLength(3)
   })
 })
+
+function rejected(description: string, drafts: CommandDraft[]) {
+  const result = buildDiagram(plan(description, drafts))
+  if (result.ok) throw new Error('план должен был быть отклонён')
+  return result.errors.join(' ')
+}
+
+const axisPoints: CommandDraft[] = [
+  { op: 'point', names: ['A'], values: [0, 0] },
+  { op: 'point', names: ['B'], values: [80, 0] },
+]
+
+describe('операции построителя по одной', () => {
+  it('perpendicular: основание на прямой, угол прямой', () => {
+    const { scene } = build('Перпендикуляр PH к прямой AB.', [
+      ...axisPoints,
+      { op: 'point', names: ['P'], values: [30, 40] },
+      { op: 'segment', args: ['A', 'B'] },
+      { op: 'perpendicular', names: ['H'], args: ['P', 'A', 'B'] },
+    ])
+    expect(angle(scene, 'P', 'H', 'A')).toBeCloseTo(90, 4)
+    expect(skew(scene, 'A', 'B', 'A', 'H')).toBeLessThan(1e-6)
+  })
+
+  it('mark-equal: верное равенство проходит, неверное отклоняется', () => {
+    const { scene } = build('Равнобедренный треугольник.', [
+      { op: 'triangle-isosceles', names: ['A', 'B', 'C'], values: [60, 55] },
+      { op: 'mark-equal', args: ['B', 'A', 'B', 'C'] },
+    ])
+    expect(scene.marks.filter((mark) => mark.kind === 'equal-segment')).toHaveLength(1)
+    expect(rejected('Ложное равенство.', [
+      { op: 'triangle-isosceles', names: ['A', 'B', 'C'], values: [60, 55] },
+      { op: 'mark-equal', args: ['A', 'B', 'A', 'C'] },
+    ])).toContain('разной длины')
+  })
+
+  it('rectangle: прямые углы и заданное отношение сторон', () => {
+    const { scene } = build('Прямоугольник ABCD.', [
+      { op: 'rectangle', names: ['A', 'B', 'C', 'D'], values: [64, 42] },
+    ])
+    expect(angle(scene, 'B', 'A', 'D')).toBeCloseTo(90, 4)
+    expect(angle(scene, 'A', 'B', 'C')).toBeCloseTo(90, 4)
+    expect(span(scene, 'A', 'B')).toBeCloseTo(span(scene, 'D', 'C'), 5)
+    expect(span(scene, 'A', 'D') / span(scene, 'A', 'B')).toBeCloseTo(42 / 64, 4)
+  })
+
+  it('square: равные стороны и равные диагонали', () => {
+    const { scene } = build('Квадрат ABCD.', [{ op: 'square', names: ['A', 'B', 'C', 'D'], values: [40] }])
+    for (const [from, to] of [['B', 'C'], ['C', 'D'], ['D', 'A']]) expect(span(scene, from, to)).toBeCloseTo(span(scene, 'A', 'B'), 5)
+    expect(span(scene, 'A', 'C')).toBeCloseTo(span(scene, 'B', 'D'), 5)
+    expect(angle(scene, 'D', 'A', 'B')).toBeCloseTo(90, 4)
+  })
+
+  it('mark-parallel: верное проходит, ложное отклоняется', () => {
+    build('Параллелограмм.', [
+      { op: 'parallelogram', names: ['A', 'B', 'C', 'D'] },
+      { op: 'mark-parallel', args: ['A', 'D', 'B', 'C'] },
+    ])
+    expect(rejected('Ложная параллельность.', [
+      { op: 'triangle', names: ['A', 'B', 'C'] },
+      { op: 'mark-parallel', args: ['A', 'B', 'B', 'C'] },
+    ])).toContain('parallel')
+  })
+
+  it('point-on-line: точка на продолжении отрезка', () => {
+    const { scene } = build('Точка P на продолжении AB.', [
+      { op: 'point', names: ['A'], values: [0, 0] },
+      { op: 'point', names: ['B'], values: [40, 0] },
+      { op: 'point', names: ['K'], values: [10, 30] },
+      { op: 'point-on-line', names: ['P'], args: ['A', 'B'], values: [1.5] },
+      { op: 'polyline', args: ['K', 'A', 'P'] },
+    ])
+    expect(skew(scene, 'A', 'B', 'A', 'P')).toBeLessThan(1e-6)
+    expect(span(scene, 'A', 'P') / span(scene, 'A', 'B')).toBeCloseTo(1.5, 4)
+  })
+
+  it('point-on-circle: на окружности под заданным углом', () => {
+    const { scene } = build('Точка P на окружности.', [
+      { op: 'point', names: ['O'], values: [0, 0] },
+      { op: 'point', names: ['R'], values: [40, 0] },
+      { op: 'circle', args: ['O', 'R'] },
+      { op: 'point-on-circle', names: ['P'], args: ['O', 'R'], values: [60] },
+    ])
+    expect(span(scene, 'O', 'P')).toBeCloseTo(span(scene, 'O', 'R'), 4)
+    expect(angle(scene, 'R', 'O', 'P')).toBeCloseTo(60, 4)
+  })
+
+  it('intersection-circles: обе точки на обеих окружностях', () => {
+    const { scene } = build('Две окружности пересекаются в X и Y.', [
+      { op: 'point', names: ['O'], values: [0, 0] },
+      { op: 'point', names: ['P'], values: [40, 0] },
+      { op: 'point', names: ['Q'], values: [50, 0] },
+      { op: 'point', names: ['S'], values: [90, 0] },
+      { op: 'circle', args: ['O', 'P'] },
+      { op: 'circle', args: ['Q', 'S'] },
+      { op: 'intersection-circles', names: ['X', 'Y'], args: ['O', 'P', 'Q', 'S'] },
+    ])
+    for (const id of ['X', 'Y']) {
+      expect(span(scene, 'O', id)).toBeCloseTo(span(scene, 'O', 'P'), 4)
+      expect(span(scene, 'Q', id)).toBeCloseTo(span(scene, 'Q', 'S'), 4)
+    }
+    // Общая хорда перпендикулярна линии центров.
+    expect(angle(scene, 'X', 'Y', 'O') + angle(scene, 'Y', 'X', 'O')).toBeGreaterThan(0)
+    expect(1 - skew(scene, 'X', 'Y', 'O', 'Q')).toBeLessThan(1e-6)
+  })
+
+  it('ray: луч начинается в первой точке', () => {
+    const { scene } = build('Луч AB.', [...axisPoints, { op: 'ray', args: ['A', 'B'] }])
+    expect(scene.objects[0]).toMatchObject({ kind: 'ray', points: ['A', 'B'] })
+  })
+
+  it('polygon: пятиугольник по цепочке', () => {
+    const { scene } = build('Пятиугольник ABCDE.', [
+      { op: 'point', names: ['A'], values: [0, 0] },
+      { op: 'point', names: ['B'], values: [60, 0] },
+      { op: 'point', names: ['C'], values: [75, 45] },
+      { op: 'point', names: ['D'], values: [30, 75] },
+      { op: 'point', names: ['E'], values: [-15, 45] },
+      { op: 'polygon', args: ['A', 'B', 'C', 'D', 'E'] },
+    ])
+    expect(scene.objects[0]).toMatchObject({ kind: 'polygon', points: ['A', 'B', 'C', 'D', 'E'] })
+  })
+})
+
+describe('план, к которому придерётся проверяющий', () => {
+  it('многоугольник-«бабочка» отклоняется', () => {
+    expect(rejected('ABCD с вершинами не по обходу.', [
+      { op: 'point', names: ['A'], values: [0, 0] },
+      { op: 'point', names: ['B'], values: [60, 0] },
+      { op: 'point', names: ['C'], values: [0, 50] },
+      { op: 'point', names: ['D'], values: [60, 50] },
+      { op: 'polygon', args: ['A', 'B', 'C', 'D'] },
+    ])).toContain('пересекает сам себя')
+  })
+
+  it('имя T₁ из плана не отдаётся технической точке', () => {
+    const { scene } = build('Окружность и точка T₁.', [
+      { op: 'point', names: ['O'], values: [0, 0] },
+      { op: 'circle-radius', args: ['O'], values: [40] },
+      { op: 'point', names: ['T₁'], values: [60, 30] },
+      { op: 'segment', args: ['O', 'T₁'] },
+    ])
+    const named = scene.points.find((point) => point.id === 'T₁')
+    expect(named?.visible).toBe(true)
+    expect(scene.points.filter((point) => !point.visible).map((point) => point.id)).not.toContain('T₁')
+  })
+
+  it('mark-angle: округление до целого проходит, два градуса ошибки - нет', () => {
+    const right: CommandDraft = { op: 'triangle-right', names: ['A', 'B', 'C'], values: [40, 30] }
+    build('Угол A ≈ 37°.', [right, { op: 'mark-angle', args: ['B', 'A', 'C'], label: '37°' }])
+    expect(rejected('Угол A подписан 39°.', [right, { op: 'mark-angle', args: ['B', 'A', 'C'], label: '39°' }])).toContain('36.9°')
+  })
+
+  it('mark-equal-angle: равные углы при основании, ложное равенство отклоняется', () => {
+    const { scene } = build('Равнобедренный треугольник, углы при основании равны.', [
+      { op: 'triangle-isosceles', names: ['A', 'B', 'C'], values: [60, 55] },
+      { op: 'mark-equal-angle', args: ['B', 'A', 'C', 'B', 'C', 'A'] },
+    ])
+    expect(scene.marks.find((mark) => mark.kind === 'equal-angle')?.points).toEqual(['B', 'A', 'C', 'B', 'C', 'A'])
+    expect(rejected('Угол при основании равен углу при вершине.', [
+      { op: 'triangle-isosceles', names: ['A', 'B', 'C'], values: [60, 55] },
+      { op: 'mark-equal-angle', args: ['B', 'A', 'C', 'A', 'B', 'C'] },
+    ])).toContain('не равны')
+  })
+
+  it('чертёж с равными углами проходит проверку движка', () => {
+    const { diagram } = build('Биссектриса BD равнобедренного треугольника.', [
+      { op: 'triangle-isosceles', names: ['A', 'B', 'C'], values: [60, 55] },
+      { op: 'median', names: ['D'], args: ['A', 'B', 'C'] },
+      { op: 'mark-equal-angle', args: ['A', 'B', 'D', 'D', 'B', 'C'] },
+    ])
+    expect(qualityIssues(diagram, 'Постройте равнобедренный треугольник ABC и биссектрису BD.', ['△ABC: AB = BC; ∠ABD = ∠DBC; AD = DC.'])).toEqual([])
+  })
+})
+
+describe('вписанный многоугольник и касательная', () => {
+  const circle: CommandDraft[] = [
+    { op: 'point', names: ['O'], values: [0, 0] },
+    { op: 'circle-radius', names: ['R'], args: ['O'], values: [40], hidden: true },
+  ]
+
+  it('правильный треугольник стоит основанием вниз', () => {
+    const { scene } = build('Правильный треугольник, вписанный в окружность.', [
+      ...circle,
+      { op: 'inscribed-polygon', names: ['A', 'B', 'C'], args: ['O', 'R'] },
+    ])
+    for (const id of ['A', 'B', 'C']) expect(span(scene, 'O', id)).toBeCloseTo(span(scene, 'O', 'R'), 4)
+    expect(span(scene, 'A', 'B')).toBeCloseTo(span(scene, 'B', 'C'), 4)
+    expect(at(scene, 'A').y).toBeCloseTo(at(scene, 'C').y, 4)
+    expect(at(scene, 'B').y).toBeLessThan(at(scene, 'A').y)
+  })
+
+  it('вписанный квадрат стоит прямо', () => {
+    const { scene } = build('Квадрат, вписанный в окружность.', [
+      ...circle,
+      { op: 'inscribed-polygon', names: ['A', 'B', 'C', 'D'], args: ['O', 'R'] },
+    ])
+    expect(angle(scene, 'A', 'B', 'C')).toBeCloseTo(90, 4)
+    expect(at(scene, 'B').y).toBeCloseTo(at(scene, 'C').y, 4)
+  })
+
+  it('четырёхугольник по углам и вершины не по обходу', () => {
+    const { scene } = build('Вписанный четырёхугольник.', [
+      ...circle,
+      { op: 'inscribed-polygon', names: ['A', 'B', 'C', 'D'], args: ['O', 'R'], values: [200, 110, 20, 290] },
+    ])
+    for (const id of ['A', 'B', 'C', 'D']) expect(span(scene, 'O', id)).toBeCloseTo(span(scene, 'O', 'R'), 4)
+    expect(rejected('Вписанная «бабочка».', [
+      ...circle,
+      { op: 'inscribed-polygon', names: ['A', 'B', 'C', 'D'], args: ['O', 'R'], values: [200, 20, 110, 290] },
+    ])).toContain('пересекает сам себя')
+  })
+
+  it('две касательные из внешней точки равны и перпендикулярны радиусам', () => {
+    const { scene, diagram } = build('Касательные PK и PL к окружности.', [
+      { op: 'point', names: ['O'], values: [0, 0] },
+      { op: 'point', names: ['R'], values: [0, 30] },
+      { op: 'circle', args: ['O', 'R'] },
+      { op: 'point', names: ['P'], values: [80, 0] },
+      { op: 'tangent-line', names: ['K', 'L'], args: ['P', 'O', 'R'] },
+    ])
+    expect(angle(scene, 'O', 'K', 'P')).toBeCloseTo(90, 3)
+    expect(angle(scene, 'O', 'L', 'P')).toBeCloseTo(90, 3)
+    expect(span(scene, 'P', 'K')).toBeCloseTo(span(scene, 'P', 'L'), 4)
+    expect(qualityIssues(diagram, 'Из точки P проведите касательные к окружности.', ['PK = PL; OK ⟂ PK; OL ⟂ PL.'])).toEqual([])
+  })
+
+  it('касательная в точке окружности и точка внутри', () => {
+    const { scene } = build('Касательная в точке P.', [
+      { op: 'point', names: ['O'], values: [0, 0] },
+      { op: 'point', names: ['R'], values: [30, 0] },
+      { op: 'circle', args: ['O', 'R'] },
+      { op: 'point-on-circle', names: ['P'], args: ['O', 'R'], values: [70] },
+      { op: 'tangent-line', args: ['P', 'O', 'R'], label: 'a' },
+    ])
+    const tangent = scene.objects.find((object) => object.label === 'a')
+    expect(tangent?.kind).toBe('line')
+    expect(angle(scene, 'O', 'P', tangent?.points[1] ?? '')).toBeCloseTo(90, 3)
+
+    expect(rejected('Касательная из точки внутри.', [
+      { op: 'point', names: ['O'], values: [0, 0] },
+      { op: 'point', names: ['R'], values: [30, 0] },
+      { op: 'point', names: ['P'], values: [10, 5] },
+      { op: 'tangent-line', names: ['K'], args: ['P', 'O', 'R'] },
+    ])).toContain('внутри окружности')
+  })
+})
+
+describe('лимит сцены', () => {
+  const grid = (count: number): CommandDraft[] => Array.from({ length: count }, (_, index) => ({
+    op: 'point' as const,
+    names: [`${String.fromCharCode(65 + (index % 13))}${index >= 13 ? '₁' : ''}`],
+    values: [(index % 5) * 20, Math.floor(index / 5) * 20],
+  }))
+
+  it('двадцать точек - обычная задача, а не избыточный план', () => {
+    const points = grid(20)
+    const { scene } = build('Двадцать точек.', [...points, { op: 'segment', args: [points[0].names?.[0] ?? '', points[19].names?.[0] ?? ''] }])
+    expect(scene.points).toHaveLength(20)
+  })
+
+  it('двадцать пять точек отклоняются', () => {
+    const points = grid(25)
+    expect(rejected('Двадцать пять точек.', [...points, { op: 'segment', args: [points[0].names?.[0] ?? '', points[1].names?.[0] ?? ''] }]))
+      .toContain('не больше 24')
+  })
+})
