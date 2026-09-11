@@ -627,7 +627,7 @@ export function LineChart({ labels, series, format = formatNumber, height = 220,
             <text x={padding.left - 8} y={y(max * ratio) + 4} textAnchor="end" className="adm-chart-axis">{format(max * ratio)}</text>
           </g>
         ))}
-        {labels.map((label, index) => (index % step === 0 || index === count - 1) && (
+        {labels.map((label, index) => ((index % step === 0 && count - 1 - index >= step / 2) || index === count - 1) && (
           <text key={`axis-${label}`} x={kind === 'bar' ? padding.left + barGroup * index + barGroup / 2 : x(index)} y={height - 8} textAnchor="middle" className="adm-chart-axis">{formatShortDate(label)}</text>
         ))}
         {kind === 'line' && series.map((item, seriesIndex) => (
@@ -708,7 +708,7 @@ export function StackedBars({ labels, stacks, height = 220 }: { labels: string[]
                 offset += barHeight
                 return <rect key={stack.name} className={`adm-chart-bar adm-series-fill-${(stackIndex % 8) + 1}`} x={padding.left + group * index + (group - barWidth) / 2} y={padding.top + innerHeight - offset} width={barWidth} height={barHeight} />
               })}
-              {(index % step === 0 || index === labels.length - 1) && <text x={padding.left + group * index + group / 2} y={height - 8} textAnchor="middle" className="adm-chart-axis">{formatShortDate(label)}</text>}
+              {((index % step === 0 && labels.length - 1 - index >= step / 2) || index === labels.length - 1) && <text x={padding.left + group * index + group / 2} y={height - 8} textAnchor="middle" className="adm-chart-axis">{formatShortDate(label)}</text>}
             </g>
           )
         })}

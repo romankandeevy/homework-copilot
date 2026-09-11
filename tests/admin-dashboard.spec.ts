@@ -31,9 +31,10 @@ test.describe('админка', () => {
     await page.setViewportSize({ width: 1440, height: 960 })
     await signIn(page)
 
-    await expect(page.getByText('обращений без ответа дольше 30 мин')).toBeVisible()
-    await expect(page.getByText('Выручка за период')).toBeVisible()
-    await expect(page.getByText('Удержание по неделям регистрации')).toBeVisible()
+    await expect(page.getByText('Без ответа дольше 30 мин:')).toBeVisible()
+    await expect(page.getByText('Решено сегодня')).toBeVisible()
+    await expect(page.getByText('кредитов на счету')).toBeVisible()
+    await expect(page.getByText('пополнил баланс')).toBeVisible()
 
     await page.getByRole('navigation', { name: 'Разделы админки' }).getByRole('link', { name: 'Пользователи' }).click()
     await expect(page).toHaveURL(/section=users/)

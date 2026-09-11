@@ -136,6 +136,20 @@ export const rpcFixtures: Record<string, (aal: string) => unknown> = {
   }),
   admin_signal_counts: () => ({ pendingTickets: 1, overdueTickets: 1, openFlags: 1, openErrors: 1, online: 3 }),
   admin_dashboard_v2: () => dashboard,
+  admin_dashboard_today: () => ({
+    today: { solved: 6, failed: 1, revenue: 20000, registrations: 2, llmCost: 240, active: 5, guests: 3 },
+    yesterday: { solved: 4, failed: 0, revenue: 10000, registrations: 3, llmCost: 180, active: 4, guests: 1 },
+    online: 3,
+    gateway: { credits: 684.55, ok: true, status: 'ok', checkedAt: ago(2), avgCreditsPerTask: 0.41, tasksLast7Days: 44 },
+    services: { total: 8, down: [], notConfigured: ['email'], checkedAt: ago(2) },
+    feed: [
+      { kind: 'solution', at: ago(3), userId: studentId, email: student.email, name: student.fullName, subject: 'Физика', ok: true, amount: 500, cost: 38, seconds: 41, text: null },
+      { kind: 'ticket', at: ago(45), userId: studentId, email: student.email, name: student.fullName, subject: 'Проблема с оплатой или балансом', ok: false, amount: null, cost: null, seconds: null, text: 'Можно вернуть деньги или прислать решение?' },
+      { kind: 'payment', at: ago(120), userId: studentId, email: student.email, name: student.fullName, subject: null, ok: true, amount: 10000, cost: null, seconds: null, text: 'bank-0001' },
+      { kind: 'solution', at: ago(95), userId: null, email: null, name: null, subject: 'Химия', ok: false, amount: 600, cost: 52, seconds: 88, text: null },
+      { kind: 'signup', at: ago(300), userId: moreStudents[0].id, email: moreStudents[0].email, name: moreStudents[0].fullName, subject: null, ok: true, amount: null, cost: null, seconds: null, text: null },
+    ],
+  }),
   admin_users_list: () => ({ total: 3, page: 1, pageSize: 50, items: [student, ...moreStudents], plans: [{ id: 'base', title: 'Базовый' }] }),
   admin_user_card: () => ({
     profile: { id: studentId, email: student.email, fullName: student.fullName, grade: 8, createdAt: student.createdAt, lastSeenAt: student.lastSeenAt, lastSignInAt: student.lastSeenAt, emailConfirmedAt: student.createdAt, providers: ['email'], isAdmin: false },

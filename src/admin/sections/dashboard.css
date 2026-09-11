@@ -1,0 +1,127 @@
+/* Дашборд на VERKSTAD: тревоги строкой с действием, сегодняшние цифры
+   крупно, одна диаграмма с переключателем, живая лента линейками. */
+
+.dash-alarms {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.dash-alarm,
+.dash-calm {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 3.5rem;
+  padding: var(--space-3) var(--space-5);
+}
+
+.dash-alarm + .dash-alarm { border-top: 1px solid var(--color-border); }
+.dash-alarm p,
+.dash-calm p { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.dash-alarm b,
+.dash-calm b { color: var(--color-strong); font-weight: var(--weight-semibold); }
+
+.dash-alarm-dot {
+  flex: 0 0 auto;
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 50%;
+  background: var(--ok-500);
+}
+
+.dash-alarm.is-danger { background: color-mix(in oklch, var(--signal-100) 55%, var(--color-surface)); }
+.dash-alarm.is-danger .dash-alarm-dot { background: var(--signal-500); box-shadow: 0 0 0 4px var(--signal-100); animation: dash-pulse 1.6s var(--ease-standard) infinite; }
+.dash-alarm.is-warning .dash-alarm-dot { background: var(--warn-500); }
+
+@keyframes dash-pulse { 50% { box-shadow: 0 0 0 7px transparent; } }
+
+.dash-calm {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+}
+
+.dash-today .adm-stat-value { font-size: clamp(1.8rem, 3vw, 2.6rem); }
+
+.dash-versus { display: grid; gap: 0.3rem; justify-items: start; }
+.dash-versus small,
+.dash-today .adm-stat-foot small { color: var(--color-text-subtle); font: 0.6875rem/1.3 var(--font-mono); letter-spacing: 0.02em; }
+.dash-today .adm-stat-foot { display: grid; gap: 0.3rem; justify-items: start; }
+.dash-today .adm-stat-foot .dash-failed { color: var(--error-500); }
+
+.dash-totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-6);
+  margin: 0 0 var(--space-4);
+}
+
+.dash-totals div { display: grid; gap: 0.35rem; }
+.dash-totals dt { color: var(--color-text-subtle); font: var(--type-eyebrow); letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; }
+.dash-totals dd { margin: 0; color: var(--color-strong); font: var(--weight-black) 1.35rem/1 var(--font-display); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.dash-totals dd.is-negative { color: var(--error-500); }
+
+.dash-side { display: grid; align-content: start; gap: var(--adm-gap); min-width: 0; }
+
+.dash-gateway { display: grid; gap: var(--space-2); padding-bottom: var(--space-4); border-bottom: 1px solid var(--color-border); }
+.dash-gateway .adm-stat-value { font-size: clamp(2rem, 3.4vw, 2.75rem); }
+.dash-gateway p { color: var(--color-text-muted); font-size: var(--text-small); line-height: var(--leading-copy); }
+.dash-gateway b { color: var(--color-strong); font-family: var(--font-mono); font-weight: var(--weight-medium); }
+
+.dash-services { display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-3) !important; color: var(--color-text-muted); font-size: var(--text-small); }
+.dash-services.is-down { color: var(--error-500); }
+.dash-services.is-down .dash-alarm-dot { background: var(--signal-500); }
+.dash-note { margin-top: var(--space-2) !important; color: var(--color-text-subtle); font: 0.75rem/1.4 var(--font-mono); }
+
+/* Лента: линейки, время моно, иконка по виду события */
+.dash-feed { display: grid; margin: 0; padding: 0; list-style: none; }
+.dash-feed-item + .dash-feed-item { border-top: 1px solid var(--color-border); }
+
+.dash-feed-item > button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 3rem;
+  padding: var(--space-2) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: var(--transition-control);
+}
+
+.dash-feed-item > button:hover:not(:disabled) { background: var(--ink-100); }
+.dash-feed-item > button:disabled { cursor: default; }
+.dash-feed-icon { display: grid; width: 2rem; height: 2rem; place-items: center; border-radius: 50%; background: var(--color-surface-sunken); color: var(--color-strong); }
+.dash-feed-item.is-failed .dash-feed-icon { background: var(--signal-100); color: var(--signal-600); }
+.dash-feed-item.is-payment .dash-feed-icon { background: var(--color-success-soft); color: var(--ok-700); }
+.dash-feed-item.is-ticket .dash-feed-icon { background: var(--blueprint-100); color: var(--blueprint-600); }
+.dash-feed-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash-feed-text b { color: var(--color-strong); font-weight: var(--weight-semibold); }
+.dash-feed-meta { color: var(--color-text-subtle); font: 0.75rem/1.3 var(--font-mono); white-space: nowrap; }
+.dash-feed-time { min-width: 6.5rem; color: var(--color-text-subtle); font: 0.6875rem/1.3 var(--font-mono); text-align: right; white-space: nowrap; }
+.dash-plus { color: var(--ok-700); }
+.dash-minus { color: var(--error-500); }
+
+@media (max-width: 640px) {
+  .dash-alarm { flex-wrap: wrap; padding: var(--space-3) var(--space-4); }
+  .dash-alarm .adm-button { margin-left: calc(0.625rem + var(--space-3)); }
+  .dash-feed-item > button { grid-template-columns: auto minmax(0, 1fr); row-gap: 0.2rem; }
+  .dash-feed-text { white-space: normal; }
+  .dash-feed-meta,
+  .dash-feed-time { grid-column: 2; text-align: left; min-width: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dash-alarm.is-danger .dash-alarm-dot { animation: none; }
+}
