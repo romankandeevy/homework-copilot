@@ -1,0 +1,127 @@
+/* Антифрод: очередь флагов, граф связей, правила. Только токены сайта. */
+
+.adm-fraud {
+  display: grid;
+  gap: var(--adm-gap, var(--space-4));
+  min-width: 0;
+}
+
+/* Сегменты в сетке растягиваются на всю ширину - держим их по содержимому. */
+.adm-fraud-views { justify-self: start; max-width: 100%; }
+
+.adm-fraud-toolbar { align-items: center; margin-top: var(--space-3); }
+
+.adm-fraud-flag { display: grid; gap: var(--space-2); min-width: 0; }
+.adm-fraud-list > li.is-high { border-left: 3px solid var(--color-danger); }
+.adm-fraud-list > li.is-medium { border-left: 3px solid var(--color-warning); }
+
+.adm-fraud-flag-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; }
+
+.adm-fraud-user {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-brand-accent);
+  font: inherit;
+  font-weight: var(--weight-semibold);
+  text-align: left;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.adm-fraud-user:hover { text-decoration: underline; }
+
+.adm-fraud-balance { margin-left: auto; color: var(--color-text-muted); }
+
+.adm-fraud-why { line-height: var(--leading-copy); overflow-wrap: anywhere; }
+
+.adm-fraud-evidence { display: grid; gap: var(--space-2); min-width: 0; }
+
+.adm-fraud-evidence-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem var(--space-3);
+  color: var(--color-text-muted);
+  font: var(--text-small)/1.45 var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+.adm-fraud-evidence-line b { color: var(--color-text-subtle); font-weight: var(--weight-medium); }
+
+.adm-fraud-evidence summary { color: var(--color-text-muted); font-size: var(--text-small); cursor: pointer; }
+.adm-fraud-evidence details[open] summary { margin-bottom: var(--space-2); }
+
+.adm-fraud-meta { display: flex; flex-wrap: wrap; gap: 0.2rem var(--space-3); color: var(--color-text-subtle); font-size: var(--text-small); }
+
+.adm-fraud-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+.adm-fraud-error { color: color-mix(in oklch, var(--color-danger) 75%, var(--color-text)); font-size: var(--text-small); }
+
+/* ---------- Граф ---------- */
+
+.adm-fraud-graph {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-surface);
+  background: var(--color-surface);
+}
+
+.adm-fraud-graph svg { display: block; width: 100%; height: auto; max-height: 72svh; margin: 0 auto; }
+
+.adm-graph-ring { fill: none; stroke: var(--color-border); stroke-dasharray: 2 5; }
+
+.adm-graph-edge { fill: none; stroke-linecap: round; opacity: 0.8; }
+.adm-graph-edge.is-ip { stroke: var(--color-info); }
+.adm-graph-edge.is-device { stroke: var(--adm-series-5, var(--color-accent)); stroke-dasharray: 6 4; }
+
+.adm-graph-node { cursor: pointer; outline: none; }
+.adm-graph-node circle { fill: var(--color-surface); stroke: var(--color-border-strong); stroke-width: 1.5; }
+.adm-graph-node.is-flagged circle { fill: var(--color-warning-soft); stroke: var(--color-warning); stroke-width: 2; }
+.adm-graph-node.is-banned circle { fill: var(--color-danger); stroke: var(--color-danger); }
+.adm-graph-node.is-root circle { stroke: var(--color-accent); stroke-width: 3.5; }
+.adm-graph-node:hover circle,
+.adm-graph-node:focus-visible circle { stroke: var(--color-accent); stroke-width: 3.5; }
+
+.adm-graph-label { fill: var(--color-text-muted); font: 10px var(--font-mono); pointer-events: none; }
+.adm-graph-node.is-root .adm-graph-label { fill: var(--color-strong); font-weight: var(--weight-semibold); }
+
+.adm-graph-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  color: var(--color-text-muted);
+  font-size: var(--text-small);
+}
+
+.adm-graph-legend span { display: inline-flex; align-items: center; gap: 0.4rem; }
+.adm-graph-legend .is-line { width: 1.5rem; height: 0; border-top: 2px solid; }
+.adm-graph-legend .is-line.is-ip { border-color: var(--color-info); }
+.adm-graph-legend .is-line.is-device { border-top-style: dashed; border-color: var(--adm-series-5, var(--color-accent)); }
+.adm-graph-legend .is-dot { width: 0.8rem; height: 0.8rem; border: 1.5px solid var(--color-border-strong); border-radius: 50%; background: var(--color-surface); }
+.adm-graph-legend .is-dot.is-flagged { border-color: var(--color-warning); background: var(--color-warning-soft); }
+.adm-graph-legend .is-dot.is-banned { border-color: var(--color-danger); background: var(--color-danger); }
+.adm-graph-legend .is-dot.is-root { border: 3px solid var(--color-accent); }
+
+/* ---------- Правила ---------- */
+
+.adm-fraud-rule { display: grid; gap: var(--space-2); min-width: 0; }
+.adm-fraud-rule-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.adm-fraud-rule-head strong { color: var(--color-strong); }
+.adm-fraud-rule p { color: var(--color-text-muted); font-size: var(--text-small); line-height: var(--leading-copy); }
+
+.adm-fraud-rule-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+  align-items: end;
+  gap: var(--space-3);
+}
+
+.adm-fraud-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 2.5rem;
+  color: var(--color-text-muted);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}

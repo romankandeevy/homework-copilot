@@ -93,6 +93,9 @@ type EngineOptions = {
      разовым замерам вручную (последний - 30 августа, на другом пуле).
      Теперь считает сам решатель, по каждому вызову. */
   onCost?: (event: HomeworkModelCall) => void
+  /* Указания владельца для предмета из админки (промпт с версией). Идут
+     в сообщение после правил предмета и не отменяют их. */
+  subjectInstructions?: string | null
 }
 
 /* Один вызов модели: во что он обошёлся и чем кончился. */
@@ -3216,13 +3219,17 @@ export async function solveHomeworkWithReview(
   // тому же пулу в candidateModels.
   const subjectModels = homeworkModelsForSubject(request.subject)
   const passModel = options.model ?? subjectModels[0]
+  const ownerInstructions = options.subjectInstructions
+    ? `Указания владельца сервиса для этого предмета. Соблюдай их, если они не противоречат правилам выше: ${options.subjectInstructions}`
+    : ''
+  const withOwner = (extra: string) => [ownerInstructions, extra].filter(Boolean).join('\n')
 
   options.onStage?.('solving')
 
   const raw = await callModelWithRetry(
     options,
     authorInstructions,
-    engineMessage(request),
+    engineMessage(request, withOwner('')),
     'homework_solution_draft',
     draftSchema,
     retryDeadline,
@@ -3317,7 +3324,7 @@ export async function solveHomeworkWithReview(
       const rawPlan = await callModelWithRetry(
         options,
         diagramPlanInstructions,
-        engineMessage(request, planPrompt),
+        engineMessage(request, withOwner(planPrompt)),
         'diagram_plan',
         diagramPlanSchema,
         retryDeadline,
@@ -3393,7 +3400,7 @@ export async function solveHomeworkWithReview(
     const rawRepair = await callModelWithRetry(
       options,
       reviewerInstructions,
-      engineMessage(request, repairPrompt),
+      engineMessage(request, withOwner(repairPrompt)),
       'homework_solution_review',
       reviewSchema,
       retryDeadline,

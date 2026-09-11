@@ -1,0 +1,91 @@
+/* Мониторинг: детали, которых нет в общих стилях админки. */
+
+.mon-badges { display: inline-flex; flex-wrap: wrap; gap: 0.3rem; }
+.mon-error-title { display: -webkit-box; overflow: hidden; max-width: 46ch; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.mon-route { overflow-wrap: anywhere; }
+.mon-bad { color: color-mix(in oklch, var(--color-danger) 75%, var(--color-text)); }
+.mon-note { margin-top: var(--space-3) !important; color: var(--color-text-subtle); font-size: var(--text-small); }
+.mon-gap-top { margin-top: var(--space-4); }
+.mon-stack-gap { display: grid; gap: var(--space-5); }
+.mon-subhead { margin: var(--space-2) 0 var(--space-2); color: var(--color-text-muted); font: var(--weight-semibold) var(--text-small)/1.3 var(--font-body); }
+.mon-prewrap { white-space: pre-wrap; overflow-wrap: anywhere; }
+.mon-subject { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+
+.adm-table tr.mon-priority-row td { background: color-mix(in oklch, var(--color-accent-soft) 55%, transparent); }
+
+.mon-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-brand-accent);
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.mon-inline { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); max-width: 100%; }
+.mon-inline code { overflow-wrap: anywhere; }
+
+.mon-status-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
+
+.mon-events { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.mon-event { border: 1px solid var(--color-border); border-radius: var(--radius-surface); background: var(--color-surface); }
+.mon-event summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  padding: var(--space-3);
+  cursor: pointer;
+}
+.mon-event summary time { color: var(--color-text-subtle); font: var(--text-small)/1.5 var(--font-mono); white-space: nowrap; }
+.mon-event summary span { flex: 1 1 16rem; min-width: 0; font-weight: var(--weight-medium); overflow-wrap: anywhere; }
+.mon-event[open] summary { border-bottom: 1px solid var(--color-border); }
+.mon-event-body { display: grid; gap: var(--space-3); padding: var(--space-3); }
+
+.mon-stack {
+  max-height: 22rem;
+  margin: 0;
+  padding: var(--space-3);
+  overflow: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-surface);
+  background: var(--color-surface-sunken);
+  font: var(--text-small)/1.55 var(--font-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.mon-static-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-surface);
+  color: var(--color-text-muted);
+}
+
+.mon-manual { margin-top: var(--space-4); }
+.mon-manual-list { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.mon-manual-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  font-size: var(--text-small);
+}
+.mon-manual-detail { flex-basis: 100%; overflow-wrap: anywhere; }
+
+/* На телефоне сегменты не должны раздвигать страницу вбок. */
+@media (max-width: 640px) {
+  .adm-toolbar > .adm-segmented { max-width: 100%; }
+  .mon-error-title { max-width: none; }
+}

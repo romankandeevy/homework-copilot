@@ -7,7 +7,7 @@ import type { HomeworkSolution, HomeworkTaskType, SolveHomeworkRequest } from '.
 import type { Database, Json } from '../src/lib/database.types.ts'
 import { formatRubles } from '../src/lib/currency.ts'
 import { estimateSolutionPrice, kieCreditKopecks } from '../src/lib/solutionPricing.ts'
-import { isSolvableSubject } from '../src/lib/subjects.ts'
+import { findSubjectByName, isSolvableSubject } from '../src/lib/subjects.ts'
 import { findVerifiedTextbookTask, geometryTextbookIdentity, normalizeTaskCondition } from '../src/textbooks/taskCatalog.ts'
 import {
   defaultHomeworkModel,
@@ -18,6 +18,17 @@ import {
   validateSolutionQuality,
 } from './geometrySolutionEngine.ts'
 import type { HomeworkModelCall, HomeworkSolveStage } from './geometrySolutionEngine.ts'
+import {
+  flagEnabled,
+  loadSolverContext,
+  recordDeviceTouch,
+  recordError,
+  recordRequestLog,
+  requestAddress,
+  requestBytes,
+  requestUserAgent,
+  telemetryClient,
+} from './telemetry.ts'
 
 type SolverOptions = {
   apiKey?: string
@@ -72,6 +83,7 @@ export async function solveWithKie(
   ownerId?: string,
   onStage?: (stage: HomeworkSolveStage) => void,
   onCost?: (call: HomeworkModelCall) => void,
+  subjectInstructions?: string | null,
 ): Promise<HomeworkSolution> {
   const verifiedTask = request.source === 'number'
     ? findVerifiedTextbookTask(request.textbookId, request.edition, request.task)
@@ -121,6 +133,7 @@ export async function solveWithKie(
       fetchImpl: options.fetchImpl,
       ...(onStage ? { onStage } : {}),
       ...(onCost ? { onCost } : {}),
+      ...(subjectInstructions ? { subjectInstructions } : {}),
     }, ownerId)
   } catch (error) {
     if (!(error instanceof GeometrySolutionEngineError)) throw error
@@ -201,7 +214,10 @@ const dailySolveAttempts = 60
 const dailyFailedAttempts = 12
 const dayMs = 24 * 60 * 60 * 1000
 
-async function assertDailySolveLimits(account: AuthenticatedAccount) {
+/* Лимит тарифа или личный лимит из админки заменяет шестьдесят по
+   умолчанию. Неудачи считаются по-прежнему: это наш расход, а не услуга. */
+async function assertDailySolveLimits(account: AuthenticatedAccount, planLimit: number | null = null) {
+  const attemptsLimit = planLimit ?? dailySolveAttempts
   const since = new Date(Date.now() - dayMs).toISOString()
   let entries: { kind: string; idempotency_key: string }[]
   try {
@@ -230,8 +246,10 @@ async function assertDailySolveLimits(account: AuthenticatedAccount) {
   if (failed >= dailyFailedAttempts) {
     throw new HomeworkSolverError(429, 'Сегодня слишком много задач не решилось. Проверь условие и вернись завтра')
   }
-  if (attempts >= dailySolveAttempts) {
-    throw new HomeworkSolverError(429, 'Сегодня решено ' + dailySolveAttempts + ' задач — это дневной предел. Продолжим завтра')
+  if (attempts >= attemptsLimit) {
+    throw new HomeworkSolverError(429, attemptsLimit === 0
+      ? 'Решение задач для этого аккаунта приостановлено. Напиши в поддержку'
+      : 'Сегодня решено ' + attempts + ' задач — это дневной предел. Продолжим завтра')
   }
 }
 
@@ -878,12 +896,29 @@ function summarizeSolveCost(calls: readonly HomeworkModelCall[]): SolveCostSumma
    пересматривают по неделям наблюдений, поэтому расход ещё и записывается
    в базу - служебной ролью, мимо ученика. Не записалось - решение всё
    равно уходит: учёт не повод терять оплаченный разбор. */
+type SolveIdentity = {
+  userId: string | null
+  guestId: string | null
+  requestId: string
+}
+
+function solutionAnswerChars(solution: HomeworkSolution | null) {
+  if (!solution) return 0
+  return [...(solution.explanation ?? []), ...solution.steps, solution.answer ?? ''].join('\n').length
+}
+
+function solutionHasDiagram(solution: HomeworkSolution | null) {
+  return Boolean(solution && solution.diagram && solution.diagram.kind !== 'none')
+}
+
 async function recordSolveCost(
   options: SolverOptions,
   request: SolveHomeworkRequest,
   cost: SolveCostSummary,
   outcome: 'solved' | 'failed',
   seconds: number,
+  identity: SolveIdentity,
+  solution: HomeworkSolution | null,
 ): Promise<void> {
   if (cost.calls === 0) return
   const admin = guestAdminClient(options)
@@ -900,9 +935,80 @@ async function recordSolveCost(
       p_price_kopecks: solutionPriceFor(request),
       p_seconds: Number(seconds.toFixed(1)),
       p_outcome: outcome,
+      p_user_id: identity.userId,
+      p_guest_id: identity.guestId,
+      p_idempotency_key: request.idempotencyKey,
+      p_answer_chars: solutionAnswerChars(solution),
+      p_has_diagram: solutionHasDiagram(solution),
+      p_request_id: identity.requestId,
     })
   } catch {
     // Учёт себестоимости - не часть решения задачи.
+  }
+}
+
+/* Полный лог задачи для админки: запрос к модели без фотографии (снимок
+   весит мегабайты, его размер записан отдельно), каждый вызов модели,
+   готовое решение и замечания проверки. По нему поддержка разбирает жалобу
+   «решение неверное», не спрашивая ученика, что он присылал. */
+async function recordSolutionLog(
+  options: SolverOptions,
+  entry: {
+    request: SolveHomeworkRequest
+    identity: SolveIdentity
+    outcome: 'solved' | 'failed' | 'rejected'
+    status: number
+    error: string | null
+    calls: readonly HomeworkModelCall[]
+    solution: HomeworkSolution | null
+    seconds: number
+    promptVersion: number | null
+    stage: string
+    reused: boolean
+  },
+) {
+  const client = telemetryClient(options)
+  if (!client) return
+  const cost = summarizeSolveCost(entry.calls)
+  const { imageDataUrl, ...requestWithoutImage } = entry.request
+  try {
+    await client.rpc('record_solution_log', {
+      p_idempotency_key: entry.request.idempotencyKey,
+      p_outcome: entry.outcome,
+      p_request_id: entry.identity.requestId,
+      p_user_id: entry.identity.userId,
+      p_guest_id: entry.identity.guestId,
+      p_subject: entry.request.subject,
+      p_grade: entry.request.grade,
+      p_source: entry.request.source,
+      p_task: entry.request.task,
+      p_condition: entry.request.condition ?? entry.solution?.condition ?? '',
+      p_note: entry.request.note ?? '',
+      p_photo_bytes: imageDataUrl ? imageDataUrl.length : 0,
+      p_models: cost.models,
+      p_calls: entry.calls.map((call) => ({ ...call, seconds: Number(call.seconds.toFixed(2)) })) as unknown as Json,
+      p_request: {
+        ...requestWithoutImage,
+        hasPhoto: Boolean(imageDataUrl),
+        promptVersion: entry.promptVersion,
+        stage: entry.stage,
+        reused: entry.reused,
+      } as unknown as Json,
+      p_response: (entry.solution ?? null) as unknown as Json,
+      p_issues: (entry.solution?.verification ?? []) as unknown as Json,
+      p_status: entry.status,
+      p_error: entry.error,
+      p_truncated: false,
+      p_answer_chars: solutionAnswerChars(entry.solution),
+      p_steps_count: entry.solution?.steps.length ?? 0,
+      p_has_diagram: solutionHasDiagram(entry.solution),
+      p_seconds: Number(entry.seconds.toFixed(1)),
+      p_credits: cost.credits,
+      p_cost_kopecks: cost.kopecks,
+      p_price_kopecks: solutionPriceFor(entry.request),
+    })
+  } catch {
+    // Лог - для разбора, а не часть решения.
   }
 }
 
@@ -996,6 +1102,16 @@ export async function handleHomeworkSolverRequest(
   // Во что обошлась задача: по строке на каждый вызов модели.
   const modelCalls: HomeworkModelCall[] = []
   let solveTask: SolveHomeworkRequest | null = null
+  // Ответ уходит после записи телеметрии: Vercel может заморозить функцию
+  // сразу после ответа, и недописанный журнал пропал бы.
+  let reply: { status: number; payload: unknown } | null = null
+  let accountUserId: string | null = null
+  let guestIdentityForLog: GuestIdentity | null = null
+  let deliveredSolution: HomeworkSolution | null = null
+  let reusedSolution = false
+  let promptVersion: number | null = null
+  let failureMessage: string | null = null
+  let unexpectedError: unknown = null
 
   try {
     const task = await validateRequest(await readJsonBody(request), options)
@@ -1023,8 +1139,26 @@ export async function handleHomeworkSolverRequest(
     const guest = readGuestIdentity(request, options)
     const account = await authenticateAccount(request, options, guest)
     const guestSolving = account ? null : guest
+    accountUserId = account?.userId ?? null
+    guestIdentityForLog = guestSolving
     job = createJobReporter(options, task, account, guestSolving)
     job.report('reading')
+
+    /* Настройки из админки: включён ли предмет и решение по фото, дневной
+       лимит тарифа, промпт владельца для предмета. */
+    stage = 'policy'
+    const solverContext = await loadSolverContext(options, {
+      userId: accountUserId,
+      guestId: guestSolving?.guestId ?? null,
+      subjectId: findSubjectByName(task.subject)?.id ?? null,
+    })
+    promptVersion = solverContext.promptVersion
+    if (!solverContext.subjectEnabled) {
+      throw new HomeworkSolverError(403, 'Этот предмет сейчас временно выключен. Выбери другой или напиши в поддержку')
+    }
+    if (task.imageDataUrl && !flagEnabled(solverContext, 'photo_input')) {
+      throw new HomeworkSolverError(403, 'Решение по фотографии сейчас выключено. Впиши условие текстом')
+    }
     stage = 'restore'
     const existingSolution = guestSolving
       ? await restoreGuestSolution(guestSolving, task, options)
@@ -1038,12 +1172,14 @@ export async function handleHomeworkSolverRequest(
       })
       job.report('done', { task: existingSolution.task })
       await job.flush()
-      sendJson(response, 200, { solution: existingSolution })
+      deliveredSolution = existingSolution
+      reusedSolution = true
+      reply = { status: 200, payload: { solution: existingSolution } }
       return
     }
 
     stage = 'balance'
-    if (account && !existingSolution) await assertDailySolveLimits(account)
+    if (account && !existingSolution) await assertDailySolveLimits(account, solverContext.dailySolveLimit)
     const reserved = existingSolution
       ? false
       : guestSolving
@@ -1068,6 +1204,7 @@ export async function handleHomeworkSolverRequest(
           account?.userId,
           (modelStage) => job.report(modelStage),
           (call) => modelCalls.push(call),
+          solverContext.prompt,
         ),
         solveDeadline(),
       ])
@@ -1091,10 +1228,15 @@ export async function handleHomeworkSolverRequest(
         credits: cost.credits ?? undefined,
         costKopecks: cost.kopecks ?? undefined,
       })
-      await recordSolveCost(options, task, cost, 'solved', (Date.now() - startedAt) / 1000)
+      deliveredSolution = completedSolution
+      await recordSolveCost(options, task, cost, 'solved', (Date.now() - startedAt) / 1000, {
+        userId: accountUserId,
+        guestId: guestSolving?.guestId ?? null,
+        requestId: solveRequestId,
+      }, completedSolution)
       job.report('done', { task: completedSolution.task })
       await job.flush()
-      sendJson(response, 200, { solution: completedSolution })
+      reply = { status: 200, payload: { solution: completedSolution } }
     } catch (error) {
       if (reserved && guestSolving) await releaseGuestSolution(guestSolving, task, options)
       else if (reserved) await refundSolutionCredit(account, task, 'Решение не удалось получить')
@@ -1127,11 +1269,75 @@ export async function handleHomeworkSolverRequest(
       costKopecks: failedCost.kopecks ?? undefined,
     })
     // Неудача стоит нам столько же: за токены платят, а не за годность.
-    if (solveTask) await recordSolveCost(options, solveTask, failedCost, 'failed', (Date.now() - startedAt) / 1000)
-    if (error instanceof HomeworkSolverError) {
-      sendJson(response, error.status, { error: error.message })
-      return
+    if (solveTask) {
+      await recordSolveCost(options, solveTask, failedCost, 'failed', (Date.now() - startedAt) / 1000, {
+        userId: accountUserId,
+        guestId: guestIdentityForLog?.guestId ?? null,
+        requestId: solveRequestId,
+      }, null)
     }
-    sendJson(response, 500, { error: 'Не получилось подготовить решение. Попробуй ещё раз' })
+    failureMessage = error instanceof HomeworkSolverError ? error.message : error instanceof Error ? error.message : 'unexpected solver error'
+    if (!(error instanceof HomeworkSolverError)) unexpectedError = error
+    reply = error instanceof HomeworkSolverError
+      ? { status: error.status, payload: { error: error.message } }
+      : { status: 500, payload: { error: 'Не получилось подготовить решение. Попробуй ещё раз' } }
+  } finally {
+    const status = reply?.status ?? 500
+    const ip = trustedClientAddress(request.headers, options.serviceRoleKey) ?? requestAddress(request, null)
+    const userAgent = requestUserAgent(request)
+    const identity: SolveIdentity = {
+      userId: accountUserId,
+      guestId: guestIdentityForLog?.guestId ?? null,
+      requestId: solveRequestId,
+    }
+    const seconds = (Date.now() - startedAt) / 1000
+    await Promise.all([
+      recordRequestLog(options, {
+        route: 'solve',
+        status,
+        requestId: solveRequestId,
+        userId: identity.userId,
+        guestId: identity.guestId,
+        ip,
+        userAgent,
+        durationMs: Date.now() - startedAt,
+        bytesIn: requestBytes(request),
+        error: failureMessage,
+      }),
+      recordDeviceTouch(options, { userId: identity.userId, guestId: identity.guestId, ip, userAgent }),
+      solveTask && stage !== 'validate'
+        ? recordSolutionLog(options, {
+          request: solveTask,
+          identity,
+          outcome: status === 200 ? 'solved' : modelCalls.length > 0 ? 'failed' : 'rejected',
+          status,
+          error: failureMessage,
+          calls: modelCalls,
+          solution: deliveredSolution,
+          seconds,
+          promptVersion,
+          stage,
+          reused: reusedSolution,
+        })
+        : Promise.resolve(),
+      status >= 500 || unexpectedError
+        ? recordError(options, {
+          kind: stage === 'generate' ? 'llm' : stage === 'balance' || stage === 'persist' ? 'db' : 'api',
+          severity: status === 503 || unexpectedError ? 'critical' : 'error',
+          route: 'solve',
+          message: failureMessage ?? 'solve failed',
+          stack: unexpectedError instanceof Error ? unexpectedError.stack ?? null : null,
+          requestId: solveRequestId,
+          userId: identity.userId,
+          guestId: identity.guestId,
+          ip,
+          input: solveTask
+            ? { task: solveTask.task, source: solveTask.source, subject: solveTask.subject, grade: solveTask.grade, stage, status, models: summarizeSolveCost(modelCalls).models }
+            : { stage, status },
+        })
+        : Promise.resolve(),
+    ])
+    if (reply) sendJson(response, reply.status, reply.payload)
+    else sendJson(response, 500, { error: 'Не получилось подготовить решение. Попробуй ещё раз' })
   }
 }

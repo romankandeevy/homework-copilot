@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import type { SupabaseClient, User } from '@supabase/supabase-js'
+import type { RealtimeChannel, SupabaseClient, User } from '@supabase/supabase-js'
 import {
   ArrowLeft,
   ArrowRight,
   ChatCircleText,
   CheckCircle,
+  Checks,
   CircleNotch,
   CreditCard,
   Lightbulb,
@@ -13,6 +14,7 @@ import {
   PaperPlaneTilt,
   Question,
   ShieldCheck,
+  Star,
   WarningCircle,
   X,
 } from '@phosphor-icons/react'
@@ -192,6 +194,119 @@ function SiteFooter({ onOpenSupport, compact = false }: { onOpenSupport?: () => 
   )
 }
 
+/* «Печатает» в обе стороны: канал support-typing:<id> общий с админкой.
+   Канал с тем же именем клиент отдаёт повторно, поэтому прежний, ещё не
+   закрытый канал снимаем до подписки - иначе новая подписка молча не
+   сработает. */
+function useSupportTyping(client: SupabaseClient<Database> | null, conversationId: string | null) {
+  const channelRef = useRef<RealtimeChannel | null>(null)
+  const lastSentRef = useRef(0)
+  const [peer, setPeer] = useState<{ id: string; at: number } | null>(null)
+
+  useEffect(() => {
+    if (!client || !conversationId) return
+    const topic = `support-typing:${conversationId}`
+    let cancelled = false
+    let channel: RealtimeChannel | null = null
+    const open = async () => {
+      const stale = client.getChannels().find((item) => item.topic === `realtime:${topic}`)
+      if (stale) await client.removeChannel(stale)
+      if (cancelled) return
+      channel = client
+        .channel(topic)
+        .on('broadcast', { event: 'typing' }, ({ payload }) => {
+          if ((payload as { from?: unknown } | null)?.from === 'owner') setPeer({ id: conversationId, at: Date.now() })
+        })
+        .subscribe()
+      channelRef.current = channel
+    }
+    void open()
+    return () => {
+      cancelled = true
+      channelRef.current = null
+      if (channel) void client.removeChannel(channel)
+    }
+  }, [client, conversationId])
+
+  useEffect(() => {
+    if (!peer) return
+    const timer = window.setTimeout(() => setPeer(null), Math.max(0, 4000 - (Date.now() - peer.at)))
+    return () => window.clearTimeout(timer)
+  }, [peer])
+
+  const notifyTyping = useCallback(() => {
+    const channel = channelRef.current
+    const now = Date.now()
+    if (!channel || now - lastSentRef.current < 2000) return
+    lastSentRef.current = now
+    void channel.send({ type: 'broadcast', event: 'typing', payload: { from: 'user', at: now } })
+  }, [])
+
+  const clearPeer = useCallback(() => setPeer(null), [])
+
+  return { peerTyping: peer !== null && peer.id === conversationId, notifyTyping, clearPeer }
+}
+
+const ratingLabels = ['', 'Совсем не помогли', 'Плохо', 'Нормально', 'Хорошо', 'Отлично']
+
+/* Оценка закрытого обращения: одна на обращение, после отправки вместо
+   формы остаётся поставленная оценка. */
+function SupportRating({ conversation, client, onRated }: { conversation: SupportConversation; client: SupabaseClient<Database> | null; onRated: () => void }) {
+  const [rating, setRating] = useState(0)
+  const [comment, setComment] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [failure, setFailure] = useState('')
+
+  if (conversation.rating) {
+    const given = conversation.rating
+    return (
+      <section className="support-rating is-done" aria-label="Оценка обращения">
+        <div className="support-rating-stars" role="img" aria-label={`Твоя оценка: ${given} из 5`}>
+          {[1, 2, 3, 4, 5].map((value) => <Star key={value} size={20} weight={value <= given ? 'fill' : 'regular'} aria-hidden="true" />)}
+          <span className="support-rating-label">{ratingLabels[given]}</span>
+        </div>
+        <p><strong>Спасибо за оценку.</strong>{conversation.rating_comment && <span>{conversation.rating_comment}</span>}</p>
+      </section>
+    )
+  }
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!client || saving || rating < 1) return
+    setSaving(true)
+    setFailure('')
+    const { error: rateError } = await client.rpc('rate_support_conversation', { p_conversation_id: conversation.id, p_rating: rating, p_comment: comment.trim() || null })
+    setSaving(false)
+    if (rateError) {
+      setFailure('Не получилось сохранить оценку. Попробуй ещё раз.')
+      return
+    }
+    onRated()
+  }
+
+  const commentId = `support-rating-comment-${conversation.id}`
+  return (
+    <form className="support-rating" onSubmit={(event) => { void submit(event) }}>
+      <h3>Обращение закрыто. Оцени, как мы помогли</h3>
+      <div className="support-rating-stars" role="group" aria-label="Оценка от 1 до 5">
+        {[1, 2, 3, 4, 5].map((value) => (
+          <button key={value} type="button" className={value <= rating ? 'is-on' : ''} aria-pressed={rating === value} aria-label={`${value} из 5 - ${ratingLabels[value]}`} onClick={() => setRating(value)}>
+            <Star size={20} weight={value <= rating ? 'fill' : 'regular'} aria-hidden="true" />
+          </button>
+        ))}
+        {rating > 0 && <span className="support-rating-label">{ratingLabels[rating]}</span>}
+      </div>
+      <label htmlFor={commentId}>Комментарий - по желанию</label>
+      <textarea id={commentId} value={comment} maxLength={500} onChange={(event) => setComment(event.target.value.slice(0, 500))} placeholder="Что было хорошо или что стоит исправить" />
+      <div className="support-compose-footer">
+        <span>{comment.length}/500</span>
+        <button className="support-primary-button" type="submit" disabled={saving || rating < 1}>{saving ? <><CircleNotch size={17} className="support-spinner" aria-hidden="true" /> Сохраняем…</> : 'Отправить оценку'}</button>
+      </div>
+      {failure && <p className="support-feedback is-error" role="alert">{failure}</p>}
+    </form>
+  )
+}
+
 export function SupportCenter({ user, supabaseClient, initialCategory, initialContext, onRequireAuth, onClose }: SupportCenterProps) {
   const [category, setCategory] = useState<SupportCategory>(initialCategory)
   const [messageText, setMessageText] = useState('')
@@ -207,6 +322,7 @@ export function SupportCenter({ user, supabaseClient, initialCategory, initialCo
   const [showNew, setShowNew] = useState(true)
   const initialFocusRef = useRef<HTMLButtonElement>(null)
   const dialogRef = useModalIsolation<HTMLElement>(true, onClose, initialFocusRef)
+  const { peerTyping: ownerTyping, notifyTyping, clearPeer: clearOwnerTyping } = useSupportTyping(supabaseClient, user ? selectedId : null)
 
   useEffect(() => {
     if (window.location.hash !== '#faq') return
@@ -245,20 +361,42 @@ export function SupportCenter({ user, supabaseClient, initialCategory, initialCo
     setMessagesLoading(false)
   }, [supabaseClient])
 
+  // Открытая переписка - прочитанная: поддержка видит это у своих ответов.
+  const markRead = useCallback((conversationId: string) => {
+    if (!supabaseClient) return
+    void supabaseClient.rpc('mark_support_read', { p_conversation_id: conversationId }).then(() => undefined)
+  }, [supabaseClient])
+
   useEffect(() => { void refreshConversations() }, [refreshConversations])
 
   useEffect(() => {
     if (!selectedId || !supabaseClient) return
     void refreshMessages(selectedId)
+    markRead(selectedId)
     const channel = supabaseClient
       .channel(`support:${selectedId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'support_messages', filter: `conversation_id=eq.${selectedId}` }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'support_messages', filter: `conversation_id=eq.${selectedId}` }, (payload) => {
         void refreshMessages(selectedId)
         void refreshConversations()
+        if (payload.eventType === 'INSERT' && (payload.new as Partial<SupportMessage>).author_type === 'owner') {
+          clearOwnerTyping()
+          if (document.visibilityState === 'visible') markRead(selectedId)
+        }
+      })
+      // Прочтение поддержкой и оценка приходят обновлением строки обращения.
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'support_conversations', filter: `id=eq.${selectedId}` }, (payload) => {
+        const row = payload.new as SupportConversation
+        setConversations((current) => current.map((conversation) => (conversation.id === row.id ? { ...conversation, ...row } : conversation)))
       })
       .subscribe()
-    return () => { void supabaseClient.removeChannel(channel) }
-  }, [refreshConversations, refreshMessages, selectedId, supabaseClient])
+    // Ответ, пришедший в фоновую вкладку, прочитан, когда её открыли.
+    const onVisible = () => { if (document.visibilityState === 'visible') markRead(selectedId) }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible)
+      void supabaseClient.removeChannel(channel)
+    }
+  }, [clearOwnerTyping, markRead, refreshConversations, refreshMessages, selectedId, supabaseClient])
 
   const submitMessage = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -306,6 +444,8 @@ export function SupportCenter({ user, supabaseClient, initialCategory, initialCo
     setError('')
   }
 
+  const ownerReadAt = selectedConversation?.owner_last_read_at ? Date.parse(selectedConversation.owner_last_read_at) : Number.NaN
+
   return (
     <div className="support-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
       <section ref={dialogRef} className="support-center" role="dialog" aria-modal="true" aria-labelledby="support-center-title" tabIndex={-1}>
@@ -335,8 +475,9 @@ export function SupportCenter({ user, supabaseClient, initialCategory, initialCo
                 </>
               ) : selectedConversation ? (
                 <>
-                  <div className="support-message-list" aria-live="polite">{messagesLoading ? <div className="support-loading"><CircleNotch size={22} className="support-spinner" aria-hidden="true" /> Загружаем переписку…</div> : messages.map((message) => <article className={`support-message${message.author_type === 'owner' ? ' is-owner' : ' is-user'}`} key={message.id}><div className="support-message-meta"><strong>{message.author_type === 'owner' ? 'Владелец' : 'Ты'}</strong><time dateTime={message.created_at}>{formatDate(message.created_at)}</time></div><p>{message.body}</p></article>)}</div>
-                  <form className="support-compose support-compose-followup" onSubmit={submitMessage}><label htmlFor="support-followup-message">Новое сообщение</label><textarea id="support-followup-message" value={messageText} onChange={(event) => setMessageText(event.target.value.slice(0, 4000))} placeholder="Напиши уточнение…" maxLength={4000} /><div className="support-compose-footer"><span>{messageText.length}/4000</span><button className="support-primary-button" type="submit" disabled={sending || !messageText.trim()}>{sending ? 'Отправляем…' : <>Отправить <PaperPlaneTilt size={16} weight="bold" aria-hidden="true" /></>}</button></div></form>
+                  <div className="support-message-list" aria-live="polite">{messagesLoading ? <div className="support-loading"><CircleNotch size={22} className="support-spinner" aria-hidden="true" /> Загружаем переписку…</div> : <>{messages.map((message) => <article className={`support-message${message.author_type === 'owner' ? ' is-owner' : ' is-user'}`} key={message.id}><div className="support-message-meta"><strong>{message.author_type === 'owner' ? 'Владелец' : 'Ты'}</strong><time dateTime={message.created_at}>{formatDate(message.created_at)}</time></div><p>{message.body}</p>{message.author_type !== 'owner' && ownerReadAt >= Date.parse(message.created_at) && <span className="support-message-read"><Checks size={14} weight="bold" aria-hidden="true" /> Прочитано</span>}</article>)}{ownerTyping && <p className="support-typing" role="status"><span className="support-typing-dots" aria-hidden="true"><i /><i /><i /></span>Поддержка печатает…</p>}</>}</div>
+                  {selectedConversation.status === 'resolved' && <SupportRating key={selectedConversation.id} conversation={selectedConversation} client={supabaseClient} onRated={() => { void refreshConversations() }} />}
+                  <form className="support-compose support-compose-followup" onSubmit={submitMessage}><label htmlFor="support-followup-message">Новое сообщение</label><textarea id="support-followup-message" value={messageText} onChange={(event) => { setMessageText(event.target.value.slice(0, 4000)); if (event.target.value) notifyTyping() }} placeholder="Напиши уточнение…" maxLength={4000} /><div className="support-compose-footer"><span>{messageText.length}/4000</span><button className="support-primary-button" type="submit" disabled={sending || !messageText.trim()}>{sending ? 'Отправляем…' : <>Отправить <PaperPlaneTilt size={16} weight="bold" aria-hidden="true" /></>}</button></div></form>
                 </>
               ) : null}
             </>

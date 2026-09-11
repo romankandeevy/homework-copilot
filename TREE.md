@@ -5,7 +5,7 @@
 
 ```
 homework Copilot/
-├── api/                     — обёртки Vercel: solve, chat, support, telegram-webhook
+├── api/                     — обёртки Vercel: solve, chat, support, telegram-webhook, admin
 ├── docs/                    — замеры и исследования: цена, конкуренты, лицензии, чат
 ├── public/                  — статика: robots, sitemap, манифест, иконки, промо-ролик
 ├── scripts/                 — сборка статических маршрутов, иконки, проверки перед сборкой
@@ -19,11 +19,14 @@ homework Copilot/
 │   ├── gradeRules.ts        — приём решения по ступени: школа против вуза
 │   ├── conditionGuard.ts    — признаки попытки переопределить промпт внутри условия
 │   ├── chat.ts / chatProviders.ts — ИИ-чат: квоты, списание, два протокола шлюза
-│   └── support.ts           — обращения, мост в Telegram
+│   ├── support.ts           — обращения, мост в Telegram
+│   ├── telemetry.ts         — журнал запросов, ошибки, устройства, настройки решателя
+│   └── admin.ts             — функция админки: вход под пользователем, сброс пароля, уведомления, health
 ├── src/
 │   ├── Root.tsx             — развилка витрины и приложения, возврат авторизации
 │   ├── App.tsx              — маршруты, очередь решений, экран решения
-│   ├── account/             — вход, регистрация, профиль, баланс, удаление аккаунта
+│   ├── account/             — вход, регистрация, профиль, баланс, тариф, промокод, удаление аккаунта
+│   ├── admin/               — админка: AdminApp (вход, 2FA, каркас), api.ts, ui.tsx, sections/ по разделам ТЗ
 │   ├── chat/                — страница ИИ-чата и разметка ответов
 │   ├── landing/             — публичная витрина
 │   ├── lib/                 — Supabase, деньги, контракты, очередь, согласия
@@ -61,3 +64,6 @@ homework Copilot/
 | Маршруты и метаданные | `src/lib/siteMetadata.ts`, `scripts/create-static-routes.mjs`, `vercel.json` |
 | Витрина и её обещания | `src/landing/LandingPage.tsx`, `src/landing/LandingPreviews.tsx` |
 | ИИ-чат: квоты и деньги | `supabase/migrations/20260830170000_ai_chat_core.sql`, `server/chat.ts` |
+| Админка: роли, 2FA, аудит | `supabase/migrations/20260911090000_admin_roles_audit_mfa.sql`, `src/admin/AdminApp.tsx` |
+| Админка: метрики, финансы, мониторинг | `supabase/migrations/20260911090400_*`, `src/admin/sections/` |
+| Настройки без деплоя, уведомления | `supabase/migrations/20260911090500_*`, `server/admin.ts`, `src/lib/publicConfig.ts` |

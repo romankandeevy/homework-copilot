@@ -7,6 +7,7 @@ import { formatRubles } from './lib/currency'
 import { prepareTaskPhoto } from './lib/homeworkSolution'
 import { estimateSolutionPrice, minimumSolutionPriceKopecks } from './lib/solutionPricing'
 import { solvableGrades, solvableSubjects } from './lib/subjects'
+import type { SolvableSubject } from './lib/subjects'
 
 // Форма постановки задач.
 //
@@ -93,6 +94,8 @@ export default function CopyTask({
   signedIn = false,
   freeSolutionUsed = false,
   defaultGrade = '',
+  subjects = solvableSubjects,
+  photoEnabled = true,
 }: {
   onSubmit: (submissions: TaskSubmission[]) => Promise<boolean>
   /** Гостю показываем, что первое решение он получит без регистрации. */
@@ -100,6 +103,10 @@ export default function CopyTask({
   freeSolutionUsed?: boolean
   /** Класс из профиля: один и тот же вопрос не должен иметь двух ответов. */
   defaultGrade?: string
+  /** Предметы и их порядок из админки: выключенный предмет не предлагаем. */
+  subjects?: readonly SolvableSubject[]
+  /** Решение по фото можно выключить из админки, сервер его тогда отвергнет. */
+  photoEnabled?: boolean
 }) {
   const [entries, setEntries] = useState<TaskEntry[]>(() => [emptyEntry(defaultGrade)])
   const [error, setError] = useState('')
@@ -165,6 +172,7 @@ export default function CopyTask({
   // Фото можно не только выбрать файлом, но и вставить из буфера: школьник
   // чаще делает снимок экрана, чем сохраняет файл и ищет его в проводнике.
   const pastePhoto = (id: string, event: ClipboardEvent<HTMLTextAreaElement>) => {
+    if (!photoEnabled) return
     const item = [...event.clipboardData.items].find((entry) => entry.type.startsWith('image/'))
     const file = item?.getAsFile()
     if (!file) return
@@ -338,7 +346,7 @@ export default function CopyTask({
                 onPaste={(event) => pastePhoto(entry.id, event)}
                 placeholder={entry.imageDataUrl
                   ? 'Можно уточнить, что решать: «только пункт б»'
-                  : 'Впиши условие или вставь сюда фото задачи'}
+                  : photoEnabled ? 'Впиши условие или вставь сюда фото задачи' : 'Впиши условие задачи'}
                 rows={many ? 3 : 4}
                 aria-invalid={(invalidEntryId === entry.id && Boolean(error)) || undefined}
                 aria-errormessage={error ? 'task-entry-error' : undefined}
@@ -358,17 +366,21 @@ export default function CopyTask({
               )}
 
               <div className="task-controls">
-                <input
-                  id={`task-photo-${entry.id}`}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
-                  capture="environment"
-                  onChange={(event) => void changePhoto(entry.id, event.target.files?.[0] ?? null)}
-                />
-                <label className="task-photo-button" htmlFor={`task-photo-${entry.id}`}>
-                  <ImageSquare size={20} weight="duotone" aria-hidden="true" />
-                  {entry.imageDataUrl ? 'Заменить фото' : 'Добавить фото'}
-                </label>
+                {photoEnabled && (
+                  <>
+                    <input
+                      id={`task-photo-${entry.id}`}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                      capture="environment"
+                      onChange={(event) => void changePhoto(entry.id, event.target.files?.[0] ?? null)}
+                    />
+                    <label className="task-photo-button" htmlFor={`task-photo-${entry.id}`}>
+                      <ImageSquare size={20} weight="duotone" aria-hidden="true" />
+                      {entry.imageDataUrl ? 'Заменить фото' : 'Добавить фото'}
+                    </label>
+                  </>
+                )}
 
                 {/* Подписи короткие: «Предмет — определим сами» не влезает в
                     селект на телефоне и обрезается ровно на том слове, ради
@@ -385,7 +397,7 @@ export default function CopyTask({
                     onChange={(event) => { patchEntry(entry.id, { subject: event.target.value }); if (error) setError('') }}
                   >
                     <option value="">Выбери предмет</option>
-                    {solvableSubjects.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}
+                    {subjects.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}
                   </select>
                 </label>
 

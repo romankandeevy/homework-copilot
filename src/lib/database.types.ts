@@ -19,7 +19,10 @@ export type Database = {
           ban_reason: string | null
           banned_at: string | null
           banned_by: string | null
+          banned_until: string | null
+          daily_solve_limit: number | null
           is_banned: boolean
+          limit_reason: string | null
           updated_at: string
           user_id: string
         }
@@ -27,7 +30,10 @@ export type Database = {
           ban_reason?: string | null
           banned_at?: string | null
           banned_by?: string | null
+          banned_until?: string | null
+          daily_solve_limit?: number | null
           is_banned?: boolean
+          limit_reason?: string | null
           updated_at?: string
           user_id: string
         }
@@ -35,7 +41,10 @@ export type Database = {
           ban_reason?: string | null
           banned_at?: string | null
           banned_by?: string | null
+          banned_until?: string | null
+          daily_solve_limit?: number | null
           is_banned?: boolean
+          limit_reason?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -410,17 +419,26 @@ export type Database = {
       }
       support_conversations: {
         Row: {
+          assigned_to: string | null
           category: string
           context: Json
           created_at: string
+          first_response_at: string | null
           id: string
           last_message_at: string
+          last_user_message_at: string | null
+          owner_last_read_at: string | null
           owner_notification_status: string
+          priority: string
+          rated_at: string | null
+          rating: number | null
+          rating_comment: string | null
           resolved_at: string | null
           status: string
           subject: string
           updated_at: string
           user_id: string
+          user_last_read_at: string | null
         }
         Insert: {
           category: string
@@ -782,7 +800,7 @@ export type Database = {
         Returns: Json
       }
       admin_set_user_ban: {
-        Args: { p_is_banned: boolean; p_reason?: string; p_user_id: string }
+        Args: { p_is_banned: boolean; p_reason?: string; p_until?: string | null; p_user_id: string }
         Returns: Json
       }
       admin_user_detail: { Args: { p_user_id: string }; Returns: Json }
@@ -874,6 +892,13 @@ export type Database = {
           p_price_kopecks: number
           p_seconds: number
           p_outcome: string
+          p_user_id?: string | null
+          p_guest_id?: string | null
+          p_idempotency_key?: string | null
+          p_truncated?: boolean
+          p_answer_chars?: number
+          p_has_diagram?: boolean
+          p_request_id?: string | null
         }
         Returns: undefined
       }
@@ -932,6 +957,112 @@ export type Database = {
         Returns: Json
       }
       get_admin_context: { Args: never; Returns: Json }
+      is_admin_user: { Args: { p_user_id: string }; Returns: boolean }
+      admin_record_external_action: {
+        Args: { p_event: string; p_payload?: Json; p_target_user_id: string }
+        Returns: string
+      }
+      admin_notifications_overview: { Args: never; Returns: Json }
+      record_request_log: {
+        Args: {
+          p_bytes_in?: number | null
+          p_duration_ms?: number | null
+          p_error?: string | null
+          p_guest_id?: string | null
+          p_ip?: string | null
+          p_method?: string
+          p_request_id?: string | null
+          p_route: string
+          p_status: number
+          p_user_agent?: string | null
+          p_user_id?: string | null
+        }
+        Returns: undefined
+      }
+      record_error_event: {
+        Args: {
+          p_environment?: Json
+          p_guest_id?: string | null
+          p_input?: Json
+          p_ip?: string | null
+          p_kind: string
+          p_message: string
+          p_request_id?: string | null
+          p_route: string
+          p_severity: string
+          p_stack?: string | null
+          p_user_id?: string | null
+        }
+        Returns: string
+      }
+      record_client_touch: {
+        Args: {
+          p_device_id?: string | null
+          p_guest_id?: string | null
+          p_ip?: string | null
+          p_user_agent?: string | null
+          p_user_id?: string | null
+        }
+        Returns: undefined
+      }
+      solver_context: {
+        Args: { p_guest_id?: string | null; p_subject_id?: string | null; p_user_id?: string | null }
+        Returns: Json
+      }
+      record_solution_log: {
+        Args: {
+          p_answer_chars?: number
+          p_calls?: Json
+          p_condition?: string
+          p_cost_kopecks?: number | null
+          p_credits?: number | null
+          p_error?: string | null
+          p_grade?: string
+          p_guest_id?: string | null
+          p_has_diagram?: boolean
+          p_idempotency_key: string
+          p_issues?: Json
+          p_models?: string
+          p_note?: string
+          p_outcome: string
+          p_photo_bytes?: number
+          p_price_kopecks?: number
+          p_request?: Json
+          p_request_id?: string | null
+          p_response?: Json
+          p_seconds?: number
+          p_source?: string
+          p_status?: number | null
+          p_steps_count?: number
+          p_subject?: string
+          p_task?: string
+          p_truncated?: boolean
+          p_user_id?: string | null
+        }
+        Returns: string
+      }
+      claim_admin_cron: { Args: { p_token: string }; Returns: Json }
+      complete_admin_notifications: { Args: { p_results: Json }; Returns: undefined }
+      record_health_check: {
+        Args: { p_detail?: string | null; p_latency_ms?: number | null; p_ok: boolean; p_service: string; p_status: string }
+        Returns: undefined
+      }
+      get_public_config: { Args: { p_guest_id?: string | null }; Returns: Json }
+      get_my_plan: { Args: never; Returns: Json }
+      redeem_promo_code: { Args: { p_code: string }; Returns: Json }
+      rate_homework_solution: {
+        Args: { p_comment?: string | null; p_guest_id?: string | null; p_helpful: boolean; p_solution_key: string; p_subject: string }
+        Returns: Json
+      }
+      report_client_error: {
+        Args: { p_environment?: Json; p_guest_id?: string | null; p_message: string; p_route?: string | null; p_stack?: string | null }
+        Returns: undefined
+      }
+      mark_support_read: { Args: { p_conversation_id: string }; Returns: undefined }
+      rate_support_conversation: {
+        Args: { p_comment?: string | null; p_conversation_id: string; p_rating: number }
+        Returns: Json
+      }
       get_my_referral: { Args: never; Returns: Json }
       get_my_homework_solutions: {
         Args: never

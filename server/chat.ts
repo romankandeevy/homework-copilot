@@ -17,6 +17,7 @@ import type { Database } from '../src/lib/database.types.ts'
 import { ChatApiError } from './chatErrors.ts'
 import { streamModelAnswer } from './chatProviders.ts'
 import type { ChatContentPart, ChatMessageInput } from './chatProviders.ts'
+import { flagEnabled, loadSolverContext, recordError, recordRequestLog, requestAddress, requestIdOf, requestUserAgent } from './telemetry.ts'
 
 export { ChatApiError } from './chatErrors.ts'
 
@@ -278,13 +279,47 @@ export async function handleChatRequest(
   let account: ChatAccount | null = null
   let generationId: string | null = null
   let service: SupabaseClient<Database> | null = null
+  let modelId = ''
   const startedAt = Date.now()
+  const requestId = requestIdOf(request)
+
+  // Журнал пишется до закрытия ответа: после него Vercel может заморозить функцию.
+  const logChat = async (status: number, message: string | null, error?: unknown) => {
+    const ip = requestAddress(request, null)
+    await Promise.all([
+      recordRequestLog(options, {
+        route: 'chat',
+        status,
+        requestId,
+        userId: account?.userId ?? null,
+        ip,
+        userAgent: requestUserAgent(request),
+        durationMs: Date.now() - startedAt,
+        error: message,
+      }),
+      status >= 500 || (error !== undefined && !(error instanceof ChatApiError))
+        ? recordError(options, {
+          kind: status === 502 || status === 504 ? 'llm' : 'api',
+          route: 'chat',
+          message: message ?? 'chat failed',
+          stack: error instanceof Error && !(error instanceof ChatApiError) ? error.stack ?? null : null,
+          requestId,
+          userId: account?.userId ?? null,
+          ip,
+          input: { modelId, generationId },
+        })
+        : Promise.resolve(),
+    ])
+  }
 
   try {
     if (!options.apiKey) throw new ChatApiError(503, 'Чат не настроен')
 
     const body = validateBody(await readJsonBody(request))
+    modelId = body.modelId
     account = await authenticate(request, options)
+    const context = await loadSolverContext(options, { userId: account.userId })
+    if (!flagEnabled(context, 'ai_chat')) throw new ChatApiError(403, 'ИИ-чат сейчас выключен')
     service = serviceClient(options)
 
     // 1. Открываем генерацию. Деньги при этом не трогаем: проверяются бан,
@@ -429,6 +464,7 @@ export async function handleChatRequest(
        обрезки, а мы его никуда не отдавали, и ответ просто заканчивался на
        полуслове без единого слова о причине. */
     stream.send('done', { messageId: assistantMessage?.id ?? null, truncated: answer.truncated })
+    await logChat(200, answer.truncated ? 'answer truncated by balance' : null)
     stream.close()
   } catch (error) {
     const status = error instanceof ChatApiError ? error.status : 500
@@ -452,6 +488,8 @@ export async function handleChatRequest(
         // пользователю это скрывать не должно.
       }
     }
+
+    await logChat(status, message, error)
 
     if (stream) {
       stream.send('error', { message })

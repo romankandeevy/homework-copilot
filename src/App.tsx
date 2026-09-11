@@ -29,6 +29,7 @@ import {
   Sun,
   UserCircle,
   WarningCircle,
+  X,
 } from '@phosphor-icons/react'
 import CopyTask from './CopyTask'
 import type { TaskSubmission } from './CopyTask'
@@ -87,6 +88,9 @@ import { SolutionCard } from './solution/SolutionCard'
 import { SiteFooter, SupportCenter, SupportLauncher } from './support/SupportCenter'
 import type { SupportCategory, SupportPrefill } from './support/SupportCenter'
 import './App.css'
+import { featureEnabled, orderedSubjects, usePublicConfig } from './lib/publicConfig'
+import type { SiteBanner } from './lib/publicConfig'
+import { installClientErrorReporting } from './lib/clientErrors'
 
 const DesignSystemPlayground = lazy(() => import('./DesignSystemPlayground'))
 // Холст тетради нужен только в разработке — в главном чанке ему делать нечего.
@@ -94,7 +98,7 @@ const NotebookCanvas = lazy(() => import('./NotebookCanvas'))
 const ChatPage = lazy(() => import('./chat/ChatPage'))
 const AccountDialog = lazy(() => import('./account/AccountDialog'))
 const SchedulePage = lazy(() => import('./SchedulePage'))
-const AdminDashboard = lazy(() => import('./AdminDashboard'))
+const AdminApp = lazy(() => import('./admin/AdminApp'))
 
 type Theme = 'light' | 'dark'
 type AccountView = 'profile' | 'wallet'
@@ -546,6 +550,136 @@ function ProfileButton({ user, account, onClick, compact = false }: { user: User
   )
 }
 
+const noHiddenLabels: readonly NavigationLabel[] = []
+
+/* Объявление из админки («ведутся работы»). Закрытое объявление с тем же
+   текстом больше не показывается: новый текст - новое объявление. */
+function SiteBannerStrip({ banner }: { banner: SiteBanner }) {
+  const storageKey = `homework-copilot:banner-closed:${banner.text}`
+  const [closed, setClosed] = useState(() => {
+    try {
+      return window.localStorage.getItem(storageKey) === '1'
+    } catch {
+      return false
+    }
+  })
+  if (closed) return null
+  const internal = banner.link.startsWith('/')
+  return (
+    <div className={`site-banner is-${banner.tone}`} role={banner.tone === 'danger' ? 'alert' : 'status'}>
+      <p>
+        {banner.text}
+        {banner.link && <> <a href={banner.link} {...(internal ? {} : { target: '_blank', rel: 'noreferrer' })}>Подробнее</a></>}
+      </p>
+      <button
+        type="button"
+        aria-label="Скрыть объявление"
+        onClick={() => {
+          setClosed(true)
+          try {
+            window.localStorage.setItem(storageKey, '1')
+          } catch {
+            // Не запомнится - покажем при следующем заходе.
+          }
+        }}
+      >
+        <X size={16} weight="bold" aria-hidden="true" />
+      </button>
+    </div>
+  )
+}
+
+function FeatureOffNotice({ title, onGoHome }: { title: string; onGoHome: () => void }) {
+  return (
+    <section className="route-page feature-off" aria-labelledby="feature-off-title">
+      <header className="route-page-header">
+        <h1 id="feature-off-title">{title}</h1>
+        <p>Раздел скоро вернётся. Решение задач работает как обычно.</p>
+      </header>
+      <button className="route-primary-action" type="button" onClick={onGoHome}>
+        На главную <ArrowRight size={18} weight="bold" aria-hidden="true" />
+      </button>
+    </section>
+  )
+}
+
+/* «Помогло / не помогло» под разбором. Оценка идёт в метрики качества по
+   предметам в админке; на «не помогло» просим одну фразу - что было
+   непонятно, иначе оценка ничего не объясняет. */
+function SolutionRating({ client, solutionKey, subject, guestId }: {
+  client: SupabaseClient<Database>
+  solutionKey: string
+  subject: string
+  guestId: string | null
+}) {
+  const storageKey = `homework-copilot:rated:${solutionKey}`
+  const [value, setValue] = useState<boolean | null>(() => {
+    try {
+      const stored = window.localStorage.getItem(storageKey)
+      return stored === '1' ? true : stored === '0' ? false : null
+    } catch {
+      return null
+    }
+  })
+  const [comment, setComment] = useState('')
+  const [askComment, setAskComment] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [status, setStatus] = useState('')
+  const [error, setError] = useState('')
+
+  const send = async (helpful: boolean, text = '') => {
+    if (sending) return
+    setSending(true)
+    setError('')
+    const { error: rateError } = await client.rpc('rate_homework_solution', {
+      p_solution_key: solutionKey,
+      p_subject: subject,
+      p_helpful: helpful,
+      p_comment: text.trim() || null,
+      p_guest_id: guestId,
+    })
+    setSending(false)
+    if (rateError) {
+      setError('Оценка не сохранилась. Попробуй ещё раз')
+      return
+    }
+    setValue(helpful)
+    try {
+      window.localStorage.setItem(storageKey, helpful ? '1' : '0')
+    } catch {
+      // Не запомнится - кнопки просто останутся активными.
+    }
+    if (!helpful && !text) {
+      setAskComment(true)
+      setStatus('')
+    } else {
+      setAskComment(false)
+      setStatus('Спасибо, учтём.')
+    }
+  }
+
+  return (
+    <section className="solution-rating" aria-labelledby="solution-rating-title">
+      <h2 id="solution-rating-title">Разбор помог разобраться?</h2>
+      <div className="solution-rating-actions">
+        <button type="button" className={value === true ? 'is-selected' : ''} aria-pressed={value === true} disabled={sending} onClick={() => { void send(true) }}>Помог</button>
+        <button type="button" className={value === false ? 'is-selected' : ''} aria-pressed={value === false} disabled={sending} onClick={() => { void send(false) }}>Не помог</button>
+      </div>
+      {askComment && (
+        <form className="solution-rating-comment" onSubmit={(event) => { event.preventDefault(); void send(false, comment) }}>
+          <label>
+            <span>Что осталось непонятным?</span>
+            <textarea value={comment} onChange={(event) => setComment(event.target.value.slice(0, 500))} rows={2} maxLength={500} />
+          </label>
+          <button type="submit" disabled={sending || !comment.trim()}>Отправить</button>
+        </form>
+      )}
+      {status && <p className="solution-rating-status" role="status">{status}</p>}
+      {error && <p className="solution-rating-status is-error" role="alert">{error}</p>}
+    </section>
+  )
+}
+
 function ProductTopbar({
   theme,
   activeLabel,
@@ -555,6 +689,7 @@ function ProductTopbar({
   account,
   onOpenAccount,
   onOpenWallet,
+  hiddenLabels = noHiddenLabels,
 }: {
   theme: Theme
   activeLabel: NavigationLabel
@@ -564,6 +699,8 @@ function ProductTopbar({
   account: AccountData | null
   onOpenAccount: () => void
   onOpenWallet: () => void
+  /** Разделы, выключенные флагами из админки. */
+  hiddenLabels?: readonly NavigationLabel[]
 }) {
   return (
     <header className="product-topbar">
@@ -580,7 +717,7 @@ function ProductTopbar({
       </a>
 
       <nav className="product-navigation" aria-label="Основная навигация">
-        {navigation.map(({ label, path, icon: Icon }) => {
+        {navigation.filter(({ label }) => !hiddenLabels.includes(label)).map(({ label, path, icon: Icon }) => {
           const active = label === activeLabel
           return (
             <a
@@ -810,6 +947,8 @@ function UnderstandingPage({
   onOpenSupport,
   guestOffer,
   onOpenAccount,
+  ratingClient = null,
+  ratingGuestId = null,
 }: {
   solution: SolutionState | null
   generatedSolution?: HomeworkSolution
@@ -818,6 +957,9 @@ function UnderstandingPage({
   /** Решение получено без аккаунта: оно лежит только в этом браузере. */
   guestOffer: boolean
   onOpenAccount: () => void
+  /** Клиент для оценки «помогло / не помогло»; null - оценка выключена флагом. */
+  ratingClient?: SupabaseClient<Database> | null
+  ratingGuestId?: string | null
 }) {
   const [copied, setCopied] = useState(false)
   const [copyFailed, setCopyFailed] = useState(false)
@@ -1099,6 +1241,14 @@ function UnderstandingPage({
         {disclaimer}
         {guestInvite}
         {generatedSolution.verification && <SolutionVerificationPanel verification={generatedSolution.verification} />}
+        {ratingClient && (
+          <SolutionRating
+            client={ratingClient}
+            solutionKey={`${generatedSolution.textbookId}:${generatedSolution.task}`}
+            subject={generatedSolution.subject}
+            guestId={ratingGuestId}
+          />
+        )}
         {actions}
       </section>
     )
@@ -1804,6 +1954,19 @@ function HomePage() {
   // Гость держит очередь на своей метке браузера: аккаунта у него нет,
   // а видеть ход решения он должен так же, как все.
   const guestJobId = useMemo(() => (supabaseClient && !user ? getGuestId() : null), [supabaseClient, user])
+  // Предметы, флаги и баннер из админки.
+  const publicConfig = usePublicConfig(supabaseClient, guestJobId)
+  const availableSubjects = useMemo(() => orderedSubjects(publicConfig), [publicConfig])
+  const chatEnabled = featureEnabled(publicConfig, 'ai_chat')
+  const scheduleEnabled = featureEnabled(publicConfig, 'schedule')
+  const hiddenNavigation = useMemo(() => [
+    ...(chatEnabled ? [] : ['ИИ-чат' as const]),
+    ...(scheduleEnabled ? [] : ['Расписание' as const]),
+  ], [chatEnabled, scheduleEnabled])
+
+  useEffect(() => {
+    if (supabaseClient) installClientErrorReporting(supabaseClient)
+  }, [supabaseClient])
 
   const refreshJobs = useCallback(async () => {
     if (!supabaseClient || !authReady) return
@@ -2311,14 +2474,16 @@ function HomePage() {
     )
   }
 
-  if (user && account?.control?.is_banned) {
+  // Бан со сроком: после срока доступ открыт, даже если cron ещё не снял строку.
+  if (user && account?.control?.is_banned && (!account.control.banned_until || new Date(account.control.banned_until).getTime() > Date.now())) {
     return <AccountBlockedScreen reason={account.control.ban_reason} onSignOut={signOutBlockedAccount} />
   }
 
   return (
     <main className="product-shell">
-      <ProductTopbar theme={theme} activeLabel={activeNavigation} onNavigate={navigate} onToggleTheme={toggleTheme} user={user} account={account} onOpenAccount={openAccount} onOpenWallet={openWallet} />
+      <ProductTopbar theme={theme} activeLabel={activeNavigation} onNavigate={navigate} onToggleTheme={toggleTheme} user={user} account={account} onOpenAccount={openAccount} onOpenWallet={openWallet} hiddenLabels={hiddenNavigation} />
       <div className="product-content" ref={routeScrollRef}>
+        {publicConfig.banner.enabled && <SiteBannerStrip banner={publicConfig.banner} />}
         <div className="product-route">
           {activeNavigation === 'Главная' && <PageHeader account={account} />}
           {activeNavigation === 'Главная' ? (
@@ -2328,6 +2493,8 @@ function HomePage() {
                 signedIn={Boolean(user)}
                 freeSolutionUsed={guestFreeSolutionUsed}
                 defaultGrade={account ? `${account.profile.grade} класс` : ''}
+                subjects={availableSubjects}
+                photoEnabled={featureEnabled(publicConfig, 'photo_input')}
               />
               {!user && <GuestSolutionsNote onOpenAccount={openAccount} freeSolutionUsed={guestFreeSolutionUsed} />}
               {(visibleJobs.length > 0 || user) && (
@@ -2358,11 +2525,17 @@ function HomePage() {
               onOpenSupport={(context) => openSupport('wrong_solution', context)}
               guestOffer={Boolean(supabaseClient) && !user}
               onOpenAccount={openAccount}
+              ratingClient={featureEnabled(publicConfig, 'solution_rating') ? supabaseClient : null}
+              ratingGuestId={user ? null : guestJobId}
             />
           ) : activeNavigation === 'ИИ-чат' ? (
-            <Suspense fallback={<div className="route-loading" role="status">Загружаем чат…</div>}><ChatPage userId={user?.id ?? null} onRequireAuth={openAccount} onOpenWallet={openWallet} /></Suspense>
+            chatEnabled
+              ? <Suspense fallback={<div className="route-loading" role="status">Загружаем чат…</div>}><ChatPage userId={user?.id ?? null} onRequireAuth={openAccount} onOpenWallet={openWallet} /></Suspense>
+              : <FeatureOffNotice title="ИИ-чат временно выключен" onGoHome={() => navigate('Главная')} />
           ) : activeNavigation === 'Расписание' ? (
-            <Suspense fallback={<div className="route-loading" role="status">Загружаем расписание…</div>}><SchedulePage userId={user?.id ?? null} grade={account?.profile.grade ?? null} /></Suspense>
+            scheduleEnabled
+              ? <Suspense fallback={<div className="route-loading" role="status">Загружаем расписание…</div>}><SchedulePage userId={user?.id ?? null} grade={account?.profile.grade ?? null} /></Suspense>
+              : <FeatureOffNotice title="Расписание временно выключено" onGoHome={() => navigate('Главная')} />
           ) : activeNavigation === 'Решения' ? (
             <SolutionsPage
               user={user}
@@ -2430,7 +2603,7 @@ function App() {
   if (pathname === '/offer') return <><LegalPage kind="offer" /><PrivacyNotice /></>
 
   if (pathname === '/admin') {
-    return <Suspense fallback={null}><AdminDashboard /></Suspense>
+    return <Suspense fallback={null}><AdminApp /></Suspense>
   }
 
   if (!isKnownApplicationPath(pathname)) {

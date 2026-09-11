@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
   BookOpenText,
@@ -32,38 +32,6 @@ type LibraryData = {
 }
 
 const emptyLibrary: LibraryData = { total: 0, totalAccesses: 0, items: [] }
-const previewLibrary: LibraryData = {
-  total: 3,
-  totalAccesses: 41,
-  items: [
-    {
-      id: 'preview-solution-1',
-      textbookId: 'geometry',
-      textbookTitle: 'Геометрия. 7–9 классы',
-      edition: '14-е издание, Просвещение, 2023',
-      subject: 'Геометрия',
-      task: '123',
-      sourcePage: 44,
-      condition: 'Докажите, что биссектрисы смежных углов перпендикулярны.',
-      answer: 'Угол между биссектрисами равен 90°.',
-      accessCount: 27,
-      createdAt: '2026-08-26T09:18:00.000Z',
-    },
-    {
-      id: 'preview-solution-2',
-      textbookId: 'geometry',
-      textbookTitle: 'Геометрия. 7–9 классы',
-      edition: '14-е издание, Просвещение, 2023',
-      subject: 'Геометрия',
-      task: '2',
-      sourcePage: 9,
-      condition: 'Через каждую пару из трёх точек проведите прямую. Сколько прямых получилось?',
-      answer: '3 прямые.',
-      accessCount: 14,
-      createdAt: '2026-08-24T13:40:00.000Z',
-    },
-  ],
-}
 
 function isRecord(value: Json | undefined | null): value is Record<string, Json | undefined> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -112,7 +80,9 @@ function formatDate(value: string) {
   }).format(date)
 }
 
-export default function AdminSolutionLibrary({ preview = false }: { preview?: boolean }) {
+/* База выданных решений. Удаление - только у владельца: оно закрывает
+   решение у всех, кто его открывал, и не возвращает деньги. */
+export default function AdminSolutionLibrary({ canDelete = false }: { canDelete?: boolean }) {
   const [search, setSearch] = useState('')
   const [data, setData] = useState<LibraryData>(emptyLibrary)
   const [loading, setLoading] = useState(false)
@@ -123,19 +93,6 @@ export default function AdminSolutionLibrary({ preview = false }: { preview?: bo
   const [error, setError] = useState('')
 
   const loadLibrary = useCallback(async (query: string) => {
-    if (preview) {
-      const normalized = query.trim().toLocaleLowerCase('ru-RU')
-      const items = previewLibrary.items.filter((item) => !normalized || [item.task, item.textbookTitle, item.condition]
-        .join(' ')
-        .toLocaleLowerCase('ru-RU')
-        .includes(normalized))
-      setData({
-        total: items.length,
-        totalAccesses: items.reduce((total, item) => total + item.accessCount, 0),
-        items,
-      })
-      return
-    }
     if (!supabase) return
     setLoading(true)
     const { data: payload, error: listError } = await supabase.rpc('admin_list_solution_library', {
@@ -145,14 +102,12 @@ export default function AdminSolutionLibrary({ preview = false }: { preview?: bo
     if (listError) setError('Не получилось загрузить базу решений.')
     else setData(parseLibrary(payload))
     setLoading(false)
-  }, [preview])
+  }, [])
 
   useEffect(() => {
     const timer = window.setTimeout(() => { void loadLibrary(search) }, 180)
     return () => window.clearTimeout(timer)
   }, [loadLibrary, search])
-
-  const selectedImpact = useMemo(() => deleteCandidate?.accessCount ?? 0, [deleteCandidate])
 
   const requestDelete = (item: LibrarySolution) => {
     setDeleteCandidate(item)
@@ -163,26 +118,13 @@ export default function AdminSolutionLibrary({ preview = false }: { preview?: bo
 
   const deleteSolution = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!deleteCandidate || actionLoading) return
+    if (!deleteCandidate || actionLoading || !supabase) return
     const reason = deleteReason.trim()
     if (reason.length < 3 || reason.length > 160) {
       setError('Укажи причину удаления от 3 до 160 символов.')
       return
     }
 
-    if (preview) {
-      setData((current) => ({
-        total: Math.max(0, current.total - 1),
-        totalAccesses: Math.max(0, current.totalAccesses - deleteCandidate.accessCount),
-        items: current.items.filter((item) => item.id !== deleteCandidate.id),
-      }))
-      setNotice(`Предпросмотр: решение № ${deleteCandidate.task} удалено из списка.`)
-      setDeleteCandidate(null)
-      setDeleteReason('')
-      return
-    }
-
-    if (!supabase) return
     setActionLoading(true)
     setError('')
     const { error: deleteError } = await supabase.rpc('admin_delete_solution', {
@@ -205,7 +147,7 @@ export default function AdminSolutionLibrary({ preview = false }: { preview?: bo
       <header className="admin-solution-library-heading">
         <div>
           <h2 id="admin-solution-library-title">База решений</h2>
-          <p>Решения, выданные ученикам. Удаление закрывает доступ к решению у всех, кто его открывал.</p>
+          <p>Решения, выданные ученикам. {canDelete ? 'Удаление закрывает доступ к решению у всех, кто его открывал.' : 'Удалять решения может только владелец.'}</p>
         </div>
         <dl aria-label="Статистика базы решений">
           <div><dt>Решений</dt><dd>{data.total.toLocaleString('ru-RU')}</dd></div>
@@ -236,17 +178,19 @@ export default function AdminSolutionLibrary({ preview = false }: { preview?: bo
                 </div>
                 <span className="admin-solution-accesses">{item.accessCount.toLocaleString('ru-RU')}</span>
                 <time>{formatDate(item.createdAt)}</time>
-                <button className="admin-solution-delete" type="button" onClick={() => requestDelete(item)} aria-label={`Удалить решение задачи № ${item.task}`}>
-                  <Trash size={18} weight="bold" aria-hidden="true" />
-                </button>
+                {canDelete ? (
+                  <button className="admin-solution-delete" type="button" onClick={() => requestDelete(item)} aria-label={`Удалить решение задачи № ${item.task}`}>
+                    <Trash size={18} weight="bold" aria-hidden="true" />
+                  </button>
+                ) : <span />}
               </div>
 
-              {deleteCandidate?.id === item.id && (
+              {canDelete && deleteCandidate?.id === item.id && (
                 <form className="admin-solution-confirm" onSubmit={deleteSolution}>
                   <WarningCircle size={22} weight="duotone" aria-hidden="true" />
                   <div>
                     <strong>Удалить решение № {item.task}?</strong>
-                    <p>Оно исчезнет у {selectedImpact.toLocaleString('ru-RU')} пользователей, которые его открывали. Баланс автоматически не возвращается.</p>
+                    <p>Оно исчезнет у {item.accessCount.toLocaleString('ru-RU')} пользователей, которые его открывали. Баланс автоматически не возвращается.</p>
                     <label><span>Причина удаления</span><input autoFocus value={deleteReason} onChange={(event) => setDeleteReason(event.target.value)} minLength={3} maxLength={160} placeholder="Например, неверное решение" /></label>
                     <div className="admin-solution-confirm-actions">
                       <button type="button" onClick={() => { setDeleteCandidate(null); setDeleteReason('') }} disabled={actionLoading}>Отмена</button>

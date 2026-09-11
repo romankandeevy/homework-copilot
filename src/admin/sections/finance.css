@@ -1,0 +1,72 @@
+/* Финансы: мелочи поверх admin.css, только токены сайта. */
+
+.fin-note {
+  margin: 0;
+  color: var(--color-text-subtle);
+  font-size: var(--text-small);
+  line-height: var(--leading-copy);
+}
+
+.fin-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-brand-accent);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.fin-link:hover { text-decoration: underline; }
+
+.fin-clean {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid color-mix(in oklch, var(--color-success) 45%, var(--color-border));
+  border-radius: var(--radius-surface);
+  background: var(--color-success-soft);
+  color: var(--color-success-strong);
+  font-weight: var(--weight-medium);
+}
+
+.fin-amount-neg { color: color-mix(in oklch, var(--color-danger) 75%, var(--color-text)); }
+.fin-amount-pos { color: var(--color-success-strong); }
+
+.fin-toolbar-search {
+  display: flex;
+  gap: var(--space-2);
+  flex: 1 1 18rem;
+  align-items: flex-end;
+}
+
+.fin-toolbar-search .adm-field { flex: 1; }
+
+.fin-report-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.fin-stack { display: grid; gap: var(--adm-gap); }
+
+.fin-refund-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-surface);
+  background: var(--color-surface-sunken);
+  font-size: var(--text-small);
+}
+
+.fin-refund-summary b { display: block; color: var(--color-strong); font-family: var(--font-mono); }
+
+@media (max-width: 640px) {
+  .fin-toolbar-search { flex-basis: 100%; }
+}

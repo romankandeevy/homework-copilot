@@ -23,7 +23,7 @@
    ученика проверяет сама функция на Vercel. */
 
 const upstreamOrigin = 'https://homework-copilot-taupe.vercel.app'
-const routes = new Set(['solve', 'chat', 'support'])
+const routes = new Set(['solve', 'chat', 'support', 'admin'])
 
 const forwardedRequestHeaders = [
   'accept',

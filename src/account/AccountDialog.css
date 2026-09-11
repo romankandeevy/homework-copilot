@@ -549,3 +549,48 @@
   .account-auth-view { min-height: 0; grid-template-columns: minmax(0, 1fr); }
   .account-auth-context { display: none; }
 }
+
+/* Тариф и промокод в кошельке. */
+.account-plan-card {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
+}
+
+.account-plan-card header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+.account-plan-card h3 { margin: 0; font-size: var(--text-body); }
+.account-plan-card header span { color: var(--color-text-subtle); font-size: var(--text-small); }
+.account-plan-card ul { display: grid; gap: var(--space-1); margin: 0; padding-left: 1.1rem; color: var(--color-text-muted); }
+
+.account-promo-form { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+.account-promo-form input {
+  flex: 1 1 10rem;
+  min-height: 2.75rem;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  text-transform: uppercase;
+}
+
+.account-promo-form button {
+  min-height: 2.75rem;
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-control);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font: inherit;
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+}
+
+.account-promo-form button:disabled { opacity: 0.6; cursor: not-allowed; }
+.account-promo-message { margin: 0; font-size: var(--text-small); color: var(--color-success-strong); }
+.account-promo-message.is-error { color: color-mix(in oklch, var(--color-danger) 75%, var(--color-text)); }

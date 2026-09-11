@@ -15,6 +15,10 @@
     "api/telegram-webhook.ts": {
       "includeFiles": "{server/**,src/lib/**}",
       "maxDuration": 30
+    },
+    "api/admin.ts": {
+      "includeFiles": "{server/**,src/lib/**}",
+      "maxDuration": 60
     }
   },
   "redirects": [

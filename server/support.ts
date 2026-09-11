@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 import type { SupabaseClient, User } from '@supabase/supabase-js'
 import type { Database, Json } from '../src/lib/database.types.ts'
 import { formatRubles } from '../src/lib/currency.ts'
+import { recordError, recordRequestLog, requestAddress, requestIdOf, requestUserAgent } from './telemetry.ts'
 
 export type SupportCategory = 'general' | 'payment' | 'feature' | 'wrong_solution'
 
@@ -492,6 +493,35 @@ async function saveUserMessage(
 }
 
 export async function handleSupportRequest(request: IncomingMessage, response: ServerResponse, fetchImpl: typeof fetch = fetch) {
+  const startedAt = Date.now()
+  let config: ServerConfig | null = null
+  let userId: string | null = null
+  const logSupport = async (status: number, message: string | null, error?: unknown) => {
+    if (!config) return
+    const telemetry = { supabaseUrl: config.supabaseUrl, serviceRoleKey: config.serviceKey }
+    await Promise.all([
+      recordRequestLog(telemetry, {
+        route: 'support',
+        status,
+        requestId: requestIdOf(request),
+        userId,
+        ip: requestAddress(request, null),
+        userAgent: requestUserAgent(request),
+        durationMs: Date.now() - startedAt,
+        error: status >= 400 ? message : null,
+      }),
+      status >= 500
+        ? recordError(telemetry, {
+          kind: 'api',
+          route: 'support',
+          message: message ?? 'support failed',
+          stack: error instanceof Error && !(error instanceof SupportApiError) ? error.stack ?? null : null,
+          requestId: requestIdOf(request),
+          userId,
+        })
+        : Promise.resolve(),
+    ])
+  }
   try {
     const browserAllowed = allowProductionBrowser(request, response)
     if (request.method === 'OPTIONS') {
@@ -512,12 +542,15 @@ export async function handleSupportRequest(request: IncomingMessage, response: S
       responseJson(response, 405, { error: 'method_not_allowed' })
       return
     }
-    const config = getConfig(fetchImpl)
+    config = getConfig(fetchImpl)
     const adminClient = createAdminClient(config)
     const user = await authenticateUser(request, config, adminClient)
+    userId = user.id
     const payload = jsonObject(await readJson(request)) as SupportPayload
     const result = await saveUserMessage(adminClient, config, user, payload)
-    responseJson(response, result.deliveryStatus === 'failed' ? 202 : 200, {
+    const status = result.deliveryStatus === 'failed' ? 202 : 200
+    await logSupport(status, result.deliveryStatus === 'failed' ? 'telegram delivery failed' : null)
+    responseJson(response, status, {
       ok: true,
       conversationId: result.conversation.id,
       messageId: result.message.id,
@@ -525,6 +558,7 @@ export async function handleSupportRequest(request: IncomingMessage, response: S
     })
   } catch (error) {
     const apiError = error instanceof SupportApiError ? error : new SupportApiError(500, 'Не получилось отправить сообщение')
+    await logSupport(apiError.status, error instanceof Error ? error.message : apiError.message, error)
     responseJson(response, apiError.status, { error: apiError.message })
   }
 }

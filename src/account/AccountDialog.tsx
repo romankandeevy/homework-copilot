@@ -712,6 +712,99 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
   )
 }
 
+type MyPlan = { title: string; features: string[]; dailySolveLimit: number | null; expiresAt: string | null }
+
+function promoErrorMessage(message: string) {
+  if (message.includes('promo code not found')) return 'Такого промокода нет'
+  if (message.includes('promo code expired')) return 'Срок промокода истёк'
+  if (message.includes('promo code not started')) return 'Промокод ещё не начал действовать'
+  if (message.includes('promo code already used')) return 'Этот промокод уже использован на твоём аккаунте'
+  if (message.includes('promo code exhausted')) return 'Промокод закончился'
+  if (message.includes('promo attempts exceeded')) return 'Слишком много попыток. Попробуй через час'
+  if (message.includes('account is blocked')) return 'Аккаунт заблокирован'
+  return 'Не получилось применить промокод'
+}
+
+/* Тариф и промокод. Тариф задаёт дневной предел решений и состав услуги,
+   цену решения он не меняет. Промокод начисляет деньги или подключает
+   тариф - что именно, решает админка. Ввод промокода можно выключить
+   флагом promo_codes. */
+function PlanAndPromo({ onReloadAccount }: { onReloadAccount: () => Promise<void> }) {
+  const [plan, setPlan] = useState<MyPlan | null>(null)
+  const [promoEnabled, setPromoEnabled] = useState(true)
+  const [code, setCode] = useState('')
+  const [sending, setSending] = useState(false)
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
+
+  const loadPlan = async () => {
+    if (!supabase) return
+    const [{ data: planData }, { data: configData }] = await Promise.all([
+      supabase.rpc('get_my_plan'),
+      supabase.rpc('get_public_config', { p_guest_id: null }),
+    ])
+    if (planData && typeof planData === 'object' && !Array.isArray(planData)) {
+      const source = planData as Record<string, unknown>
+      setPlan({
+        title: typeof source.title === 'string' ? source.title : 'Базовый',
+        features: Array.isArray(source.features) ? source.features.filter((item): item is string => typeof item === 'string') : [],
+        dailySolveLimit: typeof source.dailySolveLimit === 'number' ? source.dailySolveLimit : null,
+        expiresAt: typeof source.expiresAt === 'string' ? source.expiresAt : null,
+      })
+    }
+    if (configData && typeof configData === 'object' && !Array.isArray(configData)) {
+      const flags = (configData as Record<string, unknown>).flags
+      if (flags && typeof flags === 'object' && !Array.isArray(flags)) setPromoEnabled((flags as Record<string, unknown>).promo_codes !== false)
+    }
+  }
+
+  useEffect(() => { void loadPlan() }, [])
+
+  const redeem = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!supabase || sending || !code.trim()) return
+    setSending(true)
+    setMessage('')
+    setError('')
+    const { data, error: redeemError } = await supabase.rpc('redeem_promo_code', { p_code: code.trim() })
+    setSending(false)
+    if (redeemError) {
+      setError(promoErrorMessage(redeemError.message))
+      return
+    }
+    const result = data && typeof data === 'object' && !Array.isArray(data) ? data as Record<string, unknown> : {}
+    setCode('')
+    setMessage(result.kind === 'plan'
+      ? `Подключён тариф «${String(result.planTitle ?? '')}» на ${String(result.planDays ?? '')} дн.`
+      : `Начислено ${formatRubles(Number(result.amount ?? 0))}`)
+    await Promise.all([onReloadAccount(), loadPlan()])
+  }
+
+  return (
+    <section className="account-plan-card" aria-labelledby="account-plan-title">
+      <header>
+        <h3 id="account-plan-title">Тариф «{plan?.title ?? '…'}»</h3>
+        {plan?.expiresAt && <span>до {new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(new Date(plan.expiresAt))}</span>}
+      </header>
+      {plan && (plan.features.length > 0 || plan.dailySolveLimit !== null) && (
+        <ul>
+          {plan.features.map((feature) => <li key={feature}>{feature}</li>)}
+          {plan.dailySolveLimit !== null && <li>До {plan.dailySolveLimit} решений в сутки</li>}
+        </ul>
+      )}
+      {promoEnabled && (
+        <form className="account-promo-form" onSubmit={redeem}>
+          <label className="sr-only" htmlFor="account-promo-code">Промокод</label>
+          <input id="account-promo-code" value={code} onChange={(event) => setCode(event.target.value.slice(0, 32))} placeholder="Промокод" autoComplete="off" />
+          <button type="submit" disabled={sending || !code.trim()}>{sending ? 'Применяем…' : 'Применить'}</button>
+        </form>
+      )}
+      {message && <p className="account-promo-message" role="status">{message}</p>}
+      {error && <p className="account-promo-message is-error" role="alert">{error}</p>}
+    </section>
+  )
+}
+
 function ReferralCard() {
   const [referral, setReferral] = useState<ReferralStatus | null>(null)
   const [loading, setLoading] = useState(true)
@@ -929,6 +1022,8 @@ function ProfileView({ user, account, notice, initialView, theme, onToggleTheme,
               <span>за решение, точная цена зависит от задачи</span>
             </div>
           </section>
+
+          <PlanAndPromo onReloadAccount={onReloadAccount} />
 
           <ReferralCard />
 

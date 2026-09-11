@@ -61,6 +61,9 @@ React 19, TypeScript, Vite 8, motion. Serverless-функции на Vercel (Nod
   (требования к записи по предмету и допустимый приём по классу),
   `chat*.ts`, `support.ts`.
 - `api/` — тонкие обёртки Vercel над `server/`.
+- `src/admin/` — админка на `/admin`: роли, обязательная 2FA, аудит, разделы
+  по ТЗ. Правила и устройство — «Админка» в AGENTS.md. Почтовые уведомления
+  требуют `RESEND_API_KEY` (и при желании `RESEND_FROM`) на Vercel.
 - `supabase/migrations/` — схема и все денежные функции.
 - `scripts/` — сборка статических маршрутов, иконки, разовые проверки.
 - `tests/` — Playwright. Юнит-тесты лежат рядом с кодом.

@@ -1,0 +1,153 @@
+/* Раздел «Пользователи» и карточка пользователя. Только токены сайта:
+   светлая и тёмная тема переключаются сами. */
+
+.adm-users {
+  display: grid;
+  gap: var(--adm-gap, var(--space-4));
+  min-width: 0;
+}
+
+.adm-users-badges { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+
+.adm-users-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 2.5rem;
+  color: var(--color-text-muted);
+  font-size: var(--text-small);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.adm-users-bulk-count { margin-right: auto; font-weight: var(--weight-semibold); color: var(--color-strong); }
+
+.adm-users-result {
+  display: grid;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid color-mix(in oklch, var(--color-success) 45%, var(--color-border));
+  border-radius: var(--radius-surface);
+  background: var(--color-surface-raised);
+}
+
+.adm-users-result.is-warning {
+  border-color: color-mix(in oklch, var(--color-warning) 60%, var(--color-border));
+  background: var(--color-warning-soft);
+}
+
+.adm-users-result-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); }
+.adm-users-result ul { display: grid; gap: 0.2rem; margin: 0; padding-left: 1.1rem; font-size: var(--text-small); }
+
+.adm-users-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-brand-accent);
+  font: inherit;
+  font-weight: var(--weight-medium);
+  text-align: left;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.adm-users-link:hover { text-decoration: underline; }
+
+.adm-money-plus { color: var(--color-success-strong); font-family: var(--font-mono); white-space: nowrap; }
+.adm-money-minus { color: color-mix(in oklch, var(--color-danger) 75%, var(--color-text)); font-family: var(--font-mono); white-space: nowrap; }
+
+/* ---------- Карточка ---------- */
+
+.adm-card-head {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.adm-card-status,
+.adm-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+
+.adm-card-note { color: var(--color-text-muted); font-size: var(--text-small); overflow-wrap: anywhere; }
+
+.adm-card-flags {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid color-mix(in oklch, var(--color-warning) 60%, var(--color-border));
+  border-radius: var(--radius-surface);
+  background: var(--color-warning-soft);
+}
+
+.adm-card-flags-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.adm-card-flags-head strong { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--color-strong); }
+.adm-card-flags ul { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; font-size: var(--text-small); }
+.adm-card-flags li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); overflow-wrap: anywhere; }
+
+.adm-card-section { display: grid; gap: var(--space-4); min-width: 0; }
+.adm-card-form { display: grid; gap: var(--space-3); min-width: 0; }
+.adm-card-inline { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.adm-card-error { color: color-mix(in oklch, var(--color-danger) 75%, var(--color-text)); font-size: var(--text-small); }
+.adm-card-hint { color: var(--color-text-subtle); font-size: var(--text-small); }
+
+.adm-card-warning {
+  padding: var(--space-3);
+  border: 1px solid color-mix(in oklch, var(--color-danger) 55%, var(--color-border));
+  border-radius: var(--radius-surface);
+  background: var(--color-danger-soft);
+  line-height: var(--leading-copy);
+}
+
+.adm-card-link-field { display: flex; align-items: center; gap: var(--space-2); }
+.adm-card-link-field input { font-family: var(--font-mono); font-size: var(--text-small); }
+
+.adm-card-pre {
+  max-height: 16rem;
+  margin: 0;
+  padding: var(--space-3);
+  overflow: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-surface);
+  background: var(--color-surface-sunken);
+  font: var(--text-small)/1.55 var(--font-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Лог решения: запрос и ответ модели в узком окне не читаются. */
+.adm-modal:has(.adm-card-log) { width: min(100%, 60rem); }
+.adm-card-log { display: grid; gap: var(--space-3); min-width: 0; }
+.adm-card-log h3 { font: var(--weight-semibold) var(--text-ui)/1.3 var(--font-body); }
+.adm-card-log ul { display: grid; gap: 0.25rem; margin: 0; padding-left: 1.1rem; font-size: var(--text-small); overflow-wrap: anywhere; }
+
+.adm-card-details summary {
+  color: var(--color-text-muted);
+  font-size: var(--text-small);
+  cursor: pointer;
+}
+
+.adm-card-details[open] summary { margin-bottom: var(--space-2); }
+
+.adm-card-audit,
+.adm-card-note-item { display: grid; gap: var(--space-2); min-width: 0; }
+
+.adm-card-audit-head,
+.adm-card-note-meta { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
+
+.adm-card-audit-head span,
+.adm-card-note-meta span { color: var(--color-text-subtle); font-size: var(--text-small); }
+
+.adm-card-note-body { white-space: pre-wrap; overflow-wrap: anywhere; line-height: var(--leading-copy); }
+
+.adm-card-diff { display: grid; gap: 0.2rem; margin: 0; padding: 0; list-style: none; font-size: var(--text-small); }
+.adm-card-diff li { overflow-wrap: anywhere; }
+.adm-card-diff b { color: var(--color-text-muted); font-weight: var(--weight-medium); }
+.adm-card-before { color: var(--color-text-subtle); text-decoration: line-through; text-decoration-color: color-mix(in oklch, var(--color-text-subtle) 50%, transparent); }
+.adm-card-after { color: var(--color-strong); }
+
+.adm-card-econ-note { color: var(--color-text-subtle); font-size: var(--text-small); line-height: var(--leading-copy); }
+
+@media (max-width: 640px) {
+  .adm-card-actions .adm-button { flex: 1 1 auto; }
+}
