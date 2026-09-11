@@ -1083,7 +1083,7 @@ function Composer({ thread, draft, onDraft, onTyping, onSent }: {
       />
       <div className="sup-composer-foot">
         <span className="adm-muted adm-mono">{draft.length}/4000</span>
-        <Button type="submit" variant="primary" loading={pending === 'reply'} disabled={!draft.trim()} icon={<PaperPlaneTilt size={16} weight="bold" aria-hidden="true" />}>Отправить</Button>
+        <Button type="submit" variant="accent" loading={pending === 'reply'} disabled={!draft.trim()} icon={<PaperPlaneTilt size={16} weight="bold" aria-hidden="true" />}>Отправить</Button>
       </div>
     </form>
   )

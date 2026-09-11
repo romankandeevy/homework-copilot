@@ -10,6 +10,7 @@ import type { FormEvent, ReactNode } from 'react'
 import {
   ArrowLeft,
   BellRinging,
+  MagnifyingGlass,
   BookOpenText,
   ChartLineUp,
   ClipboardText,
@@ -24,10 +25,10 @@ import {
   UsersThree,
 } from '@phosphor-icons/react'
 import { supabase } from '../lib/supabase'
-import { adminRpc, bool, isRecord, num, obj, str } from './api'
+import { adminRpc, bool, isRecord, num, obj, rows, str } from './api'
 import { AdminContext } from './context'
 import type { AdminAccess, AdminPermissions, AdminRole, AdminSection, AdminSignals } from './context'
-import { Badge, Button, Field, LoadingState, ToastProvider } from './ui'
+import { Button, Field, LoadingState, ToastProvider } from './ui'
 import './admin.css'
 
 const DashboardSection = lazy(() => import('./sections/DashboardSection'))
@@ -269,6 +270,106 @@ function MfaVerify({ email, factorId, onDone, onSignOut }: { email: string; fact
 }
 
 /* ------------------------------------------------------------------------
+   Быстрый переход: Ctrl+K - раздел или пользователь по почте
+   ------------------------------------------------------------------------ */
+
+type PaletteItem = { key: string; title: string; hint: string; run: () => void }
+
+function CommandPalette({ items, onClose, openUser }: { items: NavItem[]; onClose: () => void; openUser: (id: string) => void }) {
+  const [query, setQuery] = useState('')
+  const [users, setUsers] = useState<PaletteItem[]>([])
+  const [active, setActive] = useState(0)
+  const inputRef = useRef<HTMLInputElement | null>(null)
+
+  useEffect(() => { inputRef.current?.focus() }, [])
+
+  // Пользователей ищем в базе, когда набрано хотя бы два знака.
+  useEffect(() => {
+    const trimmed = query.trim()
+    if (trimmed.length < 2) {
+      setUsers([])
+      return
+    }
+    let cancelled = false
+    const timer = window.setTimeout(async () => {
+      try {
+        const data = obj(await adminRpc('admin_users_list', { p_search: trimmed, p_filters: {}, p_sort: 'last_seen', p_dir: 'desc', p_page: 1, p_page_size: 6 }))
+        if (cancelled) return
+        setUsers(rows(data.items).map((user) => ({
+          key: `user:${str(user.id)}`,
+          title: str(user.fullName) || str(user.email),
+          hint: `${str(user.email)} · ${str(user.planTitle)}`,
+          run: () => openUser(str(user.id)),
+        })))
+      } catch {
+        if (!cancelled) setUsers([])
+      }
+    }, 200)
+    return () => { cancelled = true; window.clearTimeout(timer) }
+  }, [query, openUser])
+
+  const sections: PaletteItem[] = items
+    .filter((item) => !query.trim() || item.label.toLocaleLowerCase('ru-RU').includes(query.trim().toLocaleLowerCase('ru-RU')))
+    .map((item) => ({ key: `section:${item.id}`, title: item.label, hint: item.group, run: () => { window.location.assign(item.id === 'dashboard' ? '/admin' : `/admin?section=${item.id}`) } }))
+  const all = [...users, ...sections]
+  const current = Math.min(active, Math.max(0, all.length - 1))
+
+  const choose = (item: PaletteItem) => {
+    onClose()
+    item.run()
+  }
+
+  return (
+    <div className="adm-overlay is-centered" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
+      <div className="adm-palette" role="dialog" aria-modal="true" aria-label="Быстрый переход">
+        <div className="adm-palette-input">
+          <MagnifyingGlass size={18} weight="bold" aria-hidden="true" />
+          <input
+            ref={inputRef}
+            value={query}
+            placeholder="Раздел или почта ученика"
+            aria-label="Поиск по админке"
+            onChange={(event) => { setQuery(event.target.value); setActive(0) }}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') { event.preventDefault(); onClose() }
+              if (event.key === 'ArrowDown') { event.preventDefault(); setActive((value) => Math.min(value + 1, all.length - 1)) }
+              if (event.key === 'ArrowUp') { event.preventDefault(); setActive((value) => Math.max(value - 1, 0)) }
+              if (event.key === 'Enter' && all[current]) { event.preventDefault(); choose(all[current]) }
+            }}
+          />
+        </div>
+        {all.length === 0 ? (
+          <p className="adm-palette-empty">{query.trim().length >= 2 ? 'Никого не нашлось. Поиск идёт по почте, имени и id.' : 'Набери название раздела или почту ученика.'}</p>
+        ) : (
+          <ul className="adm-palette-list">
+            {users.length > 0 && <li className="adm-palette-group adm-eyebrow">Пользователи</li>}
+            {users.map((item, index) => (
+              <li key={item.key}>
+                <button type="button" className={index === current ? 'is-active' : ''} onMouseEnter={() => setActive(index)} onClick={() => choose(item)}>
+                  <span className="adm-cell-main"><strong>{item.title}</strong><small>{item.hint}</small></span>
+                </button>
+              </li>
+            ))}
+            {sections.length > 0 && <li className="adm-palette-group adm-eyebrow">Разделы</li>}
+            {sections.map((item, index) => {
+              const position = users.length + index
+              return (
+                <li key={item.key}>
+                  <button type="button" className={position === current ? 'is-active' : ''} onMouseEnter={() => setActive(position)} onClick={() => choose(item)}>
+                    <span className="adm-cell-main"><strong>{item.title}</strong><small>{item.hint}</small></span>
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+        <div className="adm-palette-foot"><span>↑↓ выбор</span><span>Enter открыть</span><span>Esc закрыть</span></div>
+      </div>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------------
    Каркас
    ------------------------------------------------------------------------ */
 
@@ -277,7 +378,19 @@ function AdminShell({ access, theme, onToggleTheme, onSignOut }: { access: Admin
   const [signals, setSignals] = useState<AdminSignals>(emptySignals)
   const [online, setOnline] = useState(0)
   const [openUserId, setOpenUserId] = useState<string | null>(() => new URLSearchParams(window.location.search).get('user'))
+  const [paletteOpen, setPaletteOpen] = useState(false)
   const refreshTimer = useRef<number | null>(null)
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        setPaletteOpen((open) => !open)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   const allowedItems = useMemo(() => navItems.filter((item) => item.allowed(access.permissions)), [access.permissions])
   const activeSection = allowedItems.some((item) => item.id === section) ? section : 'dashboard'
@@ -382,8 +495,13 @@ function AdminShell({ access, theme, onToggleTheme, onSignOut }: { access: Admin
       <div className="adm-app">
         <header className="adm-topbar">
           <a className="adm-wordmark" href="/" aria-label="Homework Copilot"><span>H</span><b className="adm-wordmark-text">Homework Copilot</b></a>
-          <Badge tone="accent">{roleLabels[access.role]}</Badge>
+          <span className="adm-topbar-role">{roleLabels[access.role]}</span>
           <span className="adm-topbar-spacer" />
+          <button type="button" className="adm-search-trigger" onClick={() => setPaletteOpen(true)} aria-label="Быстрый переход">
+            <MagnifyingGlass size={15} weight="bold" aria-hidden="true" />
+            <span>Раздел или ученик</span>
+            <kbd>Ctrl K</kbd>
+          </button>
           <span className="adm-topbar-meta">
             <span className="adm-online" title="Пользователи с активностью за последние 10 минут"><i />{online} онлайн</span>
             <span className="adm-hide-mobile">{access.email}</span>
@@ -447,6 +565,7 @@ function AdminShell({ access, theme, onToggleTheme, onSignOut }: { access: Admin
             <UserCard key={openUserId} userId={openUserId} onClose={closeUser} />
           </Suspense>
         )}
+        {paletteOpen && <CommandPalette items={allowedItems} onClose={() => setPaletteOpen(false)} openUser={openUser} />}
       </div>
     </AdminContext.Provider>
   )

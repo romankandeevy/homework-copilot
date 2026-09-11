@@ -135,6 +135,26 @@ export default function DashboardSection() {
         )}
       />
 
+      <StatGrid>
+        <Stat label="Выручка за период" value={formatKopecks(metric('revenue'))} delta={change('revenue')} hint={`${formatNumber(metric('topUps'))} пополнений`} />
+        <Stat label="MRR" value={formatKopecks(metric('mrr'))} delta={change('mrr')} hint="выручка за 30 дней до конца периода" />
+        <Stat label="Средний чек" value={formatKopecks(metric('averageCheck'))} delta={change('averageCheck')} />
+        <Stat label="Расход на LLM" value={formatKopecks(metric('llmCost'))} delta={change('llmCost')} invert hint={`решения ${compactRubles(metric('solutionCost'))}, чат ${compactRubles(metric('chatCost'))}`} />
+        <Stat label="Маржа" value={formatKopecks(metric('margin'))} delta={change('margin')} tone={metric('margin') < 0 ? 'danger' : undefined} hint="выручка минус токены" />
+        <Stat label="Новые регистрации" value={formatNumber(metric('registrations'))} delta={change('registrations')} />
+        <Stat label="DAU / WAU / MAU" value={`${formatNumber(metric('dau'))} / ${formatNumber(metric('wau'))} / ${formatNumber(metric('mau'))}`} delta={change('mau')} hint="DAU - среднее за день периода" />
+        <Stat label="Решено задач" value={formatNumber(metric('solved'))} delta={change('solved')} hint={`не решено: ${formatNumber(metric('failed'))}`} />
+        <Stat label="Регистрация → оплата" value={formatPercent(metric('conversion'))} delta={change('conversion')} hint="из зарегистрированных за период" />
+        <Stat
+          label="Ошибки за период"
+          value={formatNumber(metric('errors'))}
+          delta={change('errors')}
+          invert
+          tone={dashboard.errorsAboveNorm === true ? 'danger' : undefined}
+          hint={dashboard.errorsAboveNorm === true ? 'за последний час выше нормы' : `за час: ${num(dashboard.errorsLastHour)}`}
+        />
+      </StatGrid>
+
       <Panel title="Требует внимания">
         <ul className="adm-attention">
           {attentionItems.map((item) => (
@@ -179,26 +199,6 @@ export default function DashboardSection() {
           </div>
         )}
       </Panel>
-
-      <StatGrid>
-        <Stat label="Выручка за период" value={formatKopecks(metric('revenue'))} delta={change('revenue')} hint={`${formatNumber(metric('topUps'))} пополнений`} />
-        <Stat label="MRR" value={formatKopecks(metric('mrr'))} delta={change('mrr')} hint="выручка за 30 дней до конца периода" />
-        <Stat label="Средний чек" value={formatKopecks(metric('averageCheck'))} delta={change('averageCheck')} />
-        <Stat label="Расход на LLM" value={formatKopecks(metric('llmCost'))} delta={change('llmCost')} invert hint={`решения ${compactRubles(metric('solutionCost'))}, чат ${compactRubles(metric('chatCost'))}`} />
-        <Stat label="Маржа" value={formatKopecks(metric('margin'))} delta={change('margin')} tone={metric('margin') < 0 ? 'danger' : undefined} hint="выручка минус токены" />
-        <Stat label="Новые регистрации" value={formatNumber(metric('registrations'))} delta={change('registrations')} />
-        <Stat label="DAU / WAU / MAU" value={`${formatNumber(metric('dau'))} / ${formatNumber(metric('wau'))} / ${formatNumber(metric('mau'))}`} delta={change('mau')} hint="DAU - среднее за день периода" />
-        <Stat label="Решено задач" value={formatNumber(metric('solved'))} delta={change('solved')} hint={`не решено: ${formatNumber(metric('failed'))}`} />
-        <Stat label="Регистрация → оплата" value={formatPercent(metric('conversion'))} delta={change('conversion')} hint="из зарегистрированных за период" />
-        <Stat
-          label="Ошибки за период"
-          value={formatNumber(metric('errors'))}
-          delta={change('errors')}
-          invert
-          tone={dashboard.errorsAboveNorm === true ? 'danger' : undefined}
-          hint={dashboard.errorsAboveNorm === true ? 'за последний час выше нормы' : `за час: ${num(dashboard.errorsLastHour)}`}
-        />
-      </StatGrid>
 
       <div className="adm-grid-main">
         <Panel title="Выручка и расход на LLM" description="По дням, в рублях.">

@@ -10,7 +10,8 @@ import { formatNumber, formatShortDate, shiftDate, todayMsk } from './api'
 /* ---------- Кнопки и метки ---------- */
 
 type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: 'primary' | 'secondary' | 'danger' | 'ghost'
+  /** primary - чернила, accent - вермильон (одно главное действие на экран), secondary - контур. */
+  variant?: 'primary' | 'accent' | 'secondary' | 'danger' | 'ghost'
   size?: 'sm' | 'md'
   loading?: boolean
   icon?: ReactNode
@@ -118,8 +119,8 @@ export function Stat({ label, value, hint, delta, invert, tone }: {
 }) {
   return (
     <div className={`adm-stat${tone ? ` is-${tone}` : ''}`}>
-      <span className="adm-stat-label">{label}</span>
       <strong className="adm-stat-value">{value}</strong>
+      <span className="adm-stat-label">{label}</span>
       <span className="adm-stat-foot">
         {delta !== undefined && <DeltaMark value={delta} invert={invert} />}
         {hint && <small>{hint}</small>}
