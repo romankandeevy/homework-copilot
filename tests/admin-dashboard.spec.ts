@@ -32,7 +32,9 @@ test.describe('админка', () => {
     await signIn(page)
 
     await expect(page.getByText('Без ответа дольше 30 мин:')).toBeVisible()
-    await expect(page.getByText('Решено за 7 дней')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Заработано за 30 дней' })).toBeVisible()
+    await expect(page.getByText('За всё время:')).toBeVisible()
+    await expect(page.getByText('Решено за 30 дней')).toBeVisible()
     await page.getByRole('button', { name: 'День', exact: true }).click()
     await expect(page.getByText('Решено сегодня')).toBeVisible()
     await page.getByRole('button', { name: 'Как считается' }).first().hover()

@@ -1,9 +1,15 @@
-/* Дашборд: что горит, как идёт период, где тонко.
+/* Дашборд: сначала деньги, потом всё остальное.
 
-   Сверху тревоги и пять цифр периода со своими микрографиками, ниже -
-   интерактивная динамика, светофор сервисов, рейтинг предметов и короткая
-   лента с фильтром и поиском. Цифры отдаёт admin_dashboard_period, ленту -
-   admin_dashboard_feed. Как считается каждая цифра - в подсказке у неё. */
+   Владелец заходит узнать, сколько заработал. Поэтому наверху одна широкая
+   карточка денег: сколько пришло за период крупно, изменение к прошлому
+   такому же периоду в рублях и процентах, итог за всё время и график дохода
+   против расхода. Сервис работает на кошельке с предоплатой, поэтому рядом
+   три разных суммы: пришло, отработано (списано за решения) и лежит на
+   кошельках - это обязательство перед учениками, а не прибыль.
+
+   Ниже - тревоги тонкой полосой (только когда есть), четыре цифры работы
+   сервиса, динамика задач и учеников, светофор сервисов, рейтинг предметов
+   и лента. Цифры отдаёт admin_dashboard_period, ленту - admin_dashboard_feed. */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
@@ -12,8 +18,8 @@ import {
   UserPlus, Warning, WarningCircle, XCircle,
 } from '@phosphor-icons/react'
 import {
-  adminRpc, downloadCsv, formatDuration, formatKopecks, formatNumber, formatPercent, num, numOrNull, obj,
-  relativeTime, rows, str, todayMsk,
+  adminRpc, delta, downloadCsv, formatDate, formatDuration, formatKopecks, formatNumber, formatPercent, num, numOrNull,
+  obj, relativeTime, rows, str, todayMsk,
 } from '../api'
 import type { Row } from '../api'
 import type { AdminSection } from '../context'
@@ -24,11 +30,11 @@ import './dashboard.css'
 type Period = 'day' | 'week' | 'month' | 'year'
 type Tone = 'ok' | 'bad' | 'warn' | 'ink' | 'blue'
 
-const periodWords: Record<Period, { current: string; previous: string; chart: string; short: string }> = {
-  day: { current: 'сегодня', previous: 'вчера к этому часу', chart: 'по часам сегодня', short: 'день' },
-  week: { current: 'за 7 дней', previous: 'прошлые 7 дней', chart: 'по дням за 7 дней', short: '7 дней' },
-  month: { current: 'за 30 дней', previous: 'прошлые 30 дней', chart: 'по дням за 30 дней', short: '30 дней' },
-  year: { current: 'за год', previous: 'прошлый год', chart: 'по месяцам за год', short: 'год' },
+const periodWords: Record<Period, { current: string; previous: string; chart: string; vs: string }> = {
+  day: { current: 'сегодня', previous: 'вчера к этому часу', chart: 'по часам сегодня', vs: 'ко вчера к этому часу' },
+  week: { current: 'за 7 дней', previous: 'прошлые 7 дней', chart: 'по дням за 7 дней', vs: 'к прошлым 7 дням' },
+  month: { current: 'за 30 дней', previous: 'прошлые 30 дней', chart: 'по дням за 30 дней', vs: 'к прошлым 30 дням' },
+  year: { current: 'за год', previous: 'прошлый год', chart: 'по месяцам за год', vs: 'к прошлому году' },
 }
 
 const serviceNames: Record<string, string> = {
@@ -104,14 +110,16 @@ function Trend({ values, tone, label }: { values: number[]; tone: Tone; label: s
   )
 }
 
-function Versus({ current, previous, label, money = false, invert = false }: { current: number; previous: number; label: string; money?: boolean; invert?: boolean }) {
+/* Разница с прошлым периодом: абсолютная и в процентах, цвет по смыслу. */
+function Change({ current, previous, vs, money = false, invert = false }: { current: number; previous: number; vs: string; money?: boolean; invert?: boolean }) {
   const diff = current - previous
+  const percent = delta(current, previous)
   const tone = diff === 0 ? 'is-flat' : (diff > 0) !== invert ? 'is-good' : 'is-bad'
   const shown = money ? formatKopecks(Math.abs(diff)) : formatNumber(Math.abs(diff))
   return (
-    <span className="dash-versus">
-      <b className={`adm-delta ${tone}`}>{diff === 0 ? 'без изменений' : `${diff > 0 ? '+' : '−'}${shown}`}</b>
-      <small>{label}: {money ? formatKopecks(previous) : formatNumber(previous)}</small>
+    <span className={`dash-change ${tone}`}>
+      <b>{diff === 0 ? 'без изменений' : `${diff > 0 ? '+' : '−'}${shown}`}{diff !== 0 && percent !== null ? ` (${diff > 0 ? '+' : '−'}${formatPercent(Math.abs(percent))})` : ''}</b>
+      <small>{vs}: {money ? formatKopecks(previous) : formatNumber(previous)}</small>
     </span>
   )
 }
@@ -140,7 +148,15 @@ function Kpi({ id, label, tip, value, tone = 'ink', state, trend, trendLabel, ch
   )
 }
 
-function KpiSkeleton() {
+function Skeleton({ kind }: { kind: 'kpi' | 'hero' }) {
+  if (kind === 'hero') {
+    return (
+      <div className="dash-hero is-loading" aria-hidden="true">
+        <div className="dash-hero-main"><span className="dash-skel is-line" /><span className="dash-skel is-hero" /><span className="dash-skel is-line is-short" /></div>
+        <span className="dash-skel is-chart" />
+      </div>
+    )
+  }
   return (
     <div className="dash-kpi is-loading" aria-hidden="true">
       <span className="dash-skel is-line" />
@@ -150,16 +166,17 @@ function KpiSkeleton() {
   )
 }
 
-/* ---------- Интерактивная динамика ---------- */
+/* ---------- Интерактивный график ---------- */
 
 type ChartSeries = { key: string; name: string; tone: Tone; values: number[] }
 
-function DynamicsChart({ labels, fullLabels, series, stacked, format }: {
+function DynamicsChart({ labels, fullLabels, series, stacked, format, compact = false }: {
   labels: string[]
   fullLabels: string[]
   series: ChartSeries[]
   stacked: boolean
   format: (value: number) => string
+  compact?: boolean
 }) {
   const [hidden, setHidden] = useState<Set<string>>(() => new Set())
   const [active, setActive] = useState<number | null>(null)
@@ -180,7 +197,7 @@ function DynamicsChart({ labels, fullLabels, series, stacked, format }: {
   }
 
   return (
-    <div className="dash-chart">
+    <div className={`dash-chart${compact ? ' is-compact' : ''}`}>
       <div className="dash-legend" role="group" aria-label="Показать на графике">
         {series.map((item) => (
           <button
@@ -225,7 +242,7 @@ function DynamicsChart({ labels, fullLabels, series, stacked, format }: {
                 </div>
                 {active === index && (
                   <div className={`dash-point-tip${index > labels.length / 2 ? ' is-left' : ''}`} role="presentation">
-                    <strong>{fullLabels[index]}</strong>
+                    <strong>{full}</strong>
                     {visible.map((item) => (
                       <span key={item.key} className={`is-${item.tone}`}><i aria-hidden="true" />{item.name}<b>{format(item.values[index] ?? 0)}</b></span>
                     ))}
@@ -238,6 +255,100 @@ function DynamicsChart({ labels, fullLabels, series, stacked, format }: {
         </div>
       </div>
     </div>
+  )
+}
+
+/* ---------- Деньги ---------- */
+
+function MoneyHero({ period, current, previous, money, labels, fullLabels, revenueSeries, costSeries }: {
+  period: Period
+  current: Row
+  previous: Row
+  money: Row
+  labels: string[]
+  fullLabels: string[]
+  revenueSeries: number[]
+  costSeries: number[]
+}) {
+  const words = periodWords[period]
+  const revenue = num(current.revenue)
+  const llmCost = num(current.llmCost)
+  const profit = revenue - llmCost
+  const previousProfit = num(previous.revenue) - num(previous.llmCost)
+  const topUps = num(current.topUps)
+  const allTime = num(money.allTimeRevenue)
+  const nobodyPaid = num(money.payersAllTime) === 0
+
+  return (
+    <section className="dash-hero" aria-labelledby="dash-hero-title">
+      <div className="dash-hero-main">
+        <header className="dash-kpi-head">
+          <h2 id="dash-hero-title">Заработано {words.current}</h2>
+          <InfoTip id="dash-hero-tip">
+            Деньги, которые пришли от учеников: подтверждённые пополнения кошелька минус возвраты. Проверочные пополнения аккаунтов админов не считаются.
+          </InfoTip>
+        </header>
+        <strong className={`dash-hero-value${revenue > 0 ? ' is-ok' : ''}`}>{formatKopecks(revenue)}</strong>
+        <Change current={revenue} previous={num(previous.revenue)} vs={words.vs} money />
+        <p className="dash-hero-total">
+          За всё время: <b>{formatKopecks(allTime)}</b>
+          {!nobodyPaid && <>, платили <b>{formatNumber(num(money.payersAllTime))}</b> учеников с {formatDate(str(money.firstPaymentAt))}</>}
+        </p>
+        {nobodyPaid && (
+          <p className="dash-hero-note">
+            Оплат от учеников ещё не было. Платёжного провайдера нет: пополнение подтверждается вручную в карточке ученика, и только оно попадает сюда.
+          </p>
+        )}
+      </div>
+
+      <div className="dash-hero-chart">
+        <DynamicsChart
+          key={`money-${period}`}
+          compact
+          labels={labels}
+          fullLabels={fullLabels}
+          stacked={false}
+          format={compactRubles}
+          series={[
+            { key: 'revenue', name: 'Заработано', tone: 'ok', values: revenueSeries },
+            { key: 'llmCost', name: 'Расход на модели', tone: 'bad', values: costSeries },
+          ]}
+        />
+      </div>
+
+      <dl className="dash-hero-stats">
+        <div className={profit < 0 ? 'is-bad' : profit > 0 ? 'is-ok' : ''}>
+          <dt>Прибыль <InfoTip id="tip-profit">Заработано минус себестоимость у шлюза моделей: решения задач, включая неудачные, и ответы ИИ-чата. Налоги и комиссии здесь не вычтены.</InfoTip></dt>
+          <dd>{formatKopecks(profit)}</dd>
+          <small>{words.previous}: {formatKopecks(previousProfit)}</small>
+        </div>
+        <div className={llmCost > 0 ? 'is-bad' : ''}>
+          <dt>Расход на модели</dt>
+          <dd>{llmCost > 0 ? '−' : ''}{formatKopecks(llmCost)}</dd>
+          <small>{words.previous}: {formatKopecks(num(previous.llmCost))}</small>
+        </div>
+        <div>
+          <dt>Платили учеников</dt>
+          <dd>{formatNumber(num(current.payers))}</dd>
+          <small>{num(current.firstPayers) ? `впервые: ${formatNumber(num(current.firstPayers))}` : `${words.previous}: ${formatNumber(num(previous.payers))}`}</small>
+        </div>
+        <div>
+          <dt>Средний чек</dt>
+          <dd>{topUps ? formatKopecks(Math.round(revenue / topUps)) : '-'}</dd>
+          <small>пополнений: {formatNumber(topUps)}</small>
+        </div>
+        <div>
+          <dt>Отработано <InfoTip id="tip-consumption">Сколько ученики потратили с кошельков на решения и чат за период, за вычетом возвратов за неудачные решения. Это деньги, за которые сервис уже сделал работу.</InfoTip></dt>
+          <dd>{formatKopecks(num(current.consumption))}</dd>
+          <small>{words.previous}: {formatKopecks(num(previous.consumption))}</small>
+        </div>
+        <div className={num(money.walletLiability) > 0 ? 'is-warn' : ''}>
+          <dt>На кошельках <InfoTip id="tip-liability">Деньги учеников, которые ещё не потрачены: их предстоит отработать решениями или вернуть. Это обязательство, а не прибыль. Сейчас, без учёта периода.</InfoTip></dt>
+          <dd>{formatKopecks(num(money.walletLiability))}</dd>
+          <small>у {formatNumber(num(money.walletsWithMoney))} учеников</small>
+        </div>
+      </dl>
+    </section>
   )
 }
 
@@ -318,11 +429,7 @@ function Feed({ onOpenUser, onOpenSection, pulse }: { onOpenUser: (id: string) =
   const items = rows(data.items)
 
   return (
-    <Panel
-      title="Лента"
-      description="События за 30 дней: решения, оплаты, регистрации, обращения и ошибки."
-      className="dash-feed-panel"
-    >
+    <Panel title="Лента" description="События за 30 дней: решения, оплаты, регистрации, обращения и ошибки." className="dash-feed-panel">
       <div className="dash-feed-tools">
         <div className="dash-chips" role="group" aria-label="Вид событий">
           {feedKinds.map((option) => (
@@ -376,9 +483,9 @@ type Alarm = { key: string; level: 'danger' | 'warning'; text: ReactNode; action
 
 export default function DashboardSection() {
   const { openSection, openUser, signals } = useAdmin()
-  const [query, setQuery] = useQueryState({ d_period: 'week', d_metric: 'tasks' })
-  const period: Period = query.d_period === 'day' || query.d_period === 'month' || query.d_period === 'year' ? query.d_period : 'week'
-  const metric = query.d_metric === 'money' || query.d_metric === 'users' ? query.d_metric : 'tasks'
+  const [query, setQuery] = useQueryState({ d_period: 'month', d_metric: 'tasks' })
+  const period: Period = query.d_period === 'day' || query.d_period === 'week' || query.d_period === 'year' ? query.d_period : 'month'
+  const metric = query.d_metric === 'users' ? 'users' : 'tasks'
   const words = periodWords[period]
 
   const dash = useAsync(() => adminRpc('admin_dashboard_period', { p_period: period }), [period])
@@ -400,6 +507,7 @@ export default function DashboardSection() {
   const data = obj(dash.data)
   const current = obj(data.current)
   const previous = obj(data.previous)
+  const money = obj(data.money)
   const series = rows(data.series)
   const attention = obj(data.attention)
   const reconciliation = obj(attention.reconciliation)
@@ -422,9 +530,6 @@ export default function DashboardSection() {
   const solved = num(current.solved)
   const failed = num(current.failed)
   const attempts = solved + failed
-  const revenue = num(current.revenue)
-  const llmCost = num(current.llmCost)
-  const margin = revenue - llmCost
 
   /* Что горит: только то, что есть, каждое со своим действием. */
   const alarms: Alarm[] = []
@@ -477,11 +582,13 @@ export default function DashboardSection() {
     ] as Row[]
     downloadCsv(`homework-copilot-dashboard-${period}-${todayMsk()}`, lines, [
       { header: 'Период', value: (row) => str(row.label) },
+      { header: 'Заработано, ₽', value: (row) => toRubles(num(row.revenue)) },
+      { header: 'Расход на модели, ₽', value: (row) => toRubles(num(row.llmCost)) },
+      { header: 'Прибыль после моделей, ₽', value: (row) => toRubles(num(row.revenue) - num(row.llmCost)) },
+      { header: 'Отработано, ₽', value: (row) => (row.consumption === undefined ? '' : toRubles(num(row.consumption))) },
+      { header: 'Платили учеников', value: (row) => (row.payers === undefined ? '' : num(row.payers)) },
       { header: 'Решено', value: (row) => num(row.solved) },
       { header: 'Не решено', value: (row) => num(row.failed) },
-      { header: 'Выручка, ₽', value: (row) => toRubles(num(row.revenue)) },
-      { header: 'Расход на модели, ₽', value: (row) => toRubles(num(row.llmCost)) },
-      { header: 'Маржа, ₽', value: (row) => toRubles(num(row.revenue) - num(row.llmCost)) },
       { header: 'Новые ученики', value: (row) => num(row.registrations) },
       { header: 'Заходили', value: (row) => num(row.active) },
     ])
@@ -514,36 +621,40 @@ export default function DashboardSection() {
     <>
       {header}
 
-      <div className="dash-top">
-        <section className={`dash-alerts${alarms.some((alarm) => alarm.level === 'danger') ? ' is-danger' : alarms.length ? ' is-warning' : ' is-calm'}`} aria-labelledby="dash-alerts-title">
-          <header className="dash-kpi-head">
-            <h3 id="dash-alerts-title">Тревоги</h3>
-            {alarms.length > 0 && <span className="dash-count">{alarms.length}</span>}
-          </header>
-          {loading ? (
-            <span className="dash-skel is-row" aria-hidden="true" />
-          ) : alarms.length ? (
-            <ul className="dash-alert-list">
-              {alarms.map((alarm) => (
-                <li key={alarm.key} className={`dash-alert is-${alarm.level}`}>
-                  {alarm.level === 'danger'
-                    ? <WarningCircle className="dash-alert-icon" size={20} weight="fill" aria-hidden="true" />
-                    : <Warning className="dash-alert-icon" size={20} weight="fill" aria-hidden="true" />}
-                  <p>{alarm.text}</p>
-                  <Button size="sm" variant={alarm.level === 'danger' ? 'accent' : 'secondary'} onClick={alarm.onAction} icon={<ArrowRight size={14} weight="bold" aria-hidden="true" />}>{alarm.action}</Button>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div className="dash-calm">
-              <CheckCircle size={28} weight="fill" aria-hidden="true" />
-              <p><b>Всё спокойно.</b> Обращения отвечены, сервисы работают, сверка сходится.</p>
-            </div>
-          )}
-        </section>
+      {loading ? <Skeleton kind="hero" /> : (
+        <MoneyHero
+          period={period}
+          current={current}
+          previous={previous}
+          money={money}
+          labels={labels}
+          fullLabels={fullLabels}
+          revenueSeries={pick('revenue')}
+          costSeries={pick('llmCost')}
+        />
+      )}
 
+      {!loading && (alarms.length ? (
+        <section className={`dash-alerts${alarms.some((alarm) => alarm.level === 'danger') ? ' is-danger' : ' is-warning'}`} aria-label={`Требует внимания: ${alarms.length}`}>
+          <ul className="dash-alert-list">
+            {alarms.map((alarm) => (
+              <li key={alarm.key} className={`dash-alert is-${alarm.level}`}>
+                {alarm.level === 'danger'
+                  ? <WarningCircle className="dash-alert-icon" size={20} weight="fill" aria-hidden="true" />
+                  : <Warning className="dash-alert-icon" size={20} weight="fill" aria-hidden="true" />}
+                <p>{alarm.text}</p>
+                <Button size="sm" variant={alarm.level === 'danger' ? 'accent' : 'secondary'} onClick={alarm.onAction} icon={<ArrowRight size={14} weight="bold" aria-hidden="true" />}>{alarm.action}</Button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : (
+        <p className="dash-calm"><CheckCircle size={20} weight="fill" aria-hidden="true" /> <span><b>Всё спокойно.</b> Обращения отвечены, сервисы работают, сверка сходится.</span></p>
+      ))}
+
+      <div className="dash-kpis">
         {loading ? (
-          <><KpiSkeleton /><KpiSkeleton /><KpiSkeleton /><KpiSkeleton /><KpiSkeleton /></>
+          <><Skeleton kind="kpi" /><Skeleton kind="kpi" /><Skeleton kind="kpi" /><Skeleton kind="kpi" /></>
         ) : (
           <>
             <Kpi
@@ -556,24 +667,8 @@ export default function DashboardSection() {
               trend={pick('solved')}
               trendLabel={`Решено ${words.chart}`}
             >
-              <Versus current={solved} previous={num(previous.solved)} label={words.previous} />
+              <Change current={solved} previous={num(previous.solved)} vs={words.previous} />
               {failed > 0 && <small className="dash-bad-text">не решено: {failed}{attempts ? ` (${formatPercent((failed / attempts) * 100)})` : ''}</small>}
-            </Kpi>
-
-            <Kpi
-              id="kpi-money"
-              label={`Маржа ${words.current}`}
-              tip="Доход - подтверждённые пополнения кошелька минус возвраты, без проверочных пополнений аккаунтов админов. Расход - себестоимость у шлюза моделей: решения задач, включая неудачные, и ответы ИИ-чата. Маржа - доход минус расход."
-              value={formatKopecks(margin)}
-              tone={margin > 0 ? 'ok' : margin < 0 ? 'bad' : 'ink'}
-              trend={series.map((item) => num(item.revenue) - num(item.llmCost))}
-              trendLabel={`Маржа ${words.chart}`}
-            >
-              <dl className="dash-money">
-                <div><dt>Доход</dt><dd className={revenue > 0 ? 'is-ok' : ''}>{formatKopecks(revenue)}</dd></div>
-                <div><dt>Расход на модели</dt><dd className={llmCost > 0 ? 'is-bad' : ''}>−{formatKopecks(llmCost)}</dd></div>
-              </dl>
-              {revenue === 0 && <small>Оплат от учеников {words.current} не было - маржа пока равна расходу.</small>}
             </Kpi>
 
             <Kpi
@@ -585,7 +680,7 @@ export default function DashboardSection() {
               trend={pick('registrations')}
               trendLabel={`Регистрации ${words.chart}`}
             >
-              <Versus current={num(current.registrations)} previous={num(previous.registrations)} label={words.previous} />
+              <Change current={num(current.registrations)} previous={num(previous.registrations)} vs={words.previous} />
               {num(current.guests) > 0 && <small>гостей с задачей: {num(current.guests)}</small>}
             </Kpi>
 
@@ -624,59 +719,41 @@ export default function DashboardSection() {
       </div>
 
       <Panel
-        title="Динамика"
+        title="Задачи и ученики"
         description={`${words.chart[0].toUpperCase()}${words.chart.slice(1)}. Наведи на столбец - покажет значения; легенда включает и выключает ряды.`}
         actions={(
           <Segmented
             label="Показатель"
             value={metric}
             onChange={(value) => setQuery({ d_metric: value }, { replace: true })}
-            options={[{ value: 'tasks', label: 'Задачи' }, { value: 'money', label: 'Деньги' }, { value: 'users', label: 'Ученики' }]}
+            options={[{ value: 'tasks', label: 'Задачи' }, { value: 'users', label: 'Ученики' }]}
           />
         )}
       >
-        {loading ? <span className="dash-skel is-chart" aria-hidden="true" /> : (
-          <>
-            {metric === 'tasks' && (
-              <DynamicsChart
-                key={`tasks-${period}`}
-                labels={labels}
-                fullLabels={fullLabels}
-                stacked
-                format={(value) => formatNumber(Math.round(value))}
-                series={[
-                  { key: 'solved', name: 'Решено', tone: 'ok', values: pick('solved') },
-                  { key: 'failed', name: 'Не решено', tone: 'bad', values: pick('failed') },
-                ]}
-              />
-            )}
-            {metric === 'money' && (
-              <DynamicsChart
-                key={`money-${period}`}
-                labels={labels}
-                fullLabels={fullLabels}
-                stacked={false}
-                format={compactRubles}
-                series={[
-                  { key: 'revenue', name: 'Доход', tone: 'ok', values: pick('revenue') },
-                  { key: 'llmCost', name: 'Расход на модели', tone: 'bad', values: pick('llmCost') },
-                ]}
-              />
-            )}
-            {metric === 'users' && (
-              <DynamicsChart
-                key={`users-${period}`}
-                labels={labels}
-                fullLabels={fullLabels}
-                stacked={false}
-                format={(value) => formatNumber(Math.round(value))}
-                series={[
-                  { key: 'active', name: 'Заходили', tone: 'blue', values: pick('active') },
-                  { key: 'registrations', name: 'Новые', tone: 'ok', values: pick('registrations') },
-                ]}
-              />
-            )}
-          </>
+        {loading ? <span className="dash-skel is-chart" aria-hidden="true" /> : metric === 'tasks' ? (
+          <DynamicsChart
+            key={`tasks-${period}`}
+            labels={labels}
+            fullLabels={fullLabels}
+            stacked
+            format={(value) => formatNumber(Math.round(value))}
+            series={[
+              { key: 'solved', name: 'Решено', tone: 'ok', values: pick('solved') },
+              { key: 'failed', name: 'Не решено', tone: 'bad', values: pick('failed') },
+            ]}
+          />
+        ) : (
+          <DynamicsChart
+            key={`users-${period}`}
+            labels={labels}
+            fullLabels={fullLabels}
+            stacked={false}
+            format={(value) => formatNumber(Math.round(value))}
+            series={[
+              { key: 'active', name: 'Заходили', tone: 'blue', values: pick('active') },
+              { key: 'registrations', name: 'Новые', tone: 'ok', values: pick('registrations') },
+            ]}
+          />
         )}
       </Panel>
 
