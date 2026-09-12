@@ -1,0 +1,286 @@
+/* База решений на VERKSTAD: цифры строкой, таблица с линейками, полное
+   решение в боковой панели листом с разделами. Пустая база - схема на
+   сетке blueprint: откуда берутся решения. */
+
+.sol-stack { display: grid; gap: var(--adm-gap); min-width: 0; }
+
+.sol-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ---------- Ошибка загрузки ---------- */
+
+.sol-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3) var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid color-mix(in oklch, var(--error-500) 40%, transparent);
+  border-radius: var(--radius-panel);
+  background: var(--color-danger-soft);
+  color: var(--error-500);
+}
+
+.sol-error > div { display: grid; flex: 1 1 18rem; gap: 0.25rem; min-width: 0; }
+.sol-error strong { color: var(--color-strong); font-weight: var(--weight-semibold); }
+.sol-error p { color: var(--color-text); font-size: var(--text-small); line-height: var(--leading-copy); overflow-wrap: anywhere; }
+
+/* ---------- Загрузка ---------- */
+
+.sol-skeleton {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
+}
+
+.sol-skeleton i {
+  display: block;
+  height: 2.75rem;
+  border-radius: var(--radius-xs);
+  background: linear-gradient(90deg, var(--color-surface-sunken) 0%, var(--ink-100) 50%, var(--color-surface-sunken) 100%);
+  background-size: 200% 100%;
+  animation: sol-shimmer 1.4s var(--ease-standard) infinite;
+}
+
+.sol-skeleton i:first-of-type { width: 45%; height: 1.25rem; }
+
+@keyframes sol-shimmer { to { background-position: -200% 0; } }
+
+/* ---------- Как считаются цифры ---------- */
+
+.sol-how { padding: 0 var(--space-2); }
+
+.sol-how summary,
+.sol-raw summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 2.25rem;
+  color: var(--color-text-muted);
+  font: var(--type-eyebrow);
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  cursor: pointer;
+  list-style: none;
+  transition: var(--transition-control);
+}
+
+.sol-how summary::-webkit-details-marker,
+.sol-raw summary::-webkit-details-marker { display: none; }
+.sol-how summary:hover,
+.sol-raw summary:hover { color: var(--color-strong); }
+
+.sol-how dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: var(--space-3) var(--space-6);
+  margin: var(--space-2) 0 0;
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
+}
+
+.sol-how dt { margin-bottom: 0.3rem; color: var(--color-strong); font: var(--weight-bold) 0.75rem/1.3 var(--font-display); text-transform: uppercase; }
+.sol-how dd { margin: 0; color: var(--color-text-muted); font-size: var(--text-small); line-height: var(--leading-copy); }
+
+/* ---------- Пустая база ---------- */
+
+.sol-empty {
+  display: grid;
+  grid-template-columns: minmax(0, 26rem) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-6);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
+}
+
+.sol-empty-copy { display: grid; gap: var(--space-3); max-width: 60ch; }
+.sol-empty-copy h2 { font: var(--weight-black) 1.25rem/1.1 var(--font-display); letter-spacing: var(--tracking-heading); text-transform: uppercase; text-wrap: balance; }
+.sol-empty-copy p { color: var(--color-text-muted); line-height: var(--leading-copy); }
+
+.sol-flow { display: block; width: 100%; height: auto; }
+.sol-flow-sheet { stroke: var(--color-border); stroke-width: 1; }
+.sol-flow-grid { fill: none; stroke: var(--blueprint-600); stroke-opacity: 0.16; stroke-width: 1; }
+.sol-flow-node rect { fill: var(--color-surface); stroke: var(--ink-1000); stroke-width: 1.25; }
+.sol-flow-node text { fill: var(--color-strong); font: var(--weight-bold) 10px/1 var(--font-display); letter-spacing: 0.04em; text-anchor: middle; text-transform: uppercase; }
+.sol-flow-node .sol-flow-note { fill: var(--color-text-muted); font: var(--weight-regular) 9px/1 var(--font-body); letter-spacing: 0; text-transform: none; }
+.sol-flow-node.is-strong rect { fill: var(--ink-1000); }
+.sol-flow-node.is-strong text,
+.sol-flow-node.is-strong .sol-flow-note { fill: var(--paper-000); }
+.sol-flow-node.is-accent rect { stroke: var(--signal-500); stroke-dasharray: 4 3; }
+.sol-flow-edge { fill: none; stroke: var(--ink-1000); stroke-width: 1.25; }
+.sol-flow-edge.is-accent { stroke: var(--signal-500); stroke-dasharray: 4 3; }
+.sol-flow-arrowhead { fill: none; stroke: var(--ink-1000); stroke-width: 1.25; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---------- Фильтры и таблица ---------- */
+
+.sol-toolbar { align-items: flex-end; }
+.sol-toolbar input[type='date'] { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+.sol-cell { max-width: 46ch; }
+.sol-cell .sol-answer { color: var(--color-text-muted); font-size: 0.8125rem; overflow-wrap: anywhere; }
+
+.sol-owner { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+
+.sol-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-strong);
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: var(--ink-300);
+  text-underline-offset: 0.22em;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+  transition: var(--transition-control);
+}
+
+.sol-link:hover { color: var(--signal-600); text-decoration-color: currentColor; }
+
+.sol-status { display: grid; justify-items: start; gap: 0.25rem; }
+.sol-status small { color: var(--error-500); font: 0.6875rem/1.3 var(--font-mono); }
+
+.sol-money { display: grid; justify-items: end; gap: 0.15rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sol-money small { color: var(--color-text-subtle); font: 0.6875rem/1.3 var(--font-mono); }
+
+.sol-empty-filtered { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--space-2); }
+
+/* ---------- Полное решение ---------- */
+
+.sol-meta {
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
+}
+
+.sol-block { display: grid; gap: var(--space-2); }
+
+.sol-block h3,
+.sol-part h3 {
+  color: var(--color-text-subtle);
+  font: var(--type-eyebrow);
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+}
+
+.sol-block > p { color: var(--color-text); }
+.sol-block b { color: var(--color-strong); font-family: var(--font-mono); font-weight: var(--weight-medium); }
+
+.sol-checks,
+.sol-accesses {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sol-checks {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
+}
+
+.sol-checks li { display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-3) var(--space-4); }
+.sol-checks li + li { border-top: 1px solid var(--color-border); }
+.sol-checks svg { flex: 0 0 auto; margin-top: 0.1rem; color: var(--ok-500); }
+.sol-checks li.is-failed svg { color: var(--error-500); }
+.sol-checks span { display: grid; gap: 0.15rem; min-width: 0; }
+.sol-checks b { color: var(--color-strong); font-family: inherit; font-weight: var(--weight-semibold); }
+.sol-checks small { color: var(--color-text-muted); font-size: 0.8125rem; overflow-wrap: anywhere; }
+
+.sol-accesses li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.sol-accesses li:last-child { border-bottom: 0; }
+.sol-accesses span { min-width: 0; overflow-wrap: anywhere; }
+.sol-accesses time { color: var(--color-text-subtle); font: 0.75rem/1.4 var(--font-mono); white-space: nowrap; }
+
+/* Лист решения: разделы в том же порядке, что в тетради ученика */
+.sol-sheet {
+  display: grid;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
+}
+
+.sol-part {
+  display: grid;
+  grid-template-columns: 9rem minmax(0, 1fr);
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+}
+
+.sol-part + .sol-part { border-top: 1px solid var(--color-border); }
+.sol-part h3 { padding-top: 0.2rem; }
+
+.sol-part-body {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  color: var(--color-text);
+  line-height: var(--leading-copy);
+  overflow-wrap: anywhere;
+}
+
+.sol-part-body ul,
+.sol-part-body ol { display: grid; gap: 0.35rem; margin: 0; padding-left: 1.4rem; }
+.sol-steps { font-variant-numeric: tabular-nums; }
+.sol-steps li::marker { color: var(--color-text-subtle); font-family: var(--font-mono); font-size: 0.75rem; }
+.sol-pre { white-space: pre-wrap; }
+
+.sol-code {
+  margin: 0;
+  padding: var(--space-3);
+  overflow-x: auto;
+  border-radius: var(--radius-xs);
+  background: var(--color-surface-sunken);
+  font: 0.8125rem/1.55 var(--font-mono);
+  white-space: pre;
+}
+
+.sol-answer-line { color: var(--color-strong); font-weight: var(--weight-semibold); }
+
+.sol-raw { display: grid; gap: var(--space-2); }
+
+/* ---------- Адаптив ---------- */
+
+@media (max-width: 760px) {
+  .sol-empty { grid-template-columns: minmax(0, 1fr); gap: var(--space-4); padding: var(--space-4); }
+}
+
+@media (max-width: 640px) {
+  .sol-error { padding: var(--space-3) var(--space-4); }
+  .sol-meta { padding: var(--space-3) var(--space-4); }
+  .sol-part { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); padding: var(--space-3) var(--space-4); }
+  /* Таблица на телефоне прокручивается в своей обёртке, а не сжимает
+     столбцы до буквы в строке. */
+  .sol-cell { min-width: 13rem; max-width: 18rem; }
+  .sol-owner { min-width: 9.5rem; }
+  .sol-owner .sol-link { overflow-wrap: normal; word-break: break-all; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sol-skeleton i { animation: none; }
+}

@@ -55,3 +55,33 @@
 .ntf-channel small { color: var(--color-text-muted); overflow-wrap: anywhere; }
 
 .ntf-check { display: inline-flex; align-items: center; gap: var(--space-2); cursor: pointer; }
+
+/* Баннер: почта не работает. Красный блок с иконкой, текст - что сделать. */
+.ntf-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid color-mix(in oklch, var(--error-500) 45%, var(--color-border));
+  border-radius: var(--radius-panel);
+  background: var(--color-danger-soft);
+  color: var(--error-500);
+}
+
+.ntf-banner strong { display: block; margin-bottom: 0.25rem; color: var(--color-strong); font-weight: var(--weight-semibold); }
+.ntf-banner p { color: var(--color-text); font-size: var(--text-small); line-height: var(--leading-copy); }
+
+.ntf-repeat {
+  display: inline-block;
+  margin-left: var(--space-2);
+  padding: 0.05rem 0.45rem;
+  border-radius: var(--radius-pill);
+  background: var(--ink-1000);
+  color: var(--paper-000);
+  font: var(--weight-semibold) 0.6875rem/1.5 var(--font-mono);
+  vertical-align: 0.1em;
+}
+
+.ntf-error { color: var(--error-500); font-size: var(--text-small); font-weight: var(--weight-medium); line-height: 1.4; }
+
+.ntf-browser { display: grid; justify-items: start; gap: var(--space-3); }

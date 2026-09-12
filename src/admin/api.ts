@@ -57,6 +57,10 @@ const knownErrors: [RegExp, string][] = [
   [/limit must be between/i, 'Лимит - от 0 до 1000 решений в сутки.'],
   [/support conversation not found/i, 'Обращение не найдено.'],
   [/assignee is not an administrator/i, 'Назначить можно только администратора.'],
+  [/select 1 to 200 conversations/i, 'Выбери от 1 до 200 обращений.'],
+  [/unknown support tag/i, 'Такой метки нет - обнови страницу.'],
+  [/invalid support period/i, 'Неизвестный период.'],
+  [/nothing to change/i, 'Выбери, что изменить.'],
   [/flag not found|rule not found|log not found|error group not found|prompt not found/i, 'Запись не найдена - обнови страницу.'],
   [/period start is after/i, 'Начало периода позже его конца.'],
 ]

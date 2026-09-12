@@ -3,7 +3,7 @@
    чтобы на экране не оставалось полуобновлённых цифр. Права берутся из роли:
    support видит всё, но меняет только заметки. */
 
-import { useId, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { Gauge, Key, LockOpen, Prohibit, SignIn, Trash, WarningCircle } from '@phosphor-icons/react'
 import type { Json } from '../lib/database.types'
@@ -29,6 +29,9 @@ import type { Row } from './api'
 import { useAdmin } from './context'
 import { Badge, Button, CopyButton, DataTable, Drawer, EmptyState, ErrorState, Field, HorizontalBars, JsonView, LoadingState, Modal, Panel, Stat, StatGrid, Tabs, useAction, useAsync } from './ui'
 import type { Column, Tone } from './ui'
+import { rememberRecentUser } from './recentUsers'
+import { BanDialog, ConfirmDialog } from './userDialogs'
+import BalanceHistoryChart from './BalanceHistoryChart'
 import './sections/users.css'
 
 type CardTab = 'profile' | 'balance' | 'plan' | 'tasks' | 'economics' | 'sessions' | 'linked' | 'support' | 'notes' | 'audit'
@@ -188,6 +191,12 @@ function UserCardView({ userId, onClose }: { userId: string; onClose: () => void
   const isAdmin = bool(profile.isAdmin)
   const isSelf = access.userId === userId
   const activeFlags = flags.filter((flag) => str(flag.status) === 'open' || str(flag.status) === 'deferred')
+  const loaded = card.data !== null
+
+  // Открытая карточка попадает в «недавние» быстрого поиска раздела «Пользователи».
+  useEffect(() => {
+    if (loaded && (email || fullName)) rememberRecentUser({ id: userId, email, name: fullName })
+  }, [loaded, userId, email, fullName])
 
   // Действие: выполнить, сообщить итог, перечитать карточку.
   const perform = async <T,>(key: string, action: () => Promise<T>, success: string | ((result: T) => string)) => {
@@ -340,6 +349,7 @@ function UserCardView({ userId, onClose }: { userId: string; onClose: () => void
             onShowSessions={() => setTab('sessions')}
           />
         )}
+        {tab === 'balance' && <BalanceHistoryChart userId={userId} />}
         {tab === 'balance' && (
           <BalanceTab
             wallet={wallet}
@@ -1097,79 +1107,6 @@ function AuditTab({ audit }: { audit: Row[] }) {
 }
 
 /* ---------- Диалоги ---------- */
-
-function ConfirmDialog({ title, confirmLabel, tone = 'primary', pending, onClose, onConfirm, children }: {
-  title: string
-  confirmLabel: string
-  tone?: 'primary' | 'danger'
-  pending: boolean
-  onClose: () => void
-  onConfirm: () => void
-  children: ReactNode
-}) {
-  return (
-    <Modal
-      open
-      title={title}
-      onClose={onClose}
-      footer={(
-        <>
-          <Button onClick={onClose}>Отмена</Button>
-          <Button variant={tone} loading={pending} onClick={onConfirm} data-initial-focus>{confirmLabel}</Button>
-        </>
-      )}
-    >
-      {children}
-    </Modal>
-  )
-}
-
-function BanDialog({ pending, onClose, onSubmit }: { pending: boolean; onClose: () => void; onSubmit: (reason: string, until: string | null) => void }) {
-  const formId = useId()
-  const [reason, setReason] = useState('')
-  const [until, setUntil] = useState('')
-  const [error, setError] = useState('')
-
-  const submit = (event: FormEvent) => {
-    event.preventDefault()
-    const clean = reason.trim()
-    if (clean.length < 3 || clean.length > 500) {
-      setError('Причина блокировки - от 3 до 500 символов.')
-      return
-    }
-    const untilIso = localInputToIso(until)
-    if (until && (!untilIso || new Date(untilIso).getTime() <= Date.now())) {
-      setError('Срок блокировки должен быть в будущем.')
-      return
-    }
-    onSubmit(clean, untilIso)
-  }
-
-  return (
-    <Modal
-      open
-      title="Заблокировать"
-      onClose={onClose}
-      footer={(
-        <>
-          <Button onClick={onClose}>Отмена</Button>
-          <Button type="submit" form={formId} variant="danger" loading={pending}>Заблокировать</Button>
-        </>
-      )}
-    >
-      <form id={formId} className="adm-card-form" onSubmit={submit}>
-        <p>Блокировка и её причина попадут в журнал. Без срока - бессрочно, со сроком снимется сама.</p>
-        <Field label="Причина">
-          <textarea data-initial-focus value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} />
-        </Field>
-        <Field label="До (необязательно)" hint="Время по часам этого компьютера.">
-          <input type="datetime-local" value={until} min={nowLocalInput()} onChange={(event) => setUntil(event.target.value)} />
-        </Field>
-        {error && <p className="adm-card-error" role="alert">{error}</p>}
-      </form>
-    </Modal>
-  )
-}
 
 function LimitDialog({ current, currentReason, pending, onClose, onSubmit }: {
   current: number | null

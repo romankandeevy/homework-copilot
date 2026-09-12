@@ -40,7 +40,7 @@ const FinanceSection = lazy(() => import('./sections/FinanceSection'))
 const SettingsSection = lazy(() => import('./sections/SettingsSection'))
 const NotificationsSection = lazy(() => import('./sections/NotificationsSection'))
 const AuditSection = lazy(() => import('./sections/AuditSection'))
-const AdminSolutionLibrary = lazy(() => import('../AdminSolutionLibrary'))
+const SolutionsSection = lazy(() => import('./sections/SolutionsSection'))
 const UserCard = lazy(() => import('./UserCard'))
 
 type Theme = 'light' | 'dark'
@@ -404,7 +404,14 @@ function AdminShell({ access, theme, onToggleTheme, onSignOut }: { access: Admin
     return () => window.removeEventListener('popstate', onPop)
   }, [])
 
-  const loadSignals = useCallback(async () => {
+  /* Счётчики меню. Журнал обращений к админ-API 12 сентября показал 2-3
+     вызова в минуту: к опросу раз в минуту добавлялся перезапрос на каждое
+     событие Realtime. Теперь не чаще раза в 30 секунд, а в скрытой вкладке -
+     никогда: вернулся на вкладку - обновилось. */
+  const lastSignalsAt = useRef(0)
+  const loadSignals = useCallback(async (force = false) => {
+    if (!force && (document.visibilityState === 'hidden' || Date.now() - lastSignalsAt.current < 30_000)) return
+    lastSignalsAt.current = Date.now()
     try {
       const data = obj(await adminRpc('admin_signal_counts'))
       setSignals((current) => ({
@@ -426,9 +433,14 @@ function AdminShell({ access, theme, onToggleTheme, onSignOut }: { access: Admin
   }, [loadSignals])
 
   useEffect(() => {
-    void loadSignals()
+    void loadSignals(true)
     const interval = window.setInterval(() => { void loadSignals() }, 60_000)
-    return () => window.clearInterval(interval)
+    const onVisible = () => { if (document.visibilityState === 'visible') void loadSignals() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      window.clearInterval(interval)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
   }, [loadSignals])
 
   /* Реальное время: новое сообщение ученика, смена статуса обращения,
@@ -552,7 +564,7 @@ function AdminShell({ access, theme, onToggleTheme, onSignOut }: { access: Admin
                 {activeSection === 'support' && <SupportSection />}
                 {activeSection === 'monitoring' && <MonitoringSection />}
                 {activeSection === 'finance' && <FinanceSection />}
-                {activeSection === 'library' && <AdminSolutionLibrary canDelete={access.permissions.delete} />}
+                {activeSection === 'library' && <SolutionsSection />}
                 {activeSection === 'settings' && <SettingsSection />}
                 {activeSection === 'notifications' && <NotificationsSection />}
                 {activeSection === 'audit' && <AuditSection />}

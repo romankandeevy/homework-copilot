@@ -58,6 +58,354 @@
 .adm-money-plus { color: var(--color-success-strong); font-family: var(--font-mono); white-space: nowrap; }
 .adm-money-minus { color: color-mix(in oklch, var(--color-danger) 75%, var(--color-text)); font-family: var(--font-mono); white-space: nowrap; }
 
+/* ---------- Полоса цифр ---------- */
+
+.adm-users-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.adm-users-stats > div {
+  display: grid;
+  align-content: start;
+  gap: 0.45rem;
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  border-right: 1px solid var(--color-border);
+}
+
+.adm-users-stats > div:last-child { border-right: 0; }
+.adm-users-stats dt { color: var(--color-text-muted); font: var(--type-eyebrow); letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; }
+.adm-users-stats dd { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.55rem; margin: 0; }
+
+.adm-users-stats strong {
+  color: var(--color-strong);
+  font: var(--weight-black) 1.375rem/1 var(--font-display);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-display);
+}
+
+.adm-users-stats small { color: var(--color-text-muted); font: var(--weight-medium) 0.8125rem/1.2 var(--font-mono); }
+
+/* ---------- Поиск и фильтры ---------- */
+
+.adm-users-toolbar { display: grid; gap: var(--space-3); margin-bottom: var(--space-4); }
+
+.adm-users-filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+/* Основы подобраны так, чтобы на 1440 строка не переносилась и при
+   появившейся кнопке «Сбросить». */
+.adm-users-filters > .adm-qs { flex: 1 1 13rem; min-width: 0; }
+.adm-app .adm-users-filters > select { flex: 0 1 10.5rem; width: 10.5rem; min-width: 0; }
+.adm-users-filter-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+
+.adm-users-count {
+  display: inline-grid;
+  min-width: 1.35rem;
+  height: 1.35rem;
+  place-items: center;
+  margin-left: 0.45rem;
+  padding: 0 0.3rem;
+  border-radius: var(--radius-pill);
+  background: var(--ink-1000);
+  color: var(--paper-000);
+  font: var(--weight-bold) 0.6875rem/1 var(--font-mono);
+  letter-spacing: 0;
+}
+
+.adm-button:hover:not(:disabled) .adm-users-count { background: var(--paper-000); color: var(--ink-1000); }
+
+.adm-users-note { color: var(--color-text-muted); font-size: 0.8125rem; line-height: var(--leading-copy); }
+
+.adm-users-panel {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-3) var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-surface);
+  background: var(--color-surface-sunken);
+}
+
+.adm-users-panel[hidden] { display: none; }
+.adm-users-panel > .adm-field { align-content: start; }
+.adm-users-range-field { grid-column: 1 / -1; max-width: 36rem; }
+
+/* Быстрый поиск с выпадающим списком */
+.adm-qs { position: relative; min-width: 0; }
+.adm-qs-field { position: relative; display: flex; align-items: center; }
+.adm-qs-field > svg { position: absolute; left: 0.85rem; color: var(--color-text-subtle); pointer-events: none; }
+.adm-app .adm-qs-field input.adm-qs-input[type='text'] { padding-right: 2.75rem; padding-left: 2.5rem; }
+.adm-qs-clear { position: absolute; right: 0.45rem; }
+
+.adm-qs-pop {
+  position: absolute;
+  z-index: 24;
+  top: calc(100% + 0.35rem);
+  left: 0;
+  /* Своя ширина: поле сужается, когда рядом появляется «Сбросить». */
+  width: max(100%, min(22rem, calc(100vw - 2rem)));
+  max-height: min(24rem, 60svh);
+  padding: var(--space-2);
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-surface);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-raised);
+}
+
+.adm-qs-head,
+.adm-qs-foot {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.6rem;
+  color: var(--color-text-subtle);
+  font: var(--type-eyebrow);
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+}
+
+.adm-qs-foot { border-top: 1px solid var(--color-border); margin-top: var(--space-1); letter-spacing: 0.06em; }
+.adm-qs-list { display: grid; gap: 0.1rem; margin: 0; padding: 0; list-style: none; }
+
+.adm-qs-list li {
+  display: flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+}
+
+.adm-qs-list li.is-active { background: var(--ink-1000); color: var(--paper-000); }
+.adm-qs-list li.is-active .adm-cell-main strong { color: var(--paper-000); }
+.adm-qs-list li.is-active .adm-cell-main small { color: var(--ink-300); }
+.adm-qs-list .adm-cell-main { min-width: 0; }
+.adm-qs-list .adm-cell-main small { overflow: hidden; overflow-wrap: normal; text-overflow: ellipsis; white-space: nowrap; }
+.adm-qs-empty { padding: 0.75rem 0.6rem; color: var(--color-text-subtle); font-size: var(--text-small); line-height: var(--leading-copy); }
+
+/* Ползунок баланса: два нативных ползунка на одной дорожке */
+.adm-range2 { display: grid; gap: 0.35rem; min-width: 0; }
+.adm-range2-values { display: flex; align-items: baseline; gap: 0.5rem; color: var(--color-strong); font: var(--weight-medium) 0.875rem/1.3 var(--font-mono); }
+.adm-range2-scale { display: flex; justify-content: space-between; color: var(--color-text-subtle); font: 0.6875rem/1 var(--font-mono); }
+
+.adm-range2-track {
+  --lo: 0%;
+  --hi: 100%;
+  position: relative;
+  height: 2.5rem;
+}
+
+.adm-range2-track::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  left: 10px;
+  height: 4px;
+  margin-top: -2px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(to right, var(--ink-200) var(--lo), var(--ink-1000) var(--lo), var(--ink-1000) var(--hi), var(--ink-200) var(--hi));
+}
+
+.adm-app .adm-range2-track input.adm-range2-input {
+  -webkit-appearance: none;
+  appearance: none;
+  position: absolute;
+  top: calc(50% - 10px);
+  left: 0;
+  width: 100%;
+  height: 20px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  pointer-events: none;
+}
+
+.adm-app .adm-range2-track input.adm-range2-input:focus { box-shadow: none; }
+.adm-range2-input.is-top { z-index: 2; }
+.adm-range2-input::-webkit-slider-runnable-track { height: 20px; background: transparent; }
+.adm-range2-input::-moz-range-track { height: 20px; background: transparent; }
+
+.adm-range2-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--ink-1000);
+  border-radius: 50%;
+  background: var(--paper-000);
+  box-shadow: var(--shadow-control);
+  cursor: grab;
+  pointer-events: auto;
+}
+
+.adm-range2-input::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--ink-1000);
+  border-radius: 50%;
+  background: var(--paper-000);
+  cursor: grab;
+  pointer-events: auto;
+}
+
+.adm-range2-input:focus-visible::-webkit-slider-thumb { box-shadow: var(--focus-ring); }
+.adm-range2-input:focus-visible::-moz-range-thumb { box-shadow: var(--focus-ring); }
+
+/* ---------- Таблица ---------- */
+
+.adm-users-tablehead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); margin-bottom: var(--space-2); }
+
+.adm-users-legend summary {
+  display: inline-flex;
+  min-height: 2rem;
+  align-items: center;
+  color: var(--color-text-muted);
+  font: var(--type-eyebrow);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.adm-users-legend summary:hover { color: var(--color-strong); }
+.adm-users-legend ul { display: grid; gap: 0.55rem; margin: var(--space-2) 0 var(--space-3); padding: 0; list-style: none; font-size: var(--text-small); line-height: var(--leading-copy); }
+.adm-users-legend li { display: grid; grid-template-columns: minmax(9.5rem, max-content) minmax(0, 1fr); align-items: baseline; gap: var(--space-3); }
+.adm-users-legend li > :first-child { justify-self: start; }
+
+.adm-users-badges { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.adm-users-pill::before { content: ''; width: 0.4rem; height: 0.4rem; flex: 0 0 auto; border-radius: 50%; background: currentColor; }
+.adm-users-pill.is-neutral::before { background: var(--ink-400); }
+
+.adm-users-seen { display: inline-flex; align-items: center; gap: 0.5rem; color: var(--color-text-muted); white-space: nowrap; }
+.adm-users-seen.is-online { color: var(--ok-700); font-weight: var(--weight-medium); }
+
+.adm-users-dot {
+  display: inline-block;
+  width: 0.6rem;
+  height: 0.6rem;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--ink-300);
+}
+
+.adm-users-dot.is-online { background: var(--ok-500); box-shadow: 0 0 0 3px color-mix(in oklch, var(--ok-500) 24%, transparent); }
+
+.adm-table td.adm-users-col-user { min-width: 13rem; }
+
+.adm-table td.adm-users-col-user small {
+  max-width: 16rem;
+  overflow: hidden;
+  overflow-wrap: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* На экранах уже 1600px «Тариф» (пока один на всех) и «Задачи» уступают
+   место остальным столбцам, чтобы таблица не уезжала вбок. Оба значения
+   есть в карточке и в CSV, тариф - ещё и в фильтре. */
+@media (max-width: 1600px) {
+  .adm-table .adm-users-col-wide { display: none; }
+}
+
+.adm-users-pill { height: 1.625rem; font-size: 0.6875rem; }
+/* Столбец «…» прилипает к правому краю: меню действий доступно без
+   прокрутки таблицы вбок. Фон непрозрачный - под ним едут другие столбцы. */
+.adm-table .adm-users-col-menu {
+  position: sticky;
+  z-index: 1;
+  /* Chrome ставит липкую ячейку внутри отступа контейнера прокрутки: без
+     отрицательного смещения в щели справа виден соседний столбец. */
+  right: calc(var(--space-5) * -1);
+  width: 3.25rem;
+  background: var(--color-surface);
+  box-shadow: inset 1px 0 0 var(--color-border);
+}
+
+.adm-table tr.is-clickable:hover td.adm-users-col-menu,
+.adm-table tr.is-selected td.adm-users-col-menu { background: color-mix(in oklch, var(--signal-500) 5%, var(--color-surface)); }
+.adm-menu-trigger { border-color: transparent; color: var(--color-text-muted); }
+.adm-menu-trigger[aria-expanded='true'] { border-color: var(--ink-1000); color: var(--color-strong); }
+
+/* Меню действий в строке */
+.adm-menu {
+  position: fixed;
+  z-index: 50;
+  display: grid;
+  gap: 0.1rem;
+  padding: var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-surface);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-raised);
+  text-align: left;
+}
+
+.adm-menu button {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0 0.75rem;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--color-text);
+  font: var(--weight-medium) var(--text-small)/1.2 var(--font-body);
+  text-align: left;
+  cursor: pointer;
+  transition: var(--transition-control);
+}
+
+.adm-menu button:hover,
+.adm-menu button:focus-visible { background: var(--ink-100); color: var(--color-strong); box-shadow: inset 0 0 0 1px var(--ink-1000); }
+.adm-menu button.is-danger { color: var(--error-500); }
+.adm-menu button svg { flex: 0 0 auto; }
+
+/* Пустое состояние: иллюстрация линиями по клетке */
+.adm-users-empty { display: grid; justify-items: center; gap: var(--space-3); padding: var(--space-6) var(--space-4); text-align: center; }
+.adm-users-empty svg { width: 10rem; max-width: 100%; height: auto; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.adm-users-empty-grid { stroke: var(--ink-200); stroke-width: 1; }
+.adm-users-empty-ink { stroke: var(--ink-700); stroke-width: 2; }
+.adm-users-empty-ink rect,
+.adm-users-empty-ink circle { fill: var(--color-surface); }
+.adm-users-empty-signal { stroke: var(--signal-500); stroke-width: 2.5; }
+.adm-users-empty h3 { color: var(--color-strong); font: var(--weight-bold) 1rem/1.2 var(--font-display); letter-spacing: -0.01em; text-transform: uppercase; }
+.adm-users-empty p { max-width: 42ch; color: var(--color-text-muted); font-size: var(--text-small); line-height: var(--leading-copy); }
+
+/* Панель выбранных держится у нижнего края окна, пока видна таблица */
+.adm-users-bulkbar { position: sticky; z-index: 20; bottom: var(--space-3); margin: var(--space-3) 0 0; box-shadow: var(--shadow-raised); }
+.adm-users-bulk-progress { color: var(--paper-000); font: var(--type-eyebrow); letter-spacing: 0.06em; }
+
+@media (max-width: 960px) {
+  .adm-users-panel { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 640px) {
+  .adm-users-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .adm-users-stats > div:nth-child(2n) { border-right: 0; }
+  .adm-users-stats > div:nth-child(-n + 2) { border-bottom: 1px solid var(--color-border); }
+  .adm-users-filters > .adm-qs { flex-basis: 100%; }
+  .adm-app .adm-users-filters > select { flex: 1 1 calc(50% - var(--space-2)); width: auto; }
+  .adm-users-filter-actions { flex: 1 1 100%; }
+  .adm-users-filter-actions .adm-button { flex: 1 1 auto; }
+  .adm-users-panel { grid-template-columns: minmax(0, 1fr); padding: var(--space-3); }
+  .adm-users-legend li { grid-template-columns: minmax(0, 1fr); gap: 0.25rem; }
+  .adm-users-bulkbar { bottom: var(--space-2); }
+  .adm-table .adm-users-col-menu { right: calc(var(--space-4) * -1); }
+  .adm-users-bulkbar .adm-users-bulk-count { flex-basis: 100%; }
+}
+
 /* ---------- Карточка ---------- */
 
 .adm-card-head {

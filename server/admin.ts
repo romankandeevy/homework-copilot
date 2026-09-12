@@ -18,12 +18,19 @@ import { createClient } from '@supabase/supabase-js'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database, Json } from '../src/lib/database.types.ts'
 import { recordError, recordRequestLog, requestAddress, requestIdOf, requestUserAgent, telemetryClient } from './telemetry.ts'
+import { solveWithKie } from './homeworkSolver.ts'
+import { parsePromptPreviewInput, PromptPreviewError, runPromptPreview } from './promptPreview.ts'
+import type { PromptPreviewInput, PromptPreviewSolve } from './promptPreview.ts'
 
 export type AdminServerOptions = {
   supabaseUrl?: string
   supabasePublishableKey?: string
   serviceRoleKey?: string
   kieApiKey?: string
+  /* KIE_MODEL: если задан, проверка промпта решает этой моделью, как и решатель. */
+  model?: string
+  /* Подмена прогона в тестах. На проде - solveWithKie. */
+  promptPreviewSolve?: PromptPreviewSolve
   telegramBotToken?: string
   telegramOwnerChatId?: string
   resendApiKey?: string
@@ -196,6 +203,80 @@ async function resetPassword(options: AdminServerOptions, admin: AdminContext, b
   return { sent: true, email }
 }
 
+/* Проверка промпта решателя без сохранения (server/promptPreview.ts).
+
+   Модель зовётся тем же движком, что и у ученика, но мимо кошелька, очереди
+   и каталога решений. Роль, второй фактор, предел частоты и запись в журнал
+   делает база в admin_prompt_preview_start - до того, как потрачен первый
+   кредит. Итог пишется в базу до ответа: прокси на Supabase живёт 150
+   секунд, прогон бывает дольше, и тогда вкладка забирает результат из
+   admin_prompt_previews. */
+function previewStartFailure(error: { code?: string; message: string }) {
+  const ours = /[а-яё]/iu.test(error.message)
+  if (error.code === '53400') return new AdminApiError(429, ours ? error.message : 'Слишком много запросов подряд. Подожди минуту.')
+  if (error.code === '55000') return new AdminApiError(409, ours ? error.message : 'Предыдущая проверка ещё идёт.')
+  if (error.code === '22023') return new AdminApiError(400, ours ? error.message : 'Проверь поля проверки.')
+  if (error.code === '42501') return new AdminApiError(403, 'Нет доступа: нужна роль администратора и подтверждённый второй фактор.')
+  return new AdminApiError(502, 'Проверку не удалось начать. Повтори попытку.')
+}
+
+async function promptPreview(options: AdminServerOptions, admin: AdminContext, body: Record<string, unknown>) {
+  if (!admin.permissions.settings) throw new AdminApiError(403, 'Роль не позволяет проверять промпты')
+  let input: PromptPreviewInput
+  try {
+    input = parsePromptPreviewInput(body)
+  } catch (error) {
+    if (error instanceof PromptPreviewError) throw new AdminApiError(error.status, error.message)
+    throw error
+  }
+  const apiKey = options.kieApiKey
+  const solve: PromptPreviewSolve | null = options.promptPreviewSolve
+    ?? (apiKey
+      ? (request, instructions, onCost) => solveWithKie(request, { apiKey, model: options.model, fetchImpl: options.fetchImpl }, undefined, undefined, onCost, instructions)
+      : null)
+  if (!solve) throw new AdminApiError(503, 'Шлюз моделей не подключён: нет KIE_API_KEY на Vercel')
+
+  const { data, error } = await admin.client.rpc('admin_prompt_preview_start', {
+    p_subject_id: input.subjectId,
+    p_grade: input.grade,
+    p_prompt: input.prompt,
+    p_condition: input.condition,
+    p_compare: input.compare,
+  })
+  if (error) throw previewStartFailure(error)
+  const started = data && typeof data === 'object' && !Array.isArray(data) ? data as Record<string, unknown> : {}
+  const previewId = typeof started.id === 'string' ? started.id : ''
+  if (!previewId) throw new AdminApiError(502, 'Проверку не удалось начать. Повтори попытку.')
+
+  const outcome = await runPromptPreview({
+    input,
+    previewId,
+    currentPrompt: typeof started.currentPrompt === 'string' ? started.currentPrompt : null,
+    currentVersion: typeof started.currentVersion === 'number' ? started.currentVersion : null,
+    solve,
+  })
+
+  const { error: finishError } = await admin.client.rpc('admin_prompt_preview_finish', {
+    p_id: previewId,
+    p_status: outcome.runs.some((run) => run.ok) ? 'done' : 'failed',
+    p_result: outcome as unknown as Json,
+    p_credits: outcome.credits,
+    p_seconds: outcome.seconds,
+    p_error: outcome.runs.find((run) => run.error)?.error ?? null,
+  })
+  if (finishError) {
+    // Ответ всё равно уходит: результат оплачен, терять его из-за записи нельзя.
+    await recordError(options, {
+      kind: 'db',
+      route: 'admin',
+      message: `prompt_preview finish: ${finishError.message}`,
+      userId: admin.userId,
+      input: { previewId },
+    })
+  }
+  return { id: previewId, ...outcome }
+}
+
 /* ------------------------------------------------------------------------
    Проверки внешних сервисов
    ------------------------------------------------------------------------ */
@@ -260,10 +341,21 @@ export async function runHealthChecks(options: AdminServerOptions): Promise<Heal
       const response = await fetchImpl(`${productionOrigin}/`, { signal: timeout(10_000) })
       return { ok: response.ok, status: response.ok ? 'ok' : `http_${response.status}`, detail: 'GitHub Pages' }
     }),
+    /* База отвечает за миллисекунды (сам запрос в Postgres - до 2 мс), но
+       12 сентября проверка «падала» каждые 15-40 минут: PostgREST изредка
+       отдавал пустую ошибку спустя ~5 с, и одна такая неудача считалась
+       лежащей базой. Теперь неудача переспрашивается через полторы секунды,
+       у запроса свой срок, а в подробности попадает код ответа. */
     probe(options, 'database', async () => {
       const service = serviceClient(options)
-      const { error } = await service.from('profiles').select('id', { head: true, count: 'exact' })
-      return { ok: !error, status: error ? 'error' : 'ok', detail: error?.message ?? null }
+      const attempt = () => service.from('profiles').select('id', { head: true, count: 'exact' }).abortSignal(timeout(10_000))
+      let { error, status, statusText } = await attempt()
+      if (error) {
+        await new Promise((resolve) => setTimeout(resolve, 1500))
+        ;({ error, status, statusText } = await attempt())
+      }
+      const detail = error ? [error.message, error.code, status ? `HTTP ${status} ${statusText}`.trim() : ''].filter(Boolean).join(' · ') : null
+      return { ok: !error, status: error ? 'error' : 'ok', detail }
     }),
     probe(options, 'storage', async () => {
       const service = serviceClient(options)
@@ -431,6 +523,8 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
       sendJson(response, 200, await impersonate(options, admin, body))
     } else if (action === 'reset_password') {
       sendJson(response, 200, await resetPassword(options, admin, body))
+    } else if (action === 'prompt_preview') {
+      sendJson(response, 200, await promptPreview(options, admin, body))
     } else if (action === 'health_now') {
       if (!admin.permissions.settings) throw new AdminApiError(403, 'Роль не позволяет запускать проверки')
       sendJson(response, 200, { results: await runHealthChecks(options) })

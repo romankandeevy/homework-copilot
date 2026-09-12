@@ -1,19 +1,23 @@
 /* Настройки без деплоя: тарифы, промокоды, промпты решателя, предметы,
    фиче-флаги, баннер и пороги, администраторы. Всё читается приложением
-   и решателем из базы на лету. */
+   и решателем из базы на лету. Под каждой подвкладкой - история изменений
+   этой сущности из журнала действий. */
 
 import { useMemo, useState } from 'react'
-import { ArrowDown, ArrowSquareOut, ArrowUp, PencilSimple, Plus, Trash } from '@phosphor-icons/react'
+import { ArrowDown, ArrowSquareOut, ArrowUp, MagnifyingGlass, PencilSimple, Plus, Trash } from '@phosphor-icons/react'
 import {
   adminRpc, arr, bool, formatDateTime, formatKopecks, formatNumber, num, numOrNull, obj, rows,
   rublesInputToKopecks, str, strOrNull, type Row,
 } from '../api'
 import {
   Badge, Button, DataTable, Drawer, EmptyState, ErrorState, Field, LoadingState, Modal, PageHeader, Panel,
-  Segmented, Tabs, useAction, useAsync, useQueryState, type Column, type Tone,
+  Segmented, useAction, useAsync, useQueryState, type Column, type Tone,
 } from '../ui'
 import { useAdmin } from '../context'
 import { solvableSubjects } from '../../lib/subjects'
+import { PromptPreview } from './PromptPreview'
+import { lineDiff } from './settingsDiff'
+import { DiffView, SettingsEmpty, SettingsHistory, SettingsTabs, type HistoryScope } from './settingsParts'
 import './settings.css'
 
 /* ---------- Данные ---------- */
@@ -84,12 +88,13 @@ function Check({ label, checked, onChange, disabled }: { label: string; checked:
   )
 }
 
-function ConfirmModal({ title, children, confirmLabel, danger, loading, onConfirm, onClose }: {
+function ConfirmModal({ title, children, confirmLabel, danger, loading, disabled, onConfirm, onClose }: {
   title: string
   children: React.ReactNode
   confirmLabel: string
   danger?: boolean
   loading?: boolean
+  disabled?: boolean
   onConfirm: () => void
   onClose: () => void
 }) {
@@ -101,7 +106,7 @@ function ConfirmModal({ title, children, confirmLabel, danger, loading, onConfir
       footer={(
         <>
           <Button onClick={onClose}>Отмена</Button>
-          <Button variant={danger ? 'danger' : 'primary'} loading={loading} onClick={onConfirm}>{confirmLabel}</Button>
+          <Button variant={danger ? 'danger' : 'primary'} loading={loading} disabled={disabled} onClick={onConfirm}>{confirmLabel}</Button>
         </>
       )}
     >
@@ -144,23 +149,34 @@ function SettingsContent() {
   const tab = tabs.find((item) => item.value === query.set_tab)?.value ?? 'plans'
   const { data, error, reload } = useAsync(() => adminRpc('admin_settings_overview'), [])
   const overview = useMemo(() => parseOverview(data), [data])
+  // Счётчик сохранений: по нему история вкладки перечитывает журнал.
+  const [changes, setChanges] = useState(0)
+  const noteChange = () => setChanges((current) => current + 1)
+  const changed = () => {
+    reload()
+    noteChange()
+  }
 
   let body: React.ReactNode
-  if (tab === 'admins') body = <AdminsTab />
-  else if (tab === 'prompts') body = <PromptsTab subjects={overview.subjects} onChanged={reload} />
+  if (tab === 'admins') body = <AdminsTab onChanged={noteChange} />
+  else if (tab === 'prompts') body = <PromptsTab subjects={overview.subjects} onChanged={changed} refreshKey={changes} />
   else if (error) body = <Panel><ErrorState message={error} onRetry={reload} /></Panel>
   else if (!data) body = <Panel><LoadingState /></Panel>
-  else if (tab === 'plans') body = <PlansTab plans={overview.plans} onChanged={reload} />
-  else if (tab === 'promo') body = <PromoTab plans={overview.plans} />
-  else if (tab === 'subjects') body = <SubjectsTab key={JSON.stringify(overview.subjects)} subjects={overview.subjects} onChanged={reload} />
-  else if (tab === 'flags') body = <FlagsTab flags={overview.flags} onChanged={reload} />
-  else body = <SiteTab settings={overview.settings} onChanged={reload} />
+  else if (tab === 'plans') body = <PlansTab plans={overview.plans} onChanged={changed} />
+  else if (tab === 'promo') body = <PromoTab plans={overview.plans} flags={overview.flags} onChanged={noteChange} />
+  else if (tab === 'subjects') body = <SubjectsTab key={JSON.stringify(overview.subjects)} subjects={overview.subjects} onChanged={changed} />
+  else if (tab === 'flags') body = <FlagsTab flags={overview.flags} onChanged={changed} />
+  else body = <SiteTab settings={overview.settings} onChanged={changed} />
+
+  // У промптов история своя - по выбранному предмету, внутри вкладки.
+  const historyScope: HistoryScope | null = tab === 'prompts' ? null : tab
 
   return (
     <div className="set-stack">
       <PageHeader title="Настройки" description="Изменения действуют сразу, без выкладки. Каждое сохранение попадает в журнал действий." />
-      <Tabs value={tab} tabs={tabs} onChange={(value) => setQuery({ set_tab: value })} />
+      <SettingsTabs label="Раздел настроек" value={tab} tabs={tabs} onChange={(value) => setQuery({ set_tab: value })} />
       {body}
+      {historyScope && <SettingsHistory key={historyScope} scope={historyScope} refreshKey={changes} />}
     </div>
   )
 }
@@ -172,6 +188,8 @@ function PlansTab({ plans, onChanged }: { plans: Plan[]; onChanged: () => void }
   const { pending, run } = useAction()
   const [editing, setEditing] = useState<Plan | 'new' | null>(null)
   const [deleting, setDeleting] = useState<Plan | null>(null)
+  const defaultPlan = plans.find((plan) => plan.isDefault) ?? null
+  const onlyDefault = plans.every((plan) => plan.isDefault)
 
   const remove = async (plan: Plan) => {
     const result = await run('delete', () => adminRpc('admin_plan_delete', { p_plan_id: plan.id }), (response) => (bool(obj(response).disabled)
@@ -186,6 +204,7 @@ function PlansTab({ plans, onChanged }: { plans: Plan[]; onChanged: () => void }
     {
       key: 'title',
       header: 'Тариф',
+      className: 'set-col-plan',
       render: (plan) => (
         <span className="adm-cell-main">
           <strong>{plan.title}</strong>
@@ -196,7 +215,14 @@ function PlansTab({ plans, onChanged }: { plans: Plan[]; onChanged: () => void }
     { key: 'price', header: 'Цена', align: 'right', render: (plan) => <span className="adm-mono adm-nowrap">{formatKopecks(plan.priceKopecks)}</span> },
     { key: 'period', header: 'Срок', align: 'right', mobile: false, render: (plan) => `${formatNumber(plan.periodDays)} дн.` },
     { key: 'limit', header: 'Решений в сутки', align: 'right', render: (plan) => (plan.dailySolveLimit === null ? 'без предела' : formatNumber(plan.dailySolveLimit)) },
-    { key: 'users', header: 'Выдан', align: 'right', mobile: false, render: (plan) => formatNumber(plan.users) },
+    {
+      key: 'users',
+      header: 'Выдан',
+      align: 'right',
+      mobile: false,
+      // Тариф по умолчанию не выдают: он действует у всех, кому не выдан другой.
+      render: (plan) => (plan.isDefault ? <span className="adm-muted adm-nowrap">всем без другого</span> : formatNumber(plan.users)),
+    },
     {
       key: 'state',
       header: 'Статус',
@@ -222,16 +248,30 @@ function PlansTab({ plans, onChanged }: { plans: Plan[]; onChanged: () => void }
     },
   ]
 
+  const createButton = (label: string) => (
+    <Button variant="primary" icon={<Plus size={16} weight="bold" aria-hidden="true" />} onClick={() => setEditing('new')}>{label}</Button>
+  )
+
   return (
     <Panel
       title="Тарифы"
       description="Цена решения задаётся в коде (от 4 ₽, зависит от размера задачи), тариф её не меняет: он задаёт дневной предел решений и состав услуги."
-      actions={<Button variant="primary" icon={<Plus size={16} weight="bold" aria-hidden="true" />} onClick={() => setEditing('new')}>Новый тариф</Button>}
+      actions={onlyDefault ? undefined : createButton('Новый тариф')}
     >
-      <p className="set-note" style={{ marginBottom: 'var(--space-3)' }}>
-        Цена тарифа пока справочная: платёжного провайдера нет, её никто не списывает. Тариф выдаётся вручную из админки, срок выдачи - период тарифа.
-      </p>
-      <DataTable columns={columns} rows={plans} rowKey={(plan) => plan.id} empty="Тарифов нет." />
+      <div className="set-status" role="note">
+        <Badge tone="warning">без оплаты</Badge>
+        <p>
+          Платёжного провайдера пока нет - тарифы работают без оплаты. Тариф выдаётся вручную в карточке ученика («Выдать тариф») или промокодом; цена в тарифе справочная и ни с кого не списывается.
+        </p>
+      </div>
+      {plans.length > 0 && <DataTable columns={columns} rows={plans} rowKey={(plan) => plan.id} empty="Тарифов нет." />}
+      {onlyDefault && (
+        <SettingsEmpty art="plans" title={defaultPlan ? 'Других тарифов пока нет' : 'Тарифов пока нет'} actions={createButton('Создать тариф')}>
+          {defaultPlan
+            ? `Сейчас у всех учеников тариф «${defaultPlan.title}»${defaultPlan.dailySolveLimit !== null ? `: до ${formatNumber(defaultPlan.dailySolveLimit)} решений в сутки` : ''}. Отдельный тариф нужен, чтобы дать части учеников другой дневной предел или состав услуги. Цену решения тариф не меняет.`
+            : 'Тариф задаёт дневной предел решений и состав услуги. Цену решения он не меняет.'}
+        </SettingsEmpty>
+      )}
       {editing && (
         <PlanForm
           plan={editing === 'new' ? null : editing}
@@ -452,17 +492,59 @@ function fromLocalInput(value: string) {
   return Number.isNaN(date.getTime()) ? null : date.toISOString()
 }
 
-function PromoTab({ plans }: { plans: Plan[] }) {
+/* Шаблоны - только то, что умеет admin_promo_save: деньги на баланс или
+   тариф на срок. Тариф по умолчанию в шаблоны не идёт: он и так у всех. */
+type PromoTemplate = { id: string; label: string; kind: 'balance' | 'plan'; amount: string; planId: string; days: string; code: string }
+
+function promoTemplates(plans: Plan[]): PromoTemplate[] {
+  const list: PromoTemplate[] = [
+    { id: 'plus50', label: '+50 ₽ на баланс', kind: 'balance', amount: '50', planId: '', days: '', code: 'PLUS50' },
+    { id: 'plus100', label: '+100 ₽ на баланс', kind: 'balance', amount: '100', planId: '', days: '', code: 'PLUS100' },
+  ]
+  for (const plan of plans) {
+    if (!plan.active || plan.isDefault) continue
+    list.push({
+      id: `plan:${plan.id}`,
+      label: `«${plan.title}» на 7 дней`,
+      kind: 'plan',
+      amount: '',
+      planId: plan.id,
+      days: '7',
+      code: `${plan.id.toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 25)}-7D`,
+    })
+  }
+  return list
+}
+
+function freeCode(base: string, taken: string[]) {
+  if (!taken.includes(base)) return base
+  for (let index = 2; index < 100; index += 1) {
+    const candidate = `${base}-${index}`
+    if (!taken.includes(candidate)) return candidate
+  }
+  return base
+}
+
+function PromoTab({ plans, flags, onChanged }: { plans: Plan[]; flags: Flag[]; onChanged: () => void }) {
   const { pending, run } = useAction()
   const { data, error, loading, reload } = useAsync(() => adminRpc('admin_promo_list'), [])
   const promos = useMemo(() => rows(data).map(parsePromo), [data])
   const [editing, setEditing] = useState<Promo | 'new' | null>(null)
   const [detailCode, setDetailCode] = useState<string | null>(null)
   const detail = promos.find((promo) => promo.code === detailCode) ?? null
+  const empty = !error && data !== null && promos.length === 0
+  const promoFlag = flags.find((flag) => flag.key === 'promo_codes') ?? null
+  const fieldHidden = promoFlag !== null && (!promoFlag.enabled || promoFlag.rolloutPercent === 0)
+  const fieldPartial = promoFlag !== null && promoFlag.enabled && promoFlag.rolloutPercent > 0 && promoFlag.rolloutPercent < 100
+
+  const refresh = () => {
+    reload()
+    onChanged()
+  }
 
   const toggle = async (promo: Promo) => {
     const result = await run(`toggle:${promo.code}`, () => adminRpc('admin_promo_save', { p_promo: promoPayload({ ...promo, active: !promo.active }) }), promo.active ? `Код ${promo.code} выключен.` : `Код ${promo.code} включён.`)
-    if (result !== undefined) reload()
+    if (result !== undefined) refresh()
   }
 
   const columns: Column<Promo>[] = [
@@ -487,18 +569,40 @@ function PromoTab({ plans }: { plans: Plan[] }) {
     },
   ]
 
+  const createButton = (label: string) => (
+    <Button variant="primary" icon={<Plus size={16} weight="bold" aria-hidden="true" />} onClick={() => setEditing('new')}>{label}</Button>
+  )
+
   return (
     <Panel
       title="Промокоды"
       description="Код даёт деньги на баланс или тариф на срок. Один ученик погашает код один раз."
-      actions={<Button variant="primary" icon={<Plus size={16} weight="bold" aria-hidden="true" />} onClick={() => setEditing('new')}>Новый код</Button>}
+      actions={empty ? undefined : createButton('Новый код')}
     >
-      <p className="set-note" style={{ marginBottom: 'var(--space-3)' }}>
-        Ученик вводит код в окне аккаунта, во вкладке «Баланс». Поле ввода можно скрыть флагом promo_codes.
-      </p>
-      {error
-        ? <ErrorState message={error} onRetry={reload} />
-        : <DataTable columns={columns} rows={promos} rowKey={(promo) => promo.code} loading={loading} empty="Промокодов нет." onRowClick={(promo) => setDetailCode(promo.code)} />}
+      {fieldHidden && (
+        <p className="set-note is-warning" style={{ marginBottom: 'var(--space-3)' }}>
+          Поле ввода кода у учеников сейчас скрыто: флаг promo_codes выключен. Созданный код никто не сможет ввести, пока флаг не включат.
+        </p>
+      )}
+      {fieldPartial && (
+        <p className="set-note is-warning" style={{ marginBottom: 'var(--space-3)' }}>
+          Поле ввода кода видят не все: флаг promo_codes раскатан на {promoFlag?.rolloutPercent} %.
+        </p>
+      )}
+      {error && <ErrorState message={error} onRetry={reload} />}
+      {!error && !empty && (
+        <>
+          <p className="set-note" style={{ marginBottom: 'var(--space-3)' }}>
+            Ученик вводит код в окне аккаунта, во вкладке «Баланс». Поле ввода можно скрыть флагом promo_codes.
+          </p>
+          <DataTable columns={columns} rows={promos} rowKey={(promo) => promo.code} loading={loading} empty="Промокодов нет." onRowClick={(promo) => setDetailCode(promo.code)} />
+        </>
+      )}
+      {empty && (
+        <SettingsEmpty art="promo" title="Промокодов пока нет" actions={createButton('Создать промокод')}>
+          Код даёт ученику деньги на баланс или тариф на срок. Ученик вводит его в окне аккаунта, во вкладке «Баланс»; один ученик погашает код один раз. В форме есть шаблоны: +50 ₽, +100 ₽ и тариф на 7 дней.
+        </SettingsEmpty>
+      )}
       {detail && (
         <Drawer open title={`Код ${detail.code}`} subtitle={promoWhat(detail, plans)} onClose={() => setDetailCode(null)}>
           <dl className="adm-kv">
@@ -533,7 +637,7 @@ function PromoTab({ plans }: { plans: Plan[] }) {
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null)
-            reload()
+            refresh()
           }}
         />
       )}
@@ -544,7 +648,9 @@ function PromoTab({ plans }: { plans: Plan[] }) {
 function PromoForm({ promo, plans, existingCodes, onClose, onSaved }: { promo: Promo | null; plans: Plan[]; existingCodes: string[]; onClose: () => void; onSaved: () => void }) {
   const { pending, run } = useAction()
   const activePlans = plans.filter((plan) => plan.active || plan.id === promo?.planId)
+  const templates = useMemo(() => promoTemplates(plans), [plans])
   const [code, setCode] = useState(promo?.code ?? '')
+  const [suggestedCode, setSuggestedCode] = useState('')
   const [kind, setKind] = useState<'balance' | 'plan'>(promo?.kind ?? 'balance')
   const [amount, setAmount] = useState(promo?.amountKopecks ? kopecksToInput(promo.amountKopecks) : '')
   const [planId, setPlanId] = useState(promo?.planId ?? activePlans[0]?.id ?? '')
@@ -561,6 +667,26 @@ function PromoForm({ promo, plans, existingCodes, onClose, onSaved }: { promo: P
   const uses = maxUses.trim() === '' ? null : intOrNull(maxUses)
   const startsIso = fromLocalInput(startsAt)
   const expiresIso = fromLocalInput(expiresAt)
+  const hasPlanTemplates = templates.some((item) => item.kind === 'plan')
+
+  const templateMatches = (item: PromoTemplate) => item.kind === kind
+    && (item.kind === 'balance' ? amount.trim() === item.amount : planId === item.planId && planDays.trim() === item.days)
+
+  // Шаблон заполняет тип и сумму или тариф и предлагает свободный код, если
+  // своего кода ещё не набрали.
+  const applyTemplate = (item: PromoTemplate) => {
+    setKind(item.kind)
+    if (item.kind === 'balance') setAmount(item.amount)
+    else {
+      setPlanId(item.planId)
+      setPlanDays(item.days)
+    }
+    if (!code.trim() || code === suggestedCode) {
+      const next = freeCode(item.code, existingCodes)
+      setCode(next)
+      setSuggestedCode(next)
+    }
+  }
 
   const problem = !/^[A-Z0-9_-]{3,32}$/.test(normalized)
     ? 'Код - от 3 до 32 символов: латиница, цифры, _ и -.'
@@ -597,6 +723,21 @@ function PromoForm({ promo, plans, existingCodes, onClose, onSaved }: { promo: P
   return (
     <Drawer open title={promo ? `Код ${promo.code}` : 'Новый промокод'} onClose={onClose}>
       <form className="set-form" onSubmit={(event) => { event.preventDefault(); void save() }}>
+        {!promo && (
+          <div className="set-templates">
+            <span className="adm-field-label">Шаблоны</span>
+            <div className="set-templates-row" role="group" aria-label="Шаблоны промокода">
+              {templates.map((item) => (
+                <Button key={item.id} size="sm" aria-pressed={templateMatches(item)} onClick={() => applyTemplate(item)}>{item.label}</Button>
+              ))}
+            </div>
+            <small className="adm-field-hint">
+              {hasPlanTemplates
+                ? 'Шаблон заполняет тип, сумму или тариф и предлагает свободный код. Остальное - как обычно.'
+                : 'Шаблон «тариф на 7 дней» появится, когда будет включённый тариф, кроме тарифа по умолчанию.'}
+            </small>
+          </div>
+        )}
         <Field label="Код" hint={promo ? 'После создания не меняется.' : 'Заглавная латиница, цифры, _ и -.'}>
           <input value={code} disabled={Boolean(promo)} maxLength={32} onChange={(event) => setCode(event.target.value.toUpperCase())} autoComplete="off" className="adm-mono" data-initial-focus />
         </Field>
@@ -659,49 +800,7 @@ type PromptVersion = {
   createdAt: string | null
 }
 
-type DiffLine = { type: 'same' | 'add' | 'del'; text: string; id: number }
-
-/* Построчная разница по наибольшей общей подпоследовательности. Промпт до
-   8000 символов - это сотни строк, таблица помещается в память легко. */
-function lineDiff(before: string, after: string): DiffLine[] {
-  const a = before.split('\n')
-  const b = after.split('\n')
-  const result: DiffLine[] = []
-  const push = (type: DiffLine['type'], text: string) => {
-    result.push({ type, text, id: result.length })
-  }
-  if (a.length * b.length > 400_000) {
-    a.forEach((text) => push('del', text))
-    b.forEach((text) => push('add', text))
-    return result
-  }
-  const table = Array.from({ length: a.length + 1 }, () => new Uint16Array(b.length + 1))
-  for (let i = a.length - 1; i >= 0; i -= 1) {
-    for (let j = b.length - 1; j >= 0; j -= 1) {
-      table[i][j] = a[i] === b[j] ? table[i + 1][j + 1] + 1 : Math.max(table[i + 1][j], table[i][j + 1])
-    }
-  }
-  let i = 0
-  let j = 0
-  while (i < a.length && j < b.length) {
-    if (a[i] === b[j]) {
-      push('same', a[i])
-      i += 1
-      j += 1
-    } else if (table[i + 1][j] >= table[i][j + 1]) {
-      push('del', a[i])
-      i += 1
-    } else {
-      push('add', b[j])
-      j += 1
-    }
-  }
-  while (i < a.length) { push('del', a[i]); i += 1 }
-  while (j < b.length) { push('add', b[j]); j += 1 }
-  return result
-}
-
-function PromptsTab({ subjects, onChanged }: { subjects: SubjectSetting[]; onChanged: () => void }) {
+function PromptsTab({ subjects, onChanged, refreshKey }: { subjects: SubjectSetting[]; onChanged: () => void; refreshKey: number }) {
   const fallback = solvableSubjects[0]?.id ?? ''
   const [query, setQuery] = useQueryState({ set_subject: fallback })
   const subject = subjectNames.has(query.set_subject) ? query.set_subject : fallback
@@ -726,6 +825,7 @@ function PromptsTab({ subjects, onChanged }: { subjects: SubjectSetting[]; onCha
         </div>
       </Panel>
       <PromptWorkspace key={subject} subject={subject} onChanged={onChanged} />
+      <SettingsHistory key={`prompts:${subject}`} scope="prompts" entityKey={subject} refreshKey={refreshKey} title={`История промпта: ${subjectLabel(subject)}`} />
     </div>
   )
 }
@@ -772,13 +872,14 @@ function PromptWorkspace({ subject, onChanged }: { subject: string; onChanged: (
 
   return (
     <>
-      <Panel
-        title={active ? `Активная версия ${active.version}` : 'Активной версии нет'}
-        description={active ? `${active.authorEmail ?? 'автор неизвестен'} · ${formatDateTime(active.createdAt)}${active.note ? ` · ${active.note}` : ''}` : 'Решатель работает только по правилам из кода.'}
-        actions={active ? <Button size="sm" variant="danger" onClick={() => setConfirmDisable(true)}>Выключить промпт</Button> : undefined}
-      >
-        <PromptEditor key={active?.id ?? 'none'} subject={subject} initial={active?.body ?? ''} onSaved={refresh} />
-      </Panel>
+      <PromptDraft
+        key={active?.id ?? 'none'}
+        subject={subject}
+        active={active}
+        onSaved={refresh}
+        onDisable={() => setConfirmDisable(true)}
+        onPreviewed={onChanged}
+      />
 
       {selected && (
         <Panel
@@ -786,11 +887,7 @@ function PromptWorkspace({ subject, onChanged }: { subject: string; onChanged: (
           description="Красным - строки только в активной, зелёным - только в выбранной."
           actions={<Button size="sm" variant="ghost" onClick={() => setSelectedId(null)}>Скрыть</Button>}
         >
-          <pre className="set-diff">
-            {diff.map((line) => (
-              <span key={line.id} className={`is-${line.type}`}>{line.type === 'add' ? '+ ' : line.type === 'del' ? '- ' : '  '}{line.text || ' '}</span>
-            ))}
-          </pre>
+          <DiffView lines={diff} />
         </Panel>
       )}
 
@@ -835,9 +932,34 @@ function PromptWorkspace({ subject, onChanged }: { subject: string; onChanged: (
   )
 }
 
-function PromptEditor({ subject, initial, onSaved }: { subject: string; initial: string; onSaved: () => void }) {
+/* Черновик промпта живёт здесь: его правит редактор и его же, без
+   сохранения, прогоняет проверка на примере задачи. */
+function PromptDraft({ subject, active, onSaved, onDisable, onPreviewed }: {
+  subject: string
+  active: PromptVersion | null
+  onSaved: () => void
+  onDisable: () => void
+  onPreviewed: () => void
+}) {
+  const [body, setBody] = useState(active?.body ?? '')
+  const activeView = useMemo(() => (active ? { body: active.body, version: active.version } : null), [active])
+
+  return (
+    <>
+      <Panel
+        title={active ? `Активная версия ${active.version}` : 'Активной версии нет'}
+        description={active ? `${active.authorEmail ?? 'автор неизвестен'} · ${formatDateTime(active.createdAt)}${active.note ? ` · ${active.note}` : ''}` : 'Решатель работает только по правилам из кода.'}
+        actions={active ? <Button size="sm" variant="danger" onClick={onDisable}>Выключить промпт</Button> : undefined}
+      >
+        <PromptEditor subject={subject} initial={active?.body ?? ''} body={body} onBody={setBody} onSaved={onSaved} />
+      </Panel>
+      <PromptPreview subject={subject} draft={body} active={activeView} onFinished={onPreviewed} />
+    </>
+  )
+}
+
+function PromptEditor({ subject, initial, body, onBody, onSaved }: { subject: string; initial: string; body: string; onBody: (value: string) => void; onSaved: () => void }) {
   const { pending, run } = useAction()
-  const [body, setBody] = useState(initial)
   const [note, setNote] = useState('')
   const trimmed = body.trim()
   const unchanged = trimmed === initial.trim()
@@ -851,15 +973,15 @@ function PromptEditor({ subject, initial, onSaved }: { subject: string; initial:
 
   return (
     <form className="set-form set-editor" onSubmit={(event) => { event.preventDefault(); void save() }}>
-      <Field label="Текст промпта" hint={`${formatNumber(trimmed.length)} из 8000 символов. Действует на следующие решения, готовые не меняются.`}>
-        <textarea value={body} onChange={(event) => setBody(event.target.value)} spellCheck={false} />
+      <Field label="Текст промпта" hint={`${formatNumber(trimmed.length)} из 8000 символов. Действует на следующие решения, готовые не меняются. Проверить текст до сохранения можно ниже.`}>
+        <textarea value={body} onChange={(event) => onBody(event.target.value)} spellCheck={false} />
       </Field>
       <Field label="Что поменялось" hint="Короткая заметка к версии, до 300 символов.">
         <input value={note} maxLength={300} onChange={(event) => setNote(event.target.value)} />
       </Field>
       {problem && !unchanged && <p className="set-form-error" role="alert">{problem}</p>}
       <div className="adm-form-actions">
-        {!unchanged && <Button variant="ghost" onClick={() => setBody(initial)}>Вернуть как было</Button>}
+        {!unchanged && <Button variant="ghost" onClick={() => onBody(initial)}>Вернуть как было</Button>}
         <Button type="submit" variant="primary" disabled={Boolean(problem) || unchanged} loading={pending === 'save'}>Сохранить как новую версию</Button>
       </div>
     </form>
@@ -943,17 +1065,102 @@ const flagEffects: Record<string, string> = {
   promo_codes: 'В кошельке пропадает поле ввода промокода.',
 }
 
+type FlagFilter = 'all' | 'on' | 'off' | 'partial'
+type FlagBulk = 'enable' | 'disable' | 'rollout'
+
+/* Действует ли флаг: выключенный и включённый на 0 % не видит никто,
+   на 1-99 % - часть людей. */
+function flagMode(flag: Pick<Flag, 'enabled' | 'rolloutPercent'>): Exclude<FlagFilter, 'all'> {
+  if (!flag.enabled || flag.rolloutPercent <= 0) return 'off'
+  return flag.rolloutPercent >= 100 ? 'on' : 'partial'
+}
+
+function flagStateText(enabled: boolean, rollout: number) {
+  if (!enabled) return 'выключен'
+  if (rollout >= 100) return 'всем'
+  return `${rollout} %`
+}
+
+const bulkTitles: Record<FlagBulk, string> = {
+  enable: 'Включить флаги для всех?',
+  disable: 'Выключить флаги?',
+  rollout: 'Раскатить флаги на часть людей?',
+}
+
+const bulkExplain: Record<FlagBulk, string> = {
+  enable: 'Выбранные флаги включатся для всех: раскатка станет 100 %.',
+  disable: 'Выбранные флаги выключатся для всех. Процент раскатки останется в настройке флага.',
+  rollout: 'Выбранные флаги включатся для указанной доли людей. Один и тот же человек видит функцию всегда одинаково.',
+}
+
 function FlagsTab({ flags, onChanged }: { flags: Flag[]; onChanged: () => void }) {
+  const { pending, run } = useAction()
   const [editing, setEditing] = useState<Flag | 'new' | null>(null)
+  const [query, setQuery] = useQueryState({ f_q: '', f_state: 'all' })
+  const [selected, setSelected] = useState<Set<string>>(() => new Set())
+  const [bulk, setBulk] = useState<FlagBulk | null>(null)
+  const [rollout, setRollout] = useState('50')
+
+  const filter: FlagFilter = query.f_state === 'on' || query.f_state === 'off' || query.f_state === 'partial' ? query.f_state : 'all'
+  const needle = query.f_q.trim().toLocaleLowerCase('ru-RU')
+  const counts = {
+    all: flags.length,
+    on: flags.filter((flag) => flagMode(flag) === 'on').length,
+    off: flags.filter((flag) => flagMode(flag) === 'off').length,
+    partial: flags.filter((flag) => flagMode(flag) === 'partial').length,
+  }
+  const visible = flags.filter((flag) => (filter === 'all' || flagMode(flag) === filter)
+    && (!needle || flag.key.toLocaleLowerCase('ru-RU').includes(needle) || flag.description.toLocaleLowerCase('ru-RU').includes(needle)))
+  // Действия - только над видимыми: скрытое фильтром не должно меняться незаметно.
+  const chosen = visible.filter((flag) => selected.has(flag.key))
+  const rolloutValue = intOrNull(rollout)
+  const rolloutValid = rolloutValue !== null && rolloutValue <= 100
+
+  const target = (flag: Flag) => (bulk === 'disable'
+    ? { enabled: false, rollout: flag.rolloutPercent }
+    : bulk === 'enable'
+      ? { enabled: true, rollout: 100 }
+      : { enabled: true, rollout: rolloutValue ?? flag.rolloutPercent })
+  const willChange = chosen.filter((flag) => {
+    const next = target(flag)
+    return next.enabled !== flag.enabled || next.rollout !== flag.rolloutPercent
+  })
+
+  const apply = async () => {
+    if (!bulk || chosen.length === 0 || (bulk === 'rollout' && !rolloutValid)) return
+    const result = await run(
+      'bulk',
+      () => adminRpc('admin_flags_bulk', { p_keys: chosen.map((flag) => flag.key), p_action: bulk, p_rollout: bulk === 'rollout' ? rolloutValue : null }),
+      (response) => `Изменено флагов: ${formatNumber(num(obj(response).changed))} из ${formatNumber(num(obj(response).selected))}.`,
+    )
+    if (result === undefined) return
+    setBulk(null)
+    setSelected(new Set())
+    onChanged()
+  }
 
   const columns: Column<Flag>[] = [
     { key: 'key', header: 'Флаг', render: (flag) => <span className="adm-cell-main"><strong className="adm-mono">{flag.key}</strong>{flag.description && <small>{flag.description}</small>}</span> },
-    { key: 'enabled', header: 'Состояние', render: (flag) => <Badge tone={flag.enabled ? 'success' : 'neutral'}>{flag.enabled ? 'включён' : 'выключен'}</Badge> },
+    {
+      key: 'enabled',
+      header: 'Состояние',
+      render: (flag) => {
+        const mode = flagMode(flag)
+        return (
+          <span className="set-flag-state">
+            <Badge tone={mode === 'on' ? 'success' : mode === 'partial' ? 'info' : 'neutral'}>{mode === 'on' ? 'включён' : mode === 'partial' ? 'частично' : 'выключен'}</Badge>
+            {flag.enabled && flag.rolloutPercent === 0 && <small>включён, но раскатка 0 %</small>}
+          </span>
+        )
+      },
+    },
     { key: 'rollout', header: 'Раскатка', align: 'right', render: (flag) => `${flag.rolloutPercent} %` },
     { key: 'effect', header: 'Где действует', mobile: false, render: (flag) => (flagEffects[flag.key] ? <span className="adm-clamp">{flagEffects[flag.key]}</span> : <Badge tone="warning">код не читает</Badge>) },
     { key: 'updated', header: 'Изменён', mobile: false, render: (flag) => <span className="adm-nowrap">{formatDateTime(flag.updatedAt)}</span> },
     { key: 'actions', header: '', align: 'right', render: (flag) => <Button size="sm" icon={<PencilSimple size={14} weight="bold" aria-hidden="true" />} onClick={() => setEditing(flag)}>Изменить</Button> },
   ]
+
+  const filtered = needle !== '' || filter !== 'all'
 
   return (
     <Panel
@@ -964,7 +1171,61 @@ function FlagsTab({ flags, onChanged }: { flags: Flag[]; onChanged: () => void }
       <p className="set-note" style={{ marginBottom: 'var(--space-3)' }}>
         Действуют флаги, которые читает код: ai_chat, photo_input, schedule, solution_rating и promo_codes. Новый ключ ни на что не влияет, пока его не начнёт читать код.
       </p>
-      <DataTable columns={columns} rows={flags} rowKey={(flag) => flag.key} empty="Флагов нет." />
+      <div className="set-flag-tools">
+        <Field label="Поиск">
+          <span className="set-search">
+            <MagnifyingGlass size={16} weight="bold" aria-hidden="true" />
+            <input
+              className="set-search-input"
+              type="search"
+              value={query.f_q}
+              placeholder="Ключ или описание"
+              autoComplete="off"
+              onChange={(event) => setQuery({ f_q: event.target.value }, { replace: true })}
+            />
+          </span>
+        </Field>
+        <div className="adm-field">
+          <span className="adm-field-label">Состояние</span>
+          <Segmented
+            label="Фильтр по состоянию"
+            value={filter}
+            options={[
+              { value: 'all', label: `Все · ${counts.all}` },
+              { value: 'on', label: `Включены · ${counts.on}` },
+              { value: 'off', label: `Выключены · ${counts.off}` },
+              { value: 'partial', label: `Частично · ${counts.partial}` },
+            ]}
+            onChange={(value) => setQuery({ f_state: value })}
+          />
+        </div>
+      </div>
+      {chosen.length > 0 && (
+        <div className="adm-bulkbar" role="region" aria-label="Действия с выбранными флагами">
+          <span className="set-bulk-count">Выбрано: {formatNumber(chosen.length)}</span>
+          <Button size="sm" onClick={() => setBulk('enable')}>Включить</Button>
+          <Button size="sm" onClick={() => setBulk('disable')}>Выключить</Button>
+          <Button size="sm" onClick={() => setBulk('rollout')}>Раскатка %</Button>
+          <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>Снять выбор</Button>
+        </div>
+      )}
+      <DataTable
+        columns={columns}
+        rows={visible}
+        rowKey={(flag) => flag.key}
+        rowLabel={(flag) => flag.key}
+        selectable
+        selected={selected}
+        onSelectedChange={setSelected}
+        empty={filtered
+          ? (
+            <span className="set-row-actions">
+              <span>Под фильтр ничего не попало.</span>
+              <Button size="sm" variant="ghost" onClick={() => setQuery({ f_q: '', f_state: 'all' })}>Сбросить фильтр</Button>
+            </span>
+          )
+          : 'Флагов нет.'}
+      />
       {editing && (
         <FlagForm
           flag={editing === 'new' ? null : editing}
@@ -975,6 +1236,43 @@ function FlagsTab({ flags, onChanged }: { flags: Flag[]; onChanged: () => void }
             onChanged()
           }}
         />
+      )}
+      {bulk && (
+        <ConfirmModal
+          title={bulkTitles[bulk]}
+          confirmLabel={bulk === 'enable' ? 'Включить' : bulk === 'disable' ? 'Выключить' : `Раскатить на ${rolloutValid ? rolloutValue : '?'} %`}
+          danger={bulk === 'disable'}
+          loading={pending === 'bulk'}
+          disabled={willChange.length === 0 || (bulk === 'rollout' && !rolloutValid)}
+          onConfirm={() => void apply()}
+          onClose={() => setBulk(null)}
+        >
+          <p className="set-note">{bulkExplain[bulk]}</p>
+          {bulk === 'rollout' && (
+            <div className="set-rollout">
+              <Field label="Раскатка, %" hint={rolloutValid ? '0 - никому, 100 - всем.' : 'Целое число от 0 до 100.'}>
+                <input type="number" min={0} max={100} step={1} inputMode="numeric" value={rollout} onChange={(event) => setRollout(event.target.value)} data-initial-focus />
+              </Field>
+              <input type="range" min={0} max={100} step={5} value={rolloutValue ?? 0} aria-label="Раскатка, % (ползунок)" onChange={(event) => setRollout(event.target.value)} />
+            </div>
+          )}
+          <ul className="set-bulk-list">
+            {chosen.map((flag) => {
+              const next = target(flag)
+              const same = next.enabled === flag.enabled && next.rollout === flag.rolloutPercent
+              return (
+                <li key={flag.key} className={same ? 'is-same' : ''}>
+                  <span className="adm-mono">{flag.key}</span>
+                  <span className="set-bulk-change">{same ? 'без изменений' : `${flagStateText(flag.enabled, flag.rolloutPercent)} → ${flagStateText(next.enabled, next.rollout)}`}</span>
+                  <small>{flagEffects[flag.key] ?? 'Код этот флаг не читает.'}</small>
+                </li>
+              )
+            })}
+          </ul>
+          <p className="set-note">
+            Изменится флагов: {formatNumber(willChange.length)} из {formatNumber(chosen.length)}. Каждое изменение попадёт в журнал действий. Всё применяется разом: если хоть один флаг не найдётся, не изменится ни один.
+          </p>
+        </ConfirmModal>
       )}
     </Panel>
   )
@@ -1169,7 +1467,7 @@ function roleLabel(role: string) {
 
 type AdminRow = { userId: string; email: string; fullName: string | null; role: string; grantedAt: string | null; mfaEnrolled: boolean; lastSignInAt: string | null }
 
-function AdminsTab() {
+function AdminsTab({ onChanged }: { onChanged: () => void }) {
   const { access } = useAdmin()
   const { pending, run } = useAction()
   const { data, error, loading, reload } = useAsync(() => adminRpc('admin_list_admins'), [])
@@ -1197,6 +1495,7 @@ function AdminsTab() {
     setConfirm(null)
     setEmail('')
     reload()
+    onChanged()
   }
 
   const normalizedEmail = email.trim().toLowerCase()

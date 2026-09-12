@@ -1,15 +1,62 @@
-/* Мониторинг: детали, которых нет в общих стилях админки. */
+/* Мониторинг: сводка, алерты, график, списки ошибок, подробности и
+   светофор. Цвета - токены админки. Виды ошибок на графике - свои токены
+   раздела на оттенках чертежа (245), сигнала (38) и их смесей; порядок
+   и шаги проверены скриптом dataviz на различимость, в том числе при
+   дальтонизме, отдельно для светлой и тёмной темы. Зелёный, жёлтый и
+   красный остаются только за нормой, предупреждением и проблемой. */
+
+.adm-app {
+  --mon-kind-frontend: oklch(0.52 0.14 250);
+  --mon-kind-api: oklch(0.6 0.2 38);
+  --mon-kind-llm: oklch(0.7 0.13 205);
+  --mon-kind-payments: oklch(0.45 0.14 300);
+  --mon-kind-db: oklch(0.72 0.14 340);
+  --mon-danger-text: color-mix(in oklch, var(--error-500) 78%, var(--ink-1000));
+}
+
+:root[data-theme='dark'] .adm-app {
+  --mon-kind-frontend: oklch(0.6 0.14 250);
+  --mon-kind-api: oklch(0.64 0.19 40);
+  --mon-kind-llm: oklch(0.66 0.11 205);
+  --mon-kind-payments: oklch(0.52 0.16 300);
+  --mon-kind-db: oklch(0.66 0.15 340);
+}
+
+.mon-kind-frontend { fill: var(--mon-kind-frontend); background: var(--mon-kind-frontend); }
+.mon-kind-api { fill: var(--mon-kind-api); background: var(--mon-kind-api); }
+.mon-kind-llm { fill: var(--mon-kind-llm); background: var(--mon-kind-llm); }
+.mon-kind-payments { fill: var(--mon-kind-payments); background: var(--mon-kind-payments); }
+.mon-kind-db { fill: var(--mon-kind-db); background: var(--mon-kind-db); }
+
+.mon-swatch { display: inline-block; flex: 0 0 auto; width: 0.625rem; height: 0.625rem; border-radius: 2px; }
+
+.mon-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------- Мелочи, общие для вкладок ---------- */
 
 .mon-badges { display: inline-flex; flex-wrap: wrap; gap: 0.3rem; }
-.mon-error-title { display: -webkit-box; overflow: hidden; max-width: 46ch; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .mon-route { overflow-wrap: anywhere; }
-.mon-bad { color: color-mix(in oklch, var(--color-danger) 75%, var(--color-text)); }
+.mon-bad { color: var(--mon-danger-text); }
 .mon-note { margin-top: var(--space-3) !important; color: var(--color-text-subtle); font-size: var(--text-small); }
 .mon-gap-top { margin-top: var(--space-4); }
 .mon-stack-gap { display: grid; gap: var(--space-5); }
 .mon-subhead { margin: var(--space-2) 0 var(--space-2); color: var(--color-text-muted); font: var(--weight-semibold) var(--text-small)/1.3 var(--font-body); }
 .mon-prewrap { white-space: pre-wrap; overflow-wrap: anywhere; }
 .mon-subject { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.mon-inline { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); max-width: 100%; }
+.mon-inline code { overflow-wrap: anywhere; }
+.mon-status-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
+.mon-ok-text { color: var(--ok-700); }
 
 .adm-table tr.mon-priority-row td { background: color-mix(in oklch, var(--color-accent-soft) 55%, transparent); }
 
@@ -25,25 +72,8 @@
   overflow-wrap: anywhere;
   cursor: pointer;
 }
-
-.mon-inline { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); max-width: 100%; }
-.mon-inline code { overflow-wrap: anywhere; }
-
-.mon-status-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
-
-.mon-events { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
-.mon-event { border: 1px solid var(--color-border); border-radius: var(--radius-surface); background: var(--color-surface); }
-.mon-event summary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1) var(--space-3);
-  padding: var(--space-3);
-  cursor: pointer;
-}
-.mon-event summary time { color: var(--color-text-subtle); font: var(--text-small)/1.5 var(--font-mono); white-space: nowrap; }
-.mon-event summary span { flex: 1 1 16rem; min-width: 0; font-weight: var(--weight-medium); overflow-wrap: anywhere; }
-.mon-event[open] summary { border-bottom: 1px solid var(--color-border); }
-.mon-event-body { display: grid; gap: var(--space-3); padding: var(--space-3); }
+.mon-link svg { margin-left: 0.25rem; vertical-align: -2px; }
+.mon-link:focus-visible { outline: none; border-radius: 4px; box-shadow: var(--focus-ring); }
 
 .mon-stack {
   max-height: 22rem;
@@ -51,7 +81,7 @@
   padding: var(--space-3);
   overflow: auto;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-surface);
+  border-radius: var(--radius-xs);
   background: var(--color-surface-sunken);
   font: var(--text-small)/1.55 var(--font-mono);
   white-space: pre-wrap;
@@ -70,22 +100,433 @@
   color: var(--color-text-muted);
 }
 
-.mon-manual { margin-top: var(--space-4); }
-.mon-manual-list { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
-.mon-manual-list li {
+/* ---------- «Обновлено N назад» ---------- */
+
+.mon-live {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.45rem;
+  margin: 0;
+  color: var(--color-text-subtle);
+  font: var(--weight-medium) 0.6875rem/1.35 var(--font-mono);
+  letter-spacing: 0.03em;
+}
+.mon-live svg { flex: 0 0 auto; }
+.mon-live.is-error { color: var(--warn-700); }
+.mon-live-note { padding-left: 0.5rem; border-left: 1px solid var(--color-border); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .mon-live-spin { animation: mon-spin 1.1s linear infinite; }
+}
+@keyframes mon-spin { to { transform: rotate(360deg); } }
+
+/* ---------- Подсказка в заголовке колонки ---------- */
+
+.mon-th-hint { position: relative; display: inline-flex; align-items: center; gap: 0.25rem; }
+.mon-hint-button {
+  display: inline-grid;
+  place-items: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text-subtle);
+  cursor: help;
+  transition: var(--transition-control);
+}
+.mon-hint-button:hover { background: var(--ink-100); color: var(--color-strong); }
+.mon-hint-button:focus-visible { outline: none; color: var(--color-strong); box-shadow: var(--focus-ring); }
+
+.mon-tip {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 0.5rem);
+  left: 0;
+  display: none;
+  width: max-content;
+  max-width: 16rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--radius-xs);
+  background: var(--ink-1000);
+  color: var(--paper-000);
+  box-shadow: var(--shadow-overlay);
+  font: var(--weight-regular) 0.75rem/1.45 var(--font-body);
+  letter-spacing: 0;
+  text-align: left;
+  text-transform: none;
+  white-space: normal;
+}
+.mon-th-hint:hover .mon-tip,
+.mon-hint-button:focus-visible + .mon-tip { display: block; }
+th.is-right .mon-tip { right: 0; left: auto; }
+
+/* ---------- Вкладка «Ошибки» ---------- */
+
+.mon-errors { display: grid; gap: var(--adm-gap); min-width: 0; }
+
+/* Поле маршрута шире соседних: подсказки вроде «/app/schedule» не
+   обрезаются. Почта в таблице переносится по словам, а не посреди. */
+.mon-filters > .adm-field:has(.mon-route-input) { flex: 0 1 13rem; }
+.adm-table .mon-link { overflow-wrap: break-word; }
+
+@media (min-width: 900px) {
+  .mon-error-cell { min-width: 18rem; }
+}
+.mon-errors > .adm-panel { margin: 0; }
+.mon-errors-head { display: flex; justify-content: flex-end; min-height: 1.25rem; }
+
+.mon-alerts { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.mon-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid transparent;
+  border-radius: var(--radius-surface);
+}
+.mon-alert > svg { flex: 0 0 auto; margin-top: 0.05rem; }
+.mon-alert.is-danger { border-color: color-mix(in oklch, var(--error-500) 35%, transparent); background: var(--color-danger-soft); }
+.mon-alert.is-danger > svg { color: var(--mon-danger-text); }
+.mon-alert.is-warning { border-color: color-mix(in oklch, var(--warn-500) 50%, transparent); background: var(--color-warning-soft); }
+.mon-alert.is-warning > svg { color: var(--warn-700); }
+.mon-alert-text { display: grid; flex: 1 1 auto; gap: 0.2rem; min-width: 0; }
+.mon-alert-text strong { color: var(--color-strong); font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
+.mon-alert-text span { color: var(--color-text-muted); font-size: var(--text-small); overflow-wrap: anywhere; }
+.mon-alert .adm-button { flex: 0 0 auto; }
+
+.mon-cards .adm-stat-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.mon-cards .adm-stat.is-danger .adm-stat-value { color: var(--mon-danger-text); }
+.mon-cards .adm-stat.is-warning .adm-stat-value { color: var(--warn-700); }
+
+.mon-cards-skeleton,
+.mon-feed-skeleton { display: grid; gap: var(--space-2); }
+.mon-cards-skeleton { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.mon-cards-skeleton span { height: 7.25rem; border-radius: var(--radius-panel); background: var(--color-surface-sunken); }
+.mon-feed-skeleton span { height: 3.5rem; border-radius: var(--radius-xs); background: var(--color-surface-sunken); }
+.mon-chart-skeleton { height: 200px; border-radius: var(--radius-xs); background: var(--color-surface-sunken); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .mon-cards-skeleton span,
+  .mon-feed-skeleton span,
+  .mon-chart-skeleton { animation: mon-breathe 1.4s var(--ease-standard) infinite alternate; }
+}
+@keyframes mon-breathe { to { opacity: 0.55; } }
+
+/* ---------- График ---------- */
+
+.mon-chart { position: relative; display: grid; gap: var(--space-3); min-width: 0; }
+.mon-chart-canvas { position: relative; min-width: 0; border-radius: var(--radius-xs); }
+.mon-chart-canvas:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.mon-chart-canvas svg { display: block; max-width: 100%; height: auto; overflow: visible; }
+.mon-chart-grid { stroke: var(--blueprint-600); stroke-opacity: 0.18; stroke-dasharray: 2 4; }
+.mon-chart-base { stroke: var(--ink-1000); stroke-opacity: 0.55; }
+.mon-chart-axis { fill: var(--color-text-subtle); font: 10px var(--font-mono); letter-spacing: 0.04em; }
+.mon-bar { stroke: var(--color-surface); stroke-width: 1; transition: opacity var(--dur-fast) var(--ease-standard); }
+.is-dim .mon-bar { opacity: 0.35; }
+.mon-chart-hit { fill: transparent; cursor: crosshair; }
+.mon-chart-cursor { stroke: var(--ink-1000); stroke-opacity: 0.3; stroke-dasharray: 3 3; pointer-events: none; }
+.mon-chart-zero {
+  position: absolute;
+  inset: 0 0 26px 34px;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  color: var(--ok-700);
+  font: var(--weight-medium) var(--text-small)/1.4 var(--font-body);
+  pointer-events: none;
+}
+
+.mon-chart-tip {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  display: grid;
+  gap: 0.3rem;
+  min-width: 9.5rem;
+  max-width: 15rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--radius-xs);
+  background: var(--ink-1000);
+  color: var(--paper-000);
+  box-shadow: var(--shadow-overlay);
+  font-size: 0.75rem;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+.mon-chart-tip.is-left { transform: translateX(-0.75rem); }
+.mon-chart-tip.is-right { transform: translateX(calc(-100% + 0.75rem)); }
+.mon-chart-tip strong { font: var(--weight-semibold) 0.75rem/1.3 var(--font-mono); }
+.mon-chart-tip-total { font-weight: var(--weight-semibold); }
+.mon-chart-tip-row { display: flex; align-items: center; gap: 0.45rem; }
+.mon-chart-tip-row b { margin-left: auto; font-family: var(--font-mono); font-weight: var(--weight-semibold); }
+
+.mon-legend { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.mon-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.25rem;
+  padding: 0 0.85rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-text);
+  font: var(--weight-medium) 0.8125rem/1 var(--font-body);
+  cursor: pointer;
+  transition: var(--transition-control);
+}
+.mon-legend-item b { color: var(--color-text-muted); font: var(--weight-semibold) 0.6875rem/1 var(--font-mono); }
+.mon-legend-item:hover { border-color: var(--ink-1000); }
+.mon-legend-item:active { transform: scale(0.98); }
+.mon-legend-item:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.mon-legend-item[aria-pressed='false'] { color: var(--color-text-subtle); text-decoration: line-through; }
+.mon-legend-item[aria-pressed='false'] .mon-swatch { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ink-400); }
+
+.mon-chart-table summary,
+.mon-disclosure summary { width: fit-content; color: var(--color-text-muted); font-size: var(--text-small); cursor: pointer; }
+.mon-chart-table[open] summary { margin-bottom: var(--space-2); }
+
+/* ---------- Фильтры, групповые действия, строки ---------- */
+
+.mon-filters > .adm-field { flex: 0 1 9.5rem; }
+.mon-filters > .adm-field.is-grow { flex: 1 1 16rem; }
+.mon-route-input { display: block; min-width: 0; }
+
+.mon-bulkbar .mon-bulk-count { margin-right: auto; font: var(--weight-semibold) 0.75rem/1.2 var(--font-mono); letter-spacing: 0.04em; }
+
+.mon-error-title {
+  display: -webkit-box;
+  overflow: hidden;
+  max-width: 52ch;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.mon-error-meta {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-1) var(--space-3);
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-control);
-  font-size: var(--text-small);
+  gap: 0.3rem 0.5rem;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
 }
-.mon-manual-detail { flex-basis: 100%; overflow-wrap: anywhere; }
+.mon-mobile-only { display: none; }
 
-/* На телефоне сегменты не должны раздвигать страницу вбок. */
+.mon-more-cell { width: 1%; white-space: nowrap; }
+.mon-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 2.25rem;
+  padding: 0 0.7rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: none;
+  color: var(--color-text-muted);
+  font: var(--weight-medium) 0.8125rem/1 var(--font-body);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: var(--transition-control);
+}
+.mon-more svg { transition: transform var(--dur-fast) var(--ease-standard); }
+.adm-table tr.is-clickable:hover .mon-more,
+.mon-more:hover { border-color: var(--color-border); color: var(--color-strong); }
+.adm-table tr.is-clickable:hover .mon-more svg,
+.mon-more:hover svg { transform: translateX(2px); }
+.mon-more:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+/* ---------- Пустой список ---------- */
+
+.mon-empty {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  padding: var(--space-8) var(--space-4);
+  text-align: center;
+}
+.mon-empty-art { width: min(100%, 15.5rem); height: auto; margin-bottom: var(--space-2); }
+.mon-empty-grid { stroke: var(--blueprint-600); stroke-opacity: 0.18; stroke-width: 1; }
+.mon-empty-axis { stroke: var(--ink-400); stroke-width: 1; }
+.mon-empty-line { fill: none; stroke: var(--ok-500); stroke-width: 2.5; stroke-linecap: round; }
+.mon-empty-dot { fill: var(--ok-500); stroke: var(--color-surface); stroke-width: 3; }
+.mon-empty-title { margin: 0; color: var(--color-strong); font: var(--weight-bold) 1rem/1.25 var(--font-display); letter-spacing: -0.01em; text-transform: uppercase; }
+.mon-empty-status { display: inline-flex; align-items: center; gap: 0.4rem; margin: 0; font-weight: var(--weight-medium); }
+.mon-empty-status svg { flex: 0 0 auto; }
+.mon-empty-status.is-ok { color: var(--ok-700); }
+.mon-empty-status.is-warning { color: var(--warn-700); }
+.mon-empty-text { max-width: 46ch; margin: 0; color: var(--color-text-subtle); font-size: var(--text-small); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .mon-empty-line { stroke-dasharray: 200; animation: mon-draw 900ms var(--ease-out-expo) both; }
+}
+@keyframes mon-draw { from { stroke-dashoffset: 200; } to { stroke-dashoffset: 0; } }
+
+/* ---------- Хронология ---------- */
+
+.mon-timeline { display: grid; gap: var(--space-5); transition: opacity var(--dur-fast) var(--ease-standard); }
+.mon-timeline.is-stale { opacity: 0.6; }
+.mon-day-head {
+  margin: 0 0 var(--space-1);
+  padding-bottom: var(--space-2);
+  border-bottom: 2px solid var(--ink-1000);
+  color: var(--color-strong);
+  font: var(--weight-medium) 0.6875rem/1 var(--font-mono);
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+}
+.mon-feed { margin: 0; padding: 0; list-style: none; }
+.mon-feed li + li { border-top: 1px solid var(--color-border); }
+.mon-feed-item {
+  display: grid;
+  grid-template-columns: 4rem auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-standard);
+}
+.mon-feed-item:hover { background: color-mix(in oklch, var(--signal-500) 6%, transparent); }
+.mon-feed-item:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.mon-feed-item time { color: var(--color-text-subtle); font: var(--text-small)/1 var(--font-mono); }
+.mon-feed-main { display: grid; gap: 0.2rem; min-width: 0; }
+.mon-feed-main strong {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--color-strong);
+  font-weight: var(--weight-semibold);
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.mon-feed-meta { display: flex; flex-wrap: wrap; gap: 0.2rem 0.6rem; color: var(--color-text-muted); font-size: 0.75rem; }
+.mon-feed-meta .adm-mono { font-size: 0.75rem; overflow-wrap: anywhere; }
+.mon-feed-side { display: inline-flex; align-items: center; gap: 0.4rem; color: var(--color-text-subtle); }
+.mon-feed-more { display: flex; justify-content: center; }
+.mon-feed-end { margin: 0; color: var(--color-text-subtle); font-size: var(--text-small); text-align: center; }
+
+/* ---------- Подробности ошибки ---------- */
+
+.mon-drawer-top { display: grid; gap: var(--space-3); }
+.mon-days { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0; padding: 0; list-style: none; }
+.mon-days li {
+  display: grid;
+  justify-items: center;
+  gap: 0.15rem;
+  min-width: 3.1rem;
+  padding: 0.35rem 0.4rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xs);
+  color: var(--color-text-subtle);
+  font: 0.6875rem/1.2 var(--font-mono);
+}
+.mon-days b { color: var(--color-text); font-size: 0.8125rem; }
+.mon-days li.has-value { border-color: color-mix(in oklch, var(--error-500) 35%, transparent); background: var(--color-danger-soft); }
+.mon-days li.has-value b { color: var(--mon-danger-text); }
+
+.mon-event-card {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-surface);
+  background: var(--color-surface);
+}
+.mon-event-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--space-3); }
+.mon-event-head h3 { margin: 0; color: var(--color-strong); font: var(--weight-bold) 0.875rem/1.3 var(--font-display); letter-spacing: -0.01em; text-transform: uppercase; }
+.mon-event-pick { flex: 0 1 19rem; }
+.mon-message {
+  margin: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-xs);
+  background: var(--color-danger-soft);
+  color: var(--color-strong);
+  font: var(--weight-medium) var(--text-small)/1.5 var(--font-mono);
+  overflow-wrap: anywhere;
+}
+.mon-agent { display: grid; gap: 0.2rem; }
+.mon-agent small { color: var(--color-text-subtle); font-size: 0.6875rem; overflow-wrap: anywhere; }
+.mon-block { display: grid; gap: var(--space-2); min-width: 0; }
+.mon-block-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.mon-block-head .mon-subhead,
+.mon-block > .mon-subhead { margin: 0; }
+.mon-block > p { margin: 0; }
+
+.mon-repro {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-surface);
+}
+.mon-repro .mon-subhead { margin: 0; }
+.mon-repro ol { display: grid; gap: 0.4rem; margin: 0; padding-left: 1.25rem; font-size: var(--text-small); overflow-wrap: anywhere; }
+.mon-repro-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
+
+/* ---------- Светофор ---------- */
+
+.mon-lights-summary { margin: 0 0 var(--space-3); color: var(--color-text-muted); font-size: var(--text-small); }
+.mon-lights { display: grid; margin: 0; padding: 0; border-top: 1px solid var(--color-border); list-style: none; }
+.mon-light-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.mon-light { width: 0.875rem; height: 0.875rem; border-radius: 50%; }
+.mon-light.is-ok { background: var(--ok-500); box-shadow: 0 0 0 3px color-mix(in oklch, var(--ok-500) 22%, transparent); }
+.mon-light.is-warn { background: var(--warn-500); box-shadow: 0 0 0 3px color-mix(in oklch, var(--warn-500) 28%, transparent); }
+.mon-light.is-down { background: var(--error-500); box-shadow: 0 0 0 3px color-mix(in oklch, var(--error-500) 24%, transparent); }
+.mon-light-main { display: grid; gap: 0.15rem; min-width: 0; }
+.mon-light-main strong { color: var(--color-strong); font-weight: var(--weight-semibold); }
+.mon-light-state { color: var(--color-text-muted); font-size: var(--text-small); overflow-wrap: anywhere; }
+.mon-light-row.is-down .mon-light-state { color: var(--mon-danger-text); }
+.mon-light-row.is-warn .mon-light-state { color: var(--warn-700); }
+.mon-light-facts { display: flex; gap: var(--space-4); margin: 0; }
+.mon-light-facts div { display: grid; gap: 0.2rem; text-align: right; }
+.mon-light-facts dt { color: var(--color-text-subtle); font: var(--weight-medium) 0.625rem/1 var(--font-mono); letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; white-space: nowrap; }
+.mon-light-facts dd { margin: 0; color: var(--color-text); font: 0.8125rem/1.2 var(--font-mono); white-space: nowrap; }
+
+/* Селектор с .mon-light-facts: иначе «div { display: grid }» выше
+   перебивает скрытие, и колонки доступности раздвигают телефон вбок. */
+@media (max-width: 1100px) {
+  .mon-light-facts .mon-light-uptime { display: none; }
+}
+
+@media (max-width: 900px) {
+  .mon-cards .adm-stat-grid,
+  .mon-cards-skeleton { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* На телефоне ничего не должно раздвигать страницу вбок. */
 @media (max-width: 640px) {
   .adm-toolbar > .adm-segmented { max-width: 100%; }
+  .mon-errors-head { justify-content: flex-start; }
   .mon-error-title { max-width: none; }
+  .mon-mobile-only { display: inline-flex; }
+  .mon-filters > .adm-field,
+  .mon-filters > .adm-field.is-grow { flex: 1 1 100%; }
+  .mon-alert { flex-wrap: wrap; }
+  .mon-alert .adm-button { margin-left: calc(22px + var(--space-3)); }
+  .mon-more span { display: none; }
+  .mon-more { padding: 0 0.5rem; }
+  .mon-feed-item { grid-template-columns: auto minmax(0, 1fr); gap: var(--space-1) var(--space-3); }
+  .mon-feed-item time { grid-column: 1 / -1; }
+  .mon-feed-side { grid-column: 2; }
+  .mon-light-row { grid-template-columns: auto minmax(0, 1fr); }
+  .mon-light-facts { grid-column: 2; }
+  .mon-light-facts div { text-align: left; }
+  .mon-event-card { padding: var(--space-3); }
+  .mon-tip { max-width: 13rem; }
 }

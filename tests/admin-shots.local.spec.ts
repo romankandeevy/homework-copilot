@@ -16,7 +16,7 @@ for (const [label, viewport] of [['desktop', { width: 1440, height: 900 }], ['mo
     await page.setViewportSize(viewport)
     await signIn(page)
     for (const section of sections) {
-      if (label === 'mobile' && !['dashboard', 'users', 'support'].includes(section)) continue
+      if (label === 'mobile' && !['dashboard', 'users', 'support', 'monitoring'].includes(section)) continue
       await page.goto(section === 'dashboard' ? '/admin' : `/admin?section=${section}`)
       await page.waitForTimeout(1200)
       await page.screenshot({ path: `${dir}/${label}-${section}.png`, fullPage: label === 'desktop' })

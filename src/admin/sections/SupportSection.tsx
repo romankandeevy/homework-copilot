@@ -2,33 +2,41 @@
 
    Чтение и запись - только через admin_support_* RPC. Живость - Realtime:
    агенту со вторым фактором RLS открывает таблицы обращений, поэтому
-   postgres_changes доходят сюда напрямую. «Печатает» идёт широковещанием
-   по каналу support-typing:<id> - его же слушает окно поддержки ученика. */
+   postgres_changes доходят сюда напрямую; сигнал admin-live из каркаса
+   (signals.pulse) и тихий опрос раз в 45 секунд - запасной путь, кнопки
+   «Обновить» нет. «Печатает» идёт широковещанием по каналу
+   support-typing:<id> - его же слушает окно поддержки ученика.
+
+   Без выбранного обращения - широкий список и сводка; с выбранным -
+   список, переписка и карточка ученика; на телефоне по одной колонке. */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { FormEvent } from 'react'
+import type { FormEvent, MouseEvent as ReactMouseEvent } from 'react'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import {
-  ArrowClockwise,
   ArrowLeft,
+  ArrowRight,
   ArrowSquareOut,
-  Bell,
-  BellRinging,
-  ChatCircleText,
   Check,
+  CheckCircle,
   Checks,
   Clock,
+  DownloadSimple,
   FileText,
   Gift,
+  Keyboard,
   NotePencil,
   PaperPlaneTilt,
   Paperclip,
   PencilSimple,
   Plus,
+  Printer,
   Star,
   Trash,
   UserCircle,
   UserPlus,
+  WarningOctagon,
+  X,
 } from '@phosphor-icons/react'
 import type { Json } from '../../lib/database.types'
 import { keyed } from '../../lib/listKeys'
@@ -38,6 +46,7 @@ import {
   adminRpc,
   arr,
   bool,
+  downloadCsv,
   formatDate,
   formatDateTime,
   formatDuration,
@@ -48,9 +57,9 @@ import {
   numOrNull,
   obj,
   relativeTime,
-  rows,
   str,
   strOrNull,
+  todayMsk,
 } from '../api'
 import type { Row } from '../api'
 import {
@@ -70,238 +79,87 @@ import {
   useQueryState,
   useToast,
 } from '../ui'
-import type { Tone } from '../ui'
 import { useAdmin } from '../context'
+import {
+  APPROVAL_PHRASE,
+  EXPORT_LIMIT,
+  EXPORT_PAGE_SIZE,
+  PAGE_SIZE,
+  SUPPORT_TAGS,
+  asPeriod,
+  categoryLabels,
+  clip,
+  fillTemplate,
+  ideaDecision,
+  inboxCsvColumns,
+  neighbourId,
+  parseInbox,
+  parseStats,
+  parseThread,
+  periodOptions,
+  periodPhrases,
+  plural,
+  priorityLabels,
+  priorityOrder,
+  priorityTones,
+  resolveHotkey,
+  riskLabels,
+  riskTones,
+  statusFilterOptions,
+  statusLabels,
+  statusTones,
+  tagLabel,
+  taskStatusLabels,
+  taskStatusTones,
+  timeOf,
+  updatedAgo,
+  waitingMinutes,
+} from './supportModel'
+import type {
+  Agent,
+  Inbox,
+  InboxCounts,
+  InboxItem,
+  RecentTask,
+  SupportHotkey,
+  SupportPeriod,
+  SupportTag,
+  Template,
+  Thread,
+  ThreadConversation,
+} from './supportModel'
+import { InboxEmptyArt, PickConversationArt } from './SupportIllustrations'
+import { ShortcutKeys, ShortcutList, ShortcutsModal } from './SupportShortcuts'
+import { SupportStatsPanel } from './SupportStats'
 import './support.css'
 
-const PAGE_SIZE = 30
 const TYPING_SEND_MS = 2000
 const TYPING_SHOW_MS = 4000
-const APPROVAL_PHRASE = 'да это хорошая идея'
+const POLL_MS = 45_000
 
-const statusFilterOptions = [
-  { value: 'open', label: 'Открытые' },
-  { value: 'pending_owner', label: 'Ждут ответа' },
-  { value: 'pending_user', label: 'Ждут ученика' },
-  { value: 'resolved', label: 'Закрытые' },
-  { value: 'all', label: 'Все' },
-]
-
-const statusLabels: Record<string, string> = { pending_owner: 'Ждёт ответа', pending_user: 'Ждём ученика', resolved: 'Закрыто' }
-const statusTones: Record<string, Tone> = { pending_owner: 'warning', pending_user: 'info', resolved: 'success' }
-const priorityOrder = ['urgent', 'high', 'normal', 'low']
-const priorityLabels: Record<string, string> = { urgent: 'Срочный', high: 'Высокий', normal: 'Обычный', low: 'Низкий' }
-const priorityTones: Record<string, Tone> = { urgent: 'danger', high: 'warning', normal: 'neutral', low: 'neutral' }
-const categoryLabels: Record<string, string> = { general: 'Общий вопрос', payment: 'Оплата и баланс', feature: 'Идея', wrong_solution: 'Неверное решение' }
-const taskStatusLabels: Record<string, string> = { queued: 'В очереди', running: 'Решается', done: 'Готово', failed: 'Ошибка' }
-const taskStatusTones: Record<string, Tone> = { queued: 'neutral', running: 'info', done: 'success', failed: 'danger' }
-const riskLabels: Record<string, string> = { high: 'высокий риск', medium: 'средний риск', low: 'низкий риск' }
-const riskTones: Record<string, Tone> = { high: 'danger', medium: 'warning', low: 'neutral' }
-
-/* ---------- Данные ---------- */
-
-type Agent = { id: string; email: string; role: string }
-
-type InboxItem = {
-  id: string
-  userId: string
-  email: string
-  fullName: string
-  category: string
-  subject: string
-  status: string
-  priority: string
-  assignedTo: string | null
-  assignedEmail: string | null
-  lastMessageAt: string
-  lastUserMessageAt: string | null
-  rating: number | null
-  lastMessage: string
-  lastAuthor: string
-  unread: number
+const defaultQuery = {
+  s_status: 'open',
+  s_assignee: 'all',
+  s_priority: 'all',
+  s_tag: 'all',
+  s_period: 'all',
+  s_overdue: '',
+  s_q: '',
+  s_page: '1',
+  conversation: '',
 }
 
-type Inbox = { total: number; slaMinutes: number; agents: Agent[]; items: InboxItem[] }
+type SupportQuery = typeof defaultQuery
 
-type ThreadConversation = {
-  id: string
-  category: string
-  subject: string
-  status: string
-  priority: string
-  assignedTo: string | null
-  userLastReadAt: string | null
-  lastUserMessageAt: string | null
-  createdAt: string
-  rating: number | null
-  ratingComment: string | null
-  ratedAt: string | null
-  slaMinutes: number
-  context: Row
-}
-
-type ThreadMessage = { id: string; authorType: 'user' | 'owner'; authorEmail: string | null; body: string; createdAt: string }
-type ThreadNote = { id: string; body: string; attachment: Row | null; authorEmail: string | null; createdAt: string }
-type ThreadUser = { id: string; email: string; fullName: string; grade: string; balance: number; planTitle: string; isBanned: boolean; createdAt: string }
-type RecentTask = { key: string; subject: string; task: string; preview: string; status: string; error: string | null; createdAt: string; logId: string | null }
-type Template = { id: string; title: string; body: string }
-
-type Thread = {
-  conversation: ThreadConversation
-  messages: ThreadMessage[]
-  notes: ThreadNote[]
-  user: ThreadUser | null
-  recentTasks: RecentTask[]
-  flags: { ruleId: string; risk: string; explanation: string; status: string }[]
-  walletEntries: { id: string; amount: number; description: string; createdAt: string }[]
-  ideaApproval: { status: string; credited: boolean }
-  templates: Template[]
-}
-
-function parseInbox(value: Json): Inbox {
-  const source = obj(value)
-  return {
-    total: num(source.total),
-    slaMinutes: num(source.slaMinutes, 30),
-    agents: rows(source.agents).map((row) => ({ id: str(row.id), email: str(row.email), role: str(row.role) })),
-    items: rows(source.items).map((row): InboxItem => ({
-      id: str(row.id),
-      userId: str(row.userId),
-      email: str(row.email),
-      fullName: str(row.fullName),
-      category: str(row.category, 'general'),
-      subject: str(row.subject, 'Обращение'),
-      status: str(row.status, 'pending_owner'),
-      priority: str(row.priority, 'normal'),
-      assignedTo: strOrNull(row.assignedTo),
-      assignedEmail: strOrNull(row.assignedEmail),
-      lastMessageAt: str(row.lastMessageAt),
-      lastUserMessageAt: strOrNull(row.lastUserMessageAt),
-      rating: numOrNull(row.rating),
-      lastMessage: str(row.lastMessage),
-      lastAuthor: str(row.lastAuthor),
-      unread: num(row.unread),
-    })),
-  }
-}
-
-function gradeText(value: Json | undefined) {
-  if (typeof value === 'number') return String(value)
-  return str(value)
-}
-
-function parseThread(value: Json): Thread | null {
-  const source = obj(value)
-  // conversation - это to_jsonb строки таблицы, поэтому ключи в snake_case.
-  const conversation = obj(source.conversation)
-  const id = str(conversation.id)
-  if (!id) return null
-  const user = isRecord(source.user) ? source.user : null
-  const approval = obj(source.ideaApproval)
-  return {
-    conversation: {
-      id,
-      category: str(conversation.category, 'general'),
-      subject: str(conversation.subject, 'Обращение'),
-      status: str(conversation.status, 'pending_owner'),
-      priority: str(conversation.priority, 'normal'),
-      assignedTo: strOrNull(conversation.assigned_to),
-      userLastReadAt: strOrNull(conversation.user_last_read_at),
-      lastUserMessageAt: strOrNull(conversation.last_user_message_at),
-      createdAt: str(conversation.created_at),
-      rating: numOrNull(conversation.rating),
-      ratingComment: strOrNull(conversation.rating_comment),
-      ratedAt: strOrNull(conversation.rated_at),
-      slaMinutes: num(conversation.slaMinutes, 30),
-      context: obj(conversation.context),
-    },
-    messages: rows(source.messages).map((row): ThreadMessage => ({
-      id: str(row.id),
-      authorType: str(row.authorType) === 'owner' ? 'owner' : 'user',
-      authorEmail: strOrNull(row.authorEmail),
-      body: str(row.body),
-      createdAt: str(row.createdAt),
-    })),
-    notes: rows(source.notes).map((row): ThreadNote => ({
-      id: str(row.id),
-      body: str(row.body),
-      attachment: isRecord(row.attachment) ? row.attachment : null,
-      authorEmail: strOrNull(row.authorEmail),
-      createdAt: str(row.createdAt),
-    })),
-    user: user ? {
-      id: str(user.id),
-      email: str(user.email),
-      fullName: str(user.fullName),
-      grade: gradeText(user.grade),
-      balance: num(user.balance),
-      planTitle: str(user.planTitle),
-      isBanned: bool(user.isBanned),
-      createdAt: str(user.createdAt),
-    } : null,
-    recentTasks: rows(source.recentTasks).map((row): RecentTask => ({
-      key: str(row.key),
-      subject: str(row.subject),
-      task: str(row.task),
-      preview: str(row.preview),
-      status: str(row.status),
-      error: strOrNull(row.error),
-      createdAt: str(row.createdAt),
-      logId: strOrNull(row.logId),
-    })),
-    flags: rows(source.flags).map((row) => ({ ruleId: str(row.ruleId), risk: str(row.risk), explanation: str(row.explanation), status: str(row.status) })),
-    walletEntries: rows(source.walletEntries).map((row) => ({ id: str(row.id), amount: num(row.amount), description: str(row.description), createdAt: str(row.createdAt) })),
-    ideaApproval: { status: str(approval.status, 'pending'), credited: bool(approval.credited) },
-    templates: rows(source.templates).map((row) => ({ id: str(row.id), title: str(row.title), body: str(row.body) })),
-  }
+const emptyTitles: Record<string, string> = {
+  open: 'Открытых обращений нет',
+  pending_owner: 'Никто не ждёт ответа',
+  pending_user: 'Ответа учеников не ждём',
+  resolved: 'Закрытых обращений нет',
+  all: 'Обращений ещё не было',
 }
 
 /* ---------- Помощники ---------- */
-
-function timeOf(value: string | null | undefined) {
-  if (!value) return Number.NaN
-  return new Date(value).getTime()
-}
-
-function clip(text: string, max: number) {
-  return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text
-}
-
-function waitingMinutes(status: string, lastUserMessageAt: string | null, now: number) {
-  if (status !== 'pending_owner') return null
-  const started = timeOf(lastUserMessageAt)
-  if (!Number.isFinite(started)) return null
-  return Math.max(0, Math.floor((now - started) / 60_000))
-}
-
-// Зеркало private.normalize_support_idea_approval: та же чистка, что в базе.
-function normalizeApproval(value: string) {
-  return value.toLowerCase().replaceAll('ё', 'е').replace(/[^a-z0-9а-я\s]+/g, ' ').replace(/\s+/g, ' ').trim()
-}
-
-function ideaDecision(thread: Thread): 'approved' | 'rejected' | 'pending' {
-  if (thread.ideaApproval.status === 'rejected') return 'rejected'
-  if (thread.ideaApproval.status === 'approved') return 'approved'
-  // admin_support_thread читает решение только из таблицы решений, а её
-  // пишет лишь кнопка в Telegram. Ответ фразой одобрения база при начислении
-  // тоже принимает (admin_credit_feature_balance), поэтому смотрим и в
-  // переписку - иначе после ответа из админки форма не открылась бы.
-  return thread.messages.some((message) => message.authorType === 'owner' && normalizeApproval(message.body) === APPROVAL_PHRASE)
-    ? 'approved'
-    : 'pending'
-}
-
-function fillTemplate(body: string, thread: Thread | null) {
-  const user = thread?.user
-  const lastTask = thread?.recentTasks[0]
-  const values: Record<string, string> = {
-    name: user ? (user.fullName.trim() || user.email) : '',
-    email: user?.email ?? '',
-    balance: user ? formatKopecks(user.balance) : '',
-    lastTask: lastTask ? clip(lastTask.preview || lastTask.task || lastTask.subject, 120) : '',
-  }
-  return body.replace(/\{\{\s*(name|email|balance|lastTask)\s*\}\}/g, (_match, key: string) => values[key] ?? '')
-}
 
 function useNow(intervalMs: number) {
   const [now, setNow] = useState(() => Date.now())
@@ -310,6 +168,39 @@ function useNow(intervalMs: number) {
     return () => window.clearInterval(timer)
   }, [intervalMs])
   return now
+}
+
+type LiveState<T> = { data: T | null; error: string; loading: boolean; updatedAt: number }
+
+/* Загрузка с тихим обновлением: фоновые обновления не гасят список и не
+   показывают ошибку поверх данных, которые уже на экране. */
+function useLiveData<T>(loader: () => Promise<T>, key: string, enabled = true) {
+  const [state, setState] = useState<LiveState<T>>({ data: null, error: '', loading: enabled, updatedAt: 0 })
+  const loaderRef = useRef(loader)
+  loaderRef.current = loader
+  const ticket = useRef(0)
+
+  const load = useCallback(async (silent: boolean) => {
+    const current = ++ticket.current
+    if (!silent) setState((previous) => ({ ...previous, loading: true, error: '' }))
+    try {
+      const data = await loaderRef.current()
+      if (current !== ticket.current) return
+      setState({ data, error: '', loading: false, updatedAt: Date.now() })
+    } catch (failure) {
+      if (current !== ticket.current) return
+      const message = failure instanceof Error ? failure.message : 'Не получилось загрузить данные.'
+      setState((previous) => ({ ...previous, loading: false, error: silent && previous.data ? previous.error : message }))
+    }
+  }, [])
+
+  useEffect(() => {
+    if (enabled) void load(false)
+  }, [key, enabled, load])
+
+  const refresh = useCallback(() => { void load(true) }, [load])
+  const reload = useCallback(() => { void load(false) }, [load])
+  return { ...state, refresh, reload }
 }
 
 /* Звук без файлов: короткий двухтоновый сигнал через WebAudio. */
@@ -346,6 +237,7 @@ function playBeep(ref: { current: AudioContext | null }) {
    сработает. Старый канал снимаем до создания нового. */
 function useSupportTyping(conversationId: string | null) {
   const channelRef = useRef<RealtimeChannel | null>(null)
+  const joinedRef = useRef(false)
   const lastSentRef = useRef(0)
   const [peer, setPeer] = useState<{ id: string; at: number } | null>(null)
 
@@ -365,13 +257,14 @@ function useSupportTyping(conversationId: string | null) {
           const from = isRecord(payload as Json) ? (payload as Row).from : undefined
           if (from === 'user') setPeer({ id: conversationId, at: Date.now() })
         })
-        .subscribe()
+        .subscribe((status) => { joinedRef.current = status === 'SUBSCRIBED' })
       channelRef.current = channel
     }
     void open()
     return () => {
       cancelled = true
       channelRef.current = null
+      joinedRef.current = false
       if (channel) void client.removeChannel(channel)
     }
   }, [conversationId])
@@ -385,7 +278,9 @@ function useSupportTyping(conversationId: string | null) {
   const notifyTyping = useCallback(() => {
     const channel = channelRef.current
     const now = Date.now()
-    if (!channel || now - lastSentRef.current < TYPING_SEND_MS) return
+    // Без подключённого канала supabase-js шлёт «печатает» запросом по HTTP -
+    // для подсказки, которая живёт 4 секунды, это лишний трафик и ошибки.
+    if (!channel || !joinedRef.current || now - lastSentRef.current < TYPING_SEND_MS) return
     lastSentRef.current = now
     void channel.send({ type: 'broadcast', event: 'typing', payload: { from: 'owner', at: now } })
   }, [])
@@ -395,20 +290,71 @@ function useSupportTyping(conversationId: string | null) {
   return { peerTyping: peer !== null && peer.id === conversationId, notifyTyping, clearPeer }
 }
 
+function inboxArgs(query: SupportQuery, page: number, pageSize: number) {
+  return {
+    p_status: query.s_status,
+    p_assignee: query.s_assignee === 'all' ? null : query.s_assignee,
+    p_priority: query.s_priority === 'all' ? null : query.s_priority,
+    p_tag: query.s_tag === 'all' ? null : query.s_tag,
+    p_period: asPeriod(query.s_period),
+    p_overdue: query.s_overdue === '1',
+    p_search: query.s_q,
+    p_page: page,
+    p_page_size: pageSize,
+  }
+}
+
+function filterSummary(query: SupportQuery, agents: Agent[]) {
+  const assignee = query.s_assignee === 'all' ? null
+    : query.s_assignee === 'me' ? 'назначено мне'
+      : query.s_assignee === 'none' ? 'без назначения'
+        : `назначено ${agents.find((agent) => agent.id === query.s_assignee)?.email ?? 'администратору'}`
+  return [
+    statusFilterOptions.find((option) => option.value === query.s_status)?.label ?? query.s_status,
+    `созданы ${periodPhrases[asPeriod(query.s_period)]}`,
+    query.s_overdue === '1' ? 'только просроченные по SLA' : null,
+    assignee,
+    query.s_priority !== 'all' ? `приоритет «${priorityLabels[query.s_priority] ?? query.s_priority}»` : null,
+    query.s_tag !== 'all' ? `метка «${tagLabel(query.s_tag)}»` : null,
+    query.s_q ? `поиск «${query.s_q}»` : null,
+  ].filter(Boolean).join(', ')
+}
+
+type PrintKind = 'list' | 'thread'
+
+function startPrint(kind: PrintKind) {
+  const root = document.documentElement
+  root.dataset.supPrint = kind
+  const done = () => {
+    delete root.dataset.supPrint
+    window.removeEventListener('afterprint', done)
+  }
+  window.addEventListener('afterprint', done)
+  window.print()
+}
+
 /* ---------- Раздел ---------- */
 
 export default function SupportSection() {
-  const { access, openUser, refreshSignals } = useAdmin()
-  const [query, setQuery] = useQueryState({ s_status: 'open', s_assignee: 'all', s_priority: 'all', s_q: '', s_page: '1', conversation: '' })
+  const { access, openUser, refreshSignals, signals } = useAdmin()
+  const toast = useToast()
+  const [query, setQuery] = useQueryState(defaultQuery)
   const conversationId = query.conversation
   const page = Math.max(1, Math.floor(Number(query.s_page)) || 1)
+  const period: SupportPeriod = asPeriod(query.s_period)
   const now = useNow(30_000)
-  const [mobileView, setMobileView] = useState<'inbox' | 'thread' | 'card'>(query.conversation ? 'thread' : 'inbox')
+  const [mobileView, setMobileView] = useState<'thread' | 'card'>('thread')
   const view = conversationId ? mobileView : 'inbox'
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [templatesOpen, setTemplatesOpen] = useState(false)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [logId, setLogId] = useState<string | null>(null)
-  const [permission, setPermission] = useState<NotificationPermission | 'unsupported'>(() => (typeof Notification === 'undefined' ? 'unsupported' : Notification.permission))
+  const [selected, setSelected] = useState<Set<string>>(() => new Set())
+  const [live, setLive] = useState(false)
+  const [exporting, setExporting] = useState<'csv' | 'print' | null>(null)
+  const [printSheet, setPrintSheet] = useState<{ items: InboxItem[]; total: number } | null>(null)
+  const bulkAction = useAction()
+  const threadAction = useAction()
 
   const refreshSignalsRef = useRef(refreshSignals)
   refreshSignalsRef.current = refreshSignals
@@ -423,15 +369,9 @@ export default function SupportSection() {
     return () => window.clearTimeout(timer)
   }, [searchDraft, setQuery])
 
-  const inbox = useAsync(() => adminRpc<Json>('admin_support_inbox', {
-    p_status: query.s_status,
-    p_assignee: query.s_assignee === 'all' ? null : query.s_assignee,
-    p_priority: query.s_priority === 'all' ? null : query.s_priority,
-    p_search: query.s_q,
-    p_page: page,
-    p_page_size: PAGE_SIZE,
-  }).then(parseInbox), [query.s_status, query.s_assignee, query.s_priority, query.s_q, page])
-  const reloadInbox = inbox.reload
+  const listArgs = inboxArgs(query, page, PAGE_SIZE)
+  const inbox = useLiveData(() => adminRpc<Json>('admin_support_inbox', listArgs).then(parseInbox), JSON.stringify(listArgs))
+  const stats = useLiveData(() => adminRpc<Json>('admin_support_stats', { p_period: period }).then(parseStats), period, !conversationId)
 
   /* ---------- Переписка ---------- */
 
@@ -473,11 +413,21 @@ export default function SupportSection() {
 
   /* ---------- Обновления ---------- */
 
+  const refreshInboxRef = useRef(inbox.refresh)
+  refreshInboxRef.current = inbox.refresh
+  const refreshStatsRef = useRef(stats.refresh)
+  refreshStatsRef.current = stats.refresh
+  const conversationRef = useRef(conversationId)
+  conversationRef.current = conversationId
+
   const timers = useRef({ inbox: 0, thread: 0 })
   const scheduleInbox = useCallback(() => {
     window.clearTimeout(timers.current.inbox)
-    timers.current.inbox = window.setTimeout(reloadInbox, 500)
-  }, [reloadInbox])
+    timers.current.inbox = window.setTimeout(() => {
+      refreshInboxRef.current()
+      if (!conversationRef.current) refreshStatsRef.current()
+    }, 500)
+  }, [])
   const scheduleThread = useCallback((id: string) => {
     window.clearTimeout(timers.current.thread)
     timers.current.thread = window.setTimeout(() => { void loadThread(id, true) }, 250)
@@ -490,20 +440,49 @@ export default function SupportSection() {
     }
   }, [])
 
+  // Сигнал каркаса: новое сообщение, смена обращения, новая ошибка.
+  const pulse = signals.pulse
+  useEffect(() => {
+    if (pulse) scheduleInbox()
+  }, [pulse, scheduleInbox])
+
+  // Запасной путь, если Realtime отвалился: тихий опрос видимой вкладки.
+  useEffect(() => {
+    const poll = () => {
+      if (document.visibilityState !== 'visible') return
+      refreshInboxRef.current()
+      const current = conversationRef.current
+      if (current) void loadThread(current, true)
+      else refreshStatsRef.current()
+    }
+    const timer = window.setInterval(poll, POLL_MS)
+    document.addEventListener('visibilitychange', poll)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', poll)
+    }
+  }, [loadThread])
+
   const afterChange = useCallback(() => {
-    if (conversationId) void loadThread(conversationId, true)
+    const current = conversationRef.current
+    if (current) void loadThread(current, true)
     scheduleInbox()
     refreshSignalsRef.current()
-  }, [conversationId, loadThread, scheduleInbox])
+  }, [loadThread, scheduleInbox])
 
   const typing = useSupportTyping(conversationId || null)
 
   const openConversation = useCallback((id: string) => {
     setQuery({ conversation: id })
     setMobileView('thread')
+    window.requestAnimationFrame(() => {
+      document.querySelector(`[data-conversation="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'nearest' })
+    })
   }, [setQuery])
 
-  /* ---------- Звук и уведомления ---------- */
+  const closeConversation = useCallback(() => setQuery({ conversation: '' }), [setQuery])
+
+  /* ---------- Звук и системные уведомления ---------- */
 
   const audioRef = useRef<AudioContext | null>(null)
   useEffect(() => {
@@ -524,6 +503,7 @@ export default function SupportSection() {
   const inboxItemsRef = useRef<InboxItem[]>([])
   inboxItemsRef.current = inbox.data?.items ?? []
 
+  // Разрешение включают в разделе «Уведомления» (BrowserNotificationsPanel).
   const showNotification = (target: string, body: string) => {
     if (typeof Notification === 'undefined' || Notification.permission !== 'granted' || document.visibilityState === 'visible') return
     const item = inboxItemsRef.current.find((entry) => entry.id === target)
@@ -542,15 +522,8 @@ export default function SupportSection() {
     }
   }
 
-  const requestNotifications = () => {
-    if (typeof Notification === 'undefined') return
-    void Notification.requestPermission().then(setPermission)
-  }
-
   /* ---------- Realtime ---------- */
 
-  const conversationRef = useRef(conversationId)
-  conversationRef.current = conversationId
   const pendingRead = useRef(false)
 
   const onRealtime = useRef<(kind: 'message' | 'conversation', row: Record<string, unknown>) => void>(() => undefined)
@@ -591,7 +564,7 @@ export default function SupportSection() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'support_conversations' }, (payload) => {
         onRealtime.current('conversation', { ...payload.old, ...payload.new })
       })
-      .subscribe()
+      .subscribe((status) => setLive(status === 'SUBSCRIBED'))
     return () => { void client.removeChannel(channel) }
   }, [])
 
@@ -605,6 +578,175 @@ export default function SupportSection() {
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [markRead])
 
+  /* ---------- Печать через Ctrl+P тоже даёт печатную версию ---------- */
+
+  useEffect(() => {
+    const before = () => {
+      const root = document.documentElement
+      if (!root.dataset.supPrint) root.dataset.supPrint = conversationRef.current ? 'thread' : 'list'
+    }
+    const after = () => { delete document.documentElement.dataset.supPrint }
+    window.addEventListener('beforeprint', before)
+    window.addEventListener('afterprint', after)
+    return () => {
+      window.removeEventListener('beforeprint', before)
+      window.removeEventListener('afterprint', after)
+      delete document.documentElement.dataset.supPrint
+    }
+  }, [])
+
+  /* ---------- Производные ---------- */
+
+  const inboxData = inbox.data
+  const sla = inboxData?.slaMinutes ?? 30
+  const items = inboxData?.items ?? []
+  const counts: InboxCounts | null = inboxData?.counts ?? null
+  const overdueTotal = counts?.overdue ?? items.filter((item) => {
+    const waiting = waitingMinutes(item.status, item.lastUserMessageAt, now)
+    return waiting !== null && waiting >= sla
+  }).length
+  const inboxItem = items.find((item) => item.id === conversationId) ?? null
+  const draft = conversationId ? drafts[conversationId] ?? '' : ''
+  const setDraft = (value: string) => {
+    if (conversationId) setDrafts((current) => ({ ...current, [conversationId]: value }))
+  }
+  const narrowed = query.s_assignee !== 'all' || query.s_priority !== 'all' || query.s_tag !== 'all' || query.s_period !== 'all' || query.s_overdue === '1' || query.s_q !== ''
+  const selectedIds = items.filter((item) => selected.has(item.id)).map((item) => item.id)
+
+  /* ---------- Действия ---------- */
+
+  const onFilter = (patch: Partial<SupportQuery>) => {
+    setQuery({ ...patch, s_page: '1' })
+    setSelected(new Set())
+  }
+
+  const resetFilters = () => {
+    setSearchDraft('')
+    onFilter({ s_assignee: 'all', s_priority: 'all', s_tag: 'all', s_period: 'all', s_overdue: '', s_q: '' })
+  }
+
+  const toggleSelected = (id: string) => {
+    setSelected((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleAll = () => {
+    setSelected((current) => {
+      const all = items.length > 0 && items.every((item) => current.has(item.id))
+      return all ? new Set() : new Set(items.map((item) => item.id))
+    })
+  }
+
+  const runBulk = async (key: string, patch: Record<string, unknown>, verb: string) => {
+    if (!selectedIds.length) return
+    const result = await bulkAction.run(key, () => adminRpc<Json>('admin_support_bulk_update', { p_conversation_ids: selectedIds, ...patch }), (data) => {
+      const report = obj(data)
+      const updated = num(report.updated)
+      const requested = num(report.requested, selectedIds.length)
+      const rest = requested - updated
+      return `${verb}: ${formatNumber(updated)} ${plural(updated, 'обращение', 'обращения', 'обращений')}${rest > 0 ? `, ещё ${formatNumber(rest)} уже были такими` : ''}`
+    })
+    if (result === undefined) return
+    setSelected(new Set())
+    afterChange()
+  }
+
+  const resolveCurrent = async () => {
+    if (!activeThread || activeThread.conversation.status === 'resolved' || threadAction.pending) return
+    const result = await threadAction.run('resolve', () => adminRpc('admin_support_update', { p_conversation_id: activeThread.conversation.id, p_status: 'resolved' }), 'Обращение закрыто')
+    if (result !== undefined) afterChange()
+  }
+
+  const fetchAll = async () => {
+    const all: InboxItem[] = []
+    let total = 0
+    for (let next = 1; next <= Math.ceil(EXPORT_LIMIT / EXPORT_PAGE_SIZE); next += 1) {
+      // Страницы по очереди: база отдаёт не больше 200 строк за вызов.
+      // eslint-disable-next-line no-await-in-loop
+      const chunk: Inbox = parseInbox(await adminRpc<Json>('admin_support_inbox', inboxArgs(query, next, EXPORT_PAGE_SIZE)))
+      total = chunk.total
+      all.push(...chunk.items)
+      if (chunk.items.length < EXPORT_PAGE_SIZE || all.length >= total) break
+    }
+    return { items: all.slice(0, EXPORT_LIMIT), total }
+  }
+
+  const exportCsv = async () => {
+    setExporting('csv')
+    try {
+      const { items: rowsForCsv, total } = await fetchAll()
+      if (!rowsForCsv.length) {
+        toast.info('Под эти фильтры обращений нет - выгружать нечего.')
+        return
+      }
+      downloadCsv(`support-${todayMsk()}`, rowsForCsv, inboxCsvColumns)
+      toast.success(total > rowsForCsv.length
+        ? `Выгружены первые ${formatNumber(rowsForCsv.length)} из ${formatNumber(total)} обращений.`
+        : `Выгружено ${formatNumber(rowsForCsv.length)} ${plural(rowsForCsv.length, 'обращение', 'обращения', 'обращений')}.`)
+    } catch (failure) {
+      toast.error(failure instanceof Error ? failure.message : 'Не получилось выгрузить обращения.')
+    } finally {
+      setExporting(null)
+    }
+  }
+
+  const printView = async () => {
+    if (conversationId) {
+      startPrint('thread')
+      return
+    }
+    setExporting('print')
+    try {
+      setPrintSheet(await fetchAll())
+      // Печатная таблица должна успеть отрисоваться до окна печати.
+      window.setTimeout(() => startPrint('list'), 60)
+    } catch (failure) {
+      toast.error(failure instanceof Error ? failure.message : 'Не получилось подготовить печать.')
+    } finally {
+      setExporting(null)
+    }
+  }
+
+  /* ---------- Горячие клавиши ---------- */
+
+  const hotkeyRef = useRef<(action: SupportHotkey) => void>(() => undefined)
+  hotkeyRef.current = (action) => {
+    if (action === 'help') {
+      setShortcutsOpen(true)
+      return
+    }
+    if (action === 'next' || action === 'prev') {
+      const target = neighbourId(items.map((item) => item.id), conversationId, action === 'next' ? 1 : -1)
+      if (target) openConversation(target)
+      return
+    }
+    if (!conversationId) return
+    if (action === 'back') closeConversation()
+    else if (action === 'resolve') void resolveCurrent()
+    else if (action === 'reply') {
+      setMobileView('thread')
+      window.requestAnimationFrame(() => document.getElementById(`sup-reply-${conversationId}`)?.focus())
+    }
+  }
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return
+      // Поверх открыто окно или быстрый переход - клавиши принадлежат им.
+      if (document.querySelector('.adm-overlay')) return
+      const action = resolveHotkey(event, event.target)
+      if (!action || (action === 'resolve' && event.repeat)) return
+      event.preventDefault()
+      hotkeyRef.current(action)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   /* ---------- Отрисовка ---------- */
 
   if (!supabase) {
@@ -616,143 +758,224 @@ export default function SupportSection() {
     )
   }
 
-  const inboxData = inbox.data
-  const inboxSla = inboxData?.slaMinutes ?? 30
-  const items = inboxData?.items ?? []
-  const unreadTotal = items.reduce((sum, item) => sum + item.unread, 0)
-  const overdueTotal = items.filter((item) => {
-    const waiting = waitingMinutes(item.status, item.lastUserMessageAt, now)
-    return waiting !== null && waiting >= inboxSla
-  }).length
-  const inboxItem = items.find((item) => item.id === conversationId) ?? null
-  const draft = conversationId ? drafts[conversationId] ?? '' : ''
-  const setDraft = (value: string) => {
-    if (conversationId) setDrafts((current) => ({ ...current, [conversationId]: value }))
+  const overdueHref = `/admin?section=support&s_status=open&s_overdue=1`
+  const showOverdue = (event: ReactMouseEvent<HTMLAnchorElement>) => {
+    if (event.metaKey || event.ctrlKey || event.shiftKey) return
+    event.preventDefault()
+    onFilter({ s_status: 'open', s_overdue: '1' })
   }
-  const filtered = query.s_status !== 'open' || query.s_assignee !== 'all' || query.s_priority !== 'all' || query.s_q !== ''
 
-  const notificationControl = permission === 'default'
-    ? <Button size="sm" icon={<Bell size={16} weight="bold" aria-hidden="true" />} onClick={requestNotifications}>Включить уведомления</Button>
-    : permission === 'granted'
-      ? <Badge tone="success" title="Покажем уведомление, когда вкладка в фоне"><BellRinging size={13} weight="bold" aria-hidden="true" /> Уведомления включены</Badge>
-      : permission === 'denied'
-        ? <Badge title="Разреши уведомления для сайта в настройках браузера">Уведомления запрещены</Badge>
-        : null
+  const sheetItems = printSheet?.items ?? items
 
   return (
     <>
       <PageHeader
         title="Поддержка"
-        description={inboxData
-          ? `В выборке ${formatNumber(inboxData.total)} · непрочитанных сообщений ${formatNumber(unreadTotal)} · просрочено по SLA ${formatNumber(overdueTotal)} · SLA первого ответа ${inboxSla} мин`
-          : 'Обращения учеников в реальном времени.'}
+        description={<SupportPulse live={live} updatedAt={inbox.updatedAt} counts={counts} sla={sla} />}
         actions={(
           <>
-            {notificationControl}
-            <Button
-              size="sm"
-              icon={<FileText size={16} weight="bold" aria-hidden="true" />}
-              onClick={() => setTemplatesOpen(true)}
-              title="Шаблоны быстрых ответов"
-            >
-              Шаблоны
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              icon={<ArrowClockwise size={16} weight="bold" aria-hidden="true" />}
-              onClick={() => {
-                reloadInbox()
-                if (conversationId) void loadThread(conversationId, true)
-              }}
-            >
-              Обновить
-            </Button>
+            <Button size="sm" icon={<FileText size={16} weight="bold" aria-hidden="true" />} onClick={() => setTemplatesOpen(true)} title="Шаблоны быстрых ответов">Шаблоны</Button>
+            <Button size="sm" icon={<DownloadSimple size={16} weight="bold" aria-hidden="true" />} loading={exporting === 'csv'} onClick={() => { void exportCsv() }} title="Все обращения под текущими фильтрами, файл для Excel">CSV</Button>
+            <Button size="sm" icon={<Printer size={16} weight="bold" aria-hidden="true" />} loading={exporting === 'print'} onClick={() => { void printView() }} title={conversationId ? 'Печать открытой переписки; в окне печати можно сохранить в PDF' : 'Печать списка под текущими фильтрами; в окне печати можно сохранить в PDF'}>Печать / PDF</Button>
+            <button type="button" className="adm-icon-button sup-keys-button" onClick={() => setShortcutsOpen(true)} aria-label="Горячие клавиши" title="Горячие клавиши (?)">
+              <Keyboard size={18} weight="bold" aria-hidden="true" />
+            </button>
           </>
         )}
       />
 
-      <div className="sup-desk" data-view={view}>
+      {inboxData && (
+        <SlaBanner
+          overdue={overdueTotal}
+          sla={sla}
+          active={query.s_overdue === '1'}
+          href={overdueHref}
+          onShow={showOverdue}
+          onReset={() => onFilter({ s_overdue: '' })}
+        />
+      )}
+
+      <div className={`sup-desk ${conversationId ? 'is-open' : 'is-idle'}`} data-view={view}>
         <InboxPane
           inbox={inboxData}
           loading={inbox.loading}
           error={inbox.error}
-          onRetry={reloadInbox}
+          onRetry={inbox.reload}
           filters={query}
-          filtered={filtered}
-          onFilter={(patch) => setQuery({ ...patch, s_page: '1' })}
+          period={period}
+          narrowed={narrowed}
+          onFilter={onFilter}
+          onResetFilters={resetFilters}
           search={searchDraft}
           onSearch={setSearchDraft}
           selectedId={conversationId}
           onSelect={openConversation}
+          checked={selected}
+          onToggle={toggleSelected}
+          onToggleAll={toggleAll}
+          bulk={selectedIds.length > 0 ? (
+            <BulkBar
+              count={selectedIds.length}
+              agents={inboxData?.agents ?? []}
+              myId={access.userId}
+              pending={bulkAction.pending}
+              onResolve={() => { void runBulk('bulk:resolve', { p_status: 'resolved' }, 'Закрыто') }}
+              onReopen={() => { void runBulk('bulk:reopen', { p_status: 'pending_owner' }, 'Открыто снова') }}
+              onAssign={(value) => {
+                if (value === 'none') void runBulk('bulk:assign', { p_unassign: true }, 'Назначение снято')
+                else void runBulk('bulk:assign', { p_assigned_to: value === 'me' ? access.userId : value }, 'Переназначено')
+              }}
+              onTag={(mode, tag) => {
+                void runBulk('bulk:tag', mode === 'add' ? { p_add_tags: [tag] } : { p_remove_tags: [tag] }, mode === 'add' ? `Метка «${tagLabel(tag)}» добавлена` : `Метка «${tagLabel(tag)}» снята`)
+              }}
+              onClear={() => setSelected(new Set())}
+            />
+          ) : null}
           now={now}
           page={page}
           onPage={(next) => setQuery({ s_page: String(next) })}
         />
 
-        <section className="adm-panel sup-pane sup-thread" aria-label="Переписка">
-          {!conversationId ? (
-            <EmptyState><ChatCircleText size={20} weight="duotone" aria-hidden="true" /> Выбери обращение в списке.</EmptyState>
-          ) : activeThread ? (
-            <ThreadView
-              thread={activeThread}
-              inboxItem={inboxItem}
-              agents={inboxData?.agents ?? []}
-              myId={access.userId}
-              canCredit={access.permissions.money}
-              now={now}
-              draft={draft}
-              onDraft={setDraft}
-              peerTyping={typing.peerTyping}
-              onTyping={typing.notifyTyping}
-              onChanged={afterChange}
-              onBack={() => setMobileView('inbox')}
-              onShowCard={() => setMobileView('card')}
-              onOpenLog={setLogId}
-            />
-          ) : threadError ? (
-            <>
-              <Button className="sup-mobile-only" size="sm" variant="ghost" icon={<ArrowLeft size={16} weight="bold" aria-hidden="true" />} onClick={() => setMobileView('inbox')}>Все обращения</Button>
-              <ErrorState message={threadError} onRetry={() => { void loadThread(conversationId) }} />
-            </>
-          ) : (
-            <LoadingState label="Загружаем переписку…" />
-          )}
-        </section>
+        {conversationId ? (
+          <>
+            <section className="adm-panel sup-pane sup-thread" aria-label="Переписка">
+              {activeThread ? (
+                <ThreadView
+                  thread={activeThread}
+                  inboxItem={inboxItem}
+                  agents={inboxData?.agents ?? []}
+                  myId={access.userId}
+                  canCredit={access.permissions.money}
+                  now={now}
+                  draft={draft}
+                  onDraft={setDraft}
+                  peerTyping={typing.peerTyping}
+                  onTyping={typing.notifyTyping}
+                  onChanged={afterChange}
+                  onResolve={() => { void resolveCurrent() }}
+                  resolving={threadAction.pending === 'resolve'}
+                  onBack={closeConversation}
+                  onShowCard={() => setMobileView('card')}
+                  onOpenLog={setLogId}
+                />
+              ) : threadError ? (
+                <>
+                  <Button className="sup-mobile-only" size="sm" variant="ghost" icon={<ArrowLeft size={16} weight="bold" aria-hidden="true" />} onClick={closeConversation}>Все обращения</Button>
+                  <ErrorState message={threadError} onRetry={() => { void loadThread(conversationId) }} />
+                </>
+              ) : (
+                <LoadingState label="Загружаем переписку…" />
+              )}
+            </section>
 
-        <aside className="adm-panel sup-pane sup-card" aria-label="Ученик">
-          {activeThread ? (
-            <UserCard thread={activeThread} onOpenUser={openUser} onBack={() => setMobileView('thread')} />
-          ) : (
-            <EmptyState>{conversationId ? 'Карточка появится вместе с перепиской.' : 'Здесь будет карточка ученика.'}</EmptyState>
-          )}
-        </aside>
+            <aside className="adm-panel sup-pane sup-card" aria-label="Ученик">
+              {activeThread ? (
+                <StudentPanel thread={activeThread} onOpenUser={openUser} onOpenConversation={openConversation} onBack={() => setMobileView('thread')} />
+              ) : (
+                <LoadingState label="Карточка ученика…" />
+              )}
+            </aside>
+          </>
+        ) : (
+          <div className="sup-side">
+            <PickPanel onShowShortcuts={() => setShortcutsOpen(true)} />
+            <SupportStatsPanel stats={stats.data} error={stats.error} onRetry={stats.reload} period={period} />
+          </div>
+        )}
       </div>
+
+      <PrintSheet
+        items={sheetItems}
+        total={printSheet?.total ?? inboxData?.total ?? sheetItems.length}
+        summary={filterSummary(query, inboxData?.agents ?? [])}
+        sla={sla}
+      />
 
       {templatesOpen && (
         <TemplatesModal onClose={() => setTemplatesOpen(false)} onChanged={() => { if (conversationId) afterChange() }} />
       )}
+      {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)} />}
       {logId && <SolutionLogModal logId={logId} onClose={() => setLogId(null)} />}
     </>
   )
 }
 
+/* ---------- Шапка: живость и SLA ---------- */
+
+function SupportPulse({ live, updatedAt, counts, sla }: { live: boolean; updatedAt: number; counts: InboxCounts | null; sla: number }) {
+  const now = useNow(10_000)
+  return (
+    <span className="sup-pulse">
+      <span
+        className={`sup-live${live ? ' is-live' : ''}`}
+        title={live
+          ? 'Список и переписка обновляются сами при каждом сообщении; раз в 45 секунд - контрольное обновление'
+          : 'Живой канал не подключён, список обновляется раз в 45 секунд'}
+      >
+        <i aria-hidden="true" />{live ? 'Живое обновление' : 'Обновление раз в 45 с'}
+      </span>
+      <span>{updatedAgo(updatedAt, now)}</span>
+      {counts && <span>открыто {formatNumber(counts.open)} · ждут ответа {formatNumber(counts.pendingOwner)} · без назначения {formatNumber(counts.unassigned)}</span>}
+      <span>SLA первого ответа {sla} мин</span>
+    </span>
+  )
+}
+
+function SlaBanner({ overdue, sla, active, href, onShow, onReset }: {
+  overdue: number
+  sla: number
+  active: boolean
+  href: string
+  onShow: (event: ReactMouseEvent<HTMLAnchorElement>) => void
+  onReset: () => void
+}) {
+  if (overdue <= 0) {
+    return (
+      <p className="sup-sla-calm">
+        <CheckCircle size={16} weight="fill" aria-hidden="true" />
+        Просрочено по SLA: 0. Все, кто ждёт ответа, ждут меньше {sla} мин.
+        {active && <button type="button" className="sup-link-button" onClick={onReset}>Показать все обращения</button>}
+      </p>
+    )
+  }
+  return (
+    <div className="sup-sla-alert" role="alert">
+      <WarningOctagon className="sup-sla-alert-icon" size={30} weight="fill" aria-hidden="true" />
+      <div className="sup-sla-alert-text">
+        <strong>Просрочено по SLA: {formatNumber(overdue)}</strong>
+        <span>{formatNumber(overdue)} {plural(overdue, 'обращение ждёт', 'обращения ждут', 'обращений ждут')} ответа дольше {sla} мин.</span>
+      </div>
+      {active ? (
+        <button type="button" className="sup-sla-alert-link is-quiet" onClick={onReset}>Показать все обращения</button>
+      ) : (
+        <a className="sup-sla-alert-link" href={href} onClick={onShow}>
+          Показать просроченные <ArrowRight size={14} weight="bold" aria-hidden="true" />
+        </a>
+      )}
+    </div>
+  )
+}
+
 /* ---------- Входящие ---------- */
 
-type InboxFilters = { s_status: string; s_assignee: string; s_priority: string }
-
-function InboxPane({ inbox, loading, error, onRetry, filters, filtered, onFilter, search, onSearch, selectedId, onSelect, now, page, onPage }: {
+function InboxPane({ inbox, loading, error, onRetry, filters, period, narrowed, onFilter, onResetFilters, search, onSearch, selectedId, onSelect, checked, onToggle, onToggleAll, bulk, now, page, onPage }: {
   inbox: Inbox | null
   loading: boolean
   error: string
   onRetry: () => void
-  filters: InboxFilters
-  filtered: boolean
-  onFilter: (patch: Partial<InboxFilters>) => void
+  filters: SupportQuery
+  period: SupportPeriod
+  narrowed: boolean
+  onFilter: (patch: Partial<SupportQuery>) => void
+  onResetFilters: () => void
   search: string
   onSearch: (value: string) => void
   selectedId: string
   onSelect: (id: string) => void
+  checked: Set<string>
+  onToggle: (id: string) => void
+  onToggleAll: () => void
+  bulk: React.ReactNode
   now: number
   page: number
   onPage: (page: number) => void
@@ -760,11 +983,17 @@ function InboxPane({ inbox, loading, error, onRetry, filters, filtered, onFilter
   const agents = inbox?.agents ?? []
   const items = inbox?.items ?? []
   const sla = inbox?.slaMinutes ?? 30
+  const checkedOnPage = items.filter((item) => checked.has(item.id)).length
+  const allChecked = items.length > 0 && checkedOnPage === items.length
   return (
     <section className="adm-panel sup-pane sup-inbox" aria-label="Входящие обращения">
       <div className="sup-filters">
         <Segmented label="Статус обращений" value={filters.s_status} options={statusFilterOptions} onChange={(value) => onFilter({ s_status: value })} />
-        <div className="sup-filter-row">
+        <div className="sup-filter-grid">
+          <div className="adm-field sup-period">
+            <span className="adm-field-label">Создано</span>
+            <Segmented label="Когда создано обращение" value={period} options={periodOptions} onChange={(value) => onFilter({ s_period: value })} />
+          </div>
           <Field label="Назначено">
             <select value={filters.s_assignee} onChange={(event) => onFilter({ s_assignee: event.target.value })}>
               <option value="all">Всем</option>
@@ -779,55 +1008,153 @@ function InboxPane({ inbox, loading, error, onRetry, filters, filtered, onFilter
               {priorityOrder.map((priority) => <option key={priority} value={priority}>{priorityLabels[priority]}</option>)}
             </select>
           </Field>
+          <Field label="Метка">
+            <select value={filters.s_tag} onChange={(event) => onFilter({ s_tag: event.target.value })}>
+              <option value="all">Любая</option>
+              {SUPPORT_TAGS.map((tag) => <option key={tag.id} value={tag.id}>{tag.label}</option>)}
+            </select>
+          </Field>
+          <Field label="Поиск" className="sup-search">
+            <input type="search" value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Почта, имя или тема" />
+          </Field>
         </div>
-        <Field label="Поиск">
-          <input type="search" value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Почта, имя или тема" />
-        </Field>
+        {filters.s_overdue === '1' && (
+          <div className="sup-active-filters">
+            <button type="button" className="sup-filter-chip" onClick={() => onFilter({ s_overdue: '' })} aria-label="Убрать фильтр: только просроченные по SLA">
+              <Clock size={13} weight="bold" aria-hidden="true" /> Только просроченные по SLA <X size={13} weight="bold" aria-hidden="true" />
+            </button>
+          </div>
+        )}
       </div>
 
-      {error ? (
-        <ErrorState message={error} onRetry={onRetry} />
-      ) : !inbox && loading ? (
-        <LoadingState />
-      ) : items.length === 0 ? (
-        <EmptyState>{filtered ? 'Под эти фильтры обращений нет.' : 'Открытых обращений нет.'}</EmptyState>
-      ) : (
-        <ul className={`sup-inbox-list${loading ? ' is-stale' : ''}`}>
-          {items.map((item) => {
-            const waiting = waitingMinutes(item.status, item.lastUserMessageAt, now)
-            const overdue = waiting !== null && waiting >= sla
-            const selected = item.id === selectedId
-            return (
-              <li key={item.id}>
-                <button
-                  type="button"
-                  className={`sup-inbox-item${selected ? ' is-selected' : ''}${item.unread > 0 ? ' is-unread' : ''}${overdue ? ' is-overdue' : ''}`}
-                  onClick={() => onSelect(item.id)}
-                  aria-current={selected || undefined}
-                >
-                  <span className="sup-inbox-top">
-                    <strong>{item.fullName || item.email}</strong>
-                    <time dateTime={item.lastMessageAt}>{relativeTime(item.lastMessageAt)}</time>
-                  </span>
-                  <span className="sup-inbox-subject">{item.subject}</span>
-                  <span className="sup-inbox-preview">{item.lastAuthor === 'owner' ? 'Поддержка: ' : ''}{item.lastMessage || 'Без текста'}</span>
-                  <span className="sup-inbox-meta">
-                    <Badge tone={statusTones[item.status] ?? 'neutral'}>{statusLabels[item.status] ?? item.status}</Badge>
-                    {item.priority !== 'normal' && <Badge tone={priorityTones[item.priority] ?? 'neutral'}>{priorityLabels[item.priority] ?? item.priority}</Badge>}
-                    {waiting !== null && <SlaTimer minutes={waiting} slaMinutes={sla} />}
-                    {item.rating !== null && <span className="sup-inbox-rating" title="Оценка ученика"><Star size={12} weight="fill" aria-hidden="true" />{item.rating}</span>}
-                    {item.unread > 0 && <span className="sup-unread" title="Непрочитанные сообщения ученика">{item.unread}</span>}
-                    <span className="sup-assignee">{item.assignedEmail ?? 'не назначено'}</span>
-                  </span>
-                </button>
-              </li>
-            )
-          })}
-        </ul>
-      )}
+      <div className="sup-list-wrap">
+        {items.length > 0 && (
+          <div className="sup-list-head">
+            <label className="sup-check-all">
+              <input
+                type="checkbox"
+                checked={allChecked}
+                ref={(node) => { if (node) node.indeterminate = checkedOnPage > 0 && !allChecked }}
+                onChange={onToggleAll}
+              />
+              Выбрать все на странице
+            </label>
+            <span>{formatNumber(inbox?.total ?? 0)} {plural(inbox?.total ?? 0, 'обращение', 'обращения', 'обращений')}</span>
+          </div>
+        )}
+        {bulk}
+
+        {error && !inbox ? (
+          <ErrorState message={error} onRetry={onRetry} />
+        ) : !inbox && loading ? (
+          <LoadingState />
+        ) : items.length === 0 ? (
+          <div className="sup-empty">
+            <InboxEmptyArt />
+            <strong>{narrowed ? 'Под эти фильтры обращений нет' : emptyTitles[filters.s_status] ?? 'Обращений нет'}</strong>
+            <p>{narrowed ? 'Измени условия или сбрось фильтры.' : 'Новые обращения появятся здесь сами - список обновляется без кнопки.'}</p>
+            {narrowed && <Button size="sm" onClick={onResetFilters}>Сбросить фильтры</Button>}
+          </div>
+        ) : (
+          <ul className={`sup-inbox-list${loading ? ' is-stale' : ''}`}>
+            {items.map((item) => {
+              const waiting = waitingMinutes(item.status, item.lastUserMessageAt, now)
+              const overdue = waiting !== null && waiting >= sla
+              const selected = item.id === selectedId
+              const isChecked = checked.has(item.id)
+              return (
+                <li key={item.id} className={`sup-row${isChecked ? ' is-checked' : ''}`} data-conversation={item.id}>
+                  <input type="checkbox" className="sup-row-check" checked={isChecked} onChange={() => onToggle(item.id)} aria-label={`Выбрать: ${item.subject}, ${item.fullName || item.email}`} />
+                  <button
+                    type="button"
+                    className={`sup-inbox-item${selected ? ' is-selected' : ''}${item.unread > 0 ? ' is-unread' : ''}${overdue ? ' is-overdue' : ''}`}
+                    onClick={() => onSelect(item.id)}
+                    aria-current={selected || undefined}
+                  >
+                    <span className="sup-inbox-top">
+                      <strong>{item.fullName || item.email}</strong>
+                      <time dateTime={item.lastMessageAt}>{relativeTime(item.lastMessageAt)}</time>
+                    </span>
+                    <span className="sup-inbox-subject">{item.subject}</span>
+                    <span className="sup-inbox-preview">{item.lastAuthor === 'owner' ? 'Поддержка: ' : ''}{item.lastMessage || 'Без текста'}</span>
+                    <span className="sup-inbox-meta">
+                      <TagPills tags={item.tags} />
+                      <Badge tone={statusTones[item.status] ?? 'neutral'}>{statusLabels[item.status] ?? item.status}</Badge>
+                      {item.priority !== 'normal' && <Badge tone={priorityTones[item.priority] ?? 'neutral'}>{priorityLabels[item.priority] ?? item.priority}</Badge>}
+                      {waiting !== null && <SlaTimer minutes={waiting} slaMinutes={sla} />}
+                      {item.rating !== null && <span className="sup-inbox-rating" title="Оценка ученика"><Star size={12} weight="fill" aria-hidden="true" />{item.rating}</span>}
+                      {item.unread > 0 && <span className="sup-unread" title="Непрочитанные сообщения ученика">{item.unread}</span>}
+                      <span className="sup-assignee">{item.assignedEmail ?? 'не назначено'}</span>
+                    </span>
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </div>
 
       {inbox && inbox.total > PAGE_SIZE && <Pagination page={page} pageSize={PAGE_SIZE} total={inbox.total} onPage={onPage} />}
     </section>
+  )
+}
+
+function BulkBar({ count, agents, myId, pending, onResolve, onReopen, onAssign, onTag, onClear }: {
+  count: number
+  agents: Agent[]
+  myId: string
+  pending: string | null
+  onResolve: () => void
+  onReopen: () => void
+  onAssign: (value: string) => void
+  onTag: (mode: 'add' | 'remove', tag: SupportTag) => void
+  onClear: () => void
+}) {
+  const busy = pending !== null
+  return (
+    <div className="adm-bulkbar sup-bulkbar" role="region" aria-label="Действия с выбранными обращениями">
+      <span className="sup-bulk-count">Выбрано: {formatNumber(count)}</span>
+      <Button size="sm" icon={<Check size={15} weight="bold" aria-hidden="true" />} loading={pending === 'bulk:resolve'} disabled={busy} onClick={onResolve}>Закрыть</Button>
+      <Button size="sm" loading={pending === 'bulk:reopen'} disabled={busy} onClick={onReopen}>Открыть снова</Button>
+      <label className="sup-bulk-select">
+        <span className="sr-only">Назначить выбранные</span>
+        <select value="" disabled={busy} onChange={(event) => { if (event.target.value) onAssign(event.target.value) }}>
+          <option value="" disabled>Назначить…</option>
+          <option value="me">Мне</option>
+          {agents.filter((agent) => agent.id !== myId).map((agent) => <option key={agent.id} value={agent.id}>{agent.email}</option>)}
+          <option value="none">Снять назначение</option>
+        </select>
+      </label>
+      <label className="sup-bulk-select">
+        <span className="sr-only">Сменить метку у выбранных</span>
+        <select
+          value=""
+          disabled={busy}
+          onChange={(event) => {
+            const [mode, tag] = event.target.value.split(':')
+            if ((mode === 'add' || mode === 'remove') && SUPPORT_TAGS.some((item) => item.id === tag)) onTag(mode, tag as SupportTag)
+          }}
+        >
+          <option value="" disabled>Метка…</option>
+          <optgroup label="Добавить">
+            {SUPPORT_TAGS.map((tag) => <option key={`add-${tag.id}`} value={`add:${tag.id}`}>+ {tag.label}</option>)}
+          </optgroup>
+          <optgroup label="Снять">
+            {SUPPORT_TAGS.map((tag) => <option key={`remove-${tag.id}`} value={`remove:${tag.id}`}>- {tag.label}</option>)}
+          </optgroup>
+        </select>
+      </label>
+      <Button size="sm" variant="ghost" icon={<X size={15} weight="bold" aria-hidden="true" />} disabled={busy} onClick={onClear}>Снять выбор</Button>
+    </div>
+  )
+}
+
+function TagPills({ tags }: { tags: SupportTag[] }) {
+  if (!tags.length) return null
+  return (
+    <span className="sup-tags">
+      {tags.map((tag) => <span key={tag} className={`sup-tag is-${tag}`}>{tagLabel(tag)}</span>)}
+    </span>
   )
 }
 
@@ -842,9 +1169,25 @@ function SlaTimer({ minutes, slaMinutes }: { minutes: number; slaMinutes: number
   )
 }
 
+/* ---------- Пустая правая часть ---------- */
+
+function PickPanel({ onShowShortcuts }: { onShowShortcuts: () => void }) {
+  return (
+    <section className="adm-panel sup-pick" aria-label="Переписка">
+      <PickConversationArt />
+      <div className="sup-pick-text">
+        <h2>Выбери обращение</h2>
+        <p>Переписка и карточка ученика с историей его обращений откроются на месте сводки. Галочками слева можно закрыть, переназначить или сменить метку у нескольких обращений разом.</p>
+      </div>
+      <ShortcutList compact />
+      <button type="button" className="sup-link-button" onClick={onShowShortcuts}>Все горячие клавиши</button>
+    </section>
+  )
+}
+
 /* ---------- Переписка ---------- */
 
-function ThreadView({ thread, inboxItem, agents, myId, canCredit, now, draft, onDraft, peerTyping, onTyping, onChanged, onBack, onShowCard, onOpenLog }: {
+function ThreadView({ thread, inboxItem, agents, myId, canCredit, now, draft, onDraft, peerTyping, onTyping, onChanged, onResolve, resolving, onBack, onShowCard, onOpenLog }: {
   thread: Thread
   inboxItem: InboxItem | null
   agents: Agent[]
@@ -856,6 +1199,8 @@ function ThreadView({ thread, inboxItem, agents, myId, canCredit, now, draft, on
   peerTyping: boolean
   onTyping: () => void
   onChanged: () => void
+  onResolve: () => void
+  resolving: boolean
   onBack: () => void
   onShowCard: () => void
   onOpenLog: (logId: string) => void
@@ -870,18 +1215,26 @@ function ThreadView({ thread, inboxItem, agents, myId, canCredit, now, draft, on
       </div>
       <header className="sup-thread-head">
         <div className="sup-badges">
-          <Badge tone="accent">{categoryLabels[conversation.category] ?? conversation.category}</Badge>
+          <TagPills tags={conversation.tags} />
           <Badge tone={statusTones[conversation.status] ?? 'neutral'}>{statusLabels[conversation.status] ?? conversation.status}</Badge>
           {conversation.priority !== 'normal' && <Badge tone={priorityTones[conversation.priority] ?? 'neutral'}>{priorityLabels[conversation.priority] ?? conversation.priority}</Badge>}
           {waiting !== null && <SlaTimer minutes={waiting} slaMinutes={conversation.slaMinutes} />}
         </div>
         <h2>{conversation.subject}</h2>
         <p className="adm-muted">
-          {thread.user ? `${thread.user.fullName || 'Без имени'} · ${thread.user.email}` : 'Профиль ученика не найден'} · открыто {formatDateTime(conversation.createdAt)}
+          {thread.user ? `${thread.user.fullName || 'Без имени'} · ${thread.user.email}` : 'Профиль ученика не найден'} · открыто {formatDateTime(conversation.createdAt)} · тип: {categoryLabels[conversation.category] ?? conversation.category}
         </p>
       </header>
 
-      <ThreadControls conversation={conversation} agents={agents} myId={myId} assignedEmail={inboxItem?.assignedEmail ?? null} onChanged={onChanged} />
+      <ThreadControls
+        conversation={conversation}
+        agents={agents}
+        myId={myId}
+        assignedEmail={inboxItem?.assignedEmail ?? null}
+        onChanged={onChanged}
+        onResolve={onResolve}
+        resolving={resolving}
+      />
 
       {conversation.rating !== null && (
         <div className={`sup-rating${conversation.rating <= 2 ? ' is-low' : ''}`}>
@@ -902,16 +1255,26 @@ function ThreadView({ thread, inboxItem, agents, myId, canCredit, now, draft, on
   )
 }
 
-function ThreadControls({ conversation, agents, myId, assignedEmail, onChanged }: {
+function ThreadControls({ conversation, agents, myId, assignedEmail, onChanged, onResolve, resolving }: {
   conversation: ThreadConversation
   agents: Agent[]
   myId: string
   assignedEmail: string | null
   onChanged: () => void
+  onResolve: () => void
+  resolving: boolean
 }) {
   const { pending, run } = useAction()
   const update = async (key: string, patch: Record<string, unknown>, success: string) => {
     const result = await run(key, () => adminRpc('admin_support_update', { p_conversation_id: conversation.id, ...patch }), success)
+    if (result !== undefined) onChanged()
+  }
+  const toggleTag = async (tag: SupportTag) => {
+    const has = conversation.tags.includes(tag)
+    const result = await run(`tag:${tag}`, () => adminRpc('admin_support_bulk_update', {
+      p_conversation_ids: [conversation.id],
+      ...(has ? { p_remove_tags: [tag] } : { p_add_tags: [tag] }),
+    }))
     if (result !== undefined) onChanged()
   }
   const resolved = conversation.status === 'resolved'
@@ -922,7 +1285,9 @@ function ThreadControls({ conversation, agents, myId, assignedEmail, onChanged }
         {resolved ? (
           <Button size="sm" loading={pending === 'reopen'} onClick={() => { void update('reopen', { p_status: 'pending_owner' }, 'Обращение открыто снова') }}>Открыть снова</Button>
         ) : (
-          <Button size="sm" variant="primary" loading={pending === 'resolve'} onClick={() => { void update('resolve', { p_status: 'resolved' }, 'Обращение закрыто') }}>Закрыть</Button>
+          <Button size="sm" variant="primary" loading={resolving} onClick={onResolve} title="Закрыть обращение (E)">
+            Закрыть <kbd className="sup-kbd-hint" aria-hidden="true">E</kbd>
+          </Button>
         )}
         {conversation.status !== 'pending_user' && (
           <Button size="sm" loading={pending === 'wait'} onClick={() => { void update('wait', { p_status: 'pending_user' }, 'Ждём ответа ученика') }}>Ждать ученика</Button>
@@ -952,6 +1317,25 @@ function ThreadControls({ conversation, agents, myId, assignedEmail, onChanged }
           {agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.id === myId ? `${agent.email} (я)` : agent.email}</option>)}
         </select>
       </label>
+      <div className="sup-tag-editor" role="group" aria-label="Метки обращения">
+        <span className="sup-inline-label">Метки</span>
+        {SUPPORT_TAGS.map((tag) => {
+          const on = conversation.tags.includes(tag.id)
+          return (
+            <button
+              key={tag.id}
+              type="button"
+              className={`sup-tag is-toggle is-${tag.id}`}
+              aria-pressed={on}
+              disabled={pending !== null && pending.startsWith('tag:')}
+              title={on ? `Снять метку «${tag.label}»` : `Поставить метку «${tag.label}»`}
+              onClick={() => { void toggleTag(tag.id) }}
+            >
+              {tag.label}
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -1069,7 +1453,7 @@ function Composer({ thread, draft, onDraft, onTyping, onSent }: {
         value={draft}
         maxLength={4000}
         rows={4}
-        placeholder="Ответ ученику. Ctrl+Enter - отправить"
+        placeholder="Ответ ученику"
         onChange={(event) => {
           onDraft(event.target.value)
           if (event.target.value) onTyping()
@@ -1082,7 +1466,10 @@ function Composer({ thread, draft, onDraft, onTyping, onSent }: {
         }}
       />
       <div className="sup-composer-foot">
-        <span className="adm-muted adm-mono">{draft.length}/4000</span>
+        <span className="sup-composer-hint">
+          <ShortcutKeys keys={['Ctrl', 'Enter']} /> отправить
+          <span className="adm-mono">{draft.length}/4000</span>
+        </span>
         <Button type="submit" variant="accent" loading={pending === 'reply'} disabled={!draft.trim()} icon={<PaperPlaneTilt size={16} weight="bold" aria-hidden="true" />}>Отправить</Button>
       </div>
     </form>
@@ -1257,7 +1644,12 @@ function NotesPanel({ thread, onChanged, onOpenLog }: { thread: Thread; onChange
 
 /* ---------- Карточка ученика ---------- */
 
-function UserCard({ thread, onOpenUser, onBack }: { thread: Thread; onOpenUser: (userId: string) => void; onBack: () => void }) {
+function StudentPanel({ thread, onOpenUser, onOpenConversation, onBack }: {
+  thread: Thread
+  onOpenUser: (userId: string) => void
+  onOpenConversation: (id: string) => void
+  onBack: () => void
+}) {
   const user = thread.user
   return (
     <>
@@ -1283,6 +1675,38 @@ function UserCard({ thread, onOpenUser, onBack }: { thread: Thread; onOpenUser: 
       ) : (
         <EmptyState>Профиль ученика не найден.</EmptyState>
       )}
+
+      <div className="sup-card-block">
+        <h3>История обращений{thread.historyTotal > 0 ? ` · ${formatNumber(thread.historyTotal)}` : ''}</h3>
+        {thread.history.length ? (
+          <ul className="sup-history">
+            {thread.history.map((item) => (
+              <li key={item.id}>
+                <button type="button" className="sup-history-item" onClick={() => onOpenConversation(item.id)} title="Открыть это обращение">
+                  <span className="sup-mini-top">
+                    <Badge tone={statusTones[item.status] ?? 'neutral'}>{statusLabels[item.status] ?? item.status}</Badge>
+                    <time dateTime={item.createdAt}>{formatDate(item.createdAt)}</time>
+                  </span>
+                  <strong>{item.subject}</strong>
+                  <span className="sup-history-meta">
+                    <TagPills tags={item.tags} />
+                    {item.rating !== null ? (
+                      <span className="sup-inbox-rating" title="Оценка ученика"><Star size={12} weight="fill" aria-hidden="true" />{item.rating}</span>
+                    ) : item.status === 'resolved' ? (
+                      <span className="adm-muted">без оценки</span>
+                    ) : null}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="adm-muted">Других обращений у ученика не было.</p>
+        )}
+        {thread.historyTotal > thread.history.length && (
+          <p className="adm-muted">Показаны последние {thread.history.length} из {formatNumber(thread.historyTotal)}.</p>
+        )}
+      </div>
 
       <div className="sup-card-block">
         <h3>Последние задачи</h3>
@@ -1336,6 +1760,45 @@ function UserCard({ thread, onOpenUser, onBack }: { thread: Thread; onOpenUser: 
         ) : <p className="adm-muted">Операций нет.</p>}
       </div>
     </>
+  )
+}
+
+/* ---------- Печатная версия списка ---------- */
+
+function PrintSheet({ items, total, summary, sla }: { items: InboxItem[]; total: number; summary: string; sla: number }) {
+  return (
+    <section className="sup-print-sheet" aria-hidden="true">
+      <h1>Обращения в поддержку</h1>
+      <p>{summary}. Сформировано {formatDateTime(new Date().toISOString())} (МСК). В таблице {formatNumber(items.length)} из {formatNumber(total)}. SLA первого ответа {sla} мин.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Создано</th>
+            <th>Ученик</th>
+            <th>Тема</th>
+            <th>Метки</th>
+            <th>Статус</th>
+            <th>Назначено</th>
+            <th>Ждёт</th>
+            <th>Оценка</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item) => (
+            <tr key={item.id}>
+              <td>{formatDateTime(item.createdAt)}</td>
+              <td>{item.fullName || '-'}<br /><small>{item.email}</small></td>
+              <td>{item.subject}</td>
+              <td>{item.tags.map(tagLabel).join(', ') || '-'}</td>
+              <td>{statusLabels[item.status] ?? item.status}{item.slaBreached ? ', просрочено' : ''}</td>
+              <td>{item.assignedEmail ?? '-'}</td>
+              <td>{item.waitingMinutes !== null ? formatDuration(item.waitingMinutes) : '-'}</td>
+              <td>{item.rating ?? '-'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
   )
 }
 

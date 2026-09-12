@@ -2,9 +2,9 @@
    пагинацией, графики на SVG, окна, уведомления и состояние в адресе.
    Внешних библиотек нет: всё рисуется на токенах сайта. */
 
-import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { ArrowDown, ArrowUp, CaretLeft, CaretRight, CircleNotch, Copy, DownloadSimple, X } from '@phosphor-icons/react'
+import { ArrowDown, ArrowUp, CaretLeft, CaretRight, CaretUpDown, CircleNotch, Copy, DownloadSimple, X } from '@phosphor-icons/react'
 import { formatNumber, formatShortDate, shiftDate, todayMsk } from './api'
 
 /* ---------- Кнопки и метки ---------- */
@@ -181,9 +181,38 @@ export function useAsync<T>(loader: () => Promise<T>, deps: readonly unknown[]) 
 /* ---------- Состояние в адресе ---------- */
 
 /* Фильтры, сортировка и страница живут в адресе: ссылку на отфильтрованную
-   таблицу можно отправить, а «назад» возвращает прежний вид. */
-export function useQueryState<T extends Record<string, string>>(defaults: T) {
+   таблицу можно отправить, а «назад» возвращает прежний вид.
+
+   Адрес переживает перезагрузку, но не переход в раздел через меню или
+   Ctrl+K: там адрес собирается заново, без фильтров. Поэтому раздел может
+   попросить запоминать часть ключей (persist) в localStorage: если в адресе
+   нет ни одного из них, берутся последние сохранённые и пишутся в адрес. */
+type QueryStateOptions<T> = { storageKey?: string; persist?: readonly (keyof T & string)[] }
+
+function readStoredQuery<T extends Record<string, string>>(storageKey: string, keys: readonly (keyof T & string)[]): Partial<T> | null {
+  try {
+    const parsed: unknown = JSON.parse(window.localStorage.getItem(storageKey) ?? 'null')
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null
+    const source = parsed as Record<string, unknown>
+    const picked: Partial<T> = {}
+    for (const key of keys) if (typeof source[key] === 'string') picked[key] = source[key] as T[typeof key]
+    return picked
+  } catch {
+    return null
+  }
+}
+
+function writeStoredQuery<T extends Record<string, string>>(storageKey: string, keys: readonly (keyof T & string)[], state: T) {
+  try {
+    window.localStorage.setItem(storageKey, JSON.stringify(Object.fromEntries(keys.map((key) => [key, state[key]]))))
+  } catch {
+    // Хранилище закрыто или переполнено - фильтры останутся только в адресе.
+  }
+}
+
+export function useQueryState<T extends Record<string, string>>(defaults: T, options: QueryStateOptions<T> = {}) {
   const defaultsRef = useRef(defaults)
+  const optionsRef = useRef(options)
   const read = useCallback((): T => {
     const params = new URLSearchParams(window.location.search)
     const next = { ...defaultsRef.current }
@@ -193,7 +222,51 @@ export function useQueryState<T extends Record<string, string>>(defaults: T) {
     }
     return next
   }, [])
-  const [state, setState] = useState<T>(read)
+
+  const writeUrl = useCallback((next: T, replace: boolean) => {
+    const params = new URLSearchParams(window.location.search)
+    for (const key of Object.keys(defaultsRef.current)) {
+      const value = next[key]
+      if (value === '' || value === defaultsRef.current[key]) params.delete(key)
+      else params.set(key, value)
+    }
+    const query = params.toString()
+    const url = `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`
+    if (url === `${window.location.pathname}${window.location.search}${window.location.hash}`) return
+    if (replace) window.history.replaceState(window.history.state, '', url)
+    else window.history.pushState(window.history.state, '', url)
+  }, [])
+
+  const restored = useRef(false)
+  const [state, setState] = useState<T>(() => {
+    const fromUrl = read()
+    const { storageKey, persist } = optionsRef.current
+    if (!storageKey || !persist?.length) return fromUrl
+    const params = new URLSearchParams(window.location.search)
+    if (persist.some((key) => params.has(key))) return fromUrl
+    const stored = readStoredQuery<T>(storageKey, persist)
+    if (!stored) return fromUrl
+    restored.current = true
+    return { ...fromUrl, ...stored }
+  })
+  const stateRef = useRef(state)
+  stateRef.current = state
+
+  /* Восстановленные фильтры сразу видны и в адресе. Эффект - layout, а не
+     обычный: пока соседний раздел грузится, Suspense не размонтирует
+     прежний, а прячет его и потом показывает тот же экземпляр. Состояние
+     при этом прежнее, useEffect заново не вызывается, а layout-эффекты
+     подключаются снова - а адрес к этому моменту меню уже собрало без
+     фильтров. */
+  useLayoutEffect(() => {
+    const { persist } = optionsRef.current
+    const current = stateRef.current
+    if (!restored.current && !persist?.length) return
+    const params = new URLSearchParams(window.location.search)
+    if (persist?.some((key) => params.has(key))) return
+    const differs = Object.keys(defaultsRef.current).some((key) => current[key] !== '' && current[key] !== defaultsRef.current[key] && !params.has(key))
+    if (restored.current || differs) writeUrl(current, true)
+  }, [writeUrl])
 
   useEffect(() => {
     const onPop = () => setState(read())
@@ -201,21 +274,16 @@ export function useQueryState<T extends Record<string, string>>(defaults: T) {
     return () => window.removeEventListener('popstate', onPop)
   }, [read])
 
-  const update = useCallback((patch: Partial<T>, options: { replace?: boolean } = {}) => {
-    setState((current) => {
-      const next = { ...current, ...patch }
-      const params = new URLSearchParams(window.location.search)
-      for (const [key, value] of Object.entries(next)) {
-        if (value === '' || value === defaultsRef.current[key]) params.delete(key)
-        else params.set(key, value)
-      }
-      const query = params.toString()
-      const url = `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`
-      if (options.replace) window.history.replaceState(window.history.state, '', url)
-      else window.history.pushState(window.history.state, '', url)
-      return next
-    })
-  }, [])
+  // Адрес и хранилище пишутся вне setState: функция-обновитель в строгом
+  // режиме React вызывается дважды, и в истории появлялись дубли.
+  const update = useCallback((patch: Partial<T>, updateOptions: { replace?: boolean } = {}) => {
+    const next = { ...stateRef.current, ...patch }
+    stateRef.current = next
+    writeUrl(next, Boolean(updateOptions.replace))
+    const { storageKey, persist } = optionsRef.current
+    if (storageKey && persist?.length) writeStoredQuery(storageKey, persist, next)
+    setState(next)
+  }, [writeUrl])
 
   return [state, update] as const
 }
@@ -246,6 +314,7 @@ export function DataTable<T>({
   onSelectedChange,
   onRowClick,
   rowClassName,
+  rowLabel,
 }: {
   columns: Column<T>[]
   rows: T[]
@@ -260,8 +329,11 @@ export function DataTable<T>({
   onSelectedChange?: (next: Set<string>) => void
   onRowClick?: (row: T) => void
   rowClassName?: (row: T) => string
+  /** Подпись строки для чекбокса: «Выбрать: <подпись>». */
+  rowLabel?: (row: T) => string
 }) {
   const allSelected = selectable && rows.length > 0 && rows.every((row) => selected?.has(rowKey(row)))
+  const someSelected = selectable && !allSelected && rows.some((row) => selected?.has(rowKey(row)))
   const toggleAll = () => {
     if (!onSelectedChange) return
     const next = new Set(selected)
@@ -284,17 +356,31 @@ export function DataTable<T>({
           <tr>
             {selectable && (
               <th className="adm-table-check">
-                <input type="checkbox" checked={allSelected} onChange={toggleAll} aria-label="Выбрать все строки на странице" />
+                <label className="adm-check">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    ref={(node) => { if (node) node.indeterminate = someSelected }}
+                    onChange={toggleAll}
+                    aria-label="Выбрать все строки на странице"
+                  />
+                </label>
               </th>
             )}
             {columns.map((column) => {
-              const active = column.sortKey && sort === column.sortKey
+              const sortable = Boolean(column.sortKey && onSort)
+              const active = sortable && sort === column.sortKey
+              // Сортируемый столбец всегда объявляет порядок: none - пока не выбран.
+              const ariaSort = !sortable ? undefined : active ? (direction === 'asc' ? 'ascending' : 'descending') : 'none'
               return (
-                <th key={column.key} className={`${column.align ? `is-${column.align}` : ''}${column.mobile === false ? ' adm-hide-mobile' : ''}${column.className ? ` ${column.className}` : ''}`} aria-sort={active ? (direction === 'asc' ? 'ascending' : 'descending') : undefined}>
-                  {column.sortKey && onSort ? (
-                    <button type="button" className={`adm-sort${active ? ' is-active' : ''}`} onClick={() => onSort(column.sortKey!, active && direction === 'desc' ? 'asc' : 'desc')}>
+                <th key={column.key} className={`${column.align ? `is-${column.align}` : ''}${column.mobile === false ? ' adm-hide-mobile' : ''}${column.className ? ` ${column.className}` : ''}`} aria-sort={ariaSort}>
+                  {sortable ? (
+                    <button type="button" className={`adm-sort${active ? ' is-active' : ''}`} onClick={() => onSort!(column.sortKey!, active && direction === 'desc' ? 'asc' : 'desc')}>
                       {column.header}
-                      {active && (direction === 'asc' ? <ArrowUp size={12} weight="bold" aria-hidden="true" /> : <ArrowDown size={12} weight="bold" aria-hidden="true" />)}
+                      {!active && <CaretUpDown className="adm-sort-icon" size={14} weight="bold" aria-hidden="true" />}
+                      {active && (direction === 'asc'
+                        ? <ArrowUp className="adm-sort-icon" size={14} weight="bold" aria-hidden="true" />
+                        : <ArrowDown className="adm-sort-icon" size={14} weight="bold" aria-hidden="true" />)}
                     </button>
                   ) : column.header}
                 </th>
@@ -323,7 +409,9 @@ export function DataTable<T>({
               >
                 {selectable && (
                   <td className="adm-table-check">
-                    <input type="checkbox" checked={selected?.has(key) ?? false} onChange={() => toggle(key)} aria-label="Выбрать строку" />
+                    <label className="adm-check">
+                      <input type="checkbox" checked={selected?.has(key) ?? false} onChange={() => toggle(key)} aria-label={rowLabel ? `Выбрать: ${rowLabel(row)}` : 'Выбрать строку'} />
+                    </label>
                   </td>
                 )}
                 {columns.map((column) => (
@@ -356,8 +444,14 @@ export function Pagination({ page, pageSize, total, onPage }: { page: number; pa
   )
 }
 
-export function ExportButton({ onExport, loading }: { onExport: () => void; loading?: boolean }) {
-  return <Button size="sm" onClick={onExport} loading={loading} icon={<DownloadSimple size={16} weight="bold" aria-hidden="true" />}>CSV</Button>
+export function ExportButton({ onExport, loading, label = 'CSV', variant = 'secondary', size = 'sm' }: {
+  onExport: () => void
+  loading?: boolean
+  label?: string
+  variant?: 'primary' | 'secondary'
+  size?: 'sm' | 'md'
+}) {
+  return <Button size={size} variant={variant} onClick={onExport} loading={loading} icon={<DownloadSimple size={16} weight="bold" aria-hidden="true" />}>{label}</Button>
 }
 
 /* ---------- Поля ---------- */

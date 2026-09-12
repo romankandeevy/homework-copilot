@@ -53,6 +53,13 @@
   gap: var(--space-3);
 }
 
+.fin-report-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
 .fin-stack { display: grid; gap: var(--adm-gap); }
 
 .fin-refund-summary {
@@ -65,8 +72,113 @@
   font-size: var(--text-small);
 }
 
-.fin-refund-summary b { display: block; color: var(--color-strong); font-family: var(--font-mono); }
+.fin-refund-summary b { display: block; color: var(--color-strong); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* Статус платежа: значок рядом с текстом внутри метки. */
+.fin-status-icon { flex: none; }
+.fin-status-icon.is-ok { color: var(--color-success-strong); }
+.fin-status-icon.is-partial { color: var(--warn-700); }
+.fin-status-icon.is-bad { color: color-mix(in oklch, var(--color-danger) 85%, var(--color-text)); }
+
+/* Сверка */
+.fin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.fin-reason {
+  color: var(--color-text);
+  font-size: var(--text-small);
+  line-height: var(--leading-copy);
+}
+
+.fin-reason small {
+  display: block;
+  color: var(--color-text-subtle);
+}
+
+.fin-callout {
+  margin: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-surface);
+  background: var(--color-surface-sunken);
+  color: var(--color-text);
+  font-size: var(--text-small);
+  line-height: var(--leading-copy);
+}
+
+.fin-callout.is-warning {
+  background: var(--color-warning-soft);
+}
+
+.fin-plan {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.fin-plan h3 {
+  margin: 0;
+  color: var(--color-strong);
+  font-size: var(--text-small);
+  font-weight: var(--weight-medium);
+}
+
+.fin-plan details summary {
+  cursor: pointer;
+  color: var(--color-text);
+  font-size: var(--text-small);
+}
+
+.fin-plan details[open] summary { margin-bottom: var(--space-2); }
+
+/* История баланса в карточке пользователя */
+.fin-history-skeleton {
+  height: 12rem;
+  border-radius: var(--radius-surface);
+  background: var(--color-surface-sunken);
+  animation: fin-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes fin-pulse {
+  50% { opacity: 0.55; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fin-history-skeleton { animation: none; }
+}
+
+.fin-history-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-subtle);
+  font-size: var(--text-small);
+}
+
+.fin-history-meta b { font-family: var(--font-mono); font-weight: var(--weight-medium); font-variant-numeric: tabular-nums; }
+
+.fin-history-drift {
+  margin: var(--space-3) 0 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-surface);
+  background: var(--color-warning-soft);
+  color: var(--color-text);
+  font-size: var(--text-small);
+  line-height: var(--leading-copy);
+}
+
+/* Период в ленте платежей: пресеты и две даты не помещаются в узкое поле
+   панели фильтров, поэтому поле берёт ширину по содержимому. */
+.adm-toolbar > .adm-field.fin-range-field { flex: 0 1 auto; min-width: 0; max-width: 100%; }
 
 @media (max-width: 640px) {
   .fin-toolbar-search { flex-basis: 100%; }
+  .adm-toolbar > .adm-field.fin-range-field { flex-basis: 100%; }
+  .fin-range-field .adm-segmented,
+  .fin-report-bar .adm-segmented { flex-wrap: wrap; max-width: 100%; }
+  .fin-range-field .adm-range-custom,
+  .fin-report-bar .adm-range-custom { flex-wrap: wrap; }
 }

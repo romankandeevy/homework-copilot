@@ -1,4 +1,5 @@
 {
+  "regions": ["fra1"],
   "functions": {
     "api/solve.ts": {
       "includeFiles": "{server/**,src/lib/**,src/textbooks/**}",
@@ -17,8 +18,8 @@
       "maxDuration": 30
     },
     "api/admin.ts": {
-      "includeFiles": "{server/**,src/lib/**}",
-      "maxDuration": 60
+      "includeFiles": "{server/**,src/lib/**,src/textbooks/**}",
+      "maxDuration": 300
     }
   },
   "redirects": [

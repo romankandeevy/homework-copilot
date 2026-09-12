@@ -1,41 +1,62 @@
-/* Дашборд: что происходит и куда смотреть.
+/* Дашборд: что горит, как идёт период, где тонко.
 
-   Сознательно отступает от ТЗ. На сервисе с десятком учеников MRR,
-   когорты, воронка и десять карточек показателей - шум: по ним нечего
-   делать. Здесь только то, по чему владелец действует: что горит, как
-   идёт выбранный период против предыдущего такого же к этому же моменту,
-   хватит ли кредитов шлюза и живая лента событий. Все цифры отдаёт одна
-   функция - admin_dashboard_period. */
+   Сверху тревоги и пять цифр периода со своими микрографиками, ниже -
+   интерактивная динамика, светофор сервисов, рейтинг предметов и короткая
+   лента с фильтром и поиском. Цифры отдаёт admin_dashboard_period, ленту -
+   admin_dashboard_feed. Как считается каждая цифра - в подсказке у неё. */
 
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { ArrowClockwise, ArrowRight, CheckCircle, CurrencyRub, Info, Lifebuoy, UserPlus, XCircle } from '@phosphor-icons/react'
-import { adminRpc, formatDuration, formatKopecks, formatNumber, formatPercent, num, numOrNull, obj, relativeTime, rows, str } from '../api'
+import {
+  ArrowClockwise, ArrowRight, CheckCircle, CurrencyRub, DownloadSimple, Info, Lifebuoy, MagnifyingGlass,
+  UserPlus, Warning, WarningCircle, XCircle,
+} from '@phosphor-icons/react'
+import {
+  adminRpc, downloadCsv, formatDuration, formatKopecks, formatNumber, formatPercent, num, numOrNull, obj,
+  relativeTime, rows, str, todayMsk,
+} from '../api'
 import type { Row } from '../api'
 import type { AdminSection } from '../context'
 import { useAdmin } from '../context'
-import { Button, EmptyState, ErrorState, HorizontalBars, LineChart, LoadingState, PageHeader, Panel, Segmented, StackedBars, useAsync, useQueryState } from '../ui'
+import { Button, EmptyState, ErrorState, PageHeader, Panel, Segmented, useAsync, useQueryState } from '../ui'
 import './dashboard.css'
 
-type Metric = 'tasks' | 'money' | 'users'
 type Period = 'day' | 'week' | 'month' | 'year'
+type Tone = 'ok' | 'bad' | 'warn' | 'ink' | 'blue'
 
-const periodWords: Record<Period, { current: string; previous: string; chart: string }> = {
-  day: { current: 'сегодня', previous: 'вчера к этому часу', chart: 'по часам сегодня' },
-  week: { current: 'за 7 дней', previous: 'прошлые 7 дней', chart: 'по дням за 7 дней' },
-  month: { current: 'за 30 дней', previous: 'прошлые 30 дней', chart: 'по дням за 30 дней' },
-  year: { current: 'за год', previous: 'прошлый год', chart: 'по месяцам за год' },
+const periodWords: Record<Period, { current: string; previous: string; chart: string; short: string }> = {
+  day: { current: 'сегодня', previous: 'вчера к этому часу', chart: 'по часам сегодня', short: 'день' },
+  week: { current: 'за 7 дней', previous: 'прошлые 7 дней', chart: 'по дням за 7 дней', short: '7 дней' },
+  month: { current: 'за 30 дней', previous: 'прошлые 30 дней', chart: 'по дням за 30 дней', short: '30 дней' },
+  year: { current: 'за год', previous: 'прошлый год', chart: 'по месяцам за год', short: 'год' },
 }
 
 const serviceNames: Record<string, string> = {
-  kie: 'шлюз моделей',
-  'vercel-api': 'функции Vercel',
-  'supabase-proxy': 'прокси Supabase',
-  frontend: 'сайт',
-  database: 'база',
-  storage: 'хранилище',
+  kie: 'Шлюз моделей',
+  'vercel-api': 'Функции Vercel',
+  'supabase-proxy': 'Прокси Supabase',
+  frontend: 'Сайт',
+  database: 'База данных',
+  storage: 'Хранилище',
   telegram: 'Telegram',
-  email: 'почта',
+  email: 'Почта',
+}
+
+const feedKinds = [
+  { value: 'all', label: 'Все' },
+  { value: 'solution', label: 'Решения' },
+  { value: 'payment', label: 'Оплаты' },
+  { value: 'signup', label: 'Регистрации' },
+  { value: 'ticket', label: 'Обращения' },
+  { value: 'error', label: 'Ошибки' },
+] as const
+
+function pointLabel(label: string, period: Period) {
+  if (period === 'week' || period === 'month') {
+    const [, month, day] = label.split('-')
+    return day && month ? `${day}.${month}` : label
+  }
+  return label
 }
 
 function compactRubles(kopecks: number) {
@@ -45,8 +66,44 @@ function compactRubles(kopecks: number) {
   return `${formatNumber(Math.round(rubles * 10) / 10)} ₽`
 }
 
-/* Разница с предыдущим таким же отрезком - абсолютная: на малых числах
-   «+200 %» от одной задачи к трём ничего не объясняет. */
+/* ---------- Подсказка у цифры ---------- */
+
+function InfoTip({ id, children }: { id: string; children: ReactNode }) {
+  return (
+    <span className="dash-tip">
+      <button type="button" className="dash-tip-trigger" aria-describedby={id} aria-label="Как считается">
+        <Info size={14} weight="bold" aria-hidden="true" />
+      </button>
+      <span role="tooltip" id={id} className="dash-tip-body">{children}</span>
+    </span>
+  )
+}
+
+/* ---------- Микрографик ---------- */
+
+function Trend({ values, tone, label }: { values: number[]; tone: Tone; label: string }) {
+  if (values.length < 2) return <span className="dash-trend is-empty" aria-hidden="true" />
+  const max = Math.max(...values, 0)
+  const min = Math.min(...values, 0)
+  const span = max - min || 1
+  const width = 120
+  const height = 36
+  const points = values.map((value, index) => [
+    (index / (values.length - 1)) * width,
+    height - 3 - ((value - min) / span) * (height - 6),
+  ])
+  const line = points.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ')
+  const area = `0,${height} ${line} ${width},${height}`
+  const [lastX, lastY] = points[points.length - 1]
+  return (
+    <svg className={`dash-trend is-${tone}`} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" role="img" aria-label={label}>
+      <polygon points={area} />
+      <polyline points={line} vectorEffect="non-scaling-stroke" />
+      <circle cx={lastX} cy={lastY} r="2.5" />
+    </svg>
+  )
+}
+
 function Versus({ current, previous, label, money = false, invert = false }: { current: number; previous: number; label: string; money?: boolean; invert?: boolean }) {
   const diff = current - previous
   const tone = diff === 0 ? 'is-flat' : (diff > 0) !== invert ? 'is-good' : 'is-bad'
@@ -59,57 +116,183 @@ function Versus({ current, previous, label, money = false, invert = false }: { c
   )
 }
 
-function PeriodNumber({ label, value, hint, children, tone }: { label: string; value: ReactNode; hint: string; children?: ReactNode; tone?: 'danger' }) {
+function Kpi({ id, label, tip, value, tone = 'ink', state, trend, trendLabel, children }: {
+  id: string
+  label: string
+  tip: ReactNode
+  value: ReactNode
+  tone?: Tone
+  state?: 'warn' | 'bad'
+  trend: number[]
+  trendLabel: string
+  children?: ReactNode
+}) {
   return (
-    <div className={`adm-stat${tone ? ` is-${tone}` : ''}`} title={hint}>
-      <strong className="adm-stat-value">{value}</strong>
-      <span className="adm-stat-label">{label}</span>
-      {children && <span className="adm-stat-foot">{children}</span>}
+    <article className={`dash-kpi${state ? ` is-${state}` : ''}`} aria-labelledby={`${id}-label`}>
+      <header className="dash-kpi-head">
+        <h3 id={`${id}-label`}>{label}</h3>
+        <InfoTip id={`${id}-tip`}>{tip}</InfoTip>
+      </header>
+      <strong className={`dash-kpi-value is-${tone}`}>{value}</strong>
+      {children && <div className="dash-kpi-foot">{children}</div>}
+      <Trend values={trend} tone={tone} label={trendLabel} />
+    </article>
+  )
+}
+
+function KpiSkeleton() {
+  return (
+    <div className="dash-kpi is-loading" aria-hidden="true">
+      <span className="dash-skel is-line" />
+      <span className="dash-skel is-value" />
+      <span className="dash-skel is-line is-short" />
     </div>
   )
 }
 
-type Alarm = { key: string; level: 'danger' | 'warning'; text: ReactNode; action: string; onAction: () => void }
+/* ---------- Интерактивная динамика ---------- */
+
+type ChartSeries = { key: string; name: string; tone: Tone; values: number[] }
+
+function DynamicsChart({ labels, fullLabels, series, stacked, format }: {
+  labels: string[]
+  fullLabels: string[]
+  series: ChartSeries[]
+  stacked: boolean
+  format: (value: number) => string
+}) {
+  const [hidden, setHidden] = useState<Set<string>>(() => new Set())
+  const [active, setActive] = useState<number | null>(null)
+  const visible = series.filter((item) => !hidden.has(item.key))
+  const totals = labels.map((_, index) => visible.reduce((sum, item) => sum + Math.max(0, item.values[index] ?? 0), 0))
+  const peak = stacked
+    ? Math.max(1, ...totals)
+    : Math.max(1, ...visible.flatMap((item) => item.values.map((value) => Math.max(0, value))))
+  const step = labels.length > 16 ? Math.ceil(labels.length / 8) : 1
+
+  const toggle = (key: string) => {
+    setHidden((current) => {
+      const next = new Set(current)
+      if (next.has(key)) next.delete(key)
+      else if (series.length - next.size > 1) next.add(key)
+      return next
+    })
+  }
+
+  return (
+    <div className="dash-chart">
+      <div className="dash-legend" role="group" aria-label="Показать на графике">
+        {series.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            className={`dash-legend-item is-${item.tone}`}
+            aria-pressed={!hidden.has(item.key)}
+            onClick={() => toggle(item.key)}
+          >
+            <i aria-hidden="true" />
+            {item.name}
+          </button>
+        ))}
+      </div>
+      <div className="dash-plot" onMouseLeave={() => setActive(null)}>
+        <div className="dash-grid-lines" aria-hidden="true">
+          <span><em>{format(peak)}</em></span>
+          <span><em>{format(peak / 2)}</em></span>
+          <span><em>0</em></span>
+        </div>
+        <div className="dash-columns" style={{ gridTemplateColumns: `repeat(${labels.length}, minmax(0, 1fr))` }}>
+          {labels.map((label, index) => ({ label, full: fullLabels[index] ?? label, index })).map(({ label, full, index }) => {
+            const description = `${full}: ${visible.map((item) => `${item.name} ${format(item.values[index] ?? 0)}`).join(', ')}`
+            return (
+              <div
+                key={full}
+                className={`dash-column${active === index ? ' is-active' : ''}`}
+                tabIndex={0}
+                aria-label={description}
+                onMouseEnter={() => setActive(index)}
+                onFocus={() => setActive(index)}
+                onBlur={() => setActive(null)}
+              >
+                <div className={`dash-bars${stacked ? ' is-stacked' : ''}`}>
+                  {visible.map((item) => (
+                    <span
+                      key={item.key}
+                      className={`dash-bar is-${item.tone}`}
+                      style={{ height: `${(Math.max(0, item.values[index] ?? 0) / peak) * 100}%` }}
+                    />
+                  ))}
+                </div>
+                {active === index && (
+                  <div className={`dash-point-tip${index > labels.length / 2 ? ' is-left' : ''}`} role="presentation">
+                    <strong>{fullLabels[index]}</strong>
+                    {visible.map((item) => (
+                      <span key={item.key} className={`is-${item.tone}`}><i aria-hidden="true" />{item.name}<b>{format(item.values[index] ?? 0)}</b></span>
+                    ))}
+                  </div>
+                )}
+                <small className="dash-x">{index % step === 0 || index === labels.length - 1 ? label : ''}</small>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ---------- Лента ---------- */
 
 function feedIcon(kind: string, ok: boolean) {
   if (kind === 'solution') return ok ? <CheckCircle size={18} weight="bold" aria-hidden="true" /> : <XCircle size={18} weight="bold" aria-hidden="true" />
   if (kind === 'payment' || kind === 'refund') return <CurrencyRub size={18} weight="bold" aria-hidden="true" />
   if (kind === 'signup') return <UserPlus size={18} weight="bold" aria-hidden="true" />
+  if (kind === 'error') return <WarningCircle size={18} weight="bold" aria-hidden="true" />
   return <Lifebuoy size={18} weight="bold" aria-hidden="true" />
 }
 
-function FeedRow({ item, onOpenUser, onOpenSection }: { item: Row; onOpenUser: (id: string) => void; onOpenSection: (section: AdminSection) => void }) {
+function FeedRow({ item, onOpenUser, onOpenSection }: { item: Row; onOpenUser: (id: string) => void; onOpenSection: (section: AdminSection, params?: Record<string, string>) => void }) {
   const kind = str(item.kind)
   const ok = item.ok === true
-  const who = str(item.name) || str(item.email) || 'Гость'
+  const who = str(item.name) || str(item.email) || (kind === 'error' ? 'Система' : 'Гость')
   const subject = str(item.subject)
   const userId = str(item.userId)
   let text: ReactNode
   let meta: ReactNode = null
+  let tone = ''
   if (kind === 'solution') {
-    text = <><b>{who}</b> {ok ? 'получил решение' : 'не получил решение'}{subject ? <> · {subject}</> : null}</>
+    text = <><b>{who}</b> {ok ? 'получил решение' : 'не получил решение'}{subject ? <>, {subject}</> : null}</>
     meta = ok
-      ? <>{numOrNull(item.seconds) !== null ? `${formatNumber(Math.round(num(item.seconds)))} с · ` : ''}себест. {numOrNull(item.cost) !== null ? formatKopecks(num(item.cost)) : '—'}</>
+      ? <>{numOrNull(item.seconds) !== null ? `${formatNumber(Math.round(num(item.seconds)))} с, ` : ''}себест. {numOrNull(item.cost) !== null ? formatKopecks(num(item.cost)) : '-'}</>
       : 'деньги вернулись'
+    tone = ok ? 'is-ok' : 'is-bad'
   } else if (kind === 'payment') {
     text = <><b>{who}</b> пополнил баланс</>
     meta = <span className="dash-plus">+{formatKopecks(num(item.amount))}</span>
+    tone = 'is-ok'
   } else if (kind === 'refund') {
     text = <>Возврат пополнения <b>{who}</b></>
     meta = <span className="dash-minus">−{formatKopecks(num(item.amount))}</span>
+    tone = 'is-bad'
   } else if (kind === 'signup') {
     text = <><b>{who}</b> зарегистрировался</>
+    tone = 'is-blue'
+  } else if (kind === 'error') {
+    text = <><b>{subject || 'Ошибка'}</b>: {str(item.text)}</>
+    tone = ok ? 'is-warn' : 'is-bad'
   } else {
     text = <><b>{who}</b> пишет в поддержку: «{str(item.text)}»</>
+    tone = 'is-blue'
   }
-  const clickable = kind === 'ticket' || Boolean(userId)
+  const open = () => {
+    if (kind === 'ticket') onOpenSection('support')
+    else if (kind === 'error') onOpenSection('monitoring', { m_tab: 'errors' })
+    else if (userId) onOpenUser(userId)
+  }
+  const clickable = kind === 'ticket' || kind === 'error' || Boolean(userId)
   return (
-    <li className={`dash-feed-item is-${kind}${kind === 'solution' && !ok ? ' is-failed' : ''}`}>
-      <button
-        type="button"
-        disabled={!clickable}
-        onClick={() => { if (kind === 'ticket') onOpenSection('support'); else if (userId) onOpenUser(userId) }}
-      >
+    <li className={`dash-feed-item ${tone}`}>
+      <button type="button" disabled={!clickable} onClick={open}>
         <span className="dash-feed-icon">{feedIcon(kind, ok)}</span>
         <span className="dash-feed-text">{text}</span>
         {meta && <span className="dash-feed-meta">{meta}</span>}
@@ -119,37 +302,90 @@ function FeedRow({ item, onOpenUser, onOpenSection }: { item: Row; onOpenUser: (
   )
 }
 
-/* Как считается каждая цифра - словами, без обращения к коду. */
-function Definitions({ period }: { period: Period }) {
-  const words = periodWords[period]
+function Feed({ onOpenUser, onOpenSection, pulse }: { onOpenUser: (id: string) => void; onOpenSection: (section: AdminSection, params?: Record<string, string>) => void; pulse: number }) {
+  const [kind, setKind] = useState<(typeof feedKinds)[number]['value']>('all')
+  const [search, setSearch] = useState('')
+  const [query, setQuery] = useState('')
+  const [limit, setLimit] = useState(5)
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setQuery(search.trim()), 300)
+    return () => window.clearTimeout(timer)
+  }, [search])
+
+  const feed = useAsync(() => adminRpc('admin_dashboard_feed', { p_kind: kind, p_search: query, p_limit: limit }), [kind, query, limit, pulse])
+  const data = obj(feed.data)
+  const items = rows(data.items)
+
   return (
-    <details className="dash-definitions">
-      <summary><Info size={16} weight="bold" aria-hidden="true" /> Как считаются цифры</summary>
-      <dl>
-        <div><dt>Период</dt><dd>«День» - с полуночи по Москве до сейчас. «Неделя», «месяц», «год» - последние 7, 30 и 365 дней, включая сегодня. Сравнение всегда с предыдущим таким же отрезком до этого же момента: сегодня против вчера к этому часу, неделя против недели до неё.</dd></div>
-        <div><dt>Решено задач</dt><dd>Решения, которые модель довела до конца и отдала ученику или гостю. «Не решено» - попытки, где решение не прошло проверку или сорвалось; деньги за них вернулись.</dd></div>
-        <div><dt>Выручка</dt><dd>Подтверждённые пополнения кошелька минус возвраты по ним. Пополнения аккаунтов админов - проверочные - не считаются.</dd></div>
-        <div><dt>Расход на модели</dt><dd>Себестоимость у шлюза моделей: кредиты, потраченные на решения задач, плюс ответы ИИ-чата. Неудачные попытки тоже стоят денег и входят сюда.</dd></div>
-        <div><dt>Новые ученики</dt><dd>Аккаунты, зарегистрированные {words.current}. «Гости с задачей» - браузеры без аккаунта, которые ставили задачу.</dd></div>
-        <div><dt>Онлайн</dt><dd>Ученики с активностью за последние 10 минут, от периода не зависит. «Заходили» - уникальные ученики, которые открывали приложение или ставили задачу {words.current}.</dd></div>
-      </dl>
-    </details>
+    <Panel
+      title="Лента"
+      description="События за 30 дней: решения, оплаты, регистрации, обращения и ошибки."
+      className="dash-feed-panel"
+    >
+      <div className="dash-feed-tools">
+        <div className="dash-chips" role="group" aria-label="Вид событий">
+          {feedKinds.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              className="dash-chip"
+              aria-pressed={kind === option.value}
+              onClick={() => { setKind(option.value); setLimit(5) }}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <label className="dash-search">
+          <MagnifyingGlass size={16} weight="bold" aria-hidden="true" />
+          <span className="adm-visually-hidden">Поиск по ленте</span>
+          <input type="search" value={search} onChange={(event) => { setSearch(event.target.value); setLimit(5) }} placeholder="Имя, почта, предмет, текст" />
+        </label>
+      </div>
+      {feed.error && !feed.data ? (
+        <ErrorState message={feed.error} onRetry={feed.reload} />
+      ) : items.length ? (
+        <>
+          <ol className="dash-feed" aria-busy={feed.loading || undefined}>
+            {items.map((item) => (
+              <FeedRow key={`${str(item.kind)}-${str(item.at)}-${str(item.userId)}-${str(item.text).slice(0, 20)}`} item={item} onOpenUser={onOpenUser} onOpenSection={onOpenSection} />
+            ))}
+          </ol>
+          {data.hasMore === true && (
+            <div className="dash-feed-more">
+              <Button size="sm" variant="ghost" loading={feed.loading} onClick={() => setLimit((current) => current + 10)}>Показать ещё</Button>
+              <small>всего {formatNumber(num(data.total))}</small>
+            </div>
+          )}
+        </>
+      ) : feed.loading ? (
+        <ol className="dash-feed" aria-hidden="true">
+          {['first', 'second', 'third'].map((slot) => <li key={slot} className="dash-feed-item"><span className="dash-skel is-row" /></li>)}
+        </ol>
+      ) : (
+        <EmptyState>{query || kind !== 'all' ? 'Ничего не нашлось. Смени вид событий или запрос.' : 'Событий за 30 дней не было.'}</EmptyState>
+      )}
+    </Panel>
   )
 }
+
+/* ---------- Раздел ---------- */
+
+type Alarm = { key: string; level: 'danger' | 'warning'; text: ReactNode; action: string; onAction: () => void }
 
 export default function DashboardSection() {
   const { openSection, openUser, signals } = useAdmin()
   const [query, setQuery] = useQueryState({ d_period: 'week', d_metric: 'tasks' })
   const period: Period = query.d_period === 'day' || query.d_period === 'month' || query.d_period === 'year' ? query.d_period : 'week'
-  const metric: Metric = query.d_metric === 'money' || query.d_metric === 'users' ? query.d_metric : 'tasks'
+  const metric = query.d_metric === 'money' || query.d_metric === 'users' ? query.d_metric : 'tasks'
   const words = periodWords[period]
 
   const dash = useAsync(() => adminRpc('admin_dashboard_period', { p_period: period }), [period])
   const reload = dash.reload
 
-  // Обновляется само: раз в минуту и по событию Realtime.
   useEffect(() => {
-    const timer = window.setInterval(reload, 60_000)
+    const timer = window.setInterval(() => { if (document.visibilityState === 'visible') reload() }, 60_000)
     return () => window.clearInterval(timer)
   }, [reload])
 
@@ -165,38 +401,56 @@ export default function DashboardSection() {
   const current = obj(data.current)
   const previous = obj(data.previous)
   const series = rows(data.series)
-  const labels = series.map((item) => str(item.label))
   const attention = obj(data.attention)
+  const reconciliation = obj(attention.reconciliation)
   const overdue = rows(attention.overdueTickets)
   const gateway = obj(data.gateway)
   const services = obj(data.services)
-  const feed = rows(data.feed)
-  const down = Array.isArray(services.down) ? services.down.map(String) : []
-  const notConfigured = Array.isArray(services.notConfigured) ? services.notConfigured.map(String) : []
+  const serviceList = rows(services.list)
 
   const credits = numOrNull(gateway.credits)
   const perTask = numOrNull(gateway.avgCreditsPerTask)
   const tasksLeft = credits !== null && perTask && perTask > 0 ? Math.floor(credits / perTask) : null
 
-  const subjects = useMemo(() => rows(data.subjects).map((item) => ({
-    label: str(item.subject),
-    value: num(item.solved),
-    hint: num(item.failed) ? `не решено ${num(item.failed)}` : undefined,
-  })), [data.subjects])
+  const labels = series.map((item) => pointLabel(str(item.label), period))
+  const fullLabels = series.map((item) => (period === 'day' ? `Сегодня, ${str(item.label)}` : pointLabel(str(item.label), period)))
+  const pick = (key: string) => series.map((item) => num(item[key]))
+
+  const subjects = useMemo(() => rows(data.subjects).map((item) => ({ label: str(item.subject), solved: num(item.solved), failed: num(item.failed) })), [data.subjects])
+  const subjectPeak = Math.max(1, ...subjects.map((item) => item.solved + item.failed))
+
+  const solved = num(current.solved)
+  const failed = num(current.failed)
+  const attempts = solved + failed
+  const revenue = num(current.revenue)
+  const llmCost = num(current.llmCost)
+  const margin = revenue - llmCost
 
   /* Что горит: только то, что есть, каждое со своим действием. */
   const alarms: Alarm[] = []
+  const down = serviceList.filter((item) => item.ok !== true && str(item.status) !== 'not_configured')
   if (overdue.length) {
     alarms.push({
       key: 'overdue', level: 'danger',
-      text: <>Без ответа дольше {num(attention.slaMinutes)} мин: <b>{overdue.length}</b> · {str(overdue[0].subject)}, ждёт {formatDuration(num(overdue[0].waitingMinutes))}</>,
+      text: <>Без ответа дольше {num(attention.slaMinutes)} мин: <b>{overdue.length}</b>. {str(overdue[0].subject)}, ждёт {formatDuration(num(overdue[0].waitingMinutes))}</>,
       action: 'Ответить', onAction: () => openSection('support', { conversation: str(overdue[0].id), s_status: 'pending_owner' }),
     })
   } else if (signals.pendingTickets) {
     alarms.push({ key: 'pending', level: 'warning', text: <>Ждут ответа: <b>{signals.pendingTickets}</b> обращ.</>, action: 'Открыть', onAction: () => openSection('support', { s_status: 'pending_owner' }) })
   }
   if (down.length) {
-    alarms.push({ key: 'down', level: 'danger', text: <>Не отвечает: <b>{down.map((name) => serviceNames[name] ?? name).join(', ')}</b></>, action: 'Мониторинг', onAction: () => openSection('monitoring', { m_tab: 'health' }) })
+    alarms.push({
+      key: 'down', level: 'danger',
+      text: <>Не отвечает: <b>{down.map((item) => serviceNames[str(item.service)] ?? str(item.service)).join(', ')}</b>{str(down[0].downSince) ? `, с ${relativeTime(str(down[0].downSince))}` : ''}</>,
+      action: 'Мониторинг', onAction: () => openSection('monitoring', { m_tab: 'health' }),
+    })
+  }
+  if (num(reconciliation.stuckReservations) || num(reconciliation.walletMismatches)) {
+    const parts = [
+      num(reconciliation.stuckReservations) ? `${num(reconciliation.stuckReservations)} зависших резервов на ${formatKopecks(num(reconciliation.stuckAmount))}` : '',
+      num(reconciliation.walletMismatches) ? `${num(reconciliation.walletMismatches)} балансов не сходятся с операциями` : '',
+    ].filter(Boolean)
+    alarms.push({ key: 'reconciliation', level: 'danger', text: <>Сверка кошельков: <b>{parts.join(', ')}</b></>, action: 'Сверка', onAction: () => openSection('finance', { fin_tab: 'reconciliation' }) })
   }
   if (tasksLeft !== null && tasksLeft < 300) {
     alarms.push({ key: 'credits', level: tasksLeft < 100 ? 'danger' : 'warning', text: <>Кредитов шлюза хватит примерно на <b>{formatNumber(tasksLeft)}</b> задач</>, action: 'Подробнее', onAction: () => openSection('monitoring', { m_tab: 'health' }) })
@@ -212,159 +466,268 @@ export default function DashboardSection() {
   if (num(attention.fraudOpen)) {
     alarms.push({ key: 'fraud', level: 'warning', text: <>Флаги фрода без решения: <b>{num(attention.fraudOpen)}</b></>, action: 'Разобрать', onAction: () => openSection('fraud') })
   }
+  alarms.sort((a, b) => (a.level === b.level ? 0 : a.level === 'danger' ? -1 : 1))
 
-  const periodControl = (
-    <Segmented
-      label="Период"
-      value={period}
-      onChange={(value) => setQuery({ d_period: value }, { replace: true })}
-      options={[{ value: 'day', label: 'День' }, { value: 'week', label: 'Неделя' }, { value: 'month', label: 'Месяц' }, { value: 'year', label: 'Год' }]}
+  const exportReport = () => {
+    const toRubles = (kopecks: number) => (kopecks / 100).toFixed(2).replace('.', ',')
+    const lines = [
+      { label: `Итого ${words.current}`, ...current },
+      { label: `Сравнение: ${words.previous}`, ...previous },
+      ...series.map((item) => ({ ...item, label: pointLabel(str(item.label), period) })),
+    ] as Row[]
+    downloadCsv(`homework-copilot-dashboard-${period}-${todayMsk()}`, lines, [
+      { header: 'Период', value: (row) => str(row.label) },
+      { header: 'Решено', value: (row) => num(row.solved) },
+      { header: 'Не решено', value: (row) => num(row.failed) },
+      { header: 'Выручка, ₽', value: (row) => toRubles(num(row.revenue)) },
+      { header: 'Расход на модели, ₽', value: (row) => toRubles(num(row.llmCost)) },
+      { header: 'Маржа, ₽', value: (row) => toRubles(num(row.revenue) - num(row.llmCost)) },
+      { header: 'Новые ученики', value: (row) => num(row.registrations) },
+      { header: 'Заходили', value: (row) => num(row.active) },
+    ])
+  }
+
+  const header = (
+    <PageHeader
+      title="Дашборд"
+      description={`Цифры ${words.current}, сравнение - ${words.previous}. Обновляется само.`}
+      actions={(
+        <>
+          <Segmented
+            label="Период"
+            value={period}
+            onChange={(value) => setQuery({ d_period: value }, { replace: true })}
+            options={[{ value: 'day', label: 'День' }, { value: 'week', label: 'Неделя' }, { value: 'month', label: 'Месяц' }, { value: 'year', label: 'Год' }]}
+          />
+          <Button size="sm" onClick={reload} loading={dash.loading} icon={<ArrowClockwise size={16} weight="bold" aria-hidden="true" />} aria-label="Обновить" />
+          <Button size="sm" variant="primary" disabled={!dash.data} onClick={exportReport} icon={<DownloadSimple size={16} weight="bold" aria-hidden="true" />}>Скачать отчёт</Button>
+        </>
+      )}
     />
   )
 
-  if (dash.loading && !dash.data) return <><PageHeader title="Дашборд" actions={periodControl} /><LoadingState /></>
-  if (dash.error && !dash.data) return <><PageHeader title="Дашборд" actions={periodControl} /><ErrorState message={dash.error} onRetry={reload} /></>
+  if (dash.error && !dash.data) return <>{header}<ErrorState message={dash.error} onRetry={reload} /></>
 
-  const solved = num(current.solved)
-  const failed = num(current.failed)
-  const attempts = solved + failed
+  const loading = !dash.data
 
   return (
     <>
-      <PageHeader
-        title="Дашборд"
-        description={`Цифры ${words.current}, сравнение - ${words.previous}. Обновляется само раз в минуту и при новых событиях.`}
-        actions={(
+      {header}
+
+      <div className="dash-top">
+        <section className={`dash-alerts${alarms.some((alarm) => alarm.level === 'danger') ? ' is-danger' : alarms.length ? ' is-warning' : ' is-calm'}`} aria-labelledby="dash-alerts-title">
+          <header className="dash-kpi-head">
+            <h3 id="dash-alerts-title">Тревоги</h3>
+            {alarms.length > 0 && <span className="dash-count">{alarms.length}</span>}
+          </header>
+          {loading ? (
+            <span className="dash-skel is-row" aria-hidden="true" />
+          ) : alarms.length ? (
+            <ul className="dash-alert-list">
+              {alarms.map((alarm) => (
+                <li key={alarm.key} className={`dash-alert is-${alarm.level}`}>
+                  {alarm.level === 'danger'
+                    ? <WarningCircle className="dash-alert-icon" size={20} weight="fill" aria-hidden="true" />
+                    : <Warning className="dash-alert-icon" size={20} weight="fill" aria-hidden="true" />}
+                  <p>{alarm.text}</p>
+                  <Button size="sm" variant={alarm.level === 'danger' ? 'accent' : 'secondary'} onClick={alarm.onAction} icon={<ArrowRight size={14} weight="bold" aria-hidden="true" />}>{alarm.action}</Button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="dash-calm">
+              <CheckCircle size={28} weight="fill" aria-hidden="true" />
+              <p><b>Всё спокойно.</b> Обращения отвечены, сервисы работают, сверка сходится.</p>
+            </div>
+          )}
+        </section>
+
+        {loading ? (
+          <><KpiSkeleton /><KpiSkeleton /><KpiSkeleton /><KpiSkeleton /><KpiSkeleton /></>
+        ) : (
           <>
-            {periodControl}
-            <Button size="sm" onClick={reload} loading={dash.loading} icon={<ArrowClockwise size={16} weight="bold" aria-hidden="true" />} aria-label="Обновить" />
+            <Kpi
+              id="kpi-solved"
+              label={`Решено ${words.current}`}
+              tip="Решения, которые модель довела до конца и отдала ученику или гостю. «Не решено» - попытки, где решение не прошло проверку или сорвалось; деньги за них вернулись."
+              value={formatNumber(solved)}
+              tone={solved > 0 ? 'ok' : 'ink'}
+              state={failed > solved && failed > 2 ? 'bad' : undefined}
+              trend={pick('solved')}
+              trendLabel={`Решено ${words.chart}`}
+            >
+              <Versus current={solved} previous={num(previous.solved)} label={words.previous} />
+              {failed > 0 && <small className="dash-bad-text">не решено: {failed}{attempts ? ` (${formatPercent((failed / attempts) * 100)})` : ''}</small>}
+            </Kpi>
+
+            <Kpi
+              id="kpi-money"
+              label={`Маржа ${words.current}`}
+              tip="Доход - подтверждённые пополнения кошелька минус возвраты, без проверочных пополнений аккаунтов админов. Расход - себестоимость у шлюза моделей: решения задач, включая неудачные, и ответы ИИ-чата. Маржа - доход минус расход."
+              value={formatKopecks(margin)}
+              tone={margin > 0 ? 'ok' : margin < 0 ? 'bad' : 'ink'}
+              trend={series.map((item) => num(item.revenue) - num(item.llmCost))}
+              trendLabel={`Маржа ${words.chart}`}
+            >
+              <dl className="dash-money">
+                <div><dt>Доход</dt><dd className={revenue > 0 ? 'is-ok' : ''}>{formatKopecks(revenue)}</dd></div>
+                <div><dt>Расход на модели</dt><dd className={llmCost > 0 ? 'is-bad' : ''}>−{formatKopecks(llmCost)}</dd></div>
+              </dl>
+              {revenue === 0 && <small>Оплат от учеников {words.current} не было - маржа пока равна расходу.</small>}
+            </Kpi>
+
+            <Kpi
+              id="kpi-students"
+              label="Новые ученики"
+              tip={`Аккаунты, зарегистрированные ${words.current}. «Гости с задачей» - браузеры без аккаунта, которые ставили задачу.`}
+              value={formatNumber(num(current.registrations))}
+              tone={num(current.registrations) > 0 ? 'ok' : 'ink'}
+              trend={pick('registrations')}
+              trendLabel={`Регистрации ${words.chart}`}
+            >
+              <Versus current={num(current.registrations)} previous={num(previous.registrations)} label={words.previous} />
+              {num(current.guests) > 0 && <small>гостей с задачей: {num(current.guests)}</small>}
+            </Kpi>
+
+            <Kpi
+              id="kpi-online"
+              label="Онлайн сейчас"
+              tip={`Ученики с активностью за последние 10 минут, от периода не зависит. «Заходили» - уникальные ученики, которые открывали приложение или ставили задачу ${words.current}. Пульс активности пишется с 12 сентября.`}
+              value={formatNumber(num(data.online))}
+              tone="blue"
+              trend={pick('active')}
+              trendLabel={`Заходили ${words.chart}`}
+            >
+              <small>заходили {words.current}: <b>{formatNumber(num(current.active))}</b></small>
+              <small>{words.previous}: {formatNumber(num(previous.active))}</small>
+            </Kpi>
+
+            <Kpi
+              id="kpi-credits"
+              label="Кредиты шлюза"
+              tip="Остаток на счету шлюза моделей по последней проверке и примерный запас задач: остаток, делённый на средний расход кредитов на задачу за 7 дней. Микрографик - сколько задач уходило в шлюз."
+              value={credits !== null ? formatNumber(Math.round(credits)) : '-'}
+              tone={tasksLeft !== null && tasksLeft < 100 ? 'bad' : tasksLeft !== null && tasksLeft < 300 ? 'warn' : 'ink'}
+              state={tasksLeft !== null && tasksLeft < 100 ? 'bad' : tasksLeft !== null && tasksLeft < 300 ? 'warn' : undefined}
+              trend={series.map((item) => num(item.solved) + num(item.failed))}
+              trendLabel={`Задачи в шлюз ${words.chart}`}
+            >
+              <small>
+                {tasksLeft !== null
+                  ? <>хватит примерно на <b>{formatNumber(tasksLeft)}</b> задач</>
+                  : 'запас появится после первых задач за неделю'}
+              </small>
+              {str(gateway.checkedAt) && <small>проверено {relativeTime(str(gateway.checkedAt))}</small>}
+            </Kpi>
           </>
         )}
-      />
-
-      {alarms.length ? (
-        <section className="dash-alarms" aria-label="Что требует действия">
-          {alarms.map((alarm) => (
-            <div key={alarm.key} className={`dash-alarm is-${alarm.level}`}>
-              <span className="dash-alarm-dot" aria-hidden="true" />
-              <p>{alarm.text}</p>
-              <Button size="sm" variant={alarm.level === 'danger' ? 'accent' : 'secondary'} onClick={alarm.onAction} icon={<ArrowRight size={14} weight="bold" aria-hidden="true" />}>{alarm.action}</Button>
-            </div>
-          ))}
-        </section>
-      ) : (
-        <section className="dash-calm" aria-label="Что требует действия">
-          <span className="dash-alarm-dot" aria-hidden="true" />
-          <p><b>Всё спокойно.</b> Обращения отвечены, сервисы работают, очередь движется.</p>
-        </section>
-      )}
-
-      <div className="dash-numbers">
-        <div className="adm-stat-grid dash-today">
-          <PeriodNumber
-            label={`Решено ${words.current}`}
-            value={formatNumber(solved)}
-            hint="Решения, которые модель довела до конца и отдала ученику или гостю."
-            tone={failed > solved && failed > 2 ? 'danger' : undefined}
-          >
-            <Versus current={solved} previous={num(previous.solved)} label={words.previous} />
-            {failed > 0 && <small className="dash-failed">не решено: {failed}{attempts ? ` (${formatPercent((failed / attempts) * 100)})` : ''}</small>}
-          </PeriodNumber>
-          <PeriodNumber label={`Выручка ${words.current}`} value={formatKopecks(num(current.revenue))} hint="Подтверждённые пополнения кошелька минус возвраты.">
-            <Versus current={num(current.revenue)} previous={num(previous.revenue)} label={words.previous} money />
-          </PeriodNumber>
-          <PeriodNumber label="Расход на модели" value={formatKopecks(num(current.llmCost))} hint="Оплата шлюза моделей: кредиты задач и себестоимость ответов чата.">
-            <Versus current={num(current.llmCost)} previous={num(previous.llmCost)} label={words.previous} money invert />
-          </PeriodNumber>
-          <PeriodNumber label="Новые ученики" value={formatNumber(num(current.registrations))} hint="Зарегистрированные аккаунты за период.">
-            <Versus current={num(current.registrations)} previous={num(previous.registrations)} label={words.previous} />
-            {num(current.guests) > 0 && <small>гостей с задачей: {num(current.guests)}</small>}
-          </PeriodNumber>
-          <PeriodNumber label="Онлайн сейчас" value={formatNumber(num(data.online))} hint="Ученики с активностью за последние 10 минут.">
-            <small>заходили {words.current}: {formatNumber(num(current.active))}</small>
-            <small>{words.previous}: {formatNumber(num(previous.active))}</small>
-          </PeriodNumber>
-        </div>
-        <Definitions period={period} />
       </div>
 
-      <div className="adm-grid-main">
-        <Panel
-          title="Динамика"
-          description={words.chart}
-          actions={<Segmented label="Показатель" value={metric} onChange={(value) => setQuery({ d_metric: value }, { replace: true })} options={[{ value: 'tasks', label: 'Задачи' }, { value: 'money', label: 'Деньги' }, { value: 'users', label: 'Ученики' }]} />}
-        >
-          {metric === 'tasks' && (
-            <StackedBars
-              labels={labels}
-              stacks={[
-                { name: 'Решено', values: series.map((item) => num(item.solved)) },
-                { name: 'Не решено', values: series.map((item) => num(item.failed)) },
-              ]}
-            />
-          )}
-          {metric === 'money' && (
-            <LineChart
-              kind="bar"
-              labels={labels}
-              format={compactRubles}
-              series={[
-                { name: 'Выручка', values: series.map((item) => num(item.revenue)), tone: 1 },
-                { name: 'Расход на модели', values: series.map((item) => num(item.llmCost)), tone: 2 },
-              ]}
-            />
-          )}
-          {metric === 'users' && (
-            <LineChart
-              kind="bar"
-              labels={labels}
-              series={[
-                { name: 'Заходили', values: series.map((item) => num(item.active)), tone: 1 },
-                { name: 'Новые', values: series.map((item) => num(item.registrations)), tone: 2 },
-              ]}
-            />
-          )}
-        </Panel>
-
-        <div className="dash-side">
-          <Panel title="Шлюз моделей" actions={<Button size="sm" variant="ghost" onClick={() => openSection('monitoring', { m_tab: 'health' })}>Сервисы</Button>}>
-            <div className="dash-gateway">
-              <strong className="adm-stat-value">{credits !== null ? formatNumber(Math.round(credits)) : '—'}</strong>
-              <span className="adm-stat-label">кредитов на счету</span>
-              <p>
-                {tasksLeft !== null
-                  ? <>Хватит примерно на <b>{formatNumber(tasksLeft)}</b> задач: в среднем {formatNumber(perTask ?? 0)} кредита за задачу за 7 дней.</>
-                  : 'Средний расход появится после первых задач за неделю.'}
-              </p>
-            </div>
-            <p className={`dash-services${down.length ? ' is-down' : ''}`}>
-              <span className="dash-alarm-dot" aria-hidden="true" />
-              {down.length
-                ? <>Не отвечает: {down.map((name) => serviceNames[name] ?? name).join(', ')}</>
-                : <>Все сервисы работают{str(services.checkedAt) ? `, проверено ${relativeTime(str(services.checkedAt))}` : ''}</>}
-            </p>
-            {notConfigured.length > 0 && (
-              <p className="dash-note">Не настроено: {notConfigured.map((name) => serviceNames[name] ?? name).join(', ')}.</p>
+      <Panel
+        title="Динамика"
+        description={`${words.chart[0].toUpperCase()}${words.chart.slice(1)}. Наведи на столбец - покажет значения; легенда включает и выключает ряды.`}
+        actions={(
+          <Segmented
+            label="Показатель"
+            value={metric}
+            onChange={(value) => setQuery({ d_metric: value }, { replace: true })}
+            options={[{ value: 'tasks', label: 'Задачи' }, { value: 'money', label: 'Деньги' }, { value: 'users', label: 'Ученики' }]}
+          />
+        )}
+      >
+        {loading ? <span className="dash-skel is-chart" aria-hidden="true" /> : (
+          <>
+            {metric === 'tasks' && (
+              <DynamicsChart
+                key={`tasks-${period}`}
+                labels={labels}
+                fullLabels={fullLabels}
+                stacked
+                format={(value) => formatNumber(Math.round(value))}
+                series={[
+                  { key: 'solved', name: 'Решено', tone: 'ok', values: pick('solved') },
+                  { key: 'failed', name: 'Не решено', tone: 'bad', values: pick('failed') },
+                ]}
+              />
             )}
-          </Panel>
-
-          <Panel title={`Предметы ${words.current}`}>
-            {subjects.length ? <HorizontalBars items={subjects.slice(0, 8)} /> : <EmptyState>Задач {words.current} не было.</EmptyState>}
-          </Panel>
-        </div>
-      </div>
-
-      <Panel title="Лента" description="Последние решения, оплаты, регистрации и обращения - от периода не зависит.">
-        {feed.length ? (
-          <ol className="dash-feed">
-            {feed.map((item) => (
-              <FeedRow key={`${str(item.kind)}-${str(item.at)}-${str(item.userId)}`} item={item} onOpenUser={openUser} onOpenSection={(section) => openSection(section)} />
-            ))}
-          </ol>
-        ) : (
-          <EmptyState>Событий пока нет: первые появятся, когда ученики начнут решать задачи.</EmptyState>
+            {metric === 'money' && (
+              <DynamicsChart
+                key={`money-${period}`}
+                labels={labels}
+                fullLabels={fullLabels}
+                stacked={false}
+                format={compactRubles}
+                series={[
+                  { key: 'revenue', name: 'Доход', tone: 'ok', values: pick('revenue') },
+                  { key: 'llmCost', name: 'Расход на модели', tone: 'bad', values: pick('llmCost') },
+                ]}
+              />
+            )}
+            {metric === 'users' && (
+              <DynamicsChart
+                key={`users-${period}`}
+                labels={labels}
+                fullLabels={fullLabels}
+                stacked={false}
+                format={(value) => formatNumber(Math.round(value))}
+                series={[
+                  { key: 'active', name: 'Заходили', tone: 'blue', values: pick('active') },
+                  { key: 'registrations', name: 'Новые', tone: 'ok', values: pick('registrations') },
+                ]}
+              />
+            )}
+          </>
         )}
       </Panel>
+
+      <div className="adm-grid-2 dash-pair">
+        <Panel title="Сервисы" actions={<Button size="sm" variant="ghost" onClick={() => openSection('monitoring', { m_tab: 'health' })}>Мониторинг</Button>}>
+          {serviceList.length ? (
+            <ul className="dash-lights">
+              {serviceList.map((item) => {
+                const status = str(item.status)
+                const state = item.ok === true ? 'ok' : status === 'not_configured' ? 'off' : 'bad'
+                const name = serviceNames[str(item.service)] ?? str(item.service)
+                const note = state === 'ok'
+                  ? (numOrNull(item.latencyMs) !== null ? `${formatNumber(num(item.latencyMs))} мс` : 'работает')
+                  : state === 'off' ? 'не настроено' : `не отвечает${str(item.downSince) ? ` с ${relativeTime(str(item.downSince))}` : ''}`
+                return (
+                  <li key={str(item.service)} className={`is-${state}`}>
+                    <i aria-hidden="true" />
+                    <span className="dash-light-name">{name}</span>
+                    <span className="dash-light-note">{note}</span>
+                    <span className="adm-visually-hidden">{state === 'ok' ? 'работает' : state === 'off' ? 'не настроено' : 'не отвечает'}</span>
+                  </li>
+                )
+              })}
+            </ul>
+          ) : <EmptyState>Проверок ещё не было.</EmptyState>}
+          {str(services.checkedAt) && <p className="dash-note">Проверено {relativeTime(str(services.checkedAt))}. Проверка раз в 5 минут.</p>}
+        </Panel>
+
+        <Panel title={`Предметы ${words.current}`}>
+          {subjects.length ? (
+            <ol className="dash-rank">
+              {subjects.slice(0, 8).map((item, index) => (
+                <li key={item.label}>
+                  <span className="dash-rank-place">{index + 1}</span>
+                  <span className="dash-rank-name">{item.label}</span>
+                  <span className="dash-rank-bar" aria-hidden="true">
+                    <i className="is-ok" style={{ width: `${(item.solved / subjectPeak) * 100}%` }} />
+                    <i className="is-bad" style={{ width: `${(item.failed / subjectPeak) * 100}%` }} />
+                  </span>
+                  <span className="dash-rank-value">
+                    <b>{formatNumber(item.solved)}</b>
+                    {item.failed > 0 && <small>не решено {item.failed}</small>}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          ) : <EmptyState>Задач {words.current} не было.</EmptyState>}
+        </Panel>
+      </div>
+
+      <Feed onOpenUser={openUser} onOpenSection={(section, params) => openSection(section, params)} pulse={signals.pulse} />
     </>
   )
 }

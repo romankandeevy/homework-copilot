@@ -436,6 +436,7 @@ export type Database = {
           resolved_at: string | null
           status: string
           subject: string
+          tags: string[]
           updated_at: string
           user_id: string
           user_last_read_at: string | null
@@ -450,6 +451,7 @@ export type Database = {
           resolved_at?: string | null
           status?: string
           subject: string
+          tags?: string[]
           updated_at?: string
           user_id: string
         }
@@ -463,6 +465,7 @@ export type Database = {
           resolved_at?: string | null
           status?: string
           subject?: string
+          tags?: string[]
           updated_at?: string
           user_id?: string
         }
@@ -808,6 +811,17 @@ export type Database = {
       admin_support_detail: { Args: { p_conversation_id: string }; Returns: Json }
       admin_support_update_status: { Args: { p_conversation_id: string; p_status: string }; Returns: Json }
       admin_credit_feature_balance: { Args: { p_amount: number; p_conversation_id: string; p_reason: string }; Returns: Json }
+      admin_finance_reconciliation: { Args: never; Returns: Json }
+      admin_finance_recheck_reservation: { Args: { p_idempotency_key: string; p_user_id: string }; Returns: Json }
+      admin_finance_fix_reconciliation: {
+        Args: { p_dry_run?: boolean; p_expected_count?: number | null; p_expected_total?: number | null }
+        Returns: Json
+      }
+      admin_finance_align_wallet: {
+        Args: { p_expected_balance: number; p_expected_ledger: number; p_reason: string; p_user_id: string }
+        Returns: Json
+      }
+      admin_user_balance_history: { Args: { p_days?: number; p_user_id: string }; Returns: Json }
       record_support_idea_telegram_decision: {
         Args: {
           p_action: string
@@ -957,12 +971,75 @@ export type Database = {
         Returns: Json
       }
       get_admin_context: { Args: never; Returns: Json }
+      admin_users_list: {
+        Args: { p_dir?: string; p_filters?: Json; p_page?: number; p_page_size?: number; p_search?: string; p_sort?: string }
+        Returns: Json
+      }
+      admin_users_stats: { Args: never; Returns: Json }
       is_admin_user: { Args: { p_user_id: string }; Returns: boolean }
       admin_record_external_action: {
         Args: { p_event: string; p_payload?: Json; p_target_user_id: string }
         Returns: string
       }
       admin_notifications_overview: { Args: never; Returns: Json }
+      admin_audit_log_v2: {
+        Args: {
+          p_actor?: string | null
+          p_dangerous?: boolean
+          p_event?: string | null
+          p_from?: string | null
+          p_page?: number
+          p_page_size?: number
+          p_to?: string | null
+          p_user?: string | null
+        }
+        Returns: Json
+      }
+      admin_request_log_v2: {
+        Args: {
+          p_actor_id?: string | null
+          p_from?: string | null
+          p_ip?: string | null
+          p_page?: number
+          p_page_size?: number
+          p_path?: string | null
+          p_to?: string | null
+        }
+        Returns: Json
+      }
+      admin_request_log_summary: {
+        Args: {
+          p_actor_id?: string | null
+          p_from?: string | null
+          p_ip?: string | null
+          p_limit?: number
+          p_path?: string | null
+          p_threshold?: number
+          p_to?: string | null
+        }
+        Returns: Json
+      }
+      admin_prompt_preview_start: {
+        Args: {
+          p_compare?: boolean
+          p_condition: string
+          p_grade: string
+          p_prompt: string
+          p_subject_id: string
+        }
+        Returns: Json
+      }
+      admin_prompt_preview_finish: {
+        Args: {
+          p_credits?: number | null
+          p_error?: string | null
+          p_id: string
+          p_result?: Json | null
+          p_seconds?: number | null
+          p_status: string
+        }
+        Returns: Json
+      }
       record_request_log: {
         Args: {
           p_bytes_in?: number | null

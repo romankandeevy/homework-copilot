@@ -3,13 +3,14 @@
    базе, доставляет её функция на Vercel по вызову pg_cron раз в минуту. */
 
 import { useMemo, useState } from 'react'
-import { PaperPlaneTilt, X } from '@phosphor-icons/react'
+import { PaperPlaneTilt, WarningCircle, X } from '@phosphor-icons/react'
 import { adminAction, adminRpc, arr, bool, formatDateTime, num, obj, rows, str, strOrNull, type Row } from '../api'
 import {
   Badge, Button, DataTable, EmptyState, ErrorState, Field, LoadingState, PageHeader, Panel,
   useAction, useAsync, useToast, type Column, type Tone,
 } from '../ui'
 import { useAdmin } from '../context'
+import BrowserNotificationsPanel from './BrowserNotificationsPanel'
 import './notifications.css'
 
 type Rule = { event: string; title: string; telegram: boolean; email: boolean }
@@ -25,6 +26,43 @@ type Notice = {
   wantEmail: boolean
   attempts: number
   lastError: string | null
+}
+
+/* Повторы схлопываются: 12 сентября проверка базы мигала всю ночь, и
+   журнал состоял из одинаковых «database не отвечает» и «снова работает».
+   Ключ группы - заголовок и текст без чисел и времени. */
+type NoticeGroup = { key: string; latest: Notice; first: Notice; items: Notice[] }
+
+function normalizeBody(body: string) {
+  return body.replace(/\d{1,2}\.\d{1,2}(\s+\d{1,2}:\d{2})?/g, '#').replace(/\d+/g, '#').trim()
+}
+
+function groupNotices(list: Notice[]): NoticeGroup[] {
+  const groups = new Map<string, NoticeGroup>()
+  for (const notice of list) {
+    const key = `${notice.title}|${normalizeBody(notice.body)}`
+    const group = groups.get(key)
+    if (!group) {
+      groups.set(key, { key, latest: notice, first: notice, items: [notice] })
+      continue
+    }
+    group.items.push(notice)
+    if (notice.createdAt > group.latest.createdAt) group.latest = notice
+    if (notice.createdAt < group.first.createdAt) group.first = notice
+  }
+  return [...groups.values()].sort((a, b) => (a.latest.createdAt < b.latest.createdAt ? 1 : -1))
+}
+
+function humanError(text: string | null) {
+  if (!text) return null
+  return text.split('; ').map((part) => {
+    if (part.startsWith('email: ')) {
+      const email = part.slice(7)
+      return /RESEND_API_KEY/.test(email) ? 'Почта: на Vercel не задан RESEND_API_KEY' : `Почта: ${email}`
+    }
+    if (part.startsWith('telegram: ')) return `Telegram: ${part.slice(10)}`
+    return part
+  }).join('. ')
 }
 
 type TestResult = { telegram: boolean; email: boolean; error: string | null; emails: string[] }
@@ -83,6 +121,7 @@ function NotificationsContent() {
     event: str(row.event), title: str(row.title), telegram: bool(row.telegram), email: bool(row.email),
   })), [data])
   const recent = useMemo(() => rows(obj(data).recent).map(parseNotice), [data])
+  const groups = useMemo(() => groupNotices(recent), [recent])
   const emails = arr(overview.emails).filter((entry): entry is string => typeof entry === 'string')
   const summaryHour = num(overview.dailySummaryHour, 9)
   const lastCron = obj(overview.lastCron)
@@ -150,13 +189,40 @@ function NotificationsContent() {
     },
   ]
 
-  const recentColumns: Column<Notice>[] = [
-    { key: 'title', header: 'Уведомление', render: (notice) => <span className="adm-cell-main"><strong>{notice.title}</strong><small className="adm-clamp" title={notice.body}>{notice.body}</small></span> },
-    { key: 'created', header: 'Создано', render: (notice) => <span className="adm-nowrap">{formatDateTime(notice.createdAt)}</span> },
-    { key: 'telegram', header: 'Telegram', render: (notice) => <DeliveryCell want={notice.wantTelegram} sentAt={notice.telegramSentAt} attempts={notice.attempts} /> },
-    { key: 'email', header: 'Почта', render: (notice) => <DeliveryCell want={notice.wantEmail} sentAt={notice.emailSentAt} attempts={notice.attempts} /> },
-    { key: 'attempts', header: 'Попыток', align: 'right', mobile: false, render: (notice) => notice.attempts },
-    { key: 'error', header: 'Ошибка', mobile: false, render: (notice) => (notice.lastError ? <span className="adm-clamp" title={notice.lastError}>{notice.lastError}</span> : <span className="adm-muted">-</span>) },
+  const recentColumns: Column<NoticeGroup>[] = [
+    {
+      key: 'title',
+      header: 'Уведомление',
+      render: (group) => (
+        <span className="adm-cell-main">
+          <strong>
+            {group.latest.title}
+            {group.items.length > 1 && <span className="ntf-repeat" title={`Первое ${formatDateTime(group.first.createdAt)}`}>×{group.items.length}</span>}
+          </strong>
+          <small className="adm-clamp" title={group.latest.body}>{group.latest.body}</small>
+        </span>
+      ),
+    },
+    {
+      key: 'created',
+      header: 'Когда',
+      render: (group) => (
+        <span className="adm-cell-main">
+          <span className="adm-nowrap">{formatDateTime(group.latest.createdAt)}</span>
+          {group.items.length > 1 && <small className="adm-nowrap">первое {formatDateTime(group.first.createdAt)}</small>}
+        </span>
+      ),
+    },
+    { key: 'telegram', header: 'Telegram', render: (group) => <GroupDelivery group={group} channel="telegram" /> },
+    { key: 'email', header: 'Почта', render: (group) => <GroupDelivery group={group} channel="email" /> },
+    {
+      key: 'error',
+      header: 'Почему не дошло',
+      render: (group) => {
+        const text = humanError(group.latest.lastError)
+        return text ? <span className="ntf-error" title={group.latest.lastError ?? undefined}>{text}</span> : <span className="adm-muted">-</span>
+      },
+    },
   ]
 
   return (
@@ -171,6 +237,8 @@ function NotificationsContent() {
           </>
         )}
       />
+
+      <EmailBanner recent={recent} emails={emails} />
 
       <Panel title="Состояние доставки" description="Успешный запуск планировщика значит, что база вызвала функцию на Vercel. Дошло ли сообщение, видно по времени отправки в журнале.">
         <div className="ntf-channels">
@@ -203,11 +271,13 @@ function NotificationsContent() {
         <SummaryHourEditor key={summaryHour} initial={summaryHour} onSaved={reload} />
       </div>
 
+      <BrowserNotificationsPanel />
+
       <Panel title="Последние уведомления" description={`Не доставленное повторяется до ${MAX_ATTEMPTS} попыток в течение суток, потом больше не отправляется.`}>
         <DataTable
           columns={recentColumns}
-          rows={recent}
-          rowKey={(notice) => notice.id}
+          rows={groups}
+          rowKey={(group) => group.key}
           empty="Уведомлений пока не было."
         />
       </Panel>
@@ -220,6 +290,43 @@ const cronStatusNames: Record<string, string> = {
   failed: 'с ошибкой',
   running: 'выполняется',
   starting: 'запускается',
+}
+
+function GroupDelivery({ group, channel }: { group: NoticeGroup; channel: 'telegram' | 'email' }) {
+  const wantKey = channel === 'telegram' ? 'wantTelegram' : 'wantEmail'
+  const sentKey = channel === 'telegram' ? 'telegramSentAt' : 'emailSentAt'
+  if (group.items.length === 1) return <DeliveryCell want={group.latest[wantKey]} sentAt={group.latest[sentKey]} attempts={group.latest.attempts} />
+  const wanted = group.items.filter((notice) => notice[wantKey])
+  if (!wanted.length) return <span className="adm-muted">не нужно</span>
+  const sent = wanted.filter((notice) => notice[sentKey]).length
+  if (sent === wanted.length) return <Badge tone="success">доставлено все {sent}</Badge>
+  if (sent === 0) return <Badge tone="danger">не доставлено ни одно</Badge>
+  return <Badge tone="warning">доставлено {sent} из {wanted.length}</Badge>
+}
+
+/* Почта - главный провал страницы, если она не работает: баннер сверху. */
+function EmailBanner({ recent, emails }: { recent: Notice[]; emails: string[] }) {
+  const failures = recent.filter((notice) => notice.wantEmail && !notice.emailSentAt && channelError(notice.lastError, 'email'))
+  const lastSent = recent.find((notice) => notice.emailSentAt)
+  const missingKey = failures.some((notice) => /RESEND_API_KEY/.test(channelError(notice.lastError, 'email') ?? ''))
+  const failing = failures.length > 0 && (!lastSent || failures[0].createdAt > lastSent.createdAt)
+  if (!failing && emails.length > 0) return null
+  return (
+    <div className="ntf-banner" role="alert">
+      <WarningCircle size={24} weight="fill" aria-hidden="true" />
+      <div>
+        <strong>{missingKey ? 'Почта не работает: на Vercel не задан RESEND_API_KEY' : failing ? 'Письма не доставляются' : 'Адреса для писем не заданы'}</strong>
+        <p>
+          {missingKey
+            ? `Ни одно письмо не ушло (${failures.length} в журнале). Добавь RESEND_API_KEY в переменные окружения проекта на Vercel и передеплой функции - очередь дошлёт письма младше суток.`
+            : failing
+              ? `Последняя ошибка: ${channelError(failures[0].lastError, 'email')}.`
+              : 'Письма некуда слать - добавь адрес ниже, в «Адреса для писем».'}
+          {missingKey && emails.length === 0 && ' Адресов тоже нет - добавь хотя бы один ниже.'}
+        </p>
+      </div>
+    </div>
+  )
 }
 
 function DeliveryCell({ want, sentAt, attempts }: { want: boolean; sentAt: string | null; attempts: number }) {
