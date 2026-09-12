@@ -13,6 +13,15 @@ async function attachPhoto(page: import('@playwright/test').Page) {
   await expect(page.getByRole('img', { name: 'Приложенное фото задачи' })).toBeVisible()
 }
 
+// Очередь задач живёт в настоящей базе. Без подмены каждый прогон оставлял
+// в проде гостевую «Задачу с фотографии»: к 12 сентября их набралось 86,
+// и дашборд считал их гостями. Приложение переживает отказ очереди - задача
+// решается в вкладке, - поэтому здесь база просто отвечает ошибкой.
+test.beforeEach(async ({ page }) => {
+  await page.route(/\/rest\/v1\/rpc\/(start_homework_job|close_homework_job|list_homework_jobs)\b/, (route) =>
+    route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ message: 'очередь задач в тесте отключена' }) }))
+})
+
 test('передаёт модели изображение без браузерного OCR', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
   let solveRequest: Record<string, unknown> | undefined

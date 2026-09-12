@@ -1828,7 +1828,9 @@ function HomePage() {
 
     const currentPath = () => currentApplicationPath()
     const track = (event: 'session_started' | 'session_ended' | 'page_view') => {
-      void supabaseClient.rpc('track_my_activity', { p_event: event, p_path: currentPath() })
+      // Запрос supabase-js ленивый: без then он не уходит вовсе. До 12
+      // сентября здесь стоял голый void, и пульс не записал ни одного события.
+      void supabaseClient.rpc('track_my_activity', { p_event: event, p_path: currentPath() }).then(() => undefined, () => undefined)
     }
     const onVisibilityChange = () => {
       track(document.visibilityState === 'visible' ? 'session_started' : 'session_ended')
