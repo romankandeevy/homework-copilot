@@ -32,6 +32,7 @@ import type { Column, Tone } from './ui'
 import { rememberRecentUser } from './recentUsers'
 import { BanDialog, ConfirmDialog } from './userDialogs'
 import BalanceHistoryChart from './BalanceHistoryChart'
+import InternalAccountControl from './InternalAccountControl'
 import './sections/users.css'
 
 type CardTab = 'profile' | 'balance' | 'plan' | 'tasks' | 'economics' | 'sessions' | 'linked' | 'support' | 'notes' | 'audit'
@@ -308,6 +309,8 @@ function UserCardView({ userId, onClose }: { userId: string; onClose: () => void
               )}
             </div>
           )}
+
+          {canModerate && <InternalAccountControl userId={userId} />}
 
           {activeFlags.length > 0 && (
             <div className="adm-card-flags" role="note">

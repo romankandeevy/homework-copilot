@@ -498,6 +498,7 @@ export function StatusPills({ row }: { row: Row }) {
       )}
       {!banned && flags === 0 && <Pill tone="success" title="Не заблокирован, открытых флагов антифрода нет.">Активен</Pill>}
       {bool(row.isStaff) && <Pill tone="info" title="Аккаунт администратора. В цифрах над таблицей не считается.">Админ</Pill>}
+      {bool(row.isInternal) && <Pill tone="info" title="Служебный аккаунт: свой, тестовый или демо. В статистике не считается.">Служебный</Pill>}
     </div>
   )
 }

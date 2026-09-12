@@ -65,6 +65,16 @@ function pointLabel(label: string, period: Period) {
   return label
 }
 
+/* 1 баланс, 2 баланса, 5 балансов. */
+function plural(count: number, one: string, few: string, many: string) {
+  const tens = Math.abs(count) % 100
+  const units = tens % 10
+  if (tens > 10 && tens < 20) return many
+  if (units === 1) return one
+  if (units >= 2 && units <= 4) return few
+  return many
+}
+
 function compactRubles(kopecks: number) {
   const rubles = kopecks / 100
   if (Math.abs(rubles) >= 1_000_000) return `${formatNumber(Math.round(rubles / 100_000) / 10)} млн ₽`
@@ -551,9 +561,11 @@ export default function DashboardSection() {
     })
   }
   if (num(reconciliation.stuckReservations) || num(reconciliation.walletMismatches)) {
+    const stuck = num(reconciliation.stuckReservations)
+    const mismatches = num(reconciliation.walletMismatches)
     const parts = [
-      num(reconciliation.stuckReservations) ? `${num(reconciliation.stuckReservations)} зависших резервов на ${formatKopecks(num(reconciliation.stuckAmount))}` : '',
-      num(reconciliation.walletMismatches) ? `${num(reconciliation.walletMismatches)} балансов не сходятся с операциями` : '',
+      stuck ? `${stuck} ${plural(stuck, 'зависший резерв', 'зависших резерва', 'зависших резервов')} на ${formatKopecks(num(reconciliation.stuckAmount))}` : '',
+      mismatches ? `${mismatches} ${plural(mismatches, 'баланс не сходится', 'баланса не сходятся', 'балансов не сходятся')} с операциями` : '',
     ].filter(Boolean)
     alarms.push({ key: 'reconciliation', level: 'danger', text: <>Сверка кошельков: <b>{parts.join(', ')}</b></>, action: 'Сверка', onAction: () => openSection('finance', { fin_tab: 'reconciliation' }) })
   }

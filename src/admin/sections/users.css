@@ -499,3 +499,6 @@
 @media (max-width: 640px) {
   .adm-card-actions .adm-button { flex: 1 1 auto; }
 }
+
+/* Пометка «служебный аккаунт» в шапке карточки */
+.adm-card-internal { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }

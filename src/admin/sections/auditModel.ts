@@ -8,6 +8,7 @@
 export const eventLabels: Record<string, string> = {
   balance_adjusted: 'Изменён баланс',
   user_banned: 'Пользователь заблокирован',
+  internal_account_set: 'Служебный аккаунт',
   user_unbanned: 'Блокировка снята',
   user_profile_updated: 'Изменён профиль',
   user_plan_granted: 'Выдан тариф',
@@ -51,7 +52,7 @@ export const eventLabels: Record<string, string> = {
 export const eventGroups: readonly { title: string; events: readonly string[] }[] = [
   {
     title: 'Пользователи',
-    events: ['user_banned', 'user_unbanned', 'user_profile_updated', 'user_plan_granted', 'user_plan_revoked', 'user_limit_changed', 'user_note_added', 'user_note_deleted', 'user_impersonated', 'password_reset_sent'],
+    events: ['user_banned', 'user_unbanned', 'internal_account_set', 'user_profile_updated', 'user_plan_granted', 'user_plan_revoked', 'user_limit_changed', 'user_note_added', 'user_note_deleted', 'user_impersonated', 'password_reset_sent'],
   },
   { title: 'Права администраторов', events: ['admin_role_changed'] },
   { title: 'Тарифы', events: ['plan_saved', 'plan_disabled', 'plan_deleted', 'promo_saved'] },
