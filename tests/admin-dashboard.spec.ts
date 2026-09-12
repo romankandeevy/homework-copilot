@@ -32,7 +32,11 @@ test.describe('админка', () => {
     await signIn(page)
 
     await expect(page.getByText('Без ответа дольше 30 мин:')).toBeVisible()
+    await expect(page.getByText('Решено за 7 дней')).toBeVisible()
+    await page.getByRole('button', { name: 'День', exact: true }).click()
     await expect(page.getByText('Решено сегодня')).toBeVisible()
+    await page.getByText('Как считаются цифры').click()
+    await expect(page.getByText('Себестоимость у шлюза моделей', { exact: false })).toBeVisible()
     await expect(page.getByText('кредитов на счету')).toBeVisible()
     await expect(page.getByText('пополнил баланс')).toBeVisible()
 

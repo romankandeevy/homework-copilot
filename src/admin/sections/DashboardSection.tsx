@@ -1,15 +1,16 @@
-/* Дашборд: что происходит сейчас и куда смотреть.
+/* Дашборд: что происходит и куда смотреть.
 
    Сознательно отступает от ТЗ. На сервисе с десятком учеников MRR,
    когорты, воронка и десять карточек показателей - шум: по ним нечего
    делать. Здесь только то, по чему владелец действует: что горит, как
-   идёт сегодняшний день против вчерашнего к этому же часу, хватит ли
-   кредитов шлюза, куда идёт период и живая лента событий. */
+   идёт выбранный период против предыдущего такого же к этому же моменту,
+   хватит ли кредитов шлюза и живая лента событий. Все цифры отдаёт одна
+   функция - admin_dashboard_period. */
 
 import { useEffect, useMemo, useRef } from 'react'
 import type { ReactNode } from 'react'
-import { ArrowClockwise, ArrowRight, CheckCircle, CurrencyRub, Lifebuoy, UserPlus, XCircle } from '@phosphor-icons/react'
-import { adminRpc, formatDuration, formatKopecks, formatNumber, formatPercent, num, numOrNull, obj, relativeTime, rows, shiftDate, str, todayMsk } from '../api'
+import { ArrowClockwise, ArrowRight, CheckCircle, CurrencyRub, Info, Lifebuoy, UserPlus, XCircle } from '@phosphor-icons/react'
+import { adminRpc, formatDuration, formatKopecks, formatNumber, formatPercent, num, numOrNull, obj, relativeTime, rows, str } from '../api'
 import type { Row } from '../api'
 import type { AdminSection } from '../context'
 import { useAdmin } from '../context'
@@ -17,7 +18,14 @@ import { Button, EmptyState, ErrorState, HorizontalBars, LineChart, LoadingState
 import './dashboard.css'
 
 type Metric = 'tasks' | 'money' | 'users'
-type Period = '7' | '30' | '90'
+type Period = 'day' | 'week' | 'month' | 'year'
+
+const periodWords: Record<Period, { current: string; previous: string; chart: string }> = {
+  day: { current: 'сегодня', previous: 'вчера к этому часу', chart: 'по часам сегодня' },
+  week: { current: 'за 7 дней', previous: 'прошлые 7 дней', chart: 'по дням за 7 дней' },
+  month: { current: 'за 30 дней', previous: 'прошлые 30 дней', chart: 'по дням за 30 дней' },
+  year: { current: 'за год', previous: 'прошлый год', chart: 'по месяцам за год' },
+}
 
 const serviceNames: Record<string, string> = {
   kie: 'шлюз моделей',
@@ -37,23 +45,23 @@ function compactRubles(kopecks: number) {
   return `${formatNumber(Math.round(rubles * 10) / 10)} ₽`
 }
 
-/* Разница с вчерашним днём к этому же часу - абсолютная: на малых числах
+/* Разница с предыдущим таким же отрезком - абсолютная: на малых числах
    «+200 %» от одной задачи к трём ничего не объясняет. */
-function Versus({ today, yesterday, money = false, invert = false }: { today: number; yesterday: number; money?: boolean; invert?: boolean }) {
-  const diff = today - yesterday
+function Versus({ current, previous, label, money = false, invert = false }: { current: number; previous: number; label: string; money?: boolean; invert?: boolean }) {
+  const diff = current - previous
   const tone = diff === 0 ? 'is-flat' : (diff > 0) !== invert ? 'is-good' : 'is-bad'
   const shown = money ? formatKopecks(Math.abs(diff)) : formatNumber(Math.abs(diff))
   return (
     <span className="dash-versus">
-      <b className={`adm-delta ${tone}`}>{diff === 0 ? 'как вчера' : `${diff > 0 ? '+' : '−'}${shown}`}</b>
-      <small>вчера к этому часу: {money ? formatKopecks(yesterday) : formatNumber(yesterday)}</small>
+      <b className={`adm-delta ${tone}`}>{diff === 0 ? 'без изменений' : `${diff > 0 ? '+' : '−'}${shown}`}</b>
+      <small>{label}: {money ? formatKopecks(previous) : formatNumber(previous)}</small>
     </span>
   )
 }
 
-function TodayNumber({ label, value, children, tone }: { label: string; value: ReactNode; children?: ReactNode; tone?: 'danger' }) {
+function PeriodNumber({ label, value, hint, children, tone }: { label: string; value: ReactNode; hint: string; children?: ReactNode; tone?: 'danger' }) {
   return (
-    <div className={`adm-stat${tone ? ` is-${tone}` : ''}`}>
+    <div className={`adm-stat${tone ? ` is-${tone}` : ''}`} title={hint}>
       <strong className="adm-stat-value">{value}</strong>
       <span className="adm-stat-label">{label}</span>
       {children && <span className="adm-stat-foot">{children}</span>}
@@ -111,62 +119,70 @@ function FeedRow({ item, onOpenUser, onOpenSection }: { item: Row; onOpenUser: (
   )
 }
 
+/* Как считается каждая цифра - словами, без обращения к коду. */
+function Definitions({ period }: { period: Period }) {
+  const words = periodWords[period]
+  return (
+    <details className="dash-definitions">
+      <summary><Info size={16} weight="bold" aria-hidden="true" /> Как считаются цифры</summary>
+      <dl>
+        <div><dt>Период</dt><dd>«День» - с полуночи по Москве до сейчас. «Неделя», «месяц», «год» - последние 7, 30 и 365 дней, включая сегодня. Сравнение всегда с предыдущим таким же отрезком до этого же момента: сегодня против вчера к этому часу, неделя против недели до неё.</dd></div>
+        <div><dt>Решено задач</dt><dd>Решения, которые модель довела до конца и отдала ученику или гостю. «Не решено» - попытки, где решение не прошло проверку или сорвалось; деньги за них вернулись.</dd></div>
+        <div><dt>Выручка</dt><dd>Подтверждённые пополнения кошелька минус возвраты по ним.</dd></div>
+        <div><dt>Расход на модели</dt><dd>Себестоимость у шлюза моделей: кредиты, потраченные на решения задач, плюс ответы ИИ-чата. Неудачные попытки тоже стоят денег и входят сюда.</dd></div>
+        <div><dt>Новые ученики</dt><dd>Аккаунты, зарегистрированные {words.current}. «Гости с задачей» - браузеры без аккаунта, которые ставили задачу.</dd></div>
+        <div><dt>Онлайн</dt><dd>Ученики с активностью за последние 10 минут, от периода не зависит. «Заходили» - уникальные ученики, которые открывали приложение или ставили задачу {words.current}.</dd></div>
+      </dl>
+    </details>
+  )
+}
+
 export default function DashboardSection() {
   const { openSection, openUser, signals } = useAdmin()
-  const [query, setQuery] = useQueryState({ d_period: '30', d_metric: 'tasks' })
-  const period: Period = query.d_period === '7' || query.d_period === '90' ? query.d_period : '30'
+  const [query, setQuery] = useQueryState({ d_period: 'week', d_metric: 'tasks' })
+  const period: Period = query.d_period === 'day' || query.d_period === 'month' || query.d_period === 'year' ? query.d_period : 'week'
   const metric: Metric = query.d_metric === 'money' || query.d_metric === 'users' ? query.d_metric : 'tasks'
-  const today = todayMsk()
+  const words = periodWords[period]
 
-  const live = useAsync(() => adminRpc('admin_dashboard_today'), [])
-  const trend = useAsync(
-    () => adminRpc('admin_dashboard_v2', { p_from: shiftDate(today, -(Number(period) - 1)), p_to: today }),
-    [period, today],
-  )
-  const reloadLive = live.reload
-  const reloadTrend = trend.reload
+  const dash = useAsync(() => adminRpc('admin_dashboard_period', { p_period: period }), [period])
+  const reload = dash.reload
 
-  // Сегодняшние цифры и лента обновляются сами: раз в минуту и по событию Realtime.
+  // Обновляется само: раз в минуту и по событию Realtime.
   useEffect(() => {
-    const timer = window.setInterval(reloadLive, 60_000)
+    const timer = window.setInterval(reload, 60_000)
     return () => window.clearInterval(timer)
-  }, [reloadLive])
+  }, [reload])
 
   const lastPulse = useRef(signals.pulse)
   useEffect(() => {
     if (signals.pulse === lastPulse.current) return
     lastPulse.current = signals.pulse
-    const timer = window.setTimeout(() => { reloadLive(); reloadTrend() }, 1200)
+    const timer = window.setTimeout(reload, 1200)
     return () => window.clearTimeout(timer)
-  }, [signals.pulse, reloadLive, reloadTrend])
+  }, [signals.pulse, reload])
 
-  const now = obj(live.data)
-  const todayCounts = obj(now.today)
-  const yesterdayCounts = obj(now.yesterday)
-  const gateway = obj(now.gateway)
-  const services = obj(now.services)
-  const feed = rows(now.feed)
+  const data = obj(dash.data)
+  const current = obj(data.current)
+  const previous = obj(data.previous)
+  const series = rows(data.series)
+  const labels = series.map((item) => str(item.label))
+  const attention = obj(data.attention)
+  const overdue = rows(attention.overdueTickets)
+  const gateway = obj(data.gateway)
+  const services = obj(data.services)
+  const feed = rows(data.feed)
   const down = Array.isArray(services.down) ? services.down.map(String) : []
   const notConfigured = Array.isArray(services.notConfigured) ? services.notConfigured.map(String) : []
-
-  const period$ = obj(trend.data)
-  const summary = obj(period$.current)
-  const series = rows(period$.series)
-  const labels = series.map((item) => str(item.date))
-  const attention = obj(period$.attention)
-  const overdue = rows(attention.overdueTickets)
 
   const credits = numOrNull(gateway.credits)
   const perTask = numOrNull(gateway.avgCreditsPerTask)
   const tasksLeft = credits !== null && perTask && perTask > 0 ? Math.floor(credits / perTask) : null
 
-  const subjects = useMemo(() => {
-    const totals = new Map<string, number>()
-    for (const item of series) {
-      for (const [subject, count] of Object.entries(obj(item.bySubject))) totals.set(subject, (totals.get(subject) ?? 0) + num(count))
-    }
-    return [...totals.entries()].sort((a, b) => b[1] - a[1]).map(([label, value]) => ({ label, value }))
-  }, [series])
+  const subjects = useMemo(() => rows(data.subjects).map((item) => ({
+    label: str(item.subject),
+    value: num(item.solved),
+    hint: num(item.failed) ? `не решено ${num(item.failed)}` : undefined,
+  })), [data.subjects])
 
   /* Что горит: только то, что есть, каждое со своим действием. */
   const alarms: Alarm[] = []
@@ -197,21 +213,33 @@ export default function DashboardSection() {
     alarms.push({ key: 'fraud', level: 'warning', text: <>Флаги фрода без решения: <b>{num(attention.fraudOpen)}</b></>, action: 'Разобрать', onAction: () => openSection('fraud') })
   }
 
-  const loadingFirst = (live.loading && !live.data) || (trend.loading && !trend.data)
-  if (loadingFirst) return <><PageHeader title="Дашборд" /><LoadingState /></>
-  if (live.error && !live.data) return <><PageHeader title="Дашборд" /><ErrorState message={live.error} onRetry={reloadLive} /></>
+  const periodControl = (
+    <Segmented
+      label="Период"
+      value={period}
+      onChange={(value) => setQuery({ d_period: value }, { replace: true })}
+      options={[{ value: 'day', label: 'День' }, { value: 'week', label: 'Неделя' }, { value: 'month', label: 'Месяц' }, { value: 'year', label: 'Год' }]}
+    />
+  )
 
-  const solvedToday = num(todayCounts.solved)
-  const failedToday = num(todayCounts.failed)
-  const periodSolved = num(summary.solved)
-  const periodFailed = num(summary.failed)
+  if (dash.loading && !dash.data) return <><PageHeader title="Дашборд" actions={periodControl} /><LoadingState /></>
+  if (dash.error && !dash.data) return <><PageHeader title="Дашборд" actions={periodControl} /><ErrorState message={dash.error} onRetry={reload} /></>
+
+  const solved = num(current.solved)
+  const failed = num(current.failed)
+  const attempts = solved + failed
 
   return (
     <>
       <PageHeader
         title="Дашборд"
-        description={`Сегодня, ${new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', weekday: 'long', timeZone: 'Europe/Moscow' }).format(new Date())}. Цифры и лента обновляются сами.`}
-        actions={<Button size="sm" onClick={() => { reloadLive(); reloadTrend() }} loading={live.loading || trend.loading} icon={<ArrowClockwise size={16} weight="bold" aria-hidden="true" />}>Обновить</Button>}
+        description={`Цифры ${words.current}, сравнение - ${words.previous}. Обновляется само раз в минуту и при новых событиях.`}
+        actions={(
+          <>
+            {periodControl}
+            <Button size="sm" onClick={reload} loading={dash.loading} icon={<ArrowClockwise size={16} weight="bold" aria-hidden="true" />} aria-label="Обновить" />
+          </>
+        )}
       />
 
       {alarms.length ? (
@@ -231,59 +259,41 @@ export default function DashboardSection() {
         </section>
       )}
 
-      <div className="adm-stat-grid dash-today">
-        <TodayNumber label="Решено сегодня" value={formatNumber(solvedToday)} tone={failedToday > solvedToday && failedToday > 2 ? 'danger' : undefined}>
-          <Versus today={solvedToday} yesterday={num(yesterdayCounts.solved)} />
-          {failedToday > 0 && <small className="dash-failed">не решено: {failedToday}</small>}
-        </TodayNumber>
-        <TodayNumber label="Заработано сегодня" value={formatKopecks(num(todayCounts.revenue))}>
-          <Versus today={num(todayCounts.revenue)} yesterday={num(yesterdayCounts.revenue)} money />
-        </TodayNumber>
-        <TodayNumber label="Расход на модели" value={formatKopecks(num(todayCounts.llmCost))}>
-          <Versus today={num(todayCounts.llmCost)} yesterday={num(yesterdayCounts.llmCost)} money invert />
-        </TodayNumber>
-        <TodayNumber label="Новые ученики" value={formatNumber(num(todayCounts.registrations))}>
-          <Versus today={num(todayCounts.registrations)} yesterday={num(yesterdayCounts.registrations)} />
-          {num(todayCounts.guests) > 0 && <small>гостей с задачей: {num(todayCounts.guests)}</small>}
-        </TodayNumber>
-        <TodayNumber label="Онлайн сейчас" value={formatNumber(num(now.online))}>
-          <small>заходили сегодня: {formatNumber(num(todayCounts.active))}</small>
-        </TodayNumber>
+      <div className="dash-numbers">
+        <div className="adm-stat-grid dash-today">
+          <PeriodNumber
+            label={`Решено ${words.current}`}
+            value={formatNumber(solved)}
+            hint="Решения, которые модель довела до конца и отдала ученику или гостю."
+            tone={failed > solved && failed > 2 ? 'danger' : undefined}
+          >
+            <Versus current={solved} previous={num(previous.solved)} label={words.previous} />
+            {failed > 0 && <small className="dash-failed">не решено: {failed}{attempts ? ` (${formatPercent((failed / attempts) * 100)})` : ''}</small>}
+          </PeriodNumber>
+          <PeriodNumber label={`Выручка ${words.current}`} value={formatKopecks(num(current.revenue))} hint="Подтверждённые пополнения кошелька минус возвраты.">
+            <Versus current={num(current.revenue)} previous={num(previous.revenue)} label={words.previous} money />
+          </PeriodNumber>
+          <PeriodNumber label="Расход на модели" value={formatKopecks(num(current.llmCost))} hint="Оплата шлюза моделей: кредиты задач и себестоимость ответов чата.">
+            <Versus current={num(current.llmCost)} previous={num(previous.llmCost)} label={words.previous} money invert />
+          </PeriodNumber>
+          <PeriodNumber label="Новые ученики" value={formatNumber(num(current.registrations))} hint="Зарегистрированные аккаунты за период.">
+            <Versus current={num(current.registrations)} previous={num(previous.registrations)} label={words.previous} />
+            {num(current.guests) > 0 && <small>гостей с задачей: {num(current.guests)}</small>}
+          </PeriodNumber>
+          <PeriodNumber label="Онлайн сейчас" value={formatNumber(num(data.online))} hint="Ученики с активностью за последние 10 минут.">
+            <small>заходили {words.current}: {formatNumber(num(current.active))}</small>
+            <small>{words.previous}: {formatNumber(num(previous.active))}</small>
+          </PeriodNumber>
+        </div>
+        <Definitions period={period} />
       </div>
 
       <div className="adm-grid-main">
         <Panel
           title="Динамика"
-          actions={(
-            <>
-              <Segmented label="Показатель" value={metric} onChange={(value) => setQuery({ d_metric: value }, { replace: true })} options={[{ value: 'tasks', label: 'Задачи' }, { value: 'money', label: 'Деньги' }, { value: 'users', label: 'Ученики' }]} />
-              <Segmented label="Период" value={period} onChange={(value) => setQuery({ d_period: value }, { replace: true })} options={[{ value: '7', label: '7 дн' }, { value: '30', label: '30 дн' }, { value: '90', label: '90 дн' }]} />
-            </>
-          )}
+          description={words.chart}
+          actions={<Segmented label="Показатель" value={metric} onChange={(value) => setQuery({ d_metric: value }, { replace: true })} options={[{ value: 'tasks', label: 'Задачи' }, { value: 'money', label: 'Деньги' }, { value: 'users', label: 'Ученики' }]} />}
         >
-          <dl className="dash-totals">
-            {metric === 'tasks' && (
-              <>
-                <div><dt>Решено</dt><dd>{formatNumber(periodSolved)}</dd></div>
-                <div><dt>Не решено</dt><dd>{formatNumber(periodFailed)}</dd></div>
-                <div><dt>Доля неудач</dt><dd>{periodSolved + periodFailed ? formatPercent((periodFailed / (periodSolved + periodFailed)) * 100) : '—'}</dd></div>
-              </>
-            )}
-            {metric === 'money' && (
-              <>
-                <div><dt>Выручка</dt><dd>{formatKopecks(num(summary.revenue))}</dd></div>
-                <div><dt>Расход на модели</dt><dd>{formatKopecks(num(summary.llmCost))}</dd></div>
-                <div><dt>Маржа</dt><dd className={num(summary.margin) < 0 ? 'is-negative' : ''}>{formatKopecks(num(summary.margin))}</dd></div>
-              </>
-            )}
-            {metric === 'users' && (
-              <>
-                <div><dt>Новых</dt><dd>{formatNumber(num(summary.registrations))}</dd></div>
-                <div><dt>Активных за 30 дн</dt><dd>{formatNumber(num(summary.mau))}</dd></div>
-                <div><dt>Дошли до оплаты</dt><dd>{formatPercent(num(summary.conversion))}</dd></div>
-              </>
-            )}
-          </dl>
           {metric === 'tasks' && (
             <StackedBars
               labels={labels}
@@ -306,9 +316,10 @@ export default function DashboardSection() {
           )}
           {metric === 'users' && (
             <LineChart
+              kind="bar"
               labels={labels}
               series={[
-                { name: 'Заходили', values: series.map((item) => num(item.activeUsers)), tone: 1 },
+                { name: 'Заходили', values: series.map((item) => num(item.active)), tone: 1 },
                 { name: 'Новые', values: series.map((item) => num(item.registrations)), tone: 2 },
               ]}
             />
@@ -337,13 +348,13 @@ export default function DashboardSection() {
             )}
           </Panel>
 
-          <Panel title={`Предметы за ${period} дн`}>
-            {subjects.length ? <HorizontalBars items={subjects.slice(0, 8)} /> : <EmptyState>Решённых задач за период нет.</EmptyState>}
+          <Panel title={`Предметы ${words.current}`}>
+            {subjects.length ? <HorizontalBars items={subjects.slice(0, 8)} /> : <EmptyState>Задач {words.current} не было.</EmptyState>}
           </Panel>
         </div>
       </div>
 
-      <Panel title="Лента" description="Решения, оплаты, регистрации и обращения по мере того, как они происходят.">
+      <Panel title="Лента" description="Последние решения, оплаты, регистрации и обращения - от периода не зависит.">
         {feed.length ? (
           <ol className="dash-feed">
             {feed.map((item) => (
