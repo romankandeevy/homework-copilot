@@ -46,7 +46,7 @@ import type { AccountData } from './lib/supabase'
 import { homeworkSolutionForm } from './lib/homeworkContract'
 import type { HomeworkSolution, HomeworkSource } from './lib/homeworkContract'
 import { formatRubles } from './lib/currency'
-import { recordPendingLegalAcceptance, rememberPendingLegalAcceptance } from './lib/legalConsent'
+import { recordPendingLegalAcceptance } from './lib/legalConsent'
 import { bindPendingReferral, captureReferralFromCurrentUrl, preparePendingReferralClaim } from './lib/referrals'
 import { forgetGuestSolution, getGuestId, guestSolutionUsed, rememberGuestSolutionUsed } from './lib/guestSolutions'
 import { applySeoMetadata, getSeoMetadata } from './lib/siteMetadata'
@@ -1440,14 +1440,12 @@ function HomePage() {
   const [accountOpen, setAccountOpen] = useState(() => ['reset', 'verified', 'confirm', 'signin'].includes(new URLSearchParams(window.location.search).get('auth') ?? ''))
   const [accountView, setAccountView] = useState<AccountView>('profile')
   const [passwordRecovery, setPasswordRecovery] = useState(() => new URLSearchParams(window.location.search).get('auth') === 'reset')
-  const [pendingVerificationEmail, setPendingVerificationEmail] = useState(() => sessionStorage.getItem('homework-copilot:google-verification-email') ?? '')
   const [accountNotice, setAccountNotice] = useState('')
   // Сообщение над очередью: то, что случилось с задачей, а не с аккаунтом.
   const [queueNotice, setQueueNotice] = useState('')
   const [supportOpen, setSupportOpen] = useState(() => currentApplicationPath() === '/support')
   const [supportCategory, setSupportCategory] = useState<SupportCategory>('general')
   const [supportContext, setSupportContext] = useState<SupportPrefill | undefined>(undefined)
-  const googleVerificationStarted = useRef(false)
   const emailConfirmationStarted = useRef(false)
   const accountTriggerRef = useRef<HTMLElement | null>(null)
   const supportReturnPathRef = useRef(currentApplicationPath() === '/support' ? '/app' : currentApplicationPath())
@@ -1676,15 +1674,13 @@ function HomePage() {
         forgetGuestSolution()
         setGuestFreeSolutionUsed(false)
         sessionStorage.removeItem('homework-copilot:google-auth-pending')
-        sessionStorage.removeItem('homework-copilot:google-verification-email')
         sessionStorage.removeItem('homework-copilot:verification-email')
         sessionStorage.removeItem('homework-copilot:verification-kind')
         sessionStorage.removeItem('homework-copilot:verification-sent-at')
-        setPendingVerificationEmail('')
         if (['verified', 'confirm'].includes(new URLSearchParams(window.location.search).get('auth') ?? '')) setAccountOpen(true)
       }
       if (event === 'SIGNED_OUT') {
-        if (sessionStorage.getItem('homework-copilot:verification-email') || sessionStorage.getItem('homework-copilot:google-verification-email')) setAccountOpen(true)
+        if (sessionStorage.getItem('homework-copilot:verification-email')) setAccountOpen(true)
         else setAccountOpen(false)
         setPasswordRecovery(false)
       }
@@ -1718,66 +1714,6 @@ function HomePage() {
     }
 
     void confirmEmail()
-    return () => { active = false }
-  }, [supabaseClient])
-
-  useEffect(() => {
-    if (!supabaseClient || new URLSearchParams(window.location.search).get('auth') !== 'google-code' || googleVerificationStarted.current) return
-    const authClient = supabaseClient
-    googleVerificationStarted.current = true
-    let active = true
-
-    const requestGoogleCode = async () => {
-      let session = null
-      // Опрос сессии: следующая попытка нужна только если предыдущая не дала почту.
-      // active снимает очистка эффекта, а не тело цикла — линтер этого не видит.
-      // eslint-disable-next-line no-unmodified-loop-condition
-      for (let attempt = 0; attempt < 20 && active; attempt += 1) {
-        // eslint-disable-next-line no-await-in-loop
-        const { data } = await authClient.auth.getSession()
-        session = data.session
-        if (session?.user.email) break
-        // eslint-disable-next-line no-await-in-loop
-        await new Promise((resolve) => window.setTimeout(resolve, 100))
-      }
-      const googleEmail = session?.user.email?.trim()
-      if (!googleEmail) {
-        if (active) {
-          setAccountNotice('Google не вернул почту. Попробуй войти ещё раз')
-          setAccountOpen(true)
-        }
-        return
-      }
-
-      rememberPendingLegalAcceptance('google', googleEmail)
-      sessionStorage.setItem('homework-copilot:google-verification-email', googleEmail)
-      const { error: codeError } = await authClient.auth.signInWithOtp({
-        email: googleEmail,
-        options: {
-          shouldCreateUser: false,
-          emailRedirectTo: `${window.location.origin}/?auth=verified`,
-        },
-      })
-      if (!codeError) {
-        sessionStorage.setItem('homework-copilot:verification-email', googleEmail)
-        sessionStorage.setItem('homework-copilot:verification-kind', 'google')
-        sessionStorage.setItem('homework-copilot:verification-sent-at', String(Date.now()))
-      }
-      await authClient.auth.signOut({ scope: 'local' })
-
-      const cleanUrl = new URL(window.location.href)
-      cleanUrl.searchParams.delete('auth')
-      window.history.replaceState({}, '', `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`)
-
-      if (!active) return
-      setUser(null)
-      setAccount(null)
-      setPendingVerificationEmail(googleEmail)
-      setAccountNotice(codeError ? 'Не получилось отправить письмо. Попробуй ещё раз' : '')
-      setAccountOpen(true)
-    }
-
-    window.setTimeout(() => { void requestGoogleCode() }, 0)
     return () => { active = false }
   }, [supabaseClient])
 
@@ -1873,7 +1809,6 @@ function HomePage() {
     setAccountOpen(false)
     setAccountNotice('')
     setPasswordRecovery(false)
-    setPendingVerificationEmail('')
     sessionStorage.removeItem('homework-copilot:google-auth-pending')
     const cleanUrl = new URL(window.location.href)
     cleanUrl.searchParams.delete('auth')
@@ -2568,7 +2503,6 @@ function HomePage() {
             user={user}
             account={account}
             passwordRecovery={passwordRecovery}
-            pendingVerificationEmail={pendingVerificationEmail}
             notice={accountNotice}
             initialView={accountView}
             theme={theme}

@@ -42,7 +42,7 @@ import { isStrongPassword } from './passwordStrengthRules'
 import './AccountDialog.css'
 
 type AuthScreen = 'sign-in' | 'sign-up' | 'forgot' | 'reset' | 'verify-email'
-type VerificationKind = 'signup' | 'google'
+type VerificationKind = 'signup'
 type AccountView = 'profile' | 'wallet'
 type Theme = 'light' | 'dark'
 
@@ -68,7 +68,7 @@ function verificationRedirectUrl() {
 function readPendingVerification(): { email: string; kind: VerificationKind } | null {
   const email = sessionStorage.getItem(verificationEmailKey)?.trim() ?? ''
   const kind = sessionStorage.getItem(verificationKindKey)
-  if (!email || (kind !== 'signup' && kind !== 'google')) return null
+  if (!email || kind !== 'signup') return null
   return { email, kind }
 }
 
@@ -100,7 +100,6 @@ type AccountDialogProps = {
   user: User | null
   account: AccountData | null
   passwordRecovery: boolean
-  pendingVerificationEmail?: string
   notice?: string
   initialView: AccountView
   theme: Theme
@@ -244,11 +243,9 @@ function GradeSelect({ value, onChange, compact = false }: { value: string; onCh
   )
 }
 
-function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { passwordRecovery: boolean; pendingVerificationEmail?: string; notice?: string }) {
+function AuthView({ passwordRecovery, notice }: { passwordRecovery: boolean; notice?: string }) {
   const viewRef = useRef<HTMLDivElement>(null)
-  const [initialVerification] = useState(() => pendingVerificationEmail
-    ? { email: pendingVerificationEmail, kind: 'google' as const }
-    : readPendingVerification())
+  const [initialVerification] = useState(() => readPendingVerification())
   const [screen, setScreen] = useState<AuthScreen>(passwordRecovery ? 'reset' : initialVerification ? 'verify-email' : 'sign-in')
   const [verificationKind, setVerificationKind] = useState<VerificationKind>(initialVerification?.kind ?? 'signup')
   const [fullName, setFullName] = useState('')
@@ -288,15 +285,6 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
   useEffect(() => {
     if (passwordRecovery) setScreen('reset')
   }, [passwordRecovery])
-
-  useEffect(() => {
-    if (!pendingVerificationEmail) return
-    setEmail(pendingVerificationEmail)
-    setVerificationKind('google')
-    setSentAt(Number(sessionStorage.getItem(verificationSentAtKey) ?? 0))
-    setNow(Date.now())
-    setScreen('verify-email')
-  }, [pendingVerificationEmail])
 
   useEffect(() => {
     if (screen !== 'verify-email') return
@@ -350,7 +338,7 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: authReturnUrl('google-code'),
+        redirectTo: authReturnUrl('verified'),
         queryParams: { prompt: 'select_account' },
       },
     })
@@ -368,12 +356,7 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
     setStatus('')
     setError('')
     const normalizedEmail = email.trim()
-    const { error: resendError } = verificationKind === 'signup'
-      ? await supabase.auth.resend({ type: 'signup', email: normalizedEmail })
-      : await supabase.auth.signInWithOtp({
-          email: normalizedEmail,
-          options: { shouldCreateUser: false, emailRedirectTo: verificationRedirectUrl() },
-        })
+    const { error: resendError } = await supabase.auth.resend({ type: 'signup', email: normalizedEmail })
     if (resendError) setError(authErrorMessage(resendError.message))
     else {
       const nextSentAt = rememberVerification(normalizedEmail, verificationKind)
@@ -399,7 +382,7 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
     const { error: verificationError } = await supabase.auth.verifyOtp({
       email: email.trim(),
       token: verificationCode,
-      type: verificationKind === 'signup' ? 'signup' : 'email',
+      type: 'signup',
     })
 
     if (verificationError) setError(authErrorMessage(verificationError.message))
@@ -702,7 +685,7 @@ function AuthView({ passwordRecovery, pendingVerificationEmail, notice }: { pass
         {screen === 'verify-email' && (
           <>
             <button type="button" onClick={() => { void resendEmail() }} disabled={loading || resendIn > 0}>{resendIn > 0 ? `Новый код через ${formatCountdown(resendIn)}` : 'Отправить новый код'}</button>
-            <button type="button" onClick={() => switchScreen(verificationKind === 'signup' ? 'sign-up' : 'sign-in')}>{verificationKind === 'signup' ? 'Изменить почту' : 'Другой способ входа'}</button>
+            <button type="button" onClick={() => switchScreen('sign-up')}>Изменить почту</button>
           </>
         )}
       </div>
@@ -1086,7 +1069,7 @@ function ProfileView({ user, account, notice, initialView, theme, onToggleTheme,
   )
 }
 
-export default function AccountDialog({ user, account, passwordRecovery, pendingVerificationEmail, notice, initialView, theme, onToggleTheme, onClose, onReloadAccount, returnFocusRef }: AccountDialogProps) {
+export default function AccountDialog({ user, account, passwordRecovery, notice, initialView, theme, onToggleTheme, onClose, onReloadAccount, returnFocusRef }: AccountDialogProps) {
   const reduceMotion = useReducedMotion()
   const dialogRef = useModalIsolation<HTMLElement>(true, onClose, returnFocusRef)
 
@@ -1115,7 +1098,7 @@ export default function AccountDialog({ user, account, passwordRecovery, pending
           <button className="account-dialog-close" type="button" aria-label="Закрыть окно аккаунта" onClick={onClose}><X size={20} weight="bold" aria-hidden="true" /></button>
           {user
             ? <ProfileView user={user} account={account} notice={notice} initialView={initialView} theme={theme} onToggleTheme={onToggleTheme} onReloadAccount={onReloadAccount} />
-            : <AuthView passwordRecovery={passwordRecovery} pendingVerificationEmail={pendingVerificationEmail} notice={notice} />}
+            : <AuthView passwordRecovery={passwordRecovery} notice={notice} />}
         </motion.section>
       </motion.div>
     </AnimatePresence>

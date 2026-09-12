@@ -23,11 +23,15 @@ export async function recordPendingLegalAcceptance(client: SupabaseClient<Databa
   try {
     const pending = JSON.parse(value) as { source?: unknown; email?: unknown; createdAt?: unknown }
     const source = pending.source === 'google' ? 'google' : pending.source === 'email' ? 'email' : null
+    // Почта для Google неизвестна в момент клика по кнопке — согласие
+    // запоминается без неё и сверяется тут только если она всё же есть.
     const expectedEmail = typeof pending.email === 'string' ? pending.email.trim().toLocaleLowerCase('ru') : ''
     const currentEmail = userEmail?.trim().toLocaleLowerCase('ru') ?? ''
     const createdAt = typeof pending.createdAt === 'number' ? pending.createdAt : 0
-    if (!source || !expectedEmail || !currentEmail || expectedEmail !== currentEmail || Date.now() - createdAt > 24 * 60 * 60 * 1000) {
-      if (!source || (expectedEmail && currentEmail && expectedEmail !== currentEmail) || Date.now() - createdAt > 24 * 60 * 60 * 1000) forgetPendingLegalAcceptance()
+    const expired = Date.now() - createdAt > 24 * 60 * 60 * 1000
+    const emailMismatch = expectedEmail !== '' && expectedEmail !== currentEmail
+    if (!source || !currentEmail || expired || emailMismatch) {
+      if (!source || expired || emailMismatch) forgetPendingLegalAcceptance()
       return
     }
 

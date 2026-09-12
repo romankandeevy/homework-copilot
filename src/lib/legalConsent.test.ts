@@ -18,14 +18,12 @@ describe('legal acceptance handoff', () => {
     expect(rpc).toHaveBeenCalledTimes(1)
   })
 
-  it('waits until Google supplies the verified email', async () => {
+  it('records a Google acceptance even before the email is known', async () => {
+    // Гугл не даёт почту в момент клика по кнопке - согласие запоминается
+    // без неё и засчитывается на первую же почту, которую вернёт сессия.
     const rpc = vi.fn(async () => ({ error: null }))
     const client = { rpc } as unknown as SupabaseClient<Database>
     rememberPendingLegalAcceptance('google')
-    await recordPendingLegalAcceptance(client, 'student@example.com')
-    expect(rpc).not.toHaveBeenCalled()
-
-    rememberPendingLegalAcceptance('google', 'student@example.com')
     await recordPendingLegalAcceptance(client, 'student@example.com')
     expect(rpc).toHaveBeenCalledWith('record_current_legal_acceptance', { p_source: 'google' })
   })
