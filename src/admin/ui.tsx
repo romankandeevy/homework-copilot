@@ -525,7 +525,7 @@ export function DateRangePicker({ value, onChange }: { value: DateRangeValue; on
    закрывало всю стопку разом. */
 const dialogStack: symbol[] = []
 
-function useDialogFocus(open: boolean, onClose: () => void) {
+export function useDialogFocus(open: boolean, onClose: () => void) {
   const ref = useRef<HTMLDivElement | null>(null)
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose

@@ -28,7 +28,7 @@ import { supabase } from '../lib/supabase'
 import { adminRpc, bool, isRecord, num, obj, rows, str } from './api'
 import { AdminContext } from './context'
 import type { AdminAccess, AdminPermissions, AdminRole, AdminSection, AdminSignals } from './context'
-import { Button, Field, LoadingState, ToastProvider } from './ui'
+import { Button, Field, LoadingState, ToastProvider, useDialogFocus } from './ui'
 import './admin.css'
 
 const DashboardSection = lazy(() => import('./sections/DashboardSection'))
@@ -491,6 +491,12 @@ function AdminShell({ access, theme, onToggleTheme, onSignOut }: { access: Admin
     writeUrl(search)
     setOpenUserId(null)
   }, [writeUrl])
+
+  /* Карточка пользователя грузится отдельным чанком: между кликом и её
+     появлением проходит доля секунды. Без этого место-заполнителя Escape,
+     нажатый в этот зазор, не находит ничего в стопке окон, бьёт в пустоту -
+     а карточка потом всё равно всплывает, когда чанк наконец пришёл. */
+  useDialogFocus(Boolean(openUserId), closeUser)
 
   const contextValue = useMemo(() => ({
     access,
