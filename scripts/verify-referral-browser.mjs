@@ -1,5 +1,8 @@
 /* Проверка ведёт браузер шаг за шагом: каждое действие зависит от состояния после предыдущего. */
 /* eslint-disable no-await-in-loop */
+/* Supabase подменён целиком (`routeBackend`): в базу скрипт не пишет.
+   Форма подтверждённого пополнения в админке проверяется в
+   tests/admin-finance.spec.ts - там уже есть вход со вторым фактором. */
 import { spawn } from 'node:child_process'
 import { mkdir, readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
@@ -11,6 +14,7 @@ const outputDirectory = resolve('test-results', 'referral-browser')
 const testUserId = 'c0de0000-2026-4828-9000-000000000001'
 const referralCode = 'UIREF2026A'
 const claimToken = '0f65dd61-a5df-4b65-980c-74f1ef7cdf13'
+const pendingReferralStorageKey = 'homework-copilot:pending-referral'
 await mkdir(outputDirectory, { recursive: true })
 
 const localEnvironment = [
@@ -96,7 +100,12 @@ const session = {
   user,
 }
 
-async function routeSupabase(page) {
+async function routeBackend(page) {
+  // Кошелёк спрашивает функцию оплаты, включена ли она. В разработке этой
+  // функции нет, поэтому ответ - как у прода без боевых ключей Робокассы.
+  await page.route('**/api/payment', (route) => route.fulfill({
+    json: { enabled: false, testMode: false, minKopecks: 5000, maxKopecks: 1_500_000 },
+  }))
   await page.route('**/*.supabase.co/**', async (route) => {
     const requestUrl = new URL(route.request().url())
     const path = requestUrl.pathname
@@ -116,19 +125,20 @@ async function routeSupabase(page) {
       invitedCount: 3,
       pendingCount: 2,
       rewardedCount: 1,
-      earnedAmount: 10,
+      // Деньги в копейках, как их отдаёт база.
+      earnedAmount: 1000,
       joinedViaReferral: true,
       joinedRewardStatus: 'pending',
-      referrerRewardAmount: 10,
-      inviteeRewardAmount: 5,
+      referrerRewardAmount: 1000,
+      inviteeRewardAmount: 500,
     })
     if (path.includes('/rest/v1/rpc/')) return json(null)
     if (path.endsWith('/rest/v1/profiles')) return json(profile)
-    if (path.endsWith('/rest/v1/wallet_accounts')) return json({ balance: 20 })
+    if (path.endsWith('/rest/v1/wallet_accounts')) return json({ balance: 2000 })
     if (path.endsWith('/rest/v1/wallet_entries')) return json([{
       id: 'entry-1',
       user_id: testUserId,
-      amount: 20,
+      amount: 2000,
       kind: 'credit',
       description: 'Стартовые 20 ₽',
       idempotency_key: 'welcome-credit',
@@ -145,7 +155,8 @@ function trackRuntimeErrors(page, failures, label) {
   page.on('console', (message) => {
     if (message.type() !== 'error') return
     if (/websocket|realtime/i.test(message.text())) return
-    failures.push(`${label}: ${message.text()}`)
+    const source = message.location()?.url
+    failures.push(`${label}: ${message.text()}${source ? ` (${source})` : ''}`)
   })
 }
 
@@ -154,16 +165,23 @@ const browser = await chromium.launch({ headless: true })
 try {
   await waitForServer()
 
+  // Ссылка из кошелька ведёт на витрину: код запоминается ещё там, а заявку
+  // на него открывает приложение, когда гость до него дойдёт.
   const guestPage = await browser.newPage({ viewport: { width: 390, height: 844 } })
   trackRuntimeErrors(guestPage, failures, 'guest')
-  await routeSupabase(guestPage)
+  await routeBackend(guestPage)
   await guestPage.goto(`${origin}/?ref=${referralCode}`, { waitUntil: 'domcontentloaded' })
-  await guestPage.waitForFunction((expectedToken) => {
-    const pending = JSON.parse(localStorage.getItem('homework-copilot:pending-referral') || 'null')
-    return pending?.claimToken === expectedToken
-  }, claimToken)
+  await guestPage.waitForFunction(({ storageKey, expectedCode }) => {
+    const pending = JSON.parse(localStorage.getItem(storageKey) || 'null')
+    return pending?.code === expectedCode
+  }, { storageKey: pendingReferralStorageKey, expectedCode: referralCode })
   if (new URL(guestPage.url()).searchParams.has('ref')) failures.push('guest: referral code remained in the visible URL')
-  await guestPage.getByRole('button', { name: 'Войти или зарегистрироваться' }).first().click()
+
+  await guestPage.goto(`${origin}/app?auth=signin`, { waitUntil: 'domcontentloaded' })
+  await guestPage.waitForFunction(({ storageKey, expectedToken }) => {
+    const pending = JSON.parse(localStorage.getItem(storageKey) || 'null')
+    return pending?.claimToken === expectedToken
+  }, { storageKey: pendingReferralStorageKey, expectedToken: claimToken })
   await guestPage.getByRole('tab', { name: 'Регистрация' }).click()
   await guestPage.getByRole('heading', { name: 'Создай аккаунт' }).waitFor()
   await guestPage.screenshot({ path: resolve(outputDirectory, 'registration-390.png') })
@@ -177,8 +195,8 @@ try {
     }, { storageKey: `sb-${projectRef}-auth-token`, storedSession: session })
     const page = await context.newPage()
     trackRuntimeErrors(page, failures, `wallet-${viewport.width}`)
-    await routeSupabase(page)
-    await page.goto(origin, { waitUntil: 'domcontentloaded' })
+    await routeBackend(page)
+    await page.goto(`${origin}/app`, { waitUntil: 'domcontentloaded' })
     const profileButton = page.getByRole('button', { name: 'Открыть профиль' })
     try {
       await profileButton.waitFor({ timeout: 8000 })
@@ -193,7 +211,11 @@ try {
     await page.getByRole('navigation', { name: 'Раздел аккаунта' }).waitFor()
     await page.getByRole('button', { name: /Баланс 20 ₽/ }).click()
     await page.getByRole('heading', { name: 'Пригласи друга' }).waitFor()
-    await page.getByText('После его первого подтверждённого пополнения').waitFor()
+    // Награда приходит за подтверждённую почту приглашённого, а не за его пополнение.
+    await page.getByText('Как только он зарегистрируется по твоей ссылке и подтвердит почту').waitFor()
+    await page.getByText('+5 ₽ придут, как только подтвердишь почту').waitFor()
+    const referralTerms = await page.locator('.account-referral-card header').innerText()
+    if (!referralTerms.includes('+10 ₽') || !referralTerms.includes('+5 ₽')) failures.push(`wallet-${viewport.width}: reward amounts are missing (${referralTerms})`)
 
     const linkInput = page.getByRole('textbox', { name: 'Личная реферальная ссылка' })
     if (await linkInput.inputValue() !== `${origin}/?ref=${referralCode}`) failures.push(`wallet-${viewport.width}: wrong personal link`)
@@ -239,7 +261,7 @@ try {
     await page.screenshot({ path: resolve(outputDirectory, `support-${viewport.width}.png`), fullPage: true })
 
     await page.goto(`${origin}/solutions`, { waitUntil: 'domcontentloaded' })
-    await page.getByRole('heading', { name: 'Решения', exact: true }).waitFor()
+    await page.getByRole('heading', { name: 'Мои решения', level: 1 }).waitFor()
     const footerBeforeScroll = await page.locator('.site-footer').evaluate((footer) => ({
       top: footer.getBoundingClientRect().top,
       viewportHeight: window.innerHeight,
@@ -250,18 +272,6 @@ try {
     if (!await page.locator('.site-footer').isVisible()) failures.push(`solutions-${viewport.width}: footer is not reachable by scrolling`)
     await context.close()
   }
-
-  const adminPage = await browser.newPage({ viewport: { width: 1440, height: 960 } })
-  trackRuntimeErrors(adminPage, failures, 'admin')
-  await adminPage.goto(`${origin}/admin?admin-preview=1`, { waitUntil: 'domcontentloaded' })
-  await adminPage.getByRole('heading', { name: 'Управление сервисом' }).waitFor()
-  await adminPage.locator('.admin-user-cell').first().click()
-  await adminPage.getByRole('heading', { name: 'Подтвердить пополнение' }).waitFor()
-  await adminPage.getByText('Первое подтверждённое пополнение запускает реферальные +10 ₽ и +5 ₽.').waitFor()
-  await adminPage.waitForTimeout(400)
-  if (await adminPage.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)) failures.push('admin: horizontal overflow')
-  await adminPage.screenshot({ path: resolve(outputDirectory, 'admin-top-up-1440.png') })
-  await adminPage.close()
 } finally {
   await browser.close()
   server.kill()

@@ -127,6 +127,27 @@ test.describe('финансы', () => {
     await expect(card.locator('.adm-chart-legend b').first()).toContainText('₽')
   })
 
+  test('подтверждённое пополнение в карточке ученика уходит в базу и называет реферальные бонусы', async ({ page }) => {
+    const topUps: unknown[] = []
+    await page.route(/\/rest\/v1\/rpc\/admin_record_verified_top_up/, (route) => {
+      topUps.push(route.request().postDataJSON())
+      return route.fulfill({ json: { applied: true, referralRewarded: true } })
+    })
+    await page.goto(`/admin?section=users&user=${studentId}`)
+    const card = page.getByRole('dialog')
+    const balanceTab = card.getByRole('tab', { name: 'Баланс' })
+    await balanceTab.focus()
+    await page.keyboard.press('Enter')
+    const form = card.locator('.adm-panel').filter({ has: page.getByRole('heading', { name: 'Подтверждённое пополнение' }) })
+    await form.getByLabel('Сумма, ₽').fill('500')
+    await form.getByLabel('Идентификатор транзакции').fill('Bank-0002')
+    await expect(form.getByRole('button', { name: 'Записать 500 ₽' })).toBeVisible()
+    await form.getByLabel('Идентификатор транзакции').press('Enter')
+    await expect(page.getByText('Пополнение 500 ₽ записано, реферальные бонусы начислены.')).toBeVisible()
+    expect(topUps).toEqual([{ p_user_id: studentId, p_amount: 50000, p_provider_reference: 'bank-0002' }])
+    await expectNoPageOverflow(page)
+  })
+
   for (const tab of ['payments', 'reconciliation']) {
     test(`вкладка ${tab} не переполняется на телефоне`, async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 844 })

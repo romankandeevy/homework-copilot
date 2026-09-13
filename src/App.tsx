@@ -47,7 +47,7 @@ import { homeworkSolutionForm } from './lib/homeworkContract'
 import type { HomeworkSolution, HomeworkSource } from './lib/homeworkContract'
 import { formatRubles } from './lib/currency'
 import { recordPendingLegalAcceptance } from './lib/legalConsent'
-import { bindPendingReferral, captureReferralFromCurrentUrl, preparePendingReferralClaim } from './lib/referrals'
+import { bindPendingReferral, preparePendingReferralClaim } from './lib/referrals'
 import { forgetGuestSolution, getGuestId, guestSolutionUsed, rememberGuestSolutionUsed } from './lib/guestSolutions'
 import { applySeoMetadata, getSeoMetadata } from './lib/siteMetadata'
 import { getSolutionPrice } from './lib/solutionPricing'
@@ -1514,10 +1514,6 @@ function HomePage() {
   }, [dismissedJobKeys, localJobs, remoteJobs])
 
   const hasActiveJobs = useMemo(() => visibleJobs.some(isActiveJob), [visibleJobs])
-
-  useEffect(() => {
-    captureReferralFromCurrentUrl()
-  }, [])
 
   useEffect(() => {
     if (!supabaseClient) return

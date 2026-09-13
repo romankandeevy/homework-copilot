@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import { Root } from './Root.tsx'
 import { ErrorBoundary } from './ErrorBoundary.tsx'
+import { captureReferralFromCurrentUrl } from './lib/referrals'
 
 const staleChunkReloadKey = 'homework-copilot:stale-chunk-reload'
 
@@ -23,6 +24,11 @@ if (currentUrl.searchParams.has('__app_reload')) {
   currentUrl.searchParams.delete('__app_reload')
   window.history.replaceState(window.history.state, '', currentUrl)
 }
+
+/* Реферальная ссылка ведёт на витрину (`/?ref=…`), а витрина App не
+   монтирует. Код запоминается здесь, до разводки: иначе он терялся, пока
+   гость шёл с витрины в приложение. */
+captureReferralFromCurrentUrl()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
