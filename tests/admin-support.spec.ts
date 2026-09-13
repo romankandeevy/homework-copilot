@@ -95,7 +95,8 @@ test.describe('админка: поддержка', () => {
     await page.keyboard.type('jk')
     await expect(reply).toHaveValue('jk')
     await expect(page).toHaveURL(/conversation=conversation-1/)
-    await page.keyboard.press('Control+a')
+    // На macOS «выделить всё» - Cmd+A, а Ctrl+A уводит курсор в начало строки.
+    await page.keyboard.press('ControlOrMeta+a')
     await page.keyboard.press('Backspace')
     await expect(reply).toHaveValue('')
 

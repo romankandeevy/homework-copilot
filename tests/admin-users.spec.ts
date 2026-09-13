@@ -94,7 +94,9 @@ test.describe('админка: пользователи', () => {
   test('быстрый поиск: недавние карточки, стрелки и Enter', async ({ page }) => {
     await openUsers(page)
     await page.getByRole('cell', { name: /alina@example\.test/ }).click()
-    await expect(page.getByRole('dialog')).toBeVisible()
+    // В «недавние» карточка попадает, когда загрузилась: до ответа базы в
+    // заголовке «Пользователь», и Escape в этот зазор ничего не запоминает.
+    await expect(page.getByRole('dialog').getByRole('heading', { name: 'Алина Смирнова' })).toBeVisible()
     await page.keyboard.press('Escape')
     await expect(page.getByRole('dialog')).toHaveCount(0)
 
