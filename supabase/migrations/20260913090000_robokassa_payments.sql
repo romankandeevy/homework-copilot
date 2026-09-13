@@ -129,11 +129,10 @@ begin
   insert into private.verified_balance_top_ups (id, user_id, actor_id, provider_reference, amount, wallet_entry_id, source)
   values (top_up_id, p_user_id, null, normalized_reference, p_amount, top_up_entry_id, 'provider');
 
-  -- Награда за приглашение приходит при первом живом пополнении
-  -- приглашённого: 20260906190404 вернул её сюда с подтверждения почты,
-  -- потому что самоприглашение со второго ящика было бесплатными десятью
-  -- рублями. Пополнение через Робокассу платит её так же, как ручное, и
-  -- только приглашению в статусе pending - второй раз заплатить нельзя.
+  -- Награда за приглашение обычно уже выдана при подтверждении почты
+  -- (20260913100000 вернул это правило). Здесь, как и в ручном пути, она
+  -- находит только приглашение, которое всё ещё в статусе pending, - второй
+  -- раз заплатить нельзя.
   if first_top_up then
     select * into referral
     from public.referral_invites

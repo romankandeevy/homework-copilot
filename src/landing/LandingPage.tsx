@@ -651,7 +651,7 @@ export default function LandingPage() {
                     <b>20 ₽</b>
                   </li>
                   <li>
-                    <span><strong>Приглашение друга</strong><small>Когда он пополнит баланс в первый раз: ему 5 ₽, тебе 10 ₽</small></span>
+                    <span><strong>Приглашение друга</strong><small>Как только он зарегистрируется по ссылке и подтвердит почту: ему 5 ₽, тебе 10 ₽</small></span>
                     <b>+10 ₽</b>
                   </li>
                 </ul>

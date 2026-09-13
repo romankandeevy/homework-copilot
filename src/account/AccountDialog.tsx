@@ -904,7 +904,7 @@ function ReferralCard() {
         <span className="account-referral-icon"><Gift size={23} weight="duotone" aria-hidden="true" /></span>
         <div>
           <h3 id="account-referral-title">Пригласи друга</h3>
-          <p>Когда он пополнит баланс в первый раз, тебе начислят <strong>+10 ₽</strong>, а ему — <strong>+5 ₽</strong>.</p>
+          <p>Как только он зарегистрируется по твоей ссылке и подтвердит почту, тебе начислят <strong>+10 ₽</strong>, а ему — <strong>+5 ₽</strong>. Пополнять ничего не нужно.</p>
         </div>
       </header>
 
