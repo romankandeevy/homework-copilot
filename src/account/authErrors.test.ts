@@ -48,6 +48,14 @@ describe('authErrorMessage', () => {
     expect(authErrorMessage('Signup is disabled')).toBe('Регистрация временно закрыта')
   })
 
+  // Админ со вторым фактором менял пароль по ссылке из письма, и Supabase
+  // отвечал insufficient_aal - владелец видел «Не получилось выполнить запрос».
+  it('asks for the authenticator code when the session is below aal2', () => {
+    expect(authErrorMessage('AAL2 session is required to update email or password when MFA is enabled.'))
+      .toBe('Нужен код из приложения-аутентификатора')
+    expect(authErrorMessage('insufficient_aal')).toBe('Нужен код из приложения-аутентификатора')
+  })
+
   it('keeps the earlier mappings', () => {
     expect(authErrorMessage('Invalid login credentials')).toBe('Неверная почта или пароль')
     expect(authErrorMessage('Token has expired or is invalid', 'phone')).toBe('Код неверный или уже истёк')

@@ -402,6 +402,11 @@ function AuthView({ passwordRecovery, notice, onPasswordUpdated, authMethods = o
   const [email, setEmail] = useState(initialVerification?.email ?? '')
   const [password, setPassword] = useState('')
   const [verificationCode, setVerificationCode] = useState('')
+  /* Аккаунт со вторым фактором (админы) меняет пароль только после кода из
+     приложения: ссылка из письма даёт сессию первого уровня, и Supabase
+     отвечает insufficient_aal. Код спрашивается прямо в форме пароля. */
+  const [mfaRequired, setMfaRequired] = useState(false)
+  const [mfaCode, setMfaCode] = useState('')
   const [sentAt, setSentAt] = useState(() => initialVerification ? Number(sessionStorage.getItem(verificationSentAtKey) ?? 0) : 0)
   const [now, setNow] = useState(() => Date.now())
   const [status, setStatus] = useState('')
@@ -427,12 +432,21 @@ function AuthView({ passwordRecovery, notice, onPasswordUpdated, authMethods = o
   const passwordIsValid = requiresStrongPassword ? isStrongPassword(password) : password.length >= 8
   const resendIn = verificationSecondsLeft(sentAt, emailResendDelay, now)
   const expiresIn = verificationSecondsLeft(sentAt, emailCodeLifetime, now)
+
+  useEffect(() => {
+    if (screen !== 'reset' || !supabase) return
+    let active = true
+    void supabase.auth.mfa.getAuthenticatorAssuranceLevel().then(({ data }) => {
+      if (active && data?.currentLevel === 'aal1' && data.nextLevel === 'aal2') setMfaRequired(true)
+    })
+    return () => { active = false }
+  }, [screen])
   const phoneResendIn = verificationSecondsLeft(phoneSentAt, smsResendDelay, now)
   const usingPhone = method === 'phone' && (screen === 'sign-in' || screen === 'sign-up')
   const consentsGiven = agreementAccepted && personalDataAccepted && ageConfirmed
   const phoneIsValid = isRussianMobileDigits(phoneDigits)
 
-  const formIsValid = usingPhone
+  const formFieldsValid = usingPhone
     ? phoneIsValid && (screen === 'sign-in' || (fullName.trim().length >= 2 && Boolean(grade) && consentsGiven))
     : screen === 'sign-up'
       ? fullName.trim().length >= 2 && Boolean(grade) && isValidEmail(email) && passwordIsValid && consentsGiven
@@ -711,8 +725,23 @@ function AuthView({ passwordRecovery, notice, onPasswordUpdated, authMethods = o
       }
 
       if (!isStrongPassword(password)) throw new Error('weak password')
+      if (mfaRequired) {
+        const { data: factors, error: factorsError } = await supabase.auth.mfa.listFactors()
+        if (factorsError) throw factorsError
+        const factor = (factors?.all ?? []).find((item) => item.factor_type === 'totp' && item.status === 'verified')
+        if (!factor) throw new Error('mfa factor missing')
+        const { error: mfaError } = await supabase.auth.mfa.challengeAndVerify({ factorId: factor.id, code: mfaCode.trim() })
+        if (mfaError) throw new Error('mfa code')
+      }
       const { error: updateError } = await supabase.auth.updateUser({ password })
-      if (updateError) throw updateError
+      if (updateError) {
+        // Проверка уровня при открытии формы могла не успеть или ошибиться.
+        if (updateError.code === 'insufficient_aal' || /aal2/iu.test(updateError.message)) {
+          setMfaRequired(true)
+          throw new Error('mfa required')
+        }
+        throw updateError
+      }
       setStatus('Пароль обновлён')
       window.history.replaceState({}, '', window.location.pathname)
       if (onPasswordUpdated) {
@@ -727,6 +756,9 @@ function AuthView({ passwordRecovery, notice, onPasswordUpdated, authMethods = o
       if (message === 'name') setError('Введи имя')
       else if (message === 'weak password') setError('Выполни все требования к паролю')
       else if (message === 'legal consent') setError(consentErrorMessage)
+      else if (message === 'mfa required') setError('Аккаунт защищён вторым фактором: введи шесть цифр из приложения-аутентификатора и сохрани ещё раз')
+      else if (message === 'mfa code') setError('Код из приложения не подошёл. Проверь время на телефоне и введи новый код')
+      else if (message === 'mfa factor missing') setError('Второй фактор аккаунта не найден. Напиши в поддержку')
       else setError(authErrorMessage(message))
     } finally {
       setLoading(false)
@@ -943,6 +975,25 @@ function AuthView({ passwordRecovery, notice, onPasswordUpdated, authMethods = o
           </div>
         )}
 
+        {screen === 'reset' && mfaRequired && (
+          <label>
+            <span>Код из приложения-аутентификатора</span>
+            <div className="account-input-shell">
+              <ShieldCheck size={19} weight="duotone" aria-hidden="true" />
+              <input
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="[0-9]{6}"
+                maxLength={6}
+                value={mfaCode}
+                onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, ''))}
+                placeholder="6 цифр"
+                required
+              />
+            </div>
+          </label>
+        )}
+
         {screen === 'sign-up' && (
           <LegalConsents
             agreementAccepted={agreementAccepted}
@@ -957,7 +1008,7 @@ function AuthView({ passwordRecovery, notice, onPasswordUpdated, authMethods = o
         {error && <p className="account-form-message is-error" role="alert">{error}</p>}
         {status && <p className="account-form-message is-success" role="status"><CheckCircle size={18} weight="fill" aria-hidden="true" />{status}</p>}
 
-        <button className="account-primary-button" type="submit" disabled={loading || !formIsValid}>
+        <button className="account-primary-button" type="submit" disabled={loading || !formFieldsValid || (screen === 'reset' && mfaRequired && mfaCode.length !== 6)}>
           {loading ? 'Подожди…' : usingPhone ? 'Получить код' : screen === 'sign-up' ? 'Создать аккаунт' : screen === 'forgot' ? 'Отправить ссылку' : screen === 'reset' ? 'Сохранить пароль' : 'Войти'}
           {!loading && <ArrowRight size={18} weight="bold" aria-hidden="true" />}
         </button>

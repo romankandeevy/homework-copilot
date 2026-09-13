@@ -36,6 +36,8 @@ export function authErrorMessage(message: string, channel: AuthChannel = 'email'
     return 'СМС с кодом не ушло. Попробуй ещё раз через минуту или войди по почте'
   }
   if (normalized.includes('error sending')) return 'Письмо не ушло: почта сервиса сейчас не отправляется. Напиши в поддержку'
+  // Смена пароля или почты у аккаунта со вторым фактором без кода из приложения.
+  if (normalized.includes('insufficient_aal') || normalized.includes('aal2')) return 'Нужен код из приложения-аутентификатора'
   if (normalized.includes('email not confirmed')) return 'Сначала подтверди почту кодом из письма'
   if (normalized.includes('token') || normalized.includes('otp')) return 'Код неверный или уже истёк'
   if (normalized.includes('referral claim unavailable')) return 'Не получилось закрепить приглашение. Повтори попытку'
