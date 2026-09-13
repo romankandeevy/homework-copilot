@@ -308,6 +308,11 @@ export default function CopyTask({
       </header>
 
       <form className="copy-task-form" aria-label="Задачи" onSubmit={submit}>
+        {/* Пока идёт запрос, поля выключены: иначе клик обратно в условие до
+            того, как сервер ответил и форма очистилась, дописывает новый
+            ввод к ещё не сброшенному старому тексту - задача уходит на
+            решение задвоенной. */}
+        <fieldset className="task-entries-fieldset" disabled={isSubmitting}>
         <ol className="task-entries">
           {entries.map((entry, index) => (
             <li className="task-entry" key={entry.id}>
@@ -418,6 +423,7 @@ export default function CopyTask({
             </li>
           ))}
         </ol>
+        </fieldset>
 
         <div className="task-actions">
           {/* Домашнее задание редко состоит из одной задачи, и уж точно не
