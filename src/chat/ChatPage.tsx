@@ -1087,7 +1087,7 @@ export default function ChatPage({ userId = null, onRequireAuth, onOpenWallet }:
               <WarningCircle size={18} weight="bold" aria-hidden="true" />
               <span>{failure.message}</span>
               {failure.code === 'insufficient_funds' && onOpenWallet && (
-                <button type="button" onClick={onOpenWallet}>Пополнить баланс</button>
+                <button type="button" onClick={onOpenWallet}>Открыть баланс</button>
               )}
               {failure.code !== 'insufficient_funds' && canRetry && (
                 <button type="button" onClick={retryAnswer}>Повторить ответ</button>

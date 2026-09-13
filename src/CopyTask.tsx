@@ -93,7 +93,7 @@ export default function CopyTask({
   onSubmit,
   signedIn = false,
   freeSolutionUsed = false,
-  defaultGrade = '',
+  defaultGrade: profileGrade = '',
   subjects = solvableSubjects,
   photoEnabled = true,
 }: {
@@ -108,6 +108,9 @@ export default function CopyTask({
   /** Решение по фото можно выключить из админки, сервер его тогда отвергнет. */
   photoEnabled?: boolean
 }) {
+  // Класс профиля подставляем, только если форма его знает: в старых
+  // профилях бывает 1-4 класс, а решаем мы с пятого.
+  const defaultGrade = (solvableGrades as readonly string[]).includes(profileGrade) ? profileGrade : ''
   const [entries, setEntries] = useState<TaskEntry[]>(() => [emptyEntry(defaultGrade)])
   const [error, setError] = useState('')
   const [invalidEntryId, setInvalidEntryId] = useState('')
@@ -301,7 +304,7 @@ export default function CopyTask({
             <strong>{total > 0 ? formatRubles(total) : `от ${formatRubles(minimumSolutionPriceKopecks)}`}</strong>
             <span>{total > 0 ? (many ? `за ${taskCountLabel(filled.length)}` : 'за решение') : 'за решение'}</span>
             {!signedIn && (
-              <em>Зарегистрируйся: на счёт придут 20 ₽ — это ещё пять решений</em>
+              <em>Зарегистрируйся: новому аккаунту 20 ₽, один раз на устройство</em>
             )}
           </p>
         )}

@@ -110,6 +110,10 @@ type AccountDialogProps = {
   onClose: () => void
   onReloadAccount: () => Promise<void>
   returnFocusRef?: RefObject<HTMLElement | null>
+  /** У вошедшего нет ни одной отметки о согласии: окно не отпускает, пока их нет. */
+  legalAcceptanceRequired?: boolean
+  onLegalAccepted?: () => void
+  onPasswordUpdated?: () => void
 }
 
 function authErrorMessage(message: string) {
@@ -130,7 +134,10 @@ function isValidEmail(value: string) {
 
 const consentErrorMessage = 'Прими соглашение, согласие на обработку данных и подтверди возраст'
 
-const gradeOptions = Array.from({ length: 11 }, (_, index) => index + 1)
+/* Классы те же, что в форме задачи (`solvableGrades`): 1-4 класс продукт не
+   решает, и выбранный здесь класс подставлялся в задачу, которую форма не
+   знает. «Университета» здесь нет: в профиле класс хранится числом 1-11. */
+const gradeOptions: readonly number[] = [5, 6, 7, 8, 9, 10, 11]
 
 function GradeSelect({ value, onChange, compact = false }: { value: string; onChange: (value: string) => void; compact?: boolean }) {
   const listboxId = useId()
@@ -180,16 +187,18 @@ function GradeSelect({ value, onChange, compact = false }: { value: string; onCh
       }
 
       setHighlighted((current) => {
-        if (event.key === 'Home') return 1
-        if (event.key === 'End') return gradeOptions.length
-        return Math.min(gradeOptions.length, Math.max(1, current + (event.key === 'ArrowDown' ? 1 : -1)))
+        if (event.key === 'Home') return gradeOptions[0] ?? current
+        if (event.key === 'End') return gradeOptions[gradeOptions.length - 1] ?? current
+        const index = gradeOptions.indexOf(current)
+        const next = index === -1 ? 0 : Math.min(gradeOptions.length - 1, Math.max(0, index + (event.key === 'ArrowDown' ? 1 : -1)))
+        return gradeOptions[next] ?? current
       })
       return
     }
 
     if (event.key === 'Enter' && open && event.target === triggerRef.current) {
       event.preventDefault()
-      choose(highlighted)
+      if (gradeOptions.includes(highlighted)) choose(highlighted)
     }
   }
 
@@ -246,7 +255,142 @@ function GradeSelect({ value, onChange, compact = false }: { value: string; onCh
   )
 }
 
-function AuthView({ passwordRecovery, notice }: { passwordRecovery: boolean; notice?: string }) {
+/* Три отметки согласия. Стоят в регистрации и в окне согласия для того, кто
+   вошёл, а отметки о согласии у аккаунта нет. */
+function LegalConsents({ agreementAccepted, personalDataAccepted, ageConfirmed, onAgreementChange, onPersonalDataChange, onAgeChange }: {
+  agreementAccepted: boolean
+  personalDataAccepted: boolean
+  ageConfirmed: boolean
+  onAgreementChange: (value: boolean) => void
+  onPersonalDataChange: (value: boolean) => void
+  onAgeChange: (value: boolean) => void
+}) {
+  return (
+    <div className="account-legal-consents">
+      <label className="account-consent">
+        <input type="checkbox" checked={agreementAccepted} onChange={(event) => onAgreementChange(event.target.checked)} required />
+        <span aria-hidden="true"><Check size={14} weight="bold" /></span>
+        <em>Я принимаю <a href="/terms" target="_blank" rel="noreferrer">пользовательское соглашение</a></em>
+      </label>
+      <label className="account-consent">
+        <input type="checkbox" checked={personalDataAccepted} onChange={(event) => onPersonalDataChange(event.target.checked)} required />
+        <span aria-hidden="true"><Check size={14} weight="bold" /></span>
+        <em>Я отдельно даю <a href="/consent" target="_blank" rel="noreferrer">согласие на обработку персональных данных</a> и прочитал <a href="/privacy" target="_blank" rel="noreferrer">политику данных</a></em>
+      </label>
+      <label className="account-consent">
+        <input type="checkbox" checked={ageConfirmed} onChange={(event) => onAgeChange(event.target.checked)} required />
+        <span aria-hidden="true"><Check size={14} weight="bold" /></span>
+        <em>Мне есть 14 лет или я регистрируюсь с согласия родителя</em>
+      </label>
+    </div>
+  )
+}
+
+/* Окно согласия для вошедшего.
+
+   Отметку о согласии ставит база при регистрации по почте, а при входе через
+   Google - клиент, и только если кнопку нажали на вкладке «Регистрация».
+   Новый человек, нажавший «Продолжить с Google» на вкладке «Вход», получал
+   аккаунт без отметки. Теперь аккаунт без единой отметки дальше этого окна
+   не пускает: принять документы или выйти. */
+function LegalAcceptanceView({ user, onAccepted }: { user: User; onAccepted: () => void }) {
+  const [agreementAccepted, setAgreementAccepted] = useState(false)
+  const [personalDataAccepted, setPersonalDataAccepted] = useState(false)
+  const [ageConfirmed, setAgeConfirmed] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!agreementAccepted || !personalDataAccepted || !ageConfirmed) return
+    setError((current) => (current === consentErrorMessage ? '' : current))
+  }, [ageConfirmed, agreementAccepted, personalDataAccepted])
+
+  const accept = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (loading) return
+    if (!agreementAccepted || !personalDataAccepted || !ageConfirmed) {
+      setError(consentErrorMessage)
+      return
+    }
+    if (!supabase) return
+    setLoading(true)
+    setError('')
+    const { error: acceptanceError } = await supabase.rpc('record_current_legal_acceptance', {
+      p_source: user.app_metadata?.provider === 'google' ? 'google' : 'email',
+    })
+    if (acceptanceError) {
+      setError('Не получилось сохранить согласие. Попробуй ещё раз')
+      setLoading(false)
+      return
+    }
+    onAccepted()
+  }
+
+  const signOut = async () => {
+    if (!supabase || loading) return
+    setLoading(true)
+    const { error: signOutError } = await supabase.auth.signOut({ scope: 'local' })
+    if (signOutError) {
+      setError('Не получилось выйти из аккаунта')
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="account-auth-view">
+      <aside className="account-auth-context" aria-hidden="true">
+        <div className="account-auth-wordmark"><span>HC</span><strong>Homework Copilot</strong></div>
+        <div className="account-auth-context-copy">
+          <ShieldCheck size={42} weight="duotone" />
+          <strong>Остался один шаг.</strong>
+          <p>Прими документы — и аккаунт готов к работе.</p>
+        </div>
+        <div className="account-auth-context-meta">
+          <CheckCircle size={20} weight="duotone" />
+          <span>Согласие записывается в аккаунт</span>
+        </div>
+      </aside>
+
+      <section className="account-auth-panel">
+        <div className="account-auth-brand">
+          <span className="account-auth-mark"><ShieldCheck size={28} weight="duotone" aria-hidden="true" /></span>
+          <div>
+            <h2 id="account-dialog-title">Прими документы</h2>
+            <p>Аккаунт создан, но согласие с документами в нём не записано.</p>
+          </div>
+        </div>
+
+        {/* Без noValidate браузер сам останавливал отправку на пустой отметке
+            и молчал: объяснение пришло бы только от нашей строки ошибки. */}
+        <form className="account-auth-form" onSubmit={(event) => { void accept(event) }} noValidate>
+          <LegalConsents
+            agreementAccepted={agreementAccepted}
+            personalDataAccepted={personalDataAccepted}
+            ageConfirmed={ageConfirmed}
+            onAgreementChange={setAgreementAccepted}
+            onPersonalDataChange={setPersonalDataAccepted}
+            onAgeChange={setAgeConfirmed}
+          />
+
+          {error && <p className="account-form-message is-error" role="alert">{error}</p>}
+
+          <button className="account-primary-button" type="submit" disabled={loading}>
+            {loading ? 'Подожди…' : 'Принять и продолжить'}
+            {!loading && <ArrowRight size={18} weight="bold" aria-hidden="true" />}
+          </button>
+        </form>
+
+        <div className="account-auth-secondary">
+          <button type="button" onClick={() => { void signOut() }} disabled={loading}>Выйти из аккаунта</button>
+        </div>
+      </section>
+    </div>
+  )
+}
+
+/* `onPasswordUpdated` есть, когда человек уже вошёл: ссылка из письма о смене
+   пароля открывает сессию, и новый пароль задаётся изнутри аккаунта. */
+function AuthView({ passwordRecovery, notice, onPasswordUpdated }: { passwordRecovery: boolean; notice?: string; onPasswordUpdated?: () => void }) {
   const viewRef = useRef<HTMLDivElement>(null)
   const [initialVerification] = useState(() => readPendingVerification())
   const [screen, setScreen] = useState<AuthScreen>(passwordRecovery ? 'reset' : initialVerification ? 'verify-email' : 'sign-in')
@@ -472,6 +616,10 @@ function AuthView({ passwordRecovery, notice }: { passwordRecovery: boolean; not
       if (updateError) throw updateError
       setStatus('Пароль обновлён')
       window.history.replaceState({}, '', window.location.pathname)
+      if (onPasswordUpdated) {
+        onPasswordUpdated()
+        return
+      }
       setScreen('sign-in')
       setPassword('')
     } catch (caught) {
@@ -497,7 +645,7 @@ function AuthView({ passwordRecovery, notice }: { passwordRecovery: boolean; not
         : 'Войди в аккаунт'
 
   const subtitle = screen === 'sign-up'
-    ? 'Создай профиль и получи 20 ₽ на первые решения.'
+    ? 'Новому аккаунту — 20 ₽ на первые решения, один раз на устройство.'
     : screen === 'verify-email'
       ? 'Шесть цифр из письма — и аккаунт готов.'
       : screen === 'forgot'
@@ -513,7 +661,7 @@ function AuthView({ passwordRecovery, notice }: { passwordRecovery: boolean; not
         <div className="account-auth-context-copy">
           {screen === 'verify-email' ? <ShieldCheck size={42} weight="duotone" /> : <LockKey size={42} weight="duotone" />}
           <strong>{screen === 'verify-email' ? 'Код остаётся на этом устройстве.' : 'Аккаунт без лишних переходов.'}</strong>
-          <p>{screen === 'verify-email' ? 'Открой письмо где угодно, а шесть цифр введи здесь.' : 'Учебники, баланс и готовые решения будут ждать тебя после входа.'}</p>
+          <p>{screen === 'verify-email' ? 'Открой письмо где угодно, а шесть цифр введи здесь.' : 'Баланс и готовые решения будут ждать тебя после входа.'}</p>
         </div>
         <div className="account-auth-context-meta">
           <ClockCountdown size={20} weight="duotone" />
@@ -647,23 +795,14 @@ function AuthView({ passwordRecovery, notice }: { passwordRecovery: boolean; not
         )}
 
         {screen === 'sign-up' && (
-          <div className="account-legal-consents">
-            <label className="account-consent">
-              <input type="checkbox" checked={agreementAccepted} onChange={(event) => setAgreementAccepted(event.target.checked)} required />
-              <span aria-hidden="true"><Check size={14} weight="bold" /></span>
-              <em>Я принимаю <a href="/terms" target="_blank" rel="noreferrer">пользовательское соглашение</a></em>
-            </label>
-            <label className="account-consent">
-              <input type="checkbox" checked={personalDataAccepted} onChange={(event) => setPersonalDataAccepted(event.target.checked)} required />
-              <span aria-hidden="true"><Check size={14} weight="bold" /></span>
-              <em>Я отдельно даю <a href="/consent" target="_blank" rel="noreferrer">согласие на обработку персональных данных</a> и прочитал <a href="/privacy" target="_blank" rel="noreferrer">политику данных</a></em>
-            </label>
-            <label className="account-consent">
-              <input type="checkbox" checked={ageConfirmed} onChange={(event) => setAgeConfirmed(event.target.checked)} required />
-              <span aria-hidden="true"><Check size={14} weight="bold" /></span>
-              <em>Мне есть 14 лет или я регистрируюсь с согласия родителя</em>
-            </label>
-          </div>
+          <LegalConsents
+            agreementAccepted={agreementAccepted}
+            personalDataAccepted={personalDataAccepted}
+            ageConfirmed={ageConfirmed}
+            onAgreementChange={setAgreementAccepted}
+            onPersonalDataChange={setPersonalDataAccepted}
+            onAgeChange={setAgeConfirmed}
+          />
         )}
 
         {error && <p className="account-form-message is-error" role="alert">{error}</p>}
@@ -684,7 +823,7 @@ function AuthView({ passwordRecovery, notice }: { passwordRecovery: boolean; not
 
       <div className="account-auth-secondary">
         {screen === 'sign-in' && <button type="button" onClick={() => switchScreen('forgot')}>Не помню пароль</button>}
-        {(screen === 'forgot' || screen === 'reset') && <button type="button" onClick={() => switchScreen('sign-in')}>Вернуться ко входу</button>}
+        {(screen === 'forgot' || (screen === 'reset' && !onPasswordUpdated)) && <button type="button" onClick={() => switchScreen('sign-in')}>Вернуться ко входу</button>}
         {screen === 'verify-email' && (
           <>
             <button type="button" onClick={() => { void resendEmail() }} disabled={loading || resendIn > 0}>{resendIn > 0 ? `Новый код через ${formatCountdown(resendIn)}` : 'Отправить новый код'}</button>
@@ -717,6 +856,7 @@ function promoErrorMessage(message: string) {
    Сумму проверяют и форма, и сервер, и база - из браузера её не навязать. */
 function TopUpCard() {
   const [config, setConfig] = useState<PaymentConfig | null>(null)
+  const [configLoaded, setConfigLoaded] = useState(false)
   const [amount, setAmount] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
@@ -727,10 +867,17 @@ function TopUpCard() {
     loadPaymentConfig()
       .then((next) => { if (active) setConfig(next) })
       .catch(() => undefined)
+      .finally(() => { if (active) setConfigLoaded(true) })
     return () => { active = false }
   }, [])
 
-  if (!config?.enabled) return null
+  /* Сюда ведут и кнопка баланса в шапке, и нехватка денег перед решением.
+     Без строки человек искал бы, где пополнить, и не находил. */
+  if (!config?.enabled) {
+    return configLoaded
+      ? <p className="account-top-up-note" role="note">Пополнить баланс пока нельзя. Рубли приходят по промокоду и за приглашённого друга.</p>
+      : null
+  }
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -1139,14 +1286,18 @@ function ProfileView({ user, account, notice, initialView, theme, onToggleTheme,
   )
 }
 
-export default function AccountDialog({ user, account, passwordRecovery, notice, initialView, theme, onToggleTheme, onClose, onReloadAccount, returnFocusRef }: AccountDialogProps) {
+export default function AccountDialog({ user, account, passwordRecovery, notice, initialView, theme, onToggleTheme, onClose, onReloadAccount, returnFocusRef, legalAcceptanceRequired = false, onLegalAccepted, onPasswordUpdated }: AccountDialogProps) {
   const reduceMotion = useReducedMotion()
   const dialogRef = useModalIsolation<HTMLElement>(true, onClose, returnFocusRef)
+  /* Ссылка из письма о смене пароля открывает сессию: человек уже вошёл, и
+     профиль прятал форму нового пароля - задать его было негде. */
+  const view = !user ? 'auth' : legalAcceptanceRequired ? 'legal' : passwordRecovery ? 'reset' : 'profile'
+  const authLayout = view !== 'profile'
 
   return createPortal((
     <AnimatePresence>
       <motion.div
-        className={`account-dialog-backdrop${user ? '' : ' is-auth-backdrop'}`}
+        className={`account-dialog-backdrop${authLayout ? ' is-auth-backdrop' : ''}`}
         role="presentation"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -1156,7 +1307,7 @@ export default function AccountDialog({ user, account, passwordRecovery, notice,
       >
         <motion.section
           ref={dialogRef}
-          className={`account-dialog${user ? ' is-profile' : ' is-auth'}`}
+          className={`account-dialog${authLayout ? ' is-auth' : ' is-profile'}`}
           role="dialog"
           aria-modal="true"
           aria-labelledby="account-dialog-title"
@@ -1165,10 +1316,12 @@ export default function AccountDialog({ user, account, passwordRecovery, notice,
           exit={reduceMotion ? undefined : { opacity: 0, scale: 0.985, y: 8 }}
           transition={{ duration: reduceMotion ? 0 : 0.24, ease: [0.16, 1, 0.3, 1] }}
         >
-          <button className="account-dialog-close" type="button" aria-label="Закрыть окно аккаунта" onClick={onClose}><X size={20} weight="bold" aria-hidden="true" /></button>
-          {user
-            ? <ProfileView user={user} account={account} notice={notice} initialView={initialView} theme={theme} onToggleTheme={onToggleTheme} onReloadAccount={onReloadAccount} />
-            : <AuthView passwordRecovery={passwordRecovery} notice={notice} />}
+          {view !== 'legal' && <button className="account-dialog-close" type="button" aria-label="Закрыть окно аккаунта" onClick={onClose}><X size={20} weight="bold" aria-hidden="true" /></button>}
+          {user && view === 'legal'
+            ? <LegalAcceptanceView user={user} onAccepted={() => onLegalAccepted?.()} />
+            : user && view === 'profile'
+              ? <ProfileView user={user} account={account} notice={notice} initialView={initialView} theme={theme} onToggleTheme={onToggleTheme} onReloadAccount={onReloadAccount} />
+              : <AuthView passwordRecovery={passwordRecovery} notice={notice} onPasswordUpdated={user ? onPasswordUpdated ?? (() => undefined) : undefined} />}
         </motion.section>
       </motion.div>
     </AnimatePresence>

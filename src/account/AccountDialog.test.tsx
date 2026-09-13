@@ -52,6 +52,9 @@ describe('AccountDialog profile', () => {
     expect(grade).toHaveTextContent('8 класс')
     fireEvent.click(grade)
     expect(screen.getByRole('option', { name: '8 класс' })).toHaveAttribute('aria-selected', 'true')
+    // Классы те же, что в форме задачи: с пятого по одиннадцатый.
+    expect(screen.queryByRole('option', { name: '4 класс' })).not.toBeInTheDocument()
+    expect(screen.getAllByRole('option')).toHaveLength(7)
     fireEvent.keyDown(grade, { key: 'ArrowDown' })
     fireEvent.keyDown(grade, { key: 'Enter' })
     expect(grade).toHaveTextContent('9 класс')
@@ -92,5 +95,35 @@ describe('AccountDialog profile', () => {
     fireEvent.click(age)
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'согласие на обработку персональных данных' })).toHaveAttribute('href', '/consent')
+  })
+
+  // Ссылка из письма о смене пароля открывает сессию: человек уже вошёл,
+  // и форма нового пароля не должна прятаться за профилем.
+  it('shows the new-password form to a user signed in by the recovery link', () => {
+    render(<AccountDialog user={user} account={account} passwordRecovery initialView="profile" theme="light" onToggleTheme={() => undefined} onClose={() => undefined} onReloadAccount={async () => undefined} />)
+
+    expect(screen.getByRole('heading', { name: 'Новый пароль' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Сохранить пароль/ })).toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: 'Раздел аккаунта' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Вернуться ко входу' })).not.toBeInTheDocument()
+  })
+
+  // Новый аккаунт через Google с вкладки «Вход» создавался без отметки о
+  // согласии. Без отметки окно не закрывается: принять документы или выйти.
+  it('keeps a signed-in account without legal acceptance on the consent screen', () => {
+    render(<AccountDialog user={user} account={account} passwordRecovery={false} legalAcceptanceRequired initialView="profile" theme="light" onToggleTheme={() => undefined} onClose={() => undefined} onReloadAccount={async () => undefined} />)
+
+    expect(screen.getByRole('heading', { name: 'Прими документы' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Закрыть окно аккаунта' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: 'Раздел аккаунта' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Выйти из аккаунта' })).toBeEnabled()
+
+    fireEvent.click(screen.getByRole('button', { name: /Принять и продолжить/ }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Прими соглашение')
+
+    fireEvent.click(screen.getByRole('checkbox', { name: /пользовательское соглашение/ }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /отдельно даю/ }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /14 лет/ }))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 })

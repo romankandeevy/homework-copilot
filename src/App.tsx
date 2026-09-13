@@ -50,7 +50,7 @@ import { recordPendingLegalAcceptance } from './lib/legalConsent'
 import { bindPendingReferral, preparePendingReferralClaim } from './lib/referrals'
 import { forgetGuestSolution, getGuestId, guestSolutionUsed, rememberGuestSolutionUsed } from './lib/guestSolutions'
 import { applySeoMetadata, getSeoMetadata } from './lib/siteMetadata'
-import { getSolutionPrice } from './lib/solutionPricing'
+import { estimateSolutionPrice } from './lib/solutionPricing'
 import { findSubjectByName } from './lib/subjects'
 import {
   isCurrentEngineSolution,
@@ -749,11 +749,22 @@ function ProductTopbar({
   )
 }
 
+/* Цена задачи из очереди - та же формула, что в форме до нажатия «Решить». */
+function pendingSolutionPrice(payload: { condition?: string; imageDataUrl?: string; subject?: string }) {
+  return estimateSolutionPrice({
+    conditionLength: payload.condition?.trim().length ?? 0,
+    imageBytes: payload.imageDataUrl?.length ?? 0,
+    subject: payload.subject ?? '',
+  })
+}
+
+// «Пополнить» обещало оплату, которой у обычного аккаунта нет: карточка
+// пополнения появляется, только когда оплату включил сервер.
 function BalanceControl({ balance, onOpenWallet }: { balance: number | null; onOpenWallet: () => void }) {
   return (
     <button className="balance-control" type="button" aria-label={`Открыть баланс: ${formatRubles(balance ?? 0)}`} onClick={onOpenWallet}>
       <span><small>Баланс</small><strong>{formatRubles(balance ?? 0)}</strong></span>
-      <span className="balance-open">Пополнить <ArrowRight size={15} weight="bold" aria-hidden="true" /></span>
+      <span className="balance-open">Открыть <ArrowRight size={15} weight="bold" aria-hidden="true" /></span>
     </button>
   )
 }
@@ -797,7 +808,7 @@ function GuestSolutionsNote({ onOpenAccount, freeSolutionUsed = false }: { onOpe
     <p className="home-guest-note">
       <button type="button" onClick={onOpenAccount}>
         {freeSolutionUsed
-          ? 'Бесплатное решение использовано. Зарегистрируйся и получи 20 ₽'
+          ? 'Бесплатное решение использовано. Зарегистрируйся — новому аккаунту 20 ₽, один раз на устройство'
           : 'Войти, чтобы сохранять решения'}
         <ArrowRight size={16} weight="bold" aria-hidden="true" />
       </button>
@@ -809,7 +820,7 @@ function MySolutions({ items, onOpenAll, onOpenSolution }: { items: readonly Per
   return (
     <section className="my-solutions" aria-labelledby="my-solutions-title">
       <header className="section-heading">
-        <div><h2 id="my-solutions-title">Мои решения</h2><p>Только задачи, которые ты уже открыл или запросил в этом сеансе.</p></div>
+        <div><h2 id="my-solutions-title">Мои решения</h2><p>Задачи, которые ты решил в этом аккаунте.</p></div>
         <button className="section-link" type="button" onClick={onOpenAll}>Все мои решения <ArrowRight size={17} weight="bold" aria-hidden="true" /></button>
       </header>
       {items.length > 0 ? <div className="solution-cards">
@@ -893,7 +904,7 @@ function SolutionsPage({
             <h2 id="solutions-empty-title">Здесь будут твои решения</h2>
             <p>
               Первую задачу можно решить без аккаунта. Чтобы решения сохранялись и открывались
-              снова бесплатно, нужен вход - заодно на счёт придут 20 ₽.
+              снова бесплатно, нужен вход - новому аккаунту заодно придут 20 ₽, один раз на устройство.
             </p>
             <div className="route-empty-actions">
               <button className="route-secondary-action" type="button" onClick={onStartTask}>Решить задачу</button>
@@ -1058,7 +1069,7 @@ function UnderstandingPage({
     <section className="solution-guest-offer" aria-labelledby="solution-guest-offer-title">
       <div>
         <h2 id="solution-guest-offer-title">Это решение хранится только в этом браузере</h2>
-        <p>Зарегистрируйся — оно останется в аккаунте, а на счёт придут 20 ₽. Это ещё пять задач по минимальной цене.</p>
+        <p>Зарегистрируйся — оно останется в аккаунте, а новому аккаунту придут 20 ₽, один раз на устройство. Это пять задач по минимальной цене.</p>
       </div>
       <button className="route-primary-action" type="button" onClick={onOpenAccount}>
         Сохранить решение
@@ -1440,6 +1451,9 @@ function HomePage() {
   const [accountOpen, setAccountOpen] = useState(() => ['reset', 'verified', 'confirm', 'signin'].includes(new URLSearchParams(window.location.search).get('auth') ?? ''))
   const [accountView, setAccountView] = useState<AccountView>('profile')
   const [passwordRecovery, setPasswordRecovery] = useState(() => new URLSearchParams(window.location.search).get('auth') === 'reset')
+  // Аккаунт без единой отметки о согласии: окно согласия его не отпускает.
+  const [legalGateUserId, setLegalGateUserId] = useState<string | null>(null)
+  const legalAcceptanceRequired = Boolean(user) && legalGateUserId === user?.id
   const [accountNotice, setAccountNotice] = useState('')
   // Сообщение над очередью: то, что случилось с задачей, а не с аккаунтом.
   const [queueNotice, setQueueNotice] = useState('')
@@ -1540,7 +1554,7 @@ function HomePage() {
       }
       setActiveNavigation(route.label)
       setSelectedSolution(route.solution)
-      setSupportOpen(currentPath === '/support')
+      setSupportOpen(restoredPath === '/support')
     }
 
     window.addEventListener('popstate', restoreNavigation)
@@ -1610,9 +1624,24 @@ function HomePage() {
     void restorePurchasedSolutions()
   }, [restorePurchasedSolutions])
 
+  /* Сначала записываем согласие, ждущее в sessionStorage (Google с вкладки
+     «Регистрация»), потом смотрим, есть ли у аккаунта хоть одна отметка.
+     Нет ни одной - значит, аккаунт создан без согласия: «Продолжить с
+     Google» на вкладке «Вход» его не спрашивал. Такой аккаунт дальше окна
+     согласия не пускаем. Сбой запроса никого не запирает: проверка
+     повторится при следующей загрузке. */
   useEffect(() => {
     if (!supabaseClient || !user) return
-    void recordPendingLegalAcceptance(supabaseClient, user.email)
+    const client = supabaseClient
+    const userId = user.id
+    let active = true
+    void (async () => {
+      await recordPendingLegalAcceptance(client, user.email)
+      const { data, error } = await client.from('legal_acceptances').select('id').eq('user_id', userId).limit(1)
+      if (!active || error) return
+      setLegalGateUserId(data.length === 0 ? userId : null)
+    })()
+    return () => { active = false }
   }, [supabaseClient, user])
 
   useEffect(() => {
@@ -1861,6 +1890,12 @@ function HomePage() {
     cleanUrl.searchParams.delete('auth')
     window.history.replaceState({}, '', `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`)
   }, [])
+  // Окно согласия не закрывается мимо: принять документы или выйти.
+  const keepLegalGateOpen = useCallback(() => undefined, [])
+  const finishPasswordRecovery = useCallback(() => {
+    setPasswordRecovery(false)
+    setAccountNotice('Пароль обновлён')
+  }, [])
   const openSupport = useCallback((nextCategory: SupportCategory = 'general', context?: SupportPrefill) => {
     const currentPath = currentApplicationPath()
     supportReturnPathRef.current = currentPath === '/support' ? '/app' : currentPath
@@ -1913,7 +1948,32 @@ function HomePage() {
      набирал, и не устраивает залп из пяти резервов оплаты сразу. Если
      где-то посередине не хватило денег, поставленные раньше остаются - о
      том, что встало, скажет очередь. */
+  /* Уже стоит в очереди этого устройства и ещё не оплачено: деньги
+     резервируются, когда задачу принял сервер, а до того баланс её не видит. */
+  const queuedUnpaidKopecks = () => visibleJobs
+    .filter((job) => job.deviceId === deviceIdRef.current && job.status === 'queued')
+    .reduce((sum, job) => {
+      const payload = findPendingSolution(job.idempotencyKey) ?? pendingPayloadsRef.current.get(job.idempotencyKey)
+      return sum + (payload ? pendingSolutionPrice(payload) : 0)
+    }, 0)
+
+  const openBalanceShortfall = (required: number, balance: number) => {
+    rememberAccountTrigger()
+    setAccountView('wallet')
+    setAccountNotice(`Не хватает на решение: нужно ${formatRubles(required)}, на балансе ${formatRubles(balance)}`)
+    setAccountOpen(true)
+  }
+
   const submitFromForm = async (submissions: TaskSubmission[]) => {
+    // Нехватку видно сразу за все задачи формы: иначе часть встала бы в
+    // очередь, а остальные пропали бы вместе с очищенной формой.
+    if (supabaseClient && user && account) {
+      const required = queuedUnpaidKopecks() + submissions.reduce((sum, submission) => sum + pendingSolutionPrice(submission), 0)
+      if (account.balance < required) {
+        openBalanceShortfall(required, account.balance)
+        return false
+      }
+    }
     let queued = false
     for (const submission of submissions) {
       // eslint-disable-next-line no-await-in-loop
@@ -2312,7 +2372,9 @@ function HomePage() {
     const resolvedTask = submission.source === 'photo'
       ? 'photo-' + submission.idempotencyKey.replace(/^solution-/, '').replace(/[^a-z0-9-]/gi, '').slice(-44)
       : submission.task
-    const solutionPrice = getSolutionPrice()
+    // Цена этой задачи, а не пол цены: длинное условие, фото и счётный
+    // предмет дороже, и пол пропускал задачу, на которую денег уже нет.
+    const solutionPrice = pendingSolutionPrice(submission)
 
     // Первое решение выдаётся без аккаунта. Регистрацию просим только когда
     // бесплатный разбор уже израсходован: до этого человек не видел продукт
@@ -2320,7 +2382,7 @@ function HomePage() {
     const solvingAsGuest = Boolean(supabaseClient) && !user
     if (solvingAsGuest && guestFreeSolutionUsed) {
       rememberAccountTrigger()
-      setAccountNotice('Бесплатное решение уже использовано. Зарегистрируйся — на счёт придут 20 ₽, это ещё пять задач по минимальной цене')
+      setAccountNotice('Бесплатное решение уже использовано. Зарегистрируйся — новому аккаунту 20 ₽, один раз на устройство: это пять задач по минимальной цене')
       setAccountOpen(true)
       return false
     }
@@ -2341,11 +2403,9 @@ function HomePage() {
       return true
     }
 
-    if (supabaseClient && user && account && account.balance < solutionPrice) {
-      rememberAccountTrigger()
-      setAccountView('wallet')
-      setAccountNotice(`На балансе меньше ${formatRubles(solutionPrice)}`)
-      setAccountOpen(true)
+    const requiredKopecks = queuedUnpaidKopecks() + solutionPrice
+    if (supabaseClient && user && account && account.balance < requiredKopecks) {
+      openBalanceShortfall(requiredKopecks, account.balance)
       return false
     }
 
@@ -2544,7 +2604,7 @@ function HomePage() {
         <SupportCenter user={user} supabaseClient={supabaseClient} initialCategory={supportCategory} initialContext={supportContext} onRequireAuth={openAccount} onClose={closeSupport} />,
         document.body,
       )}
-      {accountOpen && (
+      {(accountOpen || legalAcceptanceRequired) && (
         <Suspense fallback={null}>
           <AccountDialog
             user={user}
@@ -2554,9 +2614,12 @@ function HomePage() {
             initialView={accountView}
             theme={theme}
             onToggleTheme={toggleTheme}
-            onClose={closeAccount}
+            onClose={legalAcceptanceRequired ? keepLegalGateOpen : closeAccount}
             onReloadAccount={refreshAccount}
             returnFocusRef={accountTriggerRef}
+            legalAcceptanceRequired={legalAcceptanceRequired}
+            onLegalAccepted={() => setLegalGateUserId(null)}
+            onPasswordUpdated={finishPasswordRecovery}
           />
         </Suspense>
       )}
