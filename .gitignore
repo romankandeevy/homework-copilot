@@ -59,3 +59,6 @@ photo-prod-mobile-clean.png
 # Локальные прогоны против прода
 *.local.mjs
 scratch-*.py
+
+# Отчёты scripts/eval-subjects.mjs: числа за конкретный прогон, не код
+scripts/eval/results/

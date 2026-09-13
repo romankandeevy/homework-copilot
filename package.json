@@ -16,6 +16,7 @@
     "test:legal-browser": "node scripts/verify-legal-browser.mjs",
     "test:referral-browser": "node scripts/verify-referral-browser.mjs",
     "test:visual": "playwright test",
+    "eval:subjects": "node --experimental-strip-types scripts/eval-subjects.mjs",
     "preview": "vite preview",
     "test:e2e": "playwright test --grep-invert \"visual regression\""
   },
