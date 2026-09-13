@@ -69,10 +69,12 @@ describe('AccountDialog profile', () => {
     expect(screen.getByRole('button', { name: /Удалить аккаунт/ })).toBeEnabled()
   })
 
-  // Согласия стоят под формой, вплотную к кнопке, которую они защищают,
-  // а вход через Google не гаснет молча: он объясняет, чего не хватает.
+  // Согласия стоят под формой, вплотную к кнопке, которую они защищают.
+  // Входа через Google нет: с 1 декабря 2023 года (406-ФЗ) российский сайт
+  // не может авторизовать через иностранный сервис.
   it('requires separate agreement and personal-data consent during registration', () => {
     render(<AccountDialog user={null} account={null} passwordRecovery={false} initialView="profile" theme="light" onToggleTheme={() => undefined} onClose={() => undefined} onReloadAccount={async () => undefined} />)
+    expect(screen.queryByRole('button', { name: /Google/ })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('tab', { name: 'Регистрация' }))
 
     const agreement = screen.getByRole('checkbox', { name: /пользовательское соглашение/ })
@@ -80,18 +82,11 @@ describe('AccountDialog profile', () => {
     // Аудитория — школьники, часть младше четырнадцати: документы за них
     // принимает законный представитель, и это фиксируется отметкой.
     const age = screen.getByRole('checkbox', { name: /14 лет/ })
-    const google = screen.getByRole('button', { name: 'Продолжить с Google' })
     const submit = screen.getByRole('button', { name: /Создать аккаунт/ })
 
-    expect(google).toBeEnabled()
-    fireEvent.click(google)
-    expect(screen.getByRole('alert')).toHaveTextContent('Прими соглашение')
     expect(submit).toBeDisabled()
-
     fireEvent.click(agreement)
     fireEvent.click(personalData)
-    expect(screen.getByRole('alert')).toBeInTheDocument()
-
     fireEvent.click(age)
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'согласие на обработку персональных данных' })).toHaveAttribute('href', '/consent')

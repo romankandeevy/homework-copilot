@@ -13,7 +13,6 @@ import {
   Eye,
   EyeSlash,
   Gift,
-  GoogleLogo,
   LinkSimple,
   LockKey,
   Moon,
@@ -458,45 +457,6 @@ function AuthView({ passwordRecovery, notice, onPasswordUpdated }: { passwordRec
     setError((current) => (current === consentErrorMessage ? '' : current))
   }, [ageConfirmed, agreementAccepted, personalDataAccepted])
 
-  const continueWithGoogle = async () => {
-    if (loading) return
-    // Причина отказа проверяется до всего остального: кнопка больше
-    // не гаснет, поэтому объяснение должно приходить всегда.
-    if (screen === 'sign-up' && (!agreementAccepted || !personalDataAccepted || !ageConfirmed)) {
-      setError(consentErrorMessage)
-      return
-    }
-    if (!supabase) return
-    setLoading(true)
-    setStatus('')
-    setError('')
-    if (screen === 'sign-up') {
-      rememberPendingLegalAcceptance('google')
-      try {
-        await preparePendingReferralClaim(supabase)
-      } catch (claimError) {
-        forgetPendingLegalAcceptance()
-        setError(authErrorMessage(claimError instanceof Error ? claimError.message : ''))
-        setLoading(false)
-        return
-      }
-    }
-    sessionStorage.setItem('homework-copilot:google-auth-pending', '1')
-    const { error: oauthError } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: authReturnUrl('verified'),
-        queryParams: { prompt: 'select_account' },
-      },
-    })
-    if (oauthError) {
-      forgetPendingLegalAcceptance()
-      sessionStorage.removeItem('homework-copilot:google-auth-pending')
-      setError(authErrorMessage(oauthError.message))
-      setLoading(false)
-    }
-  }
-
   const resendEmail = async () => {
     if (!supabase || loading || resendIn > 0) return
     setLoading(true)
@@ -652,7 +612,7 @@ function AuthView({ passwordRecovery, notice, onPasswordUpdated }: { passwordRec
         ? 'Пришлём безопасную ссылку для нового пароля.'
         : screen === 'reset'
           ? 'Придумай новый надёжный пароль.'
-          : 'Продолжи с Google или войди по почте.'
+          : 'Войди по почте и паролю.'
 
   return (
     <div className="account-auth-view" ref={viewRef}>
@@ -686,16 +646,6 @@ function AuthView({ passwordRecovery, notice, onPasswordUpdated }: { passwordRec
       )}
 
       {notice && <p className="account-notice">{notice}</p>}
-
-      {(screen === 'sign-in' || screen === 'sign-up') && (
-        <>
-          <button className="account-google-button" type="button" onClick={() => { void continueWithGoogle() }} disabled={loading}>
-            <GoogleLogo size={20} weight="bold" aria-hidden="true" />
-            Продолжить с Google
-          </button>
-          <div className="account-auth-divider"><span>или</span></div>
-        </>
-      )}
 
       {screen === 'verify-email' && (
         <div className="account-email-check">

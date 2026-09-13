@@ -158,7 +158,7 @@ function SignInForm({ onDone, error: initialError }: { onDone: () => void; error
 
   return (
     <GateCard title="Вход в админку">
-      <p>Войди аккаунтом, которому выдана роль. Если входишь через Google, войди на сайте и вернись на эту страницу.</p>
+      <p>Войди почтой и паролем аккаунта, которому выдана роль.</p>
       <form onSubmit={submit}>
         <Field label="Почта"><input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required data-initial-focus /></Field>
         <Field label="Пароль"><input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required /></Field>
