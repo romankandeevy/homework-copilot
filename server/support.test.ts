@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { describe, expect, it, vi } from 'vitest'
 import {
+  ensureTelegramWebhook,
   handleSupportRequest,
   isIdeaApprovalPhrase,
   normalizeIdeaApprovalPhrase,
@@ -21,6 +22,46 @@ function mockResponse() {
   } as unknown as ServerResponse
   return { response, headers, end }
 }
+
+describe('telegram webhook', () => {
+  const webhookUrl = 'https://homework-copilot-taupe.vercel.app/api/telegram-webhook'
+  const ready = { url: webhookUrl, allowed_updates: ['message', 'callback_query'] }
+
+  function telegramFetch(infos: Record<string, unknown>[]) {
+    const calls: string[] = []
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+      const method = String(url).split('/').pop() ?? ''
+      calls.push(method)
+      const result = method === 'getWebhookInfo' ? infos.shift() : true
+      return new Response(JSON.stringify({ ok: true, result }), { status: 200 })
+    }) as unknown as typeof fetch
+    return { fetchImpl, calls }
+  }
+
+  it('keeps a webhook that already points at the site', async () => {
+    const { fetchImpl, calls } = telegramFetch([ready])
+    await expect(ensureTelegramWebhook('token', 'secret', fetchImpl)).resolves.toBe('kept')
+    expect(calls).toEqual(['getWebhookInfo'])
+  })
+
+  it('sets a missing webhook and verifies it', async () => {
+    const { fetchImpl, calls } = telegramFetch([{ url: '' }, ready])
+    await expect(ensureTelegramWebhook('token', 'secret', fetchImpl)).resolves.toBe('set')
+    expect(calls).toEqual(['getWebhookInfo', 'setWebhook', 'getWebhookInfo'])
+  })
+
+  it('re-sets a webhook that our handler rejects after a secret change', async () => {
+    const { fetchImpl, calls } = telegramFetch([{ ...ready, last_error_message: 'Wrong response from the webhook: 401 Unauthorized' }, ready])
+    await expect(ensureTelegramWebhook('token', 'secret', fetchImpl)).resolves.toBe('set')
+    expect(calls).toEqual(['getWebhookInfo', 'setWebhook', 'getWebhookInfo'])
+  })
+
+  it('refuses to touch the webhook without a secret', async () => {
+    const { fetchImpl, calls } = telegramFetch([ready])
+    await expect(ensureTelegramWebhook('token', undefined, fetchImpl)).rejects.toThrow('secret')
+    expect(calls).toEqual([])
+  })
+})
 
 describe('support telegram helpers', () => {
   it('allows the GitHub Pages production origin to call support', async () => {

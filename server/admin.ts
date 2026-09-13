@@ -22,6 +22,7 @@ import { solveWithKie } from './homeworkSolver.ts'
 import { parsePromptPreviewInput, PromptPreviewError, runPromptPreview } from './promptPreview.ts'
 import type { PromptPreviewInput, PromptPreviewSolve } from './promptPreview.ts'
 import { reconcilePaymentOrders } from './payments.ts'
+import { ensureTelegramWebhook } from './support.ts'
 import type { RobokassaConfig } from './robokassa.ts'
 
 export type AdminServerOptions = {
@@ -35,6 +36,8 @@ export type AdminServerOptions = {
   promptPreviewSolve?: PromptPreviewSolve
   telegramBotToken?: string
   telegramOwnerChatId?: string
+  /* Проверка здоровья ставит webhook поддержки, если его нет или он сбит. */
+  telegramWebhookSecret?: string
   resendApiKey?: string
   resendFrom?: string
   /* Сверка заказов Робокассы идёт этим же cron. Нет ключей - сверки нет. */
@@ -179,11 +182,13 @@ async function impersonate(options: AdminServerOptions, admin: AdminContext, bod
   })
   if (error || !data.properties?.action_link) throw new AdminApiError(502, 'Не получилось выписать ссылку входа')
 
-  await admin.client.rpc('admin_record_external_action', {
+  const { error: auditError } = await admin.client.rpc('admin_record_external_action', {
     p_event: 'user_impersonated',
     p_target_user_id: user.id,
     p_payload: { email, reason: typeof body.reason === 'string' ? body.reason.slice(0, 300) : null } as Json,
   })
+  // Вход под учеником без записи в журнале не выдаём: ссылка сгорит сама.
+  if (auditError) throw new AdminApiError(502, 'Не получилось записать вход в журнал - ссылка не выдана')
   return { link: data.properties.action_link, email }
 }
 
@@ -199,11 +204,13 @@ async function resetPassword(options: AdminServerOptions, admin: AdminContext, b
   const { error } = await publicClient.auth.resetPasswordForEmail(email, { redirectTo: `${productionOrigin}/app?auth=reset` })
   if (error) throw new AdminApiError(502, 'Письмо сброса пароля не ушло')
 
-  await admin.client.rpc('admin_record_external_action', {
+  const { error: auditError } = await admin.client.rpc('admin_record_external_action', {
     p_event: 'password_reset_sent',
     p_target_user_id: user.id,
     p_payload: { email } as Json,
   })
+  // Письмо уже ушло, отменить его нельзя - но и потерять запись молча нельзя.
+  if (auditError) console.log(JSON.stringify({ event: 'admin_audit_failed', action: 'password_reset_sent', message: auditError.message }))
   return { sent: true, email }
 }
 
@@ -370,7 +377,19 @@ export async function runHealthChecks(options: AdminServerOptions): Promise<Heal
       if (!options.telegramBotToken) return { ok: false, status: 'not_configured', detail: 'Нет TELEGRAM_BOT_TOKEN' }
       const response = await fetchImpl(`https://api.telegram.org/bot${options.telegramBotToken}/getMe`, { signal: timeout(10_000) })
       const payload = await response.json().catch(() => null) as { ok?: boolean; result?: { username?: string } } | null
-      return { ok: payload?.ok === true, status: payload?.ok ? 'ok' : `http_${response.status}`, detail: payload?.result?.username ? `@${payload.result.username}` : null }
+      if (payload?.ok !== true) return { ok: false, status: `http_${response.status}`, detail: null }
+      const bot = payload.result?.username ? `@${payload.result.username}` : null
+      /* Бот жив, но без webhook ответы владельца и кнопки идей до сайта не
+         доходят. Нет его или он сбит - ставим здесь же. */
+      if (!options.telegramWebhookSecret) {
+        return { ok: false, status: 'not_configured', detail: [bot, 'нет TELEGRAM_WEBHOOK_SECRET - ответы из Telegram не дойдут до сайта'].filter(Boolean).join(' · ') }
+      }
+      try {
+        const webhook = await ensureTelegramWebhook(options.telegramBotToken, options.telegramWebhookSecret, fetchImpl)
+        return { ok: true, status: 'ok', detail: [bot, webhook === 'set' ? 'webhook переустановлен' : null].filter(Boolean).join(' · ') || null }
+      } catch (webhookError) {
+        return { ok: false, status: 'webhook_failed', detail: [bot, `webhook: ${webhookError instanceof Error ? webhookError.message : 'ошибка'}`].filter(Boolean).join(' · ') }
+      }
     }),
     probe(options, 'email', async (fetchImpl) => {
       if (!options.resendApiKey) return { ok: false, status: 'not_configured', detail: 'Нет RESEND_API_KEY на Vercel' }
@@ -378,7 +397,13 @@ export async function runHealthChecks(options: AdminServerOptions): Promise<Heal
         headers: { Authorization: `Bearer ${options.resendApiKey}` },
         signal: timeout(10_000),
       })
-      return { ok: response.ok, status: response.ok ? 'ok' : `http_${response.status}`, detail: 'Resend' }
+      if (response.ok) return { ok: true, status: 'ok', detail: 'Resend' }
+      /* Ключ «только отправка» на список доменов отвечает 401
+         restricted_api_key: ключ живой, просто без права читать. Неверный
+         ключ - 400 или 401 с другим именем. */
+      const payload = await response.json().catch(() => null) as { name?: string } | null
+      if (response.status === 401 && payload?.name === 'restricted_api_key') return { ok: true, status: 'ok', detail: 'Resend · ключ на отправку' }
+      return { ok: false, status: `http_${response.status}`, detail: 'Resend' }
     }),
   ]
 
@@ -421,7 +446,7 @@ async function sendEmail(options: AdminServerOptions, recipients: string[], subj
     method: 'POST',
     headers: { Authorization: `Bearer ${options.resendApiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      from: options.resendFrom || 'Homework Copilot <noreply@homeworkcopilot.ru>',
+      from: options.resendFrom || 'Homework Copilot <no-reply@homeworkcopilot.ru>',
       to: recipients,
       subject,
       text,
@@ -481,7 +506,10 @@ async function runCron(options: AdminServerOptions, body: Record<string, unknown
 
   const results = await deliverNotifications(options, notifications, emails)
   if (results.length > 0) {
-    await service.rpc('complete_admin_notifications', { p_results: results as unknown as Json })
+    const { error: completeError } = await service.rpc('complete_admin_notifications', { p_results: results as unknown as Json })
+    // Итог не записан - те же уведомления уйдут снова через минуту. Молча это
+    // не проходит: событие видно в журнале Vercel.
+    if (completeError) console.log(JSON.stringify({ event: 'admin_notifications_complete_failed', message: completeError.message }))
   }
 
   // Внешние сервисы проверяем раз в пять минут: чаще - лишняя нагрузка на них.

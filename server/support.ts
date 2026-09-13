@@ -322,20 +322,49 @@ async function telegramMessage(config: ServerConfig, textValue: string, replyMar
   return { messageId, chatId: safeTelegramId(result?.chat?.id) || config.telegramOwnerChatId }
 }
 
-async function ensureTelegramIdeaCallbacks(config: ServerConfig) {
-  if (!config.telegramWebhookSecret) throw new Error('telegram webhook secret missing')
-  await telegramRequest(config, 'setWebhook', {
+/* Webhook ставится здесь и только здесь: при заявке с идеей и проверкой
+   здоровья в cron раз в пять минут (server/admin.ts). Раньше его ставила
+   только идея, и до первой идеи ответы владельца из Telegram не доходили до
+   сайта. Сбитый webhook - чужой адрес, неполный список событий или 401/403
+   от нашего обработчика после смены секрета - ставится заново. */
+export async function ensureTelegramWebhook(botToken: string, secret: string | undefined, fetchImpl: typeof fetch) {
+  if (!secret) throw new Error('telegram webhook secret missing')
+  const call = async <T>(method: string, body: Record<string, unknown>) => {
+    const response = await fetchImpl(`https://api.telegram.org/bot${botToken}/${method}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(10_000),
+    })
+    const payload = await response.json().catch(() => null) as { ok?: boolean; result?: T } | null
+    if (!payload?.ok) throw new Error(`telegram ${method} returned ${response.status}`)
+    return payload.result
+  }
+  type WebhookInfo = { url?: unknown; allowed_updates?: unknown; last_error_message?: unknown }
+  const isReady = (info: WebhookInfo | undefined) => {
+    const allowedUpdates = Array.isArray(info?.allowed_updates) ? info.allowed_updates : []
+    const rejected = typeof info?.last_error_message === 'string' && /\b40[13]\b/.test(info.last_error_message)
+    return info?.url === telegramWebhookUrl && allowedUpdates.includes('message') && allowedUpdates.includes('callback_query') && !rejected
+  }
+  if (isReady(await call<WebhookInfo>('getWebhookInfo', {}))) return 'kept' as const
+  await call('setWebhook', {
     url: telegramWebhookUrl,
-    secret_token: config.telegramWebhookSecret,
+    secret_token: secret,
     allowed_updates: ['message', 'callback_query'],
     drop_pending_updates: false,
   })
-  const info = await telegramRequest<{ url?: unknown; allowed_updates?: unknown }>(config, 'getWebhookInfo', {})
+  const info = await call<WebhookInfo>('getWebhookInfo', {})
   const allowedUpdates = Array.isArray(info?.allowed_updates) ? info.allowed_updates : []
   if (info?.url !== telegramWebhookUrl || !allowedUpdates.includes('message') || !allowedUpdates.includes('callback_query')) {
     throw new Error('telegram webhook verification failed')
   }
-  console.info('support telegram webhook verified: message,callback_query')
+  return 'set' as const
+}
+
+async function ensureTelegramIdeaCallbacks(config: ServerConfig) {
+  if (!config.telegramBotToken) throw new Error('telegram configuration missing')
+  const state = await ensureTelegramWebhook(config.telegramBotToken, config.telegramWebhookSecret, config.fetchImpl)
+  console.info(`support telegram webhook ${state}: message,callback_query`)
 }
 
 function contextForTelegram(context: Json) {
@@ -373,7 +402,12 @@ async function notifyOwner(
   ].join('\n')
 
   try {
-    if (includeIdeaDecision) await ensureTelegramIdeaCallbacks(config)
+    // Без webhook кнопки не сработают, но сама идея до владельца дойти должна.
+    if (includeIdeaDecision) {
+      await ensureTelegramIdeaCallbacks(config).catch((webhookError: unknown) => {
+        console.log(JSON.stringify({ event: 'support_telegram_webhook_unavailable', message: webhookError instanceof Error ? webhookError.message : 'unknown' }))
+      })
+    }
     const chunks = splitTelegramText(notification)
     const ideaActions = includeIdeaDecision
       ? [

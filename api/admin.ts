@@ -12,6 +12,7 @@ export default async function handler(request: IncomingMessage, response: Server
     model: process.env.KIE_MODEL,
     telegramBotToken: process.env.TELEGRAM_BOT_TOKEN,
     telegramOwnerChatId: process.env.TELEGRAM_OWNER_CHAT_ID,
+    telegramWebhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET,
     resendApiKey: process.env.RESEND_API_KEY,
     resendFrom: process.env.RESEND_FROM,
     // Сверка незакрытых заказов идёт тем же cron, что и уведомления.
