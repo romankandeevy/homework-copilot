@@ -32,6 +32,7 @@ import type { Column, Tone } from './ui'
 import { rememberRecentUser } from './recentUsers'
 import { formatPhoneForDisplay } from '../lib/phone'
 import { BanDialog, ConfirmDialog } from './userDialogs'
+import { DeleteUserDialog } from './deleteUserDialog'
 import BalanceHistoryChart from './BalanceHistoryChart'
 import InternalAccountControl from './InternalAccountControl'
 import './sections/users.css'
@@ -48,6 +49,7 @@ type Dialog =
   | { kind: 'log'; logId: string }
   | { kind: 'revokePlan' }
   | { kind: 'deleteNote'; noteId: string; body: string }
+  | { kind: 'delete' }
 
 /* ---------- Форматирование ---------- */
 
@@ -119,6 +121,7 @@ const AUDIT_EVENT: Record<string, string> = {
   payment_refunded: 'Возврат пополнения',
   reservation_refunded: 'Возврат резерва',
   solution_deleted: 'Решение удалено',
+  user_deleted: 'Аккаунт удалён',
 }
 
 const AUDIT_KEY: Record<string, string> = {
@@ -260,6 +263,21 @@ function UserCardView({ userId, onClose }: { userId: string; onClose: () => void
     'Заметка удалена',
   )
 
+  // Удаляет только владелец (право delete); свой и админский аккаунт - нельзя.
+  const canDelete = access.permissions.delete === true && !isAdmin && !isSelf
+  const deleteAccount = async (confirm: string, reason: string) => {
+    const result = await run('delete', async () => {
+      const response = await adminAction<{ done?: number; failed?: { error?: string }[] }>('delete_users', { userIds: [userId], confirm, reason })
+      if (!response.done) throw new Error(response.failed?.[0]?.error || 'Аккаунт не удалён')
+      return response
+    })
+    if (!result) return
+    closeDialog()
+    // Раздел «Пользователи» перечитает список: строки больше нет.
+    window.dispatchEvent(new Event('adm-users-changed'))
+    onClose()
+  }
+
   const title = fullName || email || phone || 'Пользователь'
   const subtitle = card.data ? [fullName ? email || phone : '', profile.createdAt ? `с нами с ${when(str(profile.createdAt))}` : ''].filter(Boolean).join(' · ') : undefined
 
@@ -312,6 +330,9 @@ function UserCardView({ userId, onClose }: { userId: string; onClose: () => void
               )}
               {!isAdmin && !isSelf && email && (
                 <Button size="sm" icon={<SignIn size={16} weight="bold" aria-hidden="true" />} onClick={() => setDialog({ kind: 'impersonate' })}>Войти под пользователем</Button>
+              )}
+              {canDelete && (
+                <Button size="sm" variant="danger" icon={<Trash size={16} weight="bold" aria-hidden="true" />} onClick={() => setDialog({ kind: 'delete' })}>Удалить аккаунт</Button>
               )}
             </div>
           )}
@@ -451,6 +472,9 @@ function UserCardView({ userId, onClose }: { userId: string; onClose: () => void
         <ConfirmDialog title="Отозвать тариф" confirmLabel="Отозвать" tone="danger" pending={pending === 'plan'} onClose={closeDialog} onConfirm={() => void revokePlan()}>
           <p>Выданный тариф закончится сейчас, ученик вернётся на тариф по умолчанию. Действие попадёт в журнал.</p>
         </ConfirmDialog>
+      )}
+      {dialog?.kind === 'delete' && (
+        <DeleteUserDialog target={title} expected={email || str(profile.phone)} pending={pending === 'delete'} onClose={closeDialog} onSubmit={(confirm, reason) => void deleteAccount(confirm, reason)} />
       )}
       {dialog?.kind === 'deleteNote' && (
         <ConfirmDialog title="Удалить заметку" confirmLabel="Удалить" tone="danger" pending={pending === 'note-delete'} onClose={closeDialog} onConfirm={() => void deleteNote(dialog.noteId)}>

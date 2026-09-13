@@ -7,11 +7,12 @@
    запоминаются в браузере: переход в раздел через меню или Ctrl+K собирает
    адрес заново, и раньше они терялись. */
 
-import { useId, useMemo, useState } from 'react'
-import { DownloadSimple, FunnelSimple, LockOpen, Prohibit, UserCircle, Wallet, X } from '@phosphor-icons/react'
+import { useEffect, useId, useMemo, useState } from 'react'
+import { DownloadSimple, FunnelSimple, LockOpen, Prohibit, Trash, UserCircle, Wallet, X } from '@phosphor-icons/react'
 import type { Json } from '../../lib/database.types'
 import { formatPhoneForDisplay } from '../../lib/phone'
 import {
+  adminAction,
   adminErrorMessage,
   adminRpc,
   bool,
@@ -28,6 +29,8 @@ import {
   todayMsk,
 } from '../api'
 import type { CsvColumn, Row } from '../api'
+import { DeleteUserDialog } from '../deleteUserDialog'
+import { deleteConfirmWord } from '../deleteConfirm'
 import { useAdmin } from '../context'
 import { Button, DataTable, ErrorState, ExportButton, Field, PageHeader, Pagination, Panel, useAction, useAsync, useQueryState, useToast } from '../ui'
 import type { Column } from '../ui'
@@ -59,14 +62,14 @@ const GRADES = Array.from({ length: 11 }, (_, index) => String(index + 1))
 // «01.09.2026» вместо «01 сент. 2026 г.»: столбец уже, полная дата - в подсказке.
 const COMPACT_DATE = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Europe/Moscow' })
 
-type BulkAction = 'ban' | 'unban' | 'credit'
+type BulkAction = 'ban' | 'unban' | 'credit' | 'delete'
 type BulkFailure = { userId: string; email: string; error: string }
 type BulkResult = { action: BulkAction; done: number; failed: BulkFailure[] }
 type Dialog =
   | { kind: 'ban' | 'unban' | 'balance'; row: Row }
   | { kind: 'bulk'; action: BulkAction }
 
-const BULK_TITLE: Record<BulkAction, string> = { ban: 'Блокировка', unban: 'Разблокировка', credit: 'Начисление' }
+const BULK_TITLE: Record<BulkAction, string> = { ban: 'Блокировка', unban: 'Разблокировка', credit: 'Начисление', delete: 'Удаление' }
 
 const RISK_LABEL: Record<string, string> = { high: 'высокий', medium: 'средний', low: 'низкий' }
 
@@ -123,6 +126,16 @@ export default function UsersSection() {
   )
   // Цифры над таблицей - отдельным запросом: они не зависят от фильтров.
   const stats = useAsync(() => adminRpc<Json>('admin_users_stats'), [])
+
+  // Карточка пользователя удалила аккаунт - перечитываем список и цифры.
+  useEffect(() => {
+    const reload = () => {
+      list.reload()
+      stats.reload()
+    }
+    window.addEventListener('adm-users-changed', reload)
+    return () => window.removeEventListener('adm-users-changed', reload)
+  }, [list, stats])
   const result = obj(list.data)
   const items = rows(result.items)
   const total = num(result.total)
@@ -137,6 +150,8 @@ export default function UsersSection() {
 
   const canBan = access.permissions.moderate
   const canMoney = access.permissions.money
+  // Удаление аккаунтов - только владелец (право delete).
+  const canDelete = access.permissions.delete === true
   const hasFilters = hasUsersFilters(query)
   const panelCount = countPanelFilters(query)
   const now = Date.now()
@@ -218,7 +233,10 @@ export default function UsersSection() {
       toast.error(`За раз - не больше ${BULK_LIMIT} пользователей.`)
       return
     }
-    const response = await run('bulk', () => adminRpc<Json>('admin_users_bulk', { p_user_ids: ids, p_action: action, p_payload: payload }))
+    // Удаление идёт через сервер админки: файлы чата в хранилище база сама не удалит.
+    const response = await run('bulk', () => (action === 'delete'
+      ? adminAction<Json>('delete_users', { userIds: ids, ...payload })
+      : adminRpc<Json>('admin_users_bulk', { p_user_ids: ids, p_action: action, p_payload: payload })))
     if (response === undefined) return
     const data = obj(response)
     const failed = rows(data.failed).map((item) => {
@@ -241,7 +259,7 @@ export default function UsersSection() {
       return map
     })
     list.reload()
-    if (action === 'credit') stats.reload()
+    if (action === 'credit' || action === 'delete') stats.reload()
   }
 
   const menuItems = (row: Row): RowMenuItem[] => {
@@ -442,6 +460,7 @@ export default function UsersSection() {
             {canBan && <Button size="sm" variant="danger" icon={<Prohibit size={16} weight="bold" aria-hidden="true" />} disabled={pending === 'bulk'} onClick={() => setDialog({ kind: 'bulk', action: 'ban' })}>Забанить</Button>}
             {canBan && <Button size="sm" icon={<LockOpen size={16} weight="bold" aria-hidden="true" />} disabled={pending === 'bulk'} onClick={() => setDialog({ kind: 'bulk', action: 'unban' })}>Разбанить</Button>}
             {canMoney && <Button size="sm" icon={<Wallet size={16} weight="bold" aria-hidden="true" />} disabled={pending === 'bulk'} onClick={() => setDialog({ kind: 'bulk', action: 'credit' })}>Начислить</Button>}
+            {canDelete && <Button size="sm" variant="danger" icon={<Trash size={16} weight="bold" aria-hidden="true" />} disabled={pending === 'bulk'} onClick={() => setDialog({ kind: 'bulk', action: 'delete' })}>Удалить</Button>}
             <Button size="sm" icon={<DownloadSimple size={16} weight="bold" aria-hidden="true" />} onClick={exportSelected}>Экспорт выбранных в CSV</Button>
             <Button size="sm" variant="ghost" icon={<X size={16} weight="bold" aria-hidden="true" />} onClick={() => setSelectedRows(new Map())}>Снять выбор</Button>
           </div>
@@ -478,6 +497,9 @@ export default function UsersSection() {
       )}
       {dialog?.kind === 'bulk' && dialog.action === 'credit' && (
         <BalanceDialog mode="credit" count={selected.size} pending={pending === 'bulk'} onClose={closeDialog} onSubmit={(amount, reason) => void submitBulk('credit', { amount, reason })} />
+      )}
+      {dialog?.kind === 'bulk' && dialog.action === 'delete' && (
+        <DeleteUserDialog count={selected.size} expected={deleteConfirmWord} pending={pending === 'bulk'} onClose={closeDialog} onSubmit={(confirm, reason) => void submitBulk('delete', { confirm, reason })} />
       )}
     </div>
   )

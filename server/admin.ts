@@ -227,6 +227,94 @@ async function resetPassword(options: AdminServerOptions, admin: AdminContext, b
   return { sent: true, email }
 }
 
+/* Удаление аккаунтов владельцем.
+
+   Базу чистит admin_delete_user: журнал, каскад от auth.users и повторная
+   сверка подтверждения. Файлы вложений чата живут в хранилище, база их не
+   удалит - убираем здесь, до базы: после удаления аккаунта папка осталась
+   бы без владельца. Если база потом откажет, файлы уже удалены, а аккаунт
+   цел - это лучше обратного, когда аккаунта нет, а файлы висят.
+
+   Один аккаунт подтверждается его почтой или номером, как вписал владелец.
+   Несколько - словом «УДАЛИТЬ»; тогда почту для базы берём с сервера. */
+const deleteConfirmWord = 'УДАЛИТЬ'
+const deleteBatchLimit = 50
+
+function deleteConfirmation(email: string, phone: string) {
+  return email ? email.toLowerCase() : phone.replace(/\D/g, '')
+}
+
+function deleteConfirmMatches(typed: string, email: string, phone: string) {
+  const expected = deleteConfirmation(email, phone)
+  const given = email ? typed.toLowerCase().replace(/\s/g, '') : typed.replace(/\D/g, '')
+  return expected !== '' && given === expected
+}
+
+async function removeChatAttachments(options: AdminServerOptions, userId: string) {
+  const bucket = serviceClient(options).storage.from('chat-attachments')
+  const paths: string[] = []
+  const { data: entries, error: listError } = await bucket.list(userId, { limit: 1000 })
+  if (listError) throw new Error(`хранилище: ${listError.message}`)
+  for (const entry of entries ?? []) {
+    // Файл на верхнем уровне папки: у объектов есть id, у папок его нет.
+    if (entry.id) {
+      paths.push(`${userId}/${entry.name}`)
+      continue
+    }
+    // eslint-disable-next-line no-await-in-loop
+    const { data: files } = await bucket.list(`${userId}/${entry.name}`, { limit: 1000 })
+    for (const file of files ?? []) {
+      if (file.id) paths.push(`${userId}/${entry.name}/${file.name}`)
+    }
+  }
+  if (paths.length > 0) {
+    const { error } = await bucket.remove(paths)
+    if (error) throw new Error(`хранилище: ${error.message}`)
+  }
+  return paths.length
+}
+
+async function deleteUsers(options: AdminServerOptions, admin: AdminContext, body: Record<string, unknown>) {
+  if (!admin.permissions.delete) throw new AdminApiError(403, 'Удалять аккаунты может только владелец')
+  const userIds = Array.isArray(body.userIds)
+    ? [...new Set(body.userIds.filter((id): id is string => typeof id === 'string'))]
+    : []
+  if (userIds.length === 0) throw new AdminApiError(400, 'Не выбраны пользователи')
+  if (userIds.length > deleteBatchLimit) throw new AdminApiError(400, `За раз - не больше ${deleteBatchLimit} аккаунтов`)
+  const typed = typeof body.confirm === 'string' ? body.confirm.trim() : ''
+  const byWord = typed === deleteConfirmWord
+  if (!byWord && userIds.length > 1) throw new AdminApiError(400, `Для нескольких аккаунтов впиши «${deleteConfirmWord}»`)
+  const reason = typeof body.reason === 'string' ? body.reason.trim().slice(0, 300) : ''
+
+  let done = 0
+  const failed: { userId: string; error: string }[] = []
+  // По одному и по порядку: у каждого своя проверка, свои файлы и своя запись в журнале.
+  for (const userId of userIds) {
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      const { user, email } = await targetUser(options, userId)
+      const phone = user.phone ?? ''
+      if (user.id === admin.userId) throw new AdminApiError(400, 'Свой аккаунт отсюда не удалить')
+      // eslint-disable-next-line no-await-in-loop
+      if (await isAdminAccount(options, user.id)) throw new AdminApiError(403, 'Аккаунт администратора не удаляется - сначала сними роль')
+      if (!byWord && !deleteConfirmMatches(typed, email, phone)) throw new AdminApiError(400, 'Подтверждение не совпало с почтой или номером аккаунта')
+      // eslint-disable-next-line no-await-in-loop
+      await removeChatAttachments(options, user.id)
+      // eslint-disable-next-line no-await-in-loop
+      const { error } = await admin.client.rpc('admin_delete_user', {
+        p_user_id: user.id,
+        p_confirm: deleteConfirmation(email, phone),
+        p_reason: reason || null,
+      })
+      if (error) throw new AdminApiError(502, error.message)
+      done += 1
+    } catch (error) {
+      failed.push({ userId, error: error instanceof Error ? error.message : 'не получилось' })
+    }
+  }
+  return { done, failed }
+}
+
 /* Проверка промпта решателя без сохранения (server/promptPreview.ts).
 
    Модель зовётся тем же движком, что и у ученика, но мимо кошелька, очереди
@@ -578,6 +666,8 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
       sendJson(response, 200, await impersonate(options, admin, body))
     } else if (action === 'reset_password') {
       sendJson(response, 200, await resetPassword(options, admin, body))
+    } else if (action === 'delete_users') {
+      sendJson(response, 200, await deleteUsers(options, admin, body))
     } else if (action === 'prompt_preview') {
       sendJson(response, 200, await promptPreview(options, admin, body))
     } else if (action === 'health_now') {
