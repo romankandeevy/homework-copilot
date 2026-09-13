@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from './database.types'
-import { recordPendingLegalAcceptance, rememberPendingLegalAcceptance } from './legalConsent'
+import { acceptanceSourceForUser, recordPendingLegalAcceptance, rememberPendingLegalAcceptance } from './legalConsent'
 
 describe('legal acceptance handoff', () => {
   beforeEach(() => window.sessionStorage.clear())
@@ -26,5 +26,27 @@ describe('legal acceptance handoff', () => {
     rememberPendingLegalAcceptance('google')
     await recordPendingLegalAcceptance(client, 'student@example.com')
     expect(rpc).toHaveBeenCalledWith('record_current_legal_acceptance', { p_source: 'google' })
+  })
+
+  // У аккаунта, вошедшего по телефону, почты нет вовсе: согласие с вкладки
+  // «Регистрация» всё равно должно записаться.
+  it('records a phone acceptance for an account without email and a Yandex one before the email is known', async () => {
+    const rpc = vi.fn(async () => ({ error: null }))
+    const client = { rpc } as unknown as SupabaseClient<Database>
+    rememberPendingLegalAcceptance('phone')
+    await recordPendingLegalAcceptance(client, undefined)
+    expect(rpc).toHaveBeenCalledWith('record_current_legal_acceptance', { p_source: 'phone' })
+
+    rememberPendingLegalAcceptance('yandex')
+    await recordPendingLegalAcceptance(client, 'pupil@yandex.ru')
+    expect(rpc).toHaveBeenLastCalledWith('record_current_legal_acceptance', { p_source: 'yandex' })
+  })
+
+  it('takes the acceptance source from the way the account signs in', () => {
+    expect(acceptanceSourceForUser({ app_metadata: { provider: 'phone' } })).toBe('phone')
+    expect(acceptanceSourceForUser({ app_metadata: { provider: 'yandex' } })).toBe('yandex')
+    expect(acceptanceSourceForUser({ app_metadata: { provider: 'google' } })).toBe('google')
+    expect(acceptanceSourceForUser({ app_metadata: { provider: 'email' } })).toBe('email')
+    expect(acceptanceSourceForUser({ app_metadata: {} })).toBe('email')
   })
 })

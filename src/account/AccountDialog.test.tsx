@@ -1,9 +1,13 @@
 import '@testing-library/jest-dom/vitest'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import type { User } from '@supabase/supabase-js'
 import AccountDialog from './AccountDialog'
+import type { AuthMethods } from './AccountDialog'
 import type { AccountData } from '../lib/supabase'
+
+const { startYandexSignIn } = vi.hoisted(() => ({ startYandexSignIn: vi.fn(async (consents: boolean) => { void consents }) }))
+vi.mock('../lib/yandexAuth', () => ({ startYandexSignIn }))
 
 const user = { id: 'user-1', email: 'roman@example.com' } as User
 const account: AccountData = {
@@ -120,5 +124,101 @@ describe('AccountDialog profile', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: /отдельно даю/ }))
     fireEvent.click(screen.getByRole('checkbox', { name: /14 лет/ }))
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  // У аккаунта, вошедшего по телефону, почты нет: в шапке и профиле - номер.
+  it('shows the phone instead of an email for an account that signs in by phone', () => {
+    const phoneUser = { id: 'user-2', email: '', phone: '79123456789', app_metadata: { provider: 'phone' } } as unknown as User
+    render(<AccountDialog user={phoneUser} account={account} passwordRecovery={false} initialView="profile" theme="light" onToggleTheme={() => undefined} onClose={() => undefined} onReloadAccount={async () => undefined} />)
+
+    expect(screen.getByText('+7 912 345-67-89')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('+7 912 345-67-89')).toBeInTheDocument()
+    expect(screen.queryByText('Почта')).not.toBeInTheDocument()
+  })
+})
+
+/* 406-ФЗ: кроме почты - Яндекс ID и номер телефона. Оба способа видны,
+   только когда их включили флагом в админке. */
+describe('AccountDialog sign-in methods', () => {
+  beforeEach(() => {
+    startYandexSignIn.mockClear()
+    window.sessionStorage.clear()
+  })
+
+  const renderAuth = (authMethods?: AuthMethods) => render(
+    <AccountDialog user={null} account={null} passwordRecovery={false} initialView="profile" theme="light" onToggleTheme={() => undefined} onClose={() => undefined} onReloadAccount={async () => undefined} authMethods={authMethods} />,
+  )
+
+  it('shows neither Yandex ID nor phone until the admin turns them on', () => {
+    renderAuth()
+    expect(screen.queryByRole('button', { name: /Яндекс ID/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'По номеру телефона' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: 'Регистрация' }))
+    expect(screen.queryByRole('button', { name: /Яндекс ID/ })).not.toBeInTheDocument()
+  })
+
+  it('goes to Yandex ID from the sign-in tab without recording consent', () => {
+    renderAuth({ yandex: true, phone: false })
+    fireEvent.click(screen.getByRole('button', { name: 'Войти с Яндекс ID' }))
+    expect(startYandexSignIn).toHaveBeenCalledWith(false)
+    expect(window.sessionStorage.getItem('homework-copilot:legal-acceptance-pending')).toBeNull()
+  })
+
+  it('asks for the three consents before leaving for Yandex ID from the sign-up tab', () => {
+    renderAuth({ yandex: true, phone: false })
+    fireEvent.click(screen.getByRole('tab', { name: 'Регистрация' }))
+    const yandex = screen.getByRole('button', { name: 'Войти с Яндекс ID' })
+
+    fireEvent.click(yandex)
+    expect(screen.getByRole('alert')).toHaveTextContent('Прими соглашение')
+    expect(startYandexSignIn).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('checkbox', { name: /пользовательское соглашение/ }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /отдельно даю/ }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /14 лет/ }))
+    fireEvent.click(yandex)
+    expect(startYandexSignIn).toHaveBeenCalledWith(true)
+    expect(JSON.parse(window.sessionStorage.getItem('homework-copilot:legal-acceptance-pending') ?? '{}')).toMatchObject({ source: 'yandex' })
+  })
+
+  it('takes only a Russian mobile number and hides the password recovery', () => {
+    renderAuth({ yandex: false, phone: true })
+    fireEvent.click(screen.getByRole('button', { name: 'По номеру телефона' }))
+
+    const phone = screen.getByRole('textbox', { name: /Номер телефона/ })
+    expect(screen.queryByPlaceholderText('Твой пароль')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Не помню пароль' })).not.toBeInTheDocument()
+
+    fireEvent.change(phone, { target: { value: '8 912 345 67 89' } })
+    expect(phone).toHaveValue('912 345-67-89')
+    expect(screen.getByRole('button', { name: /Получить код/ })).toBeEnabled()
+
+    fireEvent.change(phone, { target: { value: '495 123 45 67' } })
+    expect(screen.getByRole('button', { name: /Получить код/ })).toBeDisabled()
+
+    // Обратно к почте - пароль и восстановление на месте.
+    fireEvent.click(screen.getByRole('button', { name: 'По почте и паролю' }))
+    expect(screen.getByPlaceholderText('Твой пароль')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Не помню пароль' })).toBeInTheDocument()
+  })
+
+  it('requires name, grade and the three consents before sending a code on sign-up', () => {
+    renderAuth({ yandex: false, phone: true })
+    fireEvent.click(screen.getByRole('tab', { name: 'Регистрация' }))
+    fireEvent.click(screen.getByRole('button', { name: 'По номеру телефона' }))
+    fireEvent.change(screen.getByRole('textbox', { name: /Номер телефона/ }), { target: { value: '9123456789' } })
+
+    const submit = screen.getByRole('button', { name: /Получить код/ })
+    expect(submit).toBeDisabled()
+
+    fireEvent.change(screen.getByPlaceholderText('Как к тебе обращаться'), { target: { value: 'Иван' } })
+    fireEvent.click(screen.getByRole('combobox', { name: 'Класс' }))
+    fireEvent.click(screen.getByRole('option', { name: '8 класс' }))
+    expect(submit).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('checkbox', { name: /пользовательское соглашение/ }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /отдельно даю/ }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /14 лет/ }))
+    expect(submit).toBeEnabled()
   })
 })

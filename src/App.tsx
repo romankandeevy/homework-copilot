@@ -49,6 +49,8 @@ import { formatRubles } from './lib/currency'
 import { recordPendingLegalAcceptance } from './lib/legalConsent'
 import { bindPendingReferral, preparePendingReferralClaim } from './lib/referrals'
 import { forgetGuestSolution, getGuestId, guestSolutionUsed, rememberGuestSolutionUsed } from './lib/guestSolutions'
+import { takeYandexReturn } from './lib/yandexReturn'
+import { completeYandexSignIn } from './lib/yandexAuth'
 import { applySeoMetadata, getSeoMetadata } from './lib/siteMetadata'
 import { estimateSolutionPrice } from './lib/solutionPricing'
 import { findSubjectByName } from './lib/subjects'
@@ -88,7 +90,7 @@ import { SolutionCard } from './solution/SolutionCard'
 import { SiteFooter, SupportCenter, SupportLauncher } from './support/SupportCenter'
 import type { SupportCategory, SupportPrefill } from './support/SupportCenter'
 import './App.css'
-import { featureEnabled, orderedSubjects, usePublicConfig } from './lib/publicConfig'
+import { featureEnabled, featureOptIn, orderedSubjects, usePublicConfig } from './lib/publicConfig'
 import type { SiteBanner } from './lib/publicConfig'
 import { installClientErrorReporting } from './lib/clientErrors'
 
@@ -1450,7 +1452,7 @@ function HomePage() {
   const [accountReady, setAccountReady] = useState(!authIsConfigured)
   // `signin` приходит с витрины: там «Войти» должен открывать окно аккаунта,
   // а не высаживать человека на рабочую главную с просьбой поискать вход.
-  const [accountOpen, setAccountOpen] = useState(() => ['reset', 'verified', 'confirm', 'signin'].includes(new URLSearchParams(window.location.search).get('auth') ?? ''))
+  const [accountOpen, setAccountOpen] = useState(() => ['reset', 'verified', 'confirm', 'signin', 'yandex'].includes(new URLSearchParams(window.location.search).get('auth') ?? ''))
   const [accountView, setAccountView] = useState<AccountView>('profile')
   const [passwordRecovery, setPasswordRecovery] = useState(() => new URLSearchParams(window.location.search).get('auth') === 'reset')
   // Аккаунт без единой отметки о согласии: окно согласия его не отпускает.
@@ -1463,6 +1465,7 @@ function HomePage() {
   const [supportCategory, setSupportCategory] = useState<SupportCategory>('general')
   const [supportContext, setSupportContext] = useState<SupportPrefill | undefined>(undefined)
   const emailConfirmationStarted = useRef(false)
+  const yandexReturnStarted = useRef(false)
   const accountTriggerRef = useRef<HTMLElement | null>(null)
   const supportReturnPathRef = useRef(currentApplicationPath() === '/support' ? '/app' : currentApplicationPath())
   /* На узком экране ленту разделов листает не окно, а `.product-content`. */
@@ -1704,7 +1707,7 @@ function HomePage() {
         sessionStorage.removeItem('homework-copilot:verification-email')
         sessionStorage.removeItem('homework-copilot:verification-kind')
         sessionStorage.removeItem('homework-copilot:verification-sent-at')
-        if (['verified', 'confirm'].includes(new URLSearchParams(window.location.search).get('auth') ?? '')) setAccountOpen(true)
+        if (['verified', 'confirm', 'yandex'].includes(new URLSearchParams(window.location.search).get('auth') ?? '')) setAccountOpen(true)
       }
       if (event === 'SIGNED_OUT') {
         if (sessionStorage.getItem('homework-copilot:verification-email')) setAccountOpen(true)
@@ -1742,6 +1745,26 @@ function HomePage() {
 
     void confirmEmail()
     return () => { active = false }
+  }, [supabaseClient])
+
+  /* Возврат из Яндекс ID. Код из адреса уже забрал src/main.tsx, здесь он
+     меняется на сессию. Окно аккаунта открыто всё это время: новый аккаунт
+     без согласия остановит окно согласия, остальные увидят профиль. Флаг
+     `active` здесь не нужен: сессию выдаёт Supabase, и повторный заход
+     эффекта (StrictMode) возврат уже не найдёт. */
+  useEffect(() => {
+    if (!supabaseClient || yandexReturnStarted.current) return
+    const pending = takeYandexReturn()
+    if (!pending) return
+    yandexReturnStarted.current = true
+    setAccountOpen(true)
+    setAccountNotice('Завершаем вход через Яндекс ID…')
+    void completeYandexSignIn(supabaseClient, pending).then((message) => {
+      const cleanUrl = new URL(window.location.href)
+      cleanUrl.searchParams.delete('auth')
+      window.history.replaceState({}, '', `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`)
+      setAccountNotice(message)
+    })
   }, [supabaseClient])
 
   const refreshAccount = useCallback(async () => {
@@ -2622,6 +2645,7 @@ function HomePage() {
             legalAcceptanceRequired={legalAcceptanceRequired}
             onLegalAccepted={() => setLegalGateUserId(null)}
             onPasswordUpdated={finishPasswordRecovery}
+            authMethods={{ yandex: featureOptIn(publicConfig, 'auth_yandex'), phone: featureOptIn(publicConfig, 'auth_phone') }}
           />
         </Suspense>
       )}

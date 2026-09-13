@@ -388,7 +388,8 @@ async function notifyOwner(
 
   const notification = [
     `Homework Copilot · ${categoryLabels[conversation.category as SupportCategory]}`,
-    `Пользователь: ${account.fullName || 'Ученик'} · ${user.email ?? 'без почты'}`,
+    // Аккаунт, вошедший по номеру телефона, почты не имеет.
+    `Пользователь: ${account.fullName || 'Ученик'} · ${user.email || (user.phone ? `+${user.phone}` : 'без почты')}`,
     `Класс: ${account.grade ?? '—'} · баланс ${account.balance === null || account.balance === undefined ? '—' : formatRubles(account.balance)}`,
     `Статус: ${conversation.status}`,
     '',

@@ -108,6 +108,14 @@ export function featureEnabled(config: PublicConfig, key: string) {
   return config.flags[key] !== false
 }
 
+/* Флаг, который включают, а не выключают: функция видна, только если база
+   явно сказала true. Для входа через Яндекс ID и по телефону - без ключей
+   на сервере кнопка вела бы в отказ, а непрочитанная конфигурация не должна
+   её показывать. */
+export function featureOptIn(config: PublicConfig, key: string) {
+  return config.flags[key] === true
+}
+
 /* Предметы в порядке из админки; выключенные скрыты. Предмет, которого
    нет в настройках (добавлен в код позже), идёт в конце и включён. */
 export function orderedSubjects(config: PublicConfig): SolvableSubject[] {

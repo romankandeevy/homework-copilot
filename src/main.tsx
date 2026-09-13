@@ -4,6 +4,7 @@ import './index.css'
 import { Root } from './Root.tsx'
 import { ErrorBoundary } from './ErrorBoundary.tsx'
 import { captureReferralFromCurrentUrl } from './lib/referrals'
+import { captureYandexReturn } from './lib/yandexReturn'
 
 const staleChunkReloadKey = 'homework-copilot:stale-chunk-reload'
 
@@ -29,6 +30,10 @@ if (currentUrl.searchParams.has('__app_reload')) {
    монтирует. Код запоминается здесь, до разводки: иначе он терялся, пока
    гость шёл с витрины в приложение. */
 captureReferralFromCurrentUrl()
+
+/* Возврат из Яндекс ID: `?code=` и `?state=` уходят из адреса до создания
+   клиента Supabase, иначе supabase-js может принять код за свой. */
+captureYandexReturn()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

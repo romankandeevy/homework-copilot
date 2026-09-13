@@ -297,8 +297,8 @@ function CommandPalette({ items, onClose, openUser }: { items: NavItem[]; onClos
         if (cancelled) return
         setUsers(rows(data.items).map((user) => ({
           key: `user:${str(user.id)}`,
-          title: str(user.fullName) || str(user.email),
-          hint: `${str(user.email)} · ${str(user.planTitle)}`,
+          title: str(user.fullName) || str(user.email) || (str(user.phone) ? `+${str(user.phone)}` : ''),
+          hint: `${str(user.email) || (str(user.phone) ? `+${str(user.phone)}` : '')} · ${str(user.planTitle)}`,
           run: () => openUser(str(user.id)),
         })))
       } catch {

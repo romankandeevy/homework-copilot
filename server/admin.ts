@@ -151,8 +151,17 @@ async function targetUser(options: AdminServerOptions, userId: unknown) {
   if (typeof userId !== 'string' || !/^[0-9a-f-]{36}$/i.test(userId)) throw new AdminApiError(400, 'Не указан пользователь')
   const service = serviceClient(options)
   const { data, error } = await service.auth.admin.getUserById(userId)
-  if (error || !data.user?.email) throw new AdminApiError(404, 'Пользователь не найден')
-  return { user: data.user, email: data.user.email }
+  if (error || !data.user) throw new AdminApiError(404, 'Пользователь не найден')
+  return { user: data.user, email: data.user.email ?? '' }
+}
+
+/* Аккаунт, вошедший по номеру телефона, почты не имеет. Ссылку входа и письмо
+   сброса Supabase умеет только на почту, а пароля у такого аккаунта нет вовсе. */
+function requireEmail(email: string, action: 'impersonate' | 'reset') {
+  if (email) return email
+  throw new AdminApiError(409, action === 'impersonate'
+    ? 'У аккаунта нет почты: он входит по номеру телефона. Ссылку входа выписать нельзя'
+    : 'У аккаунта нет почты и пароля: он входит по номеру телефона кодом из СМС')
 }
 
 async function isAdminAccount(options: AdminServerOptions, userId: string) {
@@ -170,7 +179,9 @@ async function isAdminAccount(options: AdminServerOptions, userId: string) {
 
 async function impersonate(options: AdminServerOptions, admin: AdminContext, body: Record<string, unknown>) {
   if (!admin.permissions.moderate) throw new AdminApiError(403, 'Роль не позволяет входить под пользователем')
-  const { user, email } = await targetUser(options, body.userId)
+  const target = await targetUser(options, body.userId)
+  const { user } = target
+  const email = requireEmail(target.email, 'impersonate')
   if (user.id === admin.userId) throw new AdminApiError(400, 'Это твой собственный аккаунт')
   if (await isAdminAccount(options, user.id)) throw new AdminApiError(403, 'Под администратором входить нельзя')
 
@@ -194,7 +205,9 @@ async function impersonate(options: AdminServerOptions, admin: AdminContext, bod
 
 async function resetPassword(options: AdminServerOptions, admin: AdminContext, body: Record<string, unknown>) {
   if (!admin.permissions.moderate) throw new AdminApiError(403, 'Роль не позволяет сбрасывать пароль')
-  const { user, email } = await targetUser(options, body.userId)
+  const target = await targetUser(options, body.userId)
+  const { user } = target
+  const email = requireEmail(target.email, 'reset')
   if (!options.supabaseUrl || !options.supabasePublishableKey) throw new AdminApiError(503, 'Сервер админки не настроен')
 
   // Письмо шлёт Supabase Auth тем же шаблоном, что и «Не помню пароль».

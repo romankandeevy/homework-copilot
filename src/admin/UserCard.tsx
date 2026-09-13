@@ -30,6 +30,7 @@ import { useAdmin } from './context'
 import { Badge, Button, CopyButton, DataTable, Drawer, EmptyState, ErrorState, Field, HorizontalBars, JsonView, LoadingState, Modal, Panel, Stat, StatGrid, Tabs, useAction, useAsync } from './ui'
 import type { Column, Tone } from './ui'
 import { rememberRecentUser } from './recentUsers'
+import { formatPhoneForDisplay } from '../lib/phone'
 import { BanDialog, ConfirmDialog } from './userDialogs'
 import BalanceHistoryChart from './BalanceHistoryChart'
 import InternalAccountControl from './InternalAccountControl'
@@ -97,7 +98,7 @@ const TICKET_STATUS: Record<string, { label: string; tone: Tone }> = {
 
 const PLAN_SOURCE: Record<string, string> = { admin: 'выдан вручную', promo: 'промокод', payment: 'оплата' }
 
-const PROVIDER_LABEL: Record<string, string> = { email: 'почта и пароль' }
+const PROVIDER_LABEL: Record<string, string> = { email: 'почта и пароль', phone: 'номер телефона', yandex: 'Яндекс ID', google: 'Google' }
 
 const AUDIT_EVENT: Record<string, string> = {
   balance_adjusted: 'Изменение баланса',
@@ -183,6 +184,8 @@ function UserCardView({ userId, onClose }: { userId: string; onClose: () => void
   const audit = rows(data.audit)
 
   const email = str(profile.email)
+  // Аккаунт, вошедший по номеру телефона, почты не имеет (миграция 20260913100700).
+  const phone = formatPhoneForDisplay(profile.phone)
   const fullName = str(profile.fullName).trim()
   const isBanned = bool(controls.isBanned)
   const bannedUntil = str(controls.bannedUntil)
@@ -196,8 +199,8 @@ function UserCardView({ userId, onClose }: { userId: string; onClose: () => void
 
   // Открытая карточка попадает в «недавние» быстрого поиска раздела «Пользователи».
   useEffect(() => {
-    if (loaded && (email || fullName)) rememberRecentUser({ id: userId, email, name: fullName })
-  }, [loaded, userId, email, fullName])
+    if (loaded && (email || phone || fullName)) rememberRecentUser({ id: userId, email: email || phone, name: fullName })
+  }, [loaded, userId, email, phone, fullName])
 
   // Действие: выполнить, сообщить итог, перечитать карточку.
   const perform = async <T,>(key: string, action: () => Promise<T>, success: string | ((result: T) => string)) => {
@@ -257,8 +260,8 @@ function UserCardView({ userId, onClose }: { userId: string; onClose: () => void
     'Заметка удалена',
   )
 
-  const title = fullName || email || 'Пользователь'
-  const subtitle = card.data ? [fullName ? email : '', profile.createdAt ? `с нами с ${when(str(profile.createdAt))}` : ''].filter(Boolean).join(' · ') : undefined
+  const title = fullName || email || phone || 'Пользователь'
+  const subtitle = card.data ? [fullName ? email || phone : '', profile.createdAt ? `с нами с ${when(str(profile.createdAt))}` : ''].filter(Boolean).join(' · ') : undefined
 
   const tabs: { value: CardTab; label: string; badge?: number }[] = [
     { value: 'profile', label: 'Профиль' },
@@ -303,11 +306,17 @@ function UserCardView({ userId, onClose }: { userId: string; onClose: () => void
                 <Button size="sm" variant="danger" icon={<Prohibit size={16} weight="bold" aria-hidden="true" />} onClick={() => setDialog({ kind: 'ban' })}>Забанить</Button>
               )}
               <Button size="sm" icon={<Gauge size={16} weight="bold" aria-hidden="true" />} onClick={() => setDialog({ kind: 'limit' })}>Лимит решений</Button>
-              <Button size="sm" icon={<Key size={16} weight="bold" aria-hidden="true" />} onClick={() => setDialog({ kind: 'reset' })}>Сбросить пароль</Button>
-              {!isAdmin && !isSelf && (
+              {/* Письмо сброса и ссылку входа Supabase выписывает только на почту. */}
+              {email && (
+                <Button size="sm" icon={<Key size={16} weight="bold" aria-hidden="true" />} onClick={() => setDialog({ kind: 'reset' })}>Сбросить пароль</Button>
+              )}
+              {!isAdmin && !isSelf && email && (
                 <Button size="sm" icon={<SignIn size={16} weight="bold" aria-hidden="true" />} onClick={() => setDialog({ kind: 'impersonate' })}>Войти под пользователем</Button>
               )}
             </div>
+          )}
+          {canModerate && !email && (
+            <p className="adm-card-note">Аккаунт входит по номеру телефона кодом из СМС: почты и пароля у него нет, поэтому сброс пароля и вход под пользователем недоступны.</p>
           )}
 
           {canModerate && <InternalAccountControl userId={userId} />}
@@ -472,8 +481,15 @@ function ProfileTab({ profile, devices, linkedCount, canEdit, saving, onSave, on
   const [error, setError] = useState('')
   const id = str(profile.id)
   const email = str(profile.email)
+  const phone = formatPhoneForDisplay(profile.phone)
+  const phoneConfirmedAt = str(profile.phoneConfirmedAt)
   const currentGrade = numOrNull(profile.grade)
-  const providers = arr(profile.providers).filter((item): item is string => typeof item === 'string')
+  // Вход через Яндекс ID заводит аккаунт с identity «email», а сам способ
+  // записан в app_metadata.provider.
+  const providers = [...new Set([
+    ...(str(profile.provider) === 'yandex' ? ['yandex'] : []),
+    ...arr(profile.providers).filter((item): item is string => typeof item === 'string'),
+  ])]
   const ips = new Set(devices.map((device) => str(device.ip)).filter(Boolean))
   const deviceIds = new Set(devices.map((device) => str(device.deviceId)).filter(Boolean))
   const lastDevice = devices[0]
@@ -502,6 +518,12 @@ function ProfileTab({ profile, devices, linkedCount, canEdit, saving, onSave, on
         <dl className="adm-kv">
           <dt>Почта</dt>
           <dd className="adm-card-inline">{email || '-'}{email && <CopyButton value={email} label="Скопировать почту" />}</dd>
+          {phone && (
+            <>
+              <dt>Телефон</dt>
+              <dd className="adm-card-inline">{phone}<CopyButton value={phone} label="Скопировать телефон" /></dd>
+            </>
+          )}
           <dt>ID</dt>
           <dd className="adm-card-inline"><span className="adm-mono">{id}</span><CopyButton value={id} label="Скопировать id" /></dd>
           <dt>Имя</dt>
@@ -514,8 +536,18 @@ function ProfileTab({ profile, devices, linkedCount, canEdit, saving, onSave, on
           <dd>{when(str(profile.lastSignInAt))}</dd>
           <dt>Последняя активность</dt>
           <dd>{ago(str(profile.lastSeenAt))}</dd>
-          <dt>Почта подтверждена</dt>
-          <dd>{confirmedAt ? when(confirmedAt) : <Badge tone="warning">не подтверждена</Badge>}</dd>
+          {email && (
+            <>
+              <dt>Почта подтверждена</dt>
+              <dd>{confirmedAt ? when(confirmedAt) : <Badge tone="warning">не подтверждена</Badge>}</dd>
+            </>
+          )}
+          {phone && (
+            <>
+              <dt>Телефон подтверждён</dt>
+              <dd>{phoneConfirmedAt ? when(phoneConfirmedAt) : <Badge tone="warning">не подтверждён</Badge>}</dd>
+            </>
+          )}
           <dt>Способ входа</dt>
           <dd>{providers.length ? providers.map((provider) => PROVIDER_LABEL[provider] ?? provider).join(', ') : '-'}</dd>
         </dl>

@@ -10,6 +10,7 @@
 import { useId, useMemo, useState } from 'react'
 import { DownloadSimple, FunnelSimple, LockOpen, Prohibit, UserCircle, Wallet, X } from '@phosphor-icons/react'
 import type { Json } from '../../lib/database.types'
+import { formatPhoneForDisplay } from '../../lib/phone'
 import {
   adminErrorMessage,
   adminRpc,
@@ -80,12 +81,13 @@ function statusText(row: Row) {
 }
 
 function displayName(row: Row) {
-  return str(row.fullName).trim() || str(row.email) || 'Без имени'
+  return str(row.fullName).trim() || str(row.email) || formatPhoneForDisplay(row.phone) || 'Без имени'
 }
 
 const CSV_COLUMNS: CsvColumn<Row>[] = [
   { header: 'id', value: (row) => str(row.id) },
   { header: 'Почта', value: (row) => str(row.email) },
+  { header: 'Телефон', value: (row) => formatPhoneForDisplay(row.phone) },
   { header: 'Имя', value: (row) => str(row.fullName) },
   { header: 'Класс школы', value: (row) => numOrNull(row.grade) },
   { header: 'Тариф', value: (row) => str(row.planTitle) },
@@ -263,7 +265,8 @@ export default function UsersSection() {
       className: 'adm-users-col-user',
       render: (row) => {
         const name = str(row.fullName).trim()
-        const email = str(row.email)
+        // У аккаунта, вошедшего по телефону, почты нет - показываем номер.
+        const email = str(row.email) || formatPhoneForDisplay(row.phone)
         return (
           <div className="adm-cell-main">
             <strong>{name || email || 'Без имени'}</strong>

@@ -156,7 +156,7 @@
 
 .account-auth-tabs button.is-active { background: var(--color-surface-raised); color: var(--color-text); box-shadow: 0 1px 2px oklch(17% 0.025 260 / 0.08); }
 .account-notice { margin: 0; padding: 0 0 0 var(--space-4); border-left: 2px solid var(--color-accent); color: var(--color-text-muted); font-size: var(--text-small); line-height: var(--leading-copy); }
-.account-google-button {
+.account-provider-button {
   display: inline-flex;
   min-height: 3rem;
   align-items: center;
@@ -170,9 +170,16 @@
   font-weight: var(--weight-semibold);
   cursor: pointer;
 }
-.account-google-button:hover { border-color: var(--color-text-muted); background: var(--color-surface-raised); }
-.account-google-button:active { transform: translateY(1px) scale(0.99); }
-.account-google-button:disabled { color: var(--color-text-subtle); cursor: not-allowed; }
+.account-provider-button:hover { border-color: var(--color-text-muted); background: var(--color-surface-raised); }
+.account-provider-button:active { transform: translateY(1px) scale(0.99); }
+.account-provider-button:disabled { color: var(--color-text-subtle); cursor: not-allowed; }
+/* Другие способы входа: Яндекс ID и номер телефона. */
+.account-auth-alternatives { display: grid; gap: var(--space-3); }
+.account-provider-mark { display: inline-grid; width: 1.35rem; height: 1.35rem; place-items: center; border-radius: 50%; font-size: var(--text-small); font-weight: var(--weight-semibold); line-height: 1; }
+.account-provider-mark.is-yandex { background: #fc3f1d; color: #fff; }
+.account-input-shell:has(.account-phone-prefix) { grid-template-columns: auto auto minmax(0, 1fr); }
+.account-phone-prefix { color: var(--color-text); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; }
+.account-field-help { margin-top: calc(-1 * var(--space-2)); color: var(--color-text-subtle); font-size: var(--text-caption); }
 .account-auth-divider { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: var(--space-3); color: var(--color-text-subtle); font-size: var(--text-caption); }
 .account-auth-divider::before,
 .account-auth-divider::after { height: 1px; background: var(--color-border); content: ''; }
@@ -329,10 +336,12 @@
 .account-dialog.is-auth .account-auth-tabs button { color: var(--auth-subtle); }
 .account-dialog.is-auth .account-auth-tabs button.is-active { background: var(--color-strong); color: var(--color-on-strong); box-shadow: none; }
 .account-dialog.is-auth .account-notice { border-left-color: var(--auth-accent); color: var(--auth-muted); }
-.account-dialog.is-auth .account-google-button { border-color: var(--auth-line); background: var(--auth-field); color: var(--auth-text); }
-.account-dialog.is-auth .account-google-button:hover { border-color: var(--auth-accent-hover); background: var(--auth-field-hover); }
-.account-dialog.is-auth .account-google-button:disabled { color: var(--auth-subtle); }
+.account-dialog.is-auth .account-provider-button { border-color: var(--auth-line); background: var(--auth-field); color: var(--auth-text); }
+.account-dialog.is-auth .account-provider-button:hover { border-color: var(--auth-accent-hover); background: var(--auth-field-hover); }
+.account-dialog.is-auth .account-provider-button:disabled { color: var(--auth-subtle); }
 .account-dialog.is-auth .account-auth-divider { color: var(--auth-subtle); }
+.account-dialog.is-auth .account-phone-prefix { color: var(--auth-text); }
+.account-dialog.is-auth .account-field-help { color: var(--auth-subtle); }
 .account-dialog.is-auth .account-auth-divider::before,
 .account-dialog.is-auth .account-auth-divider::after { background: var(--auth-line); }
 .account-dialog.is-auth .account-email-check-lead { border: 1px solid var(--auth-line); background: var(--auth-canvas); }
@@ -516,7 +525,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .account-dialog-close,
-  .account-google-button,
+  .account-provider-button,
   .account-grade-trigger,
   .account-grade-trigger > svg,
   .account-primary-button,

@@ -25,8 +25,10 @@
 const upstreamOrigin = 'https://homework-copilot-taupe.vercel.app'
 /* `payment` зовут двое: браузер ученика и сама Робокасса - её уведомление
    Result приходит сюда же, с серверов в России, для которых *.vercel.app
-   так же ненадёжен, как для учеников. */
-const routes = new Set(['solve', 'chat', 'support', 'admin', 'payment'])
+   так же ненадёжен, как для учеников.
+   `auth-yandex` - вход через Яндекс ID (server/yandexAuth.ts). Хук СМС
+   (`sms-hook`) сюда не ходит: его зовёт сам Supabase Auth из Франкфурта. */
+const routes = new Set(['solve', 'chat', 'support', 'admin', 'payment', 'auth-yandex'])
 
 const forwardedRequestHeaders = [
   'accept',

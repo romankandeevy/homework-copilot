@@ -9,6 +9,7 @@ import {
   CheckCircle,
   ClockCountdown,
   CopySimple,
+  DeviceMobile,
   EnvelopeSimple,
   Eye,
   EyeSlash,
@@ -34,22 +35,33 @@ import { createPayment, loadPaymentConfig } from '../lib/payments'
 import type { PaymentConfig } from '../lib/payments'
 import { parseTopUpRubles, topUpRangeLabel } from '../lib/topUpLimits'
 import { deleteMyAccount } from '../lib/accountDeletion'
-import { forgetPendingLegalAcceptance, rememberPendingLegalAcceptance } from '../lib/legalConsent'
+import { acceptanceSourceForUser, forgetPendingLegalAcceptance, rememberPendingLegalAcceptance } from '../lib/legalConsent'
 import { getGuestId } from '../lib/guestSolutions'
 import { loadReferralStatus, preparePendingReferralClaim } from '../lib/referrals'
 import type { ReferralStatus } from '../lib/referrals'
+import { formatPhoneDigits, formatPhoneForDisplay, isRussianMobileDigits, phoneDigitsFromInput, russianPhoneE164 } from '../lib/phone'
+import { startYandexSignIn } from '../lib/yandexAuth'
 import { useModalIsolation } from '../lib/useModalIsolation'
 import PasswordStrength from './PasswordStrength'
 import { isStrongPassword } from './passwordStrengthRules'
+import { authErrorMessage } from './authErrors'
 import './AccountDialog.css'
 
-type AuthScreen = 'sign-in' | 'sign-up' | 'forgot' | 'reset' | 'verify-email'
+type AuthScreen = 'sign-in' | 'sign-up' | 'forgot' | 'reset' | 'verify-email' | 'verify-phone'
+type AuthMethod = 'email' | 'phone'
+/** Способы входа кроме почты. Каждый включается флагом в админке
+    (`auth_yandex`, `auth_phone`) и требует ключей на сервере. */
+export type AuthMethods = { yandex: boolean; phone: boolean }
+const onlyEmail: AuthMethods = { yandex: false, phone: false }
 type VerificationKind = 'signup'
 type AccountView = 'profile' | 'wallet'
 type Theme = 'light' | 'dark'
 
 const emailResendDelay = 60
 const emailCodeLifetime = 5 * 60
+// Supabase не шлёт второе СМС на тот же номер раньше, чем через минуту.
+const smsResendDelay = 60
+const phoneFormatError = 'Нужен российский мобильный номер: +7 9XX XXX-XX-XX'
 const verificationEmailKey = 'homework-copilot:verification-email'
 const verificationKindKey = 'homework-copilot:verification-kind'
 const verificationSentAtKey = 'homework-copilot:verification-sent-at'
@@ -113,18 +125,7 @@ type AccountDialogProps = {
   legalAcceptanceRequired?: boolean
   onLegalAccepted?: () => void
   onPasswordUpdated?: () => void
-}
-
-function authErrorMessage(message: string) {
-  const normalized = message.toLocaleLowerCase('en')
-  if (normalized.includes('invalid login credentials')) return 'Неверная почта или пароль'
-  if (normalized.includes('user already registered')) return 'Аккаунт с этой почтой уже существует'
-  if (normalized.includes('password') && normalized.includes('characters')) return 'Пароль должен содержать минимум 8 символов'
-  if (normalized.includes('email rate limit')) return 'Слишком много писем. Попробуй немного позже'
-  if (normalized.includes('email not confirmed')) return 'Сначала подтверди почту кодом из письма'
-  if (normalized.includes('token') || normalized.includes('otp')) return 'Код неверный или уже истёк'
-  if (normalized.includes('referral claim unavailable')) return 'Не получилось закрепить приглашение. Повтори попытку'
-  return 'Не получилось выполнить запрос. Проверь данные и попробуй ещё раз'
+  authMethods?: AuthMethods
 }
 
 function isValidEmail(value: string) {
@@ -315,7 +316,7 @@ function LegalAcceptanceView({ user, onAccepted }: { user: User; onAccepted: () 
     setLoading(true)
     setError('')
     const { error: acceptanceError } = await supabase.rpc('record_current_legal_acceptance', {
-      p_source: user.app_metadata?.provider === 'google' ? 'google' : 'email',
+      p_source: acceptanceSourceForUser(user),
     })
     if (acceptanceError) {
       setError('Не получилось сохранить согласие. Попробуй ещё раз')
@@ -389,7 +390,7 @@ function LegalAcceptanceView({ user, onAccepted }: { user: User; onAccepted: () 
 
 /* `onPasswordUpdated` есть, когда человек уже вошёл: ссылка из письма о смене
    пароля открывает сессию, и новый пароль задаётся изнутри аккаунта. */
-function AuthView({ passwordRecovery, notice, onPasswordUpdated }: { passwordRecovery: boolean; notice?: string; onPasswordUpdated?: () => void }) {
+function AuthView({ passwordRecovery, notice, onPasswordUpdated, authMethods = onlyEmail }: { passwordRecovery: boolean; notice?: string; onPasswordUpdated?: () => void; authMethods?: AuthMethods }) {
   const viewRef = useRef<HTMLDivElement>(null)
   const [initialVerification] = useState(() => readPendingVerification())
   const [screen, setScreen] = useState<AuthScreen>(passwordRecovery ? 'reset' : initialVerification ? 'verify-email' : 'sign-in')
@@ -414,26 +415,39 @@ function AuthView({ passwordRecovery, notice, onPasswordUpdated }: { passwordRec
      возраст, но фиксирует, на каком основании документы приняты, — так же,
      как это записано в соглашении и в согласии. */
   const [ageConfirmed, setAgeConfirmed] = useState(false)
+  /* Вход по номеру телефона: та же вкладка «Вход» или «Регистрация», только
+     вместо почты и пароля - номер, а потом код из СМС. */
+  const [method, setMethod] = useState<AuthMethod>('email')
+  const [phoneDigits, setPhoneDigits] = useState('')
+  const [phoneIntent, setPhoneIntent] = useState<'sign-in' | 'sign-up'>('sign-in')
+  const [phoneSentAt, setPhoneSentAt] = useState(0)
   const passwordStrengthId = useId()
+  const phoneHelpId = useId()
   const requiresStrongPassword = screen === 'sign-up' || screen === 'reset'
   const passwordIsValid = requiresStrongPassword ? isStrongPassword(password) : password.length >= 8
   const resendIn = verificationSecondsLeft(sentAt, emailResendDelay, now)
   const expiresIn = verificationSecondsLeft(sentAt, emailCodeLifetime, now)
+  const phoneResendIn = verificationSecondsLeft(phoneSentAt, smsResendDelay, now)
+  const usingPhone = method === 'phone' && (screen === 'sign-in' || screen === 'sign-up')
+  const consentsGiven = agreementAccepted && personalDataAccepted && ageConfirmed
+  const phoneIsValid = isRussianMobileDigits(phoneDigits)
 
-  const formIsValid = screen === 'sign-up'
-    ? fullName.trim().length >= 2 && Boolean(grade) && isValidEmail(email) && passwordIsValid && agreementAccepted && personalDataAccepted && ageConfirmed
-    : screen === 'sign-in'
-      ? isValidEmail(email) && password.length >= 8
-      : screen === 'forgot'
-        ? isValidEmail(email)
-        : passwordIsValid
+  const formIsValid = usingPhone
+    ? phoneIsValid && (screen === 'sign-in' || (fullName.trim().length >= 2 && Boolean(grade) && consentsGiven))
+    : screen === 'sign-up'
+      ? fullName.trim().length >= 2 && Boolean(grade) && isValidEmail(email) && passwordIsValid && consentsGiven
+      : screen === 'sign-in'
+        ? isValidEmail(email) && password.length >= 8
+        : screen === 'forgot'
+          ? isValidEmail(email)
+          : passwordIsValid
 
   useEffect(() => {
     if (passwordRecovery) setScreen('reset')
   }, [passwordRecovery])
 
   useEffect(() => {
-    if (screen !== 'verify-email') return
+    if (screen !== 'verify-email' && screen !== 'verify-phone') return
     const timer = window.setInterval(() => setNow(Date.now()), 1000)
     return () => window.clearInterval(timer)
   }, [screen])
@@ -503,12 +517,137 @@ function AuthView({ passwordRecovery, notice, onPasswordUpdated }: { passwordRec
     setLoading(false)
   }
 
+  /* Код из СМС. Supabase заводит аккаунт уже здесь, с неподтверждённым
+     номером; подтверждает его ввод кода. Метаданные те же, что у
+     регистрации по почте: метка браузера для стартовых 20 ₽, приглашение,
+     отметка о согласии. На вкладке «Вход» новый номер тоже создаёт аккаунт,
+     но без отметки о согласии - его остановит окно согласия. */
+  const requestPhoneCode = async (intent: 'sign-in' | 'sign-up') => {
+    if (!supabase) throw new Error('unavailable')
+    const signUp = intent === 'sign-up'
+    let referralClaimToken: string | null = null
+    try {
+      referralClaimToken = await preparePendingReferralClaim(supabase)
+    } catch (referralError) {
+      // Регистрация без приглашения хуже, чем повтор: как и по почте, просим повторить.
+      if (signUp) throw referralError
+    }
+    const deviceId = getGuestId()
+    const { error: otpError } = await supabase.auth.signInWithOtp({
+      phone: russianPhoneE164(phoneDigits),
+      options: {
+        shouldCreateUser: true,
+        data: {
+          ...(signUp ? { legal_source: 'phone', full_name: fullName.trim(), grade } : {}),
+          ...(deviceId ? { device_id: deviceId } : {}),
+          ...(referralClaimToken ? { referral_claim_token: referralClaimToken } : {}),
+        },
+      },
+    })
+    if (otpError) throw otpError
+    const nextSentAt = Date.now()
+    setPhoneIntent(intent)
+    setPhoneSentAt(nextSentAt)
+    setNow(nextSentAt)
+  }
+
+  const sendPhoneCode = async () => {
+    const intent = screen === 'sign-up' ? 'sign-up' : 'sign-in'
+    try {
+      if (intent === 'sign-up') {
+        if (fullName.trim().length < 2) throw new Error('name')
+        if (!consentsGiven) throw new Error('legal consent')
+      }
+      if (!phoneIsValid) throw new Error('phone format')
+      if (intent === 'sign-up') rememberPendingLegalAcceptance('phone')
+      await requestPhoneCode(intent)
+      setVerificationCode('')
+      setScreen('verify-phone')
+    } catch (caught) {
+      if (intent === 'sign-up') forgetPendingLegalAcceptance()
+      const message = caught instanceof Error ? caught.message : ''
+      if (message === 'name') setError('Введи имя')
+      else if (message === 'legal consent') setError(consentErrorMessage)
+      else if (message === 'phone format') setError(phoneFormatError)
+      else setError(authErrorMessage(message, 'phone'))
+    }
+  }
+
+  const resendPhoneCode = async () => {
+    if (loading || phoneResendIn > 0) return
+    setLoading(true)
+    setStatus('')
+    setError('')
+    try {
+      await requestPhoneCode(phoneIntent)
+      setVerificationCode('')
+      setStatus('Новый код отправлен. Предыдущий больше не действует')
+    } catch (caught) {
+      setError(authErrorMessage(caught instanceof Error ? caught.message : '', 'phone'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const verifyPhoneCode = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!supabase || loading || verificationCode.length !== 6) return
+    setLoading(true)
+    setStatus('')
+    setError('')
+    const { error: verificationError } = await supabase.auth.verifyOtp({
+      phone: russianPhoneE164(phoneDigits),
+      token: verificationCode,
+      type: 'sms',
+    })
+    if (verificationError) setError(authErrorMessage(verificationError.message, 'phone'))
+    else setStatus('Номер подтверждён')
+    setLoading(false)
+  }
+
+  /* Яндекс ID. На вкладке «Регистрация» документы принимаются до перехода,
+     как и при регистрации по почте: отметка уходит в подписанный state и
+     записывается при создании аккаунта. */
+  const signInWithYandex = async () => {
+    if (loading) return
+    const consents = screen === 'sign-up'
+    if (consents && !consentsGiven) {
+      setError(consentErrorMessage)
+      return
+    }
+    setLoading(true)
+    setStatus('')
+    setError('')
+    if (consents) rememberPendingLegalAcceptance('yandex')
+    try {
+      await startYandexSignIn(consents)
+      // Вкладка уходит на Яндекс: кнопка остаётся занятой до перехода.
+    } catch (caught) {
+      if (consents) forgetPendingLegalAcceptance()
+      const message = caught instanceof Error ? caught.message : ''
+      setError(/[а-яё]/iu.test(message) ? message : 'Не получилось перейти к Яндексу. Попробуй ещё раз')
+      setLoading(false)
+    }
+  }
+
+  const chooseMethod = (next: AuthMethod) => {
+    setMethod(next)
+    setStatus('')
+    setError('')
+  }
+
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!supabase || loading) return
     setLoading(true)
     setStatus('')
     setError('')
+
+    if (usingPhone) {
+      await sendPhoneCode()
+      setLoading(false)
+      return
+    }
 
     try {
       if (screen === 'sign-in') {
@@ -600,7 +739,7 @@ function AuthView({ passwordRecovery, notice, onPasswordUpdated }: { passwordRec
       ? 'Восстанови доступ'
       : screen === 'reset'
         ? 'Новый пароль'
-        : screen === 'verify-email'
+        : screen === 'verify-email' || screen === 'verify-phone'
           ? 'Введи код'
         : 'Войди в аккаунт'
 
@@ -608,30 +747,34 @@ function AuthView({ passwordRecovery, notice, onPasswordUpdated }: { passwordRec
     ? 'Новому аккаунту — 20 ₽ на первые решения, один раз на устройство.'
     : screen === 'verify-email'
       ? 'Шесть цифр из письма — и аккаунт готов.'
-      : screen === 'forgot'
-        ? 'Пришлём безопасную ссылку для нового пароля.'
-        : screen === 'reset'
-          ? 'Придумай новый надёжный пароль.'
-          : 'Войди по почте и паролю.'
+      : screen === 'verify-phone'
+        ? 'Шесть цифр из СМС — и ты в аккаунте.'
+        : screen === 'forgot'
+          ? 'Пришлём безопасную ссылку для нового пароля.'
+          : screen === 'reset'
+            ? 'Придумай новый надёжный пароль.'
+            : usingPhone
+              ? 'Пришлём код в СМС на этот номер.'
+              : 'Войди по почте и паролю.'
 
   return (
     <div className="account-auth-view" ref={viewRef}>
       <aside className="account-auth-context" aria-hidden="true">
         <div className="account-auth-wordmark"><span>HC</span><strong>Homework Copilot</strong></div>
         <div className="account-auth-context-copy">
-          {screen === 'verify-email' ? <ShieldCheck size={42} weight="duotone" /> : <LockKey size={42} weight="duotone" />}
-          <strong>{screen === 'verify-email' ? 'Код остаётся на этом устройстве.' : 'Аккаунт без лишних переходов.'}</strong>
-          <p>{screen === 'verify-email' ? 'Открой письмо где угодно, а шесть цифр введи здесь.' : 'Баланс и готовые решения будут ждать тебя после входа.'}</p>
+          {screen === 'verify-email' || screen === 'verify-phone' ? <ShieldCheck size={42} weight="duotone" /> : <LockKey size={42} weight="duotone" />}
+          <strong>{screen === 'verify-email' ? 'Код остаётся на этом устройстве.' : screen === 'verify-phone' ? 'Код приходит в СМС.' : 'Аккаунт без лишних переходов.'}</strong>
+          <p>{screen === 'verify-email' ? 'Открой письмо где угодно, а шесть цифр введи здесь.' : screen === 'verify-phone' ? 'Шесть цифр из сообщения введи здесь.' : 'Баланс и готовые решения будут ждать тебя после входа.'}</p>
         </div>
         <div className="account-auth-context-meta">
           <ClockCountdown size={20} weight="duotone" />
-          <span>{screen === 'verify-email' ? 'Код действует 5 минут' : 'Подтверждение занимает меньше минуты'}</span>
+          <span>{screen === 'verify-email' ? 'Код действует 5 минут' : screen === 'verify-phone' ? 'Не пришёл за минуту — запроси новый' : 'Подтверждение занимает меньше минуты'}</span>
         </div>
       </aside>
 
       <section className="account-auth-panel">
         <div className="account-auth-brand">
-          <span className="account-auth-mark">{screen === 'verify-email' ? <EnvelopeSimple size={28} weight="duotone" aria-hidden="true" /> : <UserCircle size={28} weight="duotone" aria-hidden="true" />}</span>
+          <span className="account-auth-mark">{screen === 'verify-email' ? <EnvelopeSimple size={28} weight="duotone" aria-hidden="true" /> : screen === 'verify-phone' || usingPhone ? <DeviceMobile size={28} weight="duotone" aria-hidden="true" /> : <UserCircle size={28} weight="duotone" aria-hidden="true" />}</span>
           <div>
             <h2 id="account-dialog-title">{title}</h2>
             <p>{subtitle}</p>
@@ -681,7 +824,40 @@ function AuthView({ passwordRecovery, notice, onPasswordUpdated }: { passwordRec
         </div>
       )}
 
-      {screen !== 'verify-email' && <form className="account-auth-form" onSubmit={submit}>
+      {screen === 'verify-phone' && (
+        <div className="account-email-check">
+          <div className="account-email-check-lead">
+            <div>
+              <strong>Код отправлен</strong>
+              <p>+7 {formatPhoneDigits(phoneDigits)}</p>
+            </div>
+          </div>
+          <form className="account-verify-form" onSubmit={verifyPhoneCode}>
+            <label htmlFor="account-phone-code">Код из СМС</label>
+            <input
+              id="account-phone-code"
+              className="account-otp-input"
+              value={verificationCode}
+              onChange={(event) => { setVerificationCode(event.target.value.replace(/\D/g, '').slice(0, 6)); setError('') }}
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              pattern="[0-9]{6}"
+              placeholder="000000"
+              aria-describedby="account-phone-code-help"
+              autoFocus
+              required
+              data-initial-focus=""
+            />
+            <p id="account-phone-code-help">Телефон может подставить код из СМС сам.</p>
+            <button className="account-primary-button" type="submit" disabled={loading || verificationCode.length !== 6}>
+              {loading ? 'Проверяем…' : 'Подтвердить и войти'}
+              {!loading && <ArrowRight size={18} weight="bold" aria-hidden="true" />}
+            </button>
+          </form>
+        </div>
+      )}
+
+      {screen !== 'verify-email' && screen !== 'verify-phone' && <form className="account-auth-form" onSubmit={submit}>
         {screen === 'sign-up' && (
           <div className="account-field-row">
             <label>
@@ -698,7 +874,30 @@ function AuthView({ passwordRecovery, notice, onPasswordUpdated }: { passwordRec
           </div>
         )}
 
-        {screen !== 'reset' && (
+        {usingPhone && (
+          <label>
+            <span>Номер телефона</span>
+            <div className="account-input-shell">
+              <DeviceMobile size={19} weight="duotone" aria-hidden="true" />
+              <span className="account-phone-prefix" aria-hidden="true">+7</span>
+              <input
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
+                value={formatPhoneDigits(phoneDigits)}
+                onChange={(event) => { setPhoneDigits(phoneDigitsFromInput(event.target.value)); setError('') }}
+                placeholder="900 000-00-00"
+                aria-describedby={phoneHelpId}
+                required
+                autoFocus={screen === 'sign-in'}
+                data-initial-focus={screen === 'sign-in' ? '' : undefined}
+              />
+            </div>
+          </label>
+        )}
+        {usingPhone && <small id={phoneHelpId} className="account-field-help">Только российский мобильный номер.</small>}
+
+        {screen !== 'reset' && !usingPhone && (
           <label>
             <span>Почта</span>
             <div className="account-input-shell">
@@ -708,7 +907,7 @@ function AuthView({ passwordRecovery, notice, onPasswordUpdated }: { passwordRec
           </label>
         )}
 
-        {screen !== 'forgot' && (
+        {screen !== 'forgot' && !usingPhone && (
           <div className="account-password-field">
             <label>
               <span>{screen === 'reset' ? 'Новый пароль' : 'Пароль'}</span>
@@ -759,25 +958,54 @@ function AuthView({ passwordRecovery, notice, onPasswordUpdated }: { passwordRec
         {status && <p className="account-form-message is-success" role="status"><CheckCircle size={18} weight="fill" aria-hidden="true" />{status}</p>}
 
         <button className="account-primary-button" type="submit" disabled={loading || !formIsValid}>
-          {loading ? 'Подожди…' : screen === 'sign-up' ? 'Создать аккаунт' : screen === 'forgot' ? 'Отправить ссылку' : screen === 'reset' ? 'Сохранить пароль' : 'Войти'}
+          {loading ? 'Подожди…' : usingPhone ? 'Получить код' : screen === 'sign-up' ? 'Создать аккаунт' : screen === 'forgot' ? 'Отправить ссылку' : screen === 'reset' ? 'Сохранить пароль' : 'Войти'}
           {!loading && <ArrowRight size={18} weight="bold" aria-hidden="true" />}
         </button>
       </form>}
 
-      {screen === 'verify-email' && (
+      {(screen === 'verify-email' || screen === 'verify-phone') && (
         <>
           {error && <p className="account-form-message is-error" role="alert">{error}</p>}
           {status && <p className="account-form-message is-success" role="status"><CheckCircle size={18} weight="fill" aria-hidden="true" />{status}</p>}
         </>
       )}
 
+      {/* Другие способы входа. Каждый виден, только когда его включили в
+          админке: без ключей на сервере кнопка вела бы в отказ. */}
+      {(screen === 'sign-in' || screen === 'sign-up') && (authMethods.yandex || authMethods.phone) && (
+        <div className="account-auth-alternatives">
+          <div className="account-auth-divider">или</div>
+          {authMethods.yandex && (
+            <button className="account-provider-button" type="button" onClick={() => { void signInWithYandex() }} disabled={loading}>
+              <span className="account-provider-mark is-yandex" aria-hidden="true">Я</span>
+              Войти с Яндекс ID
+            </button>
+          )}
+          {authMethods.phone && (
+            <button className="account-provider-button" type="button" onClick={() => chooseMethod(method === 'phone' ? 'email' : 'phone')} disabled={loading}>
+              {method === 'phone'
+                ? <EnvelopeSimple size={19} weight="duotone" aria-hidden="true" />
+                : <DeviceMobile size={19} weight="duotone" aria-hidden="true" />}
+              {method === 'phone' ? 'По почте и паролю' : 'По номеру телефона'}
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="account-auth-secondary">
-        {screen === 'sign-in' && <button type="button" onClick={() => switchScreen('forgot')}>Не помню пароль</button>}
+        {/* У аккаунта, вошедшего по телефону, пароля нет - и восстанавливать нечего. */}
+        {screen === 'sign-in' && !usingPhone && <button type="button" onClick={() => switchScreen('forgot')}>Не помню пароль</button>}
         {(screen === 'forgot' || (screen === 'reset' && !onPasswordUpdated)) && <button type="button" onClick={() => switchScreen('sign-in')}>Вернуться ко входу</button>}
         {screen === 'verify-email' && (
           <>
             <button type="button" onClick={() => { void resendEmail() }} disabled={loading || resendIn > 0}>{resendIn > 0 ? `Новый код через ${formatCountdown(resendIn)}` : 'Отправить новый код'}</button>
             <button type="button" onClick={() => switchScreen('sign-up')}>Изменить почту</button>
+          </>
+        )}
+        {screen === 'verify-phone' && (
+          <>
+            <button type="button" onClick={() => { void resendPhoneCode() }} disabled={loading || phoneResendIn > 0}>{phoneResendIn > 0 ? `Новый код через ${formatCountdown(phoneResendIn)}` : 'Отправить новый код'}</button>
+            <button type="button" onClick={() => switchScreen(phoneIntent)}>Изменить номер</button>
           </>
         )}
       </div>
@@ -1102,7 +1330,9 @@ function ProfileView({ user, account, notice, initialView, theme, onToggleTheme,
     }
   }
 
-  const displayName = account?.profile.full_name || user.email || 'Ученик'
+  // У аккаунта, вошедшего по телефону, почты нет: вместо неё - номер.
+  const phoneLabel = formatPhoneForDisplay(user.phone)
+  const displayName = account?.profile.full_name || user.email || phoneLabel || 'Ученик'
 
   return (
     <div className="account-profile-view">
@@ -1111,7 +1341,7 @@ function ProfileView({ user, account, notice, initialView, theme, onToggleTheme,
           <div>
             <span>Аккаунт</span>
             <h2 id="account-dialog-title">{displayName}</h2>
-            <p>{user.email}</p>
+            <p>{user.email || phoneLabel}</p>
           </div>
         </div>
       </header>
@@ -1136,10 +1366,18 @@ function ProfileView({ user, account, notice, initialView, theme, onToggleTheme,
               <span>Класс</span>
               <GradeSelect value={grade} onChange={setGrade} />
             </div>
-            <label className="account-email-field">
-              <span>Почта</span>
-              <input value={user.email ?? ''} readOnly />
-            </label>
+            {(user.email || !phoneLabel) && (
+              <label className="account-email-field">
+                <span>Почта</span>
+                <input value={user.email ?? ''} readOnly />
+              </label>
+            )}
+            {phoneLabel && (
+              <label className="account-email-field">
+                <span>Телефон</span>
+                <input value={phoneLabel} readOnly />
+              </label>
+            )}
 
             {error && <p className="account-form-message is-error" role="alert">{error}</p>}
             {status && <p className="account-form-message is-success" role="status"><CheckCircle size={18} weight="fill" aria-hidden="true" />{status}</p>}
@@ -1236,7 +1474,7 @@ function ProfileView({ user, account, notice, initialView, theme, onToggleTheme,
   )
 }
 
-export default function AccountDialog({ user, account, passwordRecovery, notice, initialView, theme, onToggleTheme, onClose, onReloadAccount, returnFocusRef, legalAcceptanceRequired = false, onLegalAccepted, onPasswordUpdated }: AccountDialogProps) {
+export default function AccountDialog({ user, account, passwordRecovery, notice, initialView, theme, onToggleTheme, onClose, onReloadAccount, returnFocusRef, legalAcceptanceRequired = false, onLegalAccepted, onPasswordUpdated, authMethods = onlyEmail }: AccountDialogProps) {
   const reduceMotion = useReducedMotion()
   const dialogRef = useModalIsolation<HTMLElement>(true, onClose, returnFocusRef)
   /* Ссылка из письма о смене пароля открывает сессию: человек уже вошёл, и
@@ -1271,7 +1509,7 @@ export default function AccountDialog({ user, account, passwordRecovery, notice,
             ? <LegalAcceptanceView user={user} onAccepted={() => onLegalAccepted?.()} />
             : user && view === 'profile'
               ? <ProfileView user={user} account={account} notice={notice} initialView={initialView} theme={theme} onToggleTheme={onToggleTheme} onReloadAccount={onReloadAccount} />
-              : <AuthView passwordRecovery={passwordRecovery} notice={notice} onPasswordUpdated={user ? onPasswordUpdated ?? (() => undefined) : undefined} />}
+              : <AuthView passwordRecovery={passwordRecovery} notice={notice} onPasswordUpdated={user ? onPasswordUpdated ?? (() => undefined) : undefined} authMethods={authMethods} />}
         </motion.section>
       </motion.div>
     </AnimatePresence>
