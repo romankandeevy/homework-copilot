@@ -1084,7 +1084,7 @@ function ReferralCard() {
 
 function ProfileView({ user, account, notice, initialView, theme, onToggleTheme, onReloadAccount }: { user: User; account: AccountData | null; notice?: string; initialView: AccountView; theme: Theme; onToggleTheme: () => void; onReloadAccount: () => Promise<void> }) {
   const [fullName, setFullName] = useState(account?.profile.full_name ?? '')
-  const [grade, setGrade] = useState(String(account?.profile.grade ?? 8))
+  const [grade, setGrade] = useState(account?.profile.grade ? String(account.profile.grade) : '')
   const [activeView, setActiveView] = useState<AccountView>(initialView)
   const [loading, setLoading] = useState(false)
   const [status, setStatus] = useState('')
@@ -1092,7 +1092,7 @@ function ProfileView({ user, account, notice, initialView, theme, onToggleTheme,
 
   useEffect(() => {
     setFullName(account?.profile.full_name ?? '')
-    setGrade(String(account?.profile.grade ?? 8))
+    setGrade(account?.profile.grade ? String(account.profile.grade) : '')
   }, [account])
 
   useEffect(() => setActiveView(initialView), [initialView])
@@ -1105,7 +1105,7 @@ function ProfileView({ user, account, notice, initialView, theme, onToggleTheme,
     setError('')
     const { error: updateError } = await supabase
       .from('profiles')
-      .update({ full_name: fullName.trim(), grade: Number(grade) })
+      .update({ full_name: fullName.trim(), grade: grade ? Number(grade) : null })
       .eq('id', user.id)
 
     if (updateError) setError('Не получилось сохранить профиль')

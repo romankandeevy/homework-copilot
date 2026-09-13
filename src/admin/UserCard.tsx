@@ -461,7 +461,7 @@ function ProfileTab({ profile, devices, linkedCount, canEdit, saving, onSave, on
   linkedCount: number
   canEdit: boolean
   saving: boolean
-  onSave: (name: string, grade: number) => Promise<boolean>
+  onSave: (name: string, grade: number | null) => Promise<boolean>
   onShowSessions: () => void
 }) {
   const [name, setName] = useState(str(profile.fullName))
@@ -486,9 +486,10 @@ function ProfileTab({ profile, devices, linkedCount, canEdit, saving, onSave, on
       setError('Имя - от 1 до 80 символов.')
       return
     }
-    const gradeNumber = Number(grade)
-    if (!Number.isInteger(gradeNumber) || gradeNumber < 1 || gradeNumber > 11) {
-      setError('Выбери класс от 1 до 11.')
+    // Пустой класс - «не указан»: выбирать класс за ученика не нужно.
+    const gradeNumber = grade === '' ? null : Number(grade)
+    if (gradeNumber !== null && (!Number.isInteger(gradeNumber) || gradeNumber < 1 || gradeNumber > 11)) {
+      setError('Выбери класс от 1 до 11 или оставь «не указан».')
       return
     }
     setError('')
@@ -529,7 +530,7 @@ function ProfileTab({ profile, devices, linkedCount, canEdit, saving, onSave, on
               </Field>
               <Field label="Класс">
                 <select value={grade} onChange={(event) => setGrade(event.target.value)}>
-                  <option value="" disabled>Выбери класс</option>
+                  <option value="">Не указан</option>
                   {Array.from({ length: 11 }, (_, index) => index + 1).map((value) => (
                     <option key={value} value={String(value)}>{value} класс</option>
                   ))}

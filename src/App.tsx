@@ -539,7 +539,9 @@ function ThemeToggle({ theme, onToggle }: { theme: Theme; onToggle: () => void }
 
 function ProfileButton({ user, account, onClick, compact = false }: { user: User | null; account: AccountData | null; onClick: () => void; compact?: boolean }) {
   const name = account?.profile.full_name || (user ? user.email?.split('@')[0] : 'Войти') || 'Ученик'
-  const subtitle = user ? `${account?.profile.grade ?? 8} класс` : 'Аккаунт'
+  // Класс не выдумываем: Google его не передаёт, и пока ученик не выбрал, его нет.
+  const grade = account?.profile.grade
+  const subtitle = user ? (grade ? `${grade} класс` : account ? 'Класс не выбран' : '') : 'Аккаунт'
 
   return (
     <button className={`profile-button${compact ? ' is-compact' : ''}`} type="button" aria-label={user ? 'Открыть профиль' : 'Войти или зарегистрироваться'} onClick={onClick}>
@@ -2536,7 +2538,7 @@ function HomePage() {
                 onSubmit={submitFromForm}
                 signedIn={Boolean(user)}
                 freeSolutionUsed={guestFreeSolutionUsed}
-                defaultGrade={account ? `${account.profile.grade} класс` : ''}
+                defaultGrade={account?.profile.grade ? `${account.profile.grade} класс` : ''}
                 subjects={availableSubjects}
                 photoEnabled={featureEnabled(publicConfig, 'photo_input')}
               />

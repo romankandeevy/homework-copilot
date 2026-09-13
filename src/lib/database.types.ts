@@ -563,7 +563,7 @@ export type Database = {
           avatar_path: string | null
           created_at: string
           full_name: string
-          grade: number
+          grade: number | null
           id: string
           last_seen_at: string | null
           updated_at: string
@@ -572,7 +572,7 @@ export type Database = {
           avatar_path?: string | null
           created_at?: string
           full_name?: string
-          grade?: number
+          grade?: number | null
           id: string
           last_seen_at?: string | null
           updated_at?: string
@@ -581,7 +581,7 @@ export type Database = {
           avatar_path?: string | null
           created_at?: string
           full_name?: string
-          grade?: number
+          grade?: number | null
           id?: string
           last_seen_at?: string | null
           updated_at?: string
@@ -782,7 +782,7 @@ export type Database = {
         Returns: Json
       }
       admin_update_user_profile: {
-        Args: { p_full_name: string; p_grade: number; p_user_id: string }
+        Args: { p_full_name: string; p_grade: number | null; p_user_id: string }
         Returns: Json
       }
       admin_list_solution_library: {
