@@ -88,6 +88,12 @@ export const metadataByPath: Record<string, SeoMetadata> = {
     path: '/offer',
     robots: 'index, follow',
   },
+  '/contacts': {
+    title: 'Реквизиты и контакты - Homework Copilot',
+    description: 'Исполнитель услуг Homework Copilot: самозанятый, ИНН и контакты для связи.',
+    path: '/contacts',
+    robots: 'index, follow',
+  },
   '/admin': {
     title: 'Управление - Homework Copilot',
     description: 'Закрытая панель управления Homework Copilot.',

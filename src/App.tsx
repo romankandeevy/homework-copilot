@@ -2673,6 +2673,7 @@ function App() {
   if (pathname === '/consent') return <><LegalPage kind="consent" /><PrivacyNotice /></>
   if (pathname === '/cookies') return <><LegalPage kind="cookies" /><PrivacyNotice /></>
   if (pathname === '/offer') return <><LegalPage kind="offer" /><PrivacyNotice /></>
+  if (pathname === '/contacts') return <><LegalPage kind="contacts" /><PrivacyNotice /></>
 
   if (pathname === '/admin') {
     return <Suspense fallback={null}><AdminApp /></Suspense>

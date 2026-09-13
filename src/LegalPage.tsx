@@ -6,7 +6,7 @@ import { applySeoMetadata, getSeoMetadata } from './lib/siteMetadata'
 import { SiteFooter } from './support/SupportCenter'
 import './LegalPage.css'
 
-export type LegalPageKind = 'privacy' | 'terms' | 'consent' | 'cookies' | 'offer'
+export type LegalPageKind = 'privacy' | 'terms' | 'consent' | 'cookies' | 'offer' | 'contacts'
 
 /* Адрес для запросов по данным должен работать.
 
@@ -19,12 +19,20 @@ const contactEmail = 'roman.kandeevy@gmail.com'
 const supportEmail = contactEmail
 const operatorName = 'Роман Кандеев'
 
+/* Реквизиты исполнителя для страницы «Реквизиты и контакты». Пустая строка
+   на сайте читается как «будет указано до запуска оплаты»: выдуманный ИНН на
+   юридической странице был бы враньём. Заполнить, когда владелец пришлёт
+   данные, - и тогда же вписать их в оферту. */
+const sellerFullName: string = ''
+const sellerInn: string = ''
+
 const documents: { kind: LegalPageKind; path: string; label: string }[] = [
   { kind: 'terms', path: '/terms', label: 'Пользовательское соглашение' },
   { kind: 'privacy', path: '/privacy', label: 'Политика данных' },
   { kind: 'consent', path: '/consent', label: 'Согласие на обработку данных' },
   { kind: 'cookies', path: '/cookies', label: 'Cookie и хранилище' },
   { kind: 'offer', path: '/offer', label: 'Публичная оферта' },
+  { kind: 'contacts', path: '/contacts', label: 'Реквизиты и контакты' },
 ]
 
 const headings: Record<LegalPageKind, { kicker: string; title: string; intro: string }> = {
@@ -52,6 +60,11 @@ const headings: Record<LegalPageKind, { kicker: string; title: string; intro: st
     kicker: 'Платные услуги',
     title: 'Публичная оферта',
     intro: 'Текущий статус оплаты, баланса и будущей оферты без несуществующих платёжных обещаний.',
+  },
+  contacts: {
+    kicker: 'Исполнитель',
+    title: 'Реквизиты и контакты',
+    intro: 'Кто оказывает услуги Homework Copilot и как с ним связаться.',
   },
 }
 
@@ -289,7 +302,7 @@ function PublicOffer() {
       </section>
       <section>
         <h2>3. Что будет опубликовано до запуска</h2>
-        <p>До первого платежа здесь появятся полные реквизиты исполнителя, перечень и цена услуг, момент акцепта, порядок оплаты и выдачи чека, срок оказания, правила списания баланса, возврата и рассмотрения претензий.</p>
+        <p>Реквизиты исполнителя — на странице <a href="/contacts">«Реквизиты и контакты»</a>. До первого платежа здесь появятся перечень и цена услуг, момент акцепта, порядок оплаты и выдачи чека, срок оказания, правила списания баланса, возврата и рассмотрения претензий.</p>
       </section>
       <section>
         <h2>4. Промобаланс</h2>
@@ -303,12 +316,37 @@ function PublicOffer() {
   )
 }
 
+/* Реквизиты исполнителя. Закон о защите прав потребителей и модерация
+   Робокассы требуют, чтобы покупатель узнал продавца до оплаты: статус
+   самозанятого, ФИО и ИНН. Ссылка на эту страницу стоит в подвале каждой
+   страницы сайта. */
+function SellerDetails() {
+  return (
+    <>
+      <section>
+        <h2>1. Исполнитель</h2>
+        <p>Услуги Homework Copilot оказывает самозанятый — плательщик налога на профессиональный доход.</p>
+        <p>ФИО: {sellerFullName || 'будет указано до запуска оплаты'}<br />ИНН: {sellerInn || 'будет указан до запуска оплаты'}</p>
+      </section>
+      <section>
+        <h2>2. Связь</h2>
+        <p>Почта: <a href={`mailto:${contactEmail}`}>{contactEmail}</a>. Вопросы по решениям, балансу и аккаунту быстрее всего решаются через <a href="/support">поддержку</a> — ответ приходит прямо в личный кабинет.</p>
+      </section>
+      <section>
+        <h2>3. Документы</h2>
+        <p>Условия платных услуг — в <a href="/offer">публичной оферте</a>, правила сервиса — в <a href="/terms">пользовательском соглашении</a>, обработка данных — в <a href="/privacy">политике данных</a>.</p>
+      </section>
+    </>
+  )
+}
+
 const contentByKind: Record<LegalPageKind, () => JSX.Element> = {
   privacy: PrivacyPolicy,
   terms: TermsOfService,
   consent: PersonalDataConsent,
   cookies: CookiePolicy,
   offer: PublicOffer,
+  contacts: SellerDetails,
 }
 
 export default function LegalPage({ kind }: { kind: LegalPageKind }) {

@@ -39,6 +39,7 @@ const pages = [
   { path: '/consent', ready: '.legal-document h1', files: ['consent/index.html', 'consent.html'] },
   { path: '/cookies', ready: '.legal-document h1', files: ['cookies/index.html', 'cookies.html'] },
   { path: '/offer', ready: '.legal-document h1', files: ['offer/index.html', 'offer.html'] },
+  { path: '/contacts', ready: '.legal-document h1', files: ['contacts/index.html', 'contacts.html'] },
 ]
 
 /* Появление секций при прокрутке сделано прозрачностью, и до срабатывания

@@ -117,6 +117,8 @@ function SiteFooter({ onOpenSupport, compact = false }: { onOpenSupport?: () => 
         <p className="site-footer-disclaimer">Решения помогают разобраться, а не заменяют работу над задачей.</p>
         <nav className="site-footer-compact-links" aria-label="Служебные ссылки">
           <a href="/terms">Документы</a>
+          {/* Реквизиты исполнителя - на каждой странице, как требует модерация оплаты. */}
+          <a href="/contacts">Реквизиты</a>
           {/* Ссылки на поддержку здесь нет, когда рядом уже висит плавающая
               кнопка: два входа в одно окно на одном экране - это дубль. */}
           {onOpenSupport && <button type="button" onClick={onOpenSupport}>Поддержка</button>}
@@ -184,6 +186,7 @@ function SiteFooter({ onOpenSupport, compact = false }: { onOpenSupport?: () => 
           <a href="/consent">Согласие на обработку данных</a>
           <a href="/cookies">Cookie и хранилище</a>
           <a href="/offer">Публичная оферта</a>
+          <a href="/contacts">Реквизиты и контакты</a>
         </nav>
       </div>
       <div className="site-footer-meta">

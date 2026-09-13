@@ -280,6 +280,10 @@
       "destination": "/index.html"
     },
     {
+      "source": "/contacts",
+      "destination": "/index.html"
+    },
+    {
       "source": "/chat",
       "destination": "/index.html"
     },
