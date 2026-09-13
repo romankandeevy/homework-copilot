@@ -1737,6 +1737,57 @@ function HomePage() {
     void refreshAccount()
   }, [refreshAccount])
 
+  /* Возврат из Робокассы: `/app?payment=success&InvId=…`. Адрес только
+     говорит, какой заказ спросить: деньги зачисляет уведомление Result или
+     сверка, а не эта вкладка. Баланс в окне обновит подписка на кошелёк. */
+  const paymentReturnHandled = useRef(false)
+  const paymentUserId = user?.id ?? null
+  useEffect(() => {
+    if (!paymentUserId || paymentReturnHandled.current || !new URLSearchParams(window.location.search).has('payment')) return
+    paymentReturnHandled.current = true
+    let active = true
+
+    const followPayment = async () => {
+      const { loadPaymentStatus, readPaymentReturn, withoutPaymentReturn } = await import('./lib/payments')
+      const paymentReturn = readPaymentReturn(window.location.search)
+      window.history.replaceState({}, '', withoutPaymentReturn(window.location.href))
+      if (!paymentReturn || !active) return
+      setAccountView('wallet')
+      setAccountOpen(true)
+      if (paymentReturn.outcome === 'fail' || !paymentReturn.invId) {
+        setAccountNotice(paymentReturn.outcome === 'fail'
+          ? 'Оплата не завершена. Если деньги всё же списались, баланс пополнится сам в течение нескольких минут'
+          : 'Баланс пополнится, как только Робокасса подтвердит платёж')
+        return
+      }
+      setAccountNotice('Проверяем платёж…')
+      for (let attempt = 0; attempt < 6; attempt += 1) {
+        try {
+          // eslint-disable-next-line no-await-in-loop
+          const status = await loadPaymentStatus(paymentReturn.invId)
+          if (!active) return
+          if (status.status === 'paid') {
+            setAccountNotice(`Баланс пополнен на ${formatRubles(status.amountKopecks)}`)
+            return
+          }
+          if (status.status !== 'pending') {
+            setAccountNotice('Платёж не прошёл. Если деньги всё же списались, напиши в поддержку')
+            return
+          }
+        } catch {
+          // Сбой проверки - не повод пугать: ниже тот же спокойный ответ.
+        }
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise((resolve) => window.setTimeout(resolve, 5000))
+        if (!active) return
+      }
+      setAccountNotice('Платёж ещё обрабатывается. Баланс пополнится сам, как только Робокасса его подтвердит')
+    }
+
+    void followPayment()
+    return () => { active = false }
+  }, [paymentUserId])
+
   useEffect(() => {
     if (!supabaseClient || !user) return
 

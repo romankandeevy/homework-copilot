@@ -21,6 +21,8 @@ import { recordError, recordRequestLog, requestAddress, requestIdOf, requestUser
 import { solveWithKie } from './homeworkSolver.ts'
 import { parsePromptPreviewInput, PromptPreviewError, runPromptPreview } from './promptPreview.ts'
 import type { PromptPreviewInput, PromptPreviewSolve } from './promptPreview.ts'
+import { reconcilePaymentOrders } from './payments.ts'
+import type { RobokassaConfig } from './robokassa.ts'
 
 export type AdminServerOptions = {
   supabaseUrl?: string
@@ -35,6 +37,8 @@ export type AdminServerOptions = {
   telegramOwnerChatId?: string
   resendApiKey?: string
   resendFrom?: string
+  /* Сверка заказов Робокассы идёт этим же cron. Нет ключей - сверки нет. */
+  robokassa?: RobokassaConfig | null
   fetchImpl?: typeof fetch
 }
 
@@ -483,7 +487,17 @@ async function runCron(options: AdminServerOptions, body: Record<string, unknown
   // Внешние сервисы проверяем раз в пять минут: чаще - лишняя нагрузка на них.
   const minute = new Date().getUTCMinutes()
   const health = minute % 5 === 0 ? await runHealthChecks(options) : []
-  return { delivered: results.length, health: health.length }
+
+  /* Заказы, по которым Робокасса не прислала уведомление: деньги могли
+     списаться, а Result не дойти. Каждую минуту - база сама отдаёт только
+     те, по которым пора спросить. Сбой сверки не роняет остальной cron. */
+  let payments = 0
+  try {
+    payments = (await reconcilePaymentOrders(service, options.robokassa ?? null, options.fetchImpl ?? fetch)).checked
+  } catch (reconcileError) {
+    console.log(JSON.stringify({ event: 'robokassa_reconcile_unavailable', message: reconcileError instanceof Error ? reconcileError.message : 'unknown' }))
+  }
+  return { delivered: results.length, health: health.length, payments }
 }
 
 /* ------------------------------------------------------------------------

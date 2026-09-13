@@ -1,0 +1,136 @@
+import { createHash } from 'node:crypto'
+import { describe, expect, it } from 'vitest'
+import {
+  buildPaymentUrl,
+  classifyOpState,
+  formatOutSum,
+  opStateUrl,
+  parseOpState,
+  parseOutSumKopecks,
+  resultSignature,
+  robokassaConfigFromEnv,
+  verifyResultNotice,
+} from './robokassa.ts'
+import type { RobokassaConfig } from './robokassa.ts'
+
+const md5 = (value: string) => createHash('md5').update(value, 'utf8').digest('hex')
+
+const config: RobokassaConfig = {
+  merchantLogin: 'homework-copilot',
+  hash: 'md5',
+  live: { password1: 'live-one', password2: 'live-two' },
+  test: { password1: 'test-one', password2: 'test-two' },
+  testMode: false,
+}
+
+describe('robokassa config', () => {
+  it('turns payments off when the passwords of the active mode are missing', () => {
+    expect(robokassaConfigFromEnv({})).toBeNull()
+    expect(robokassaConfigFromEnv({ ROBOKASSA_MERCHANT_LOGIN: 'shop', ROBOKASSA_PASSWORD1: 'a' })).toBeNull()
+    expect(robokassaConfigFromEnv({ ROBOKASSA_MERCHANT_LOGIN: 'shop', ROBOKASSA_TEST_MODE: '1', ROBOKASSA_PASSWORD1: 'a', ROBOKASSA_PASSWORD2: 'b' })).toBeNull()
+  })
+
+  it('reads the test mode and falls back to md5 for an unknown hash', () => {
+    const parsed = robokassaConfigFromEnv({
+      ROBOKASSA_MERCHANT_LOGIN: 'shop',
+      ROBOKASSA_TEST_MODE: 'true',
+      ROBOKASSA_TEST_PASSWORD1: 'a',
+      ROBOKASSA_TEST_PASSWORD2: 'b',
+      ROBOKASSA_HASH: 'crc32',
+    })
+    expect(parsed).toMatchObject({ merchantLogin: 'shop', testMode: true, hash: 'md5', live: null })
+  })
+})
+
+describe('robokassa amounts', () => {
+  it('formats OutSum once, the same way for the link and the signature', () => {
+    expect(formatOutSum(15000)).toBe('150.00')
+    expect(formatOutSum(15050)).toBe('150.50')
+  })
+
+  it('parses the sums Robokassa sends back and refuses anything finer than a kopeck', () => {
+    expect(parseOutSumKopecks('150.000000')).toBe(15000)
+    expect(parseOutSumKopecks('150,5')).toBe(15050)
+    expect(parseOutSumKopecks('150')).toBe(15000)
+    expect(parseOutSumKopecks('150.001')).toBeNull()
+    expect(parseOutSumKopecks('-150')).toBeNull()
+  })
+})
+
+describe('robokassa payment link', () => {
+  it('signs MerchantLogin:OutSum:InvId:Password1 with the live pair', () => {
+    const url = new URL(buildPaymentUrl(config, { invId: 100001, amountKopecks: 15000, isTest: false }))
+    expect(url.origin + url.pathname).toBe('https://auth.robokassa.ru/Merchant/Index.aspx')
+    expect(url.searchParams.get('OutSum')).toBe('150.00')
+    expect(url.searchParams.get('InvId')).toBe('100001')
+    expect(url.searchParams.get('SignatureValue')).toBe(md5('homework-copilot:150.00:100001:live-one'))
+    expect(url.searchParams.has('IsTest')).toBe(false)
+  })
+
+  it('uses the test pair and marks the link as a test', () => {
+    const url = new URL(buildPaymentUrl(config, { invId: 100002, amountKopecks: 5000, isTest: true }))
+    expect(url.searchParams.get('SignatureValue')).toBe(md5('homework-copilot:50.00:100002:test-one'))
+    expect(url.searchParams.get('IsTest')).toBe('1')
+  })
+})
+
+describe('robokassa result notice', () => {
+  const notice = (password2: string, extra: Record<string, string> = {}) => {
+    const params = new URLSearchParams({ OutSum: '150.000000', InvId: '100001', ...extra })
+    params.set('SignatureValue', resultSignature('md5', '150.000000', '100001', password2, params).toUpperCase())
+    return params
+  }
+
+  it('accepts a live notice signed with password 2, in either letter case', () => {
+    const check = verifyResultNotice(config, notice('live-two', { PaymentMethod: 'BankCard' }))
+    expect(check).toEqual({ ok: true, notice: { invId: 100001, amountKopecks: 15000, isTest: false, payload: { OutSum: '150.000000', InvId: '100001', PaymentMethod: 'BankCard' } } })
+  })
+
+  it('tells a test notice by the pair that signed it', () => {
+    const check = verifyResultNotice(config, notice('test-two'))
+    expect(check.ok && check.notice.isTest).toBe(true)
+  })
+
+  it('refuses a notice signed with password 1 or tampered with', () => {
+    expect(verifyResultNotice(config, notice('live-one'))).toEqual({ ok: false, reason: 'bad signature' })
+    const tampered = notice('live-two')
+    tampered.set('OutSum', '1500.000000')
+    expect(verifyResultNotice(config, tampered)).toEqual({ ok: false, reason: 'bad signature' })
+  })
+
+  it('includes shp_ parameters after the password in alphabetical order', () => {
+    const params = new URLSearchParams({ OutSum: '150.00', InvId: '100001', shp_b: '2', shp_a: '1' })
+    params.set('SignatureValue', md5('150.00:100001:live-two:shp_a=1:shp_b=2'))
+    expect(verifyResultNotice(config, params).ok).toBe(true)
+  })
+})
+
+describe('robokassa operation state', () => {
+  const xml = (result: number, state?: number) => `<?xml version="1.0" encoding="utf-8"?>
+<OperationStateResponse xmlns="http://merchant.roboxchange.com/WebService/">
+  <Result><Code>${result}</Code></Result>
+  ${state === undefined ? '' : `<State><Code>${state}</Code><RequestDate>2026-09-13T10:00:00+03:00</RequestDate></State>`}
+  <Info><IncCurrLabel>BankCard</IncCurrLabel><IncSum>150.000000</IncSum><OutSum>150.000000</OutSum></Info>
+</OperationStateResponse>`
+
+  it('credits only a completed payment', () => {
+    expect(classifyOpState(parseOpState(xml(0, 100)))).toBe('paid')
+    expect(parseOpState(xml(0, 100))?.outSumKopecks).toBe(15000)
+    expect(classifyOpState(parseOpState(xml(0, 50)))).toBe('pending')
+    expect(classifyOpState(parseOpState(xml(0, 5)))).toBe('pending')
+  })
+
+  it('separates a cancelled payment, an unknown invoice and a broken answer', () => {
+    expect(classifyOpState(parseOpState(xml(0, 10)))).toBe('cancelled')
+    expect(classifyOpState(parseOpState(xml(0, 60)))).toBe('cancelled')
+    expect(classifyOpState(parseOpState(xml(3)))).toBe('not_found')
+    expect(classifyOpState(parseOpState(xml(1)))).toBe('error')
+    expect(classifyOpState(parseOpState('<html>maintenance</html>'))).toBe('error')
+  })
+
+  it('signs the state request MerchantLogin:InvoiceID:Password2', () => {
+    const url = new URL(opStateUrl(config, 100001, false) ?? '')
+    expect(url.searchParams.get('Signature')).toBe(md5('homework-copilot:100001:live-two'))
+    expect(url.searchParams.has('IsTest')).toBe(false)
+  })
+})

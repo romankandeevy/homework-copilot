@@ -20,6 +20,10 @@
     "api/admin.ts": {
       "includeFiles": "{server/**,src/lib/**,src/textbooks/**}",
       "maxDuration": 300
+    },
+    "api/payment.ts": {
+      "includeFiles": "{server/**,src/lib/**}",
+      "maxDuration": 30
     }
   },
   "redirects": [

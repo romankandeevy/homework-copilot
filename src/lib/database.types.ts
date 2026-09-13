@@ -1119,6 +1119,16 @@ export type Database = {
         Returns: string
       }
       claim_admin_cron: { Args: { p_token: string }; Returns: Json }
+      create_payment_order: { Args: { p_amount: number; p_is_test: boolean; p_user_id: string }; Returns: Json }
+      confirm_payment_order: {
+        Args: { p_amount: number; p_inv_id: number; p_is_test: boolean; p_payload?: Json; p_via: string }
+        Returns: Json
+      }
+      payment_order_status: { Args: { p_inv_id: number; p_user_id: string }; Returns: Json }
+      claim_payment_order_check: { Args: { p_inv_id: number; p_user_id: string }; Returns: boolean }
+      payment_orders_due: { Args: { p_limit?: number }; Returns: Json }
+      close_payment_order: { Args: { p_inv_id: number; p_status: string }; Returns: boolean }
+      payment_user_is_staff: { Args: { p_user_id: string }; Returns: boolean }
       complete_admin_notifications: { Args: { p_results: Json }; Returns: undefined }
       record_health_check: {
         Args: { p_detail?: string | null; p_latency_ms?: number | null; p_ok: boolean; p_service: string; p_status: string }

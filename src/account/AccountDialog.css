@@ -594,3 +594,7 @@
 .account-promo-form button:disabled { opacity: 0.6; cursor: not-allowed; }
 .account-promo-message { margin: 0; font-size: var(--text-small); color: var(--color-success-strong); }
 .account-promo-message.is-error { color: color-mix(in oklch, var(--color-danger) 75%, var(--color-text)); }
+
+/* Сумма - цифры, а не код: заглавные буквы промокода ей не нужны. */
+.account-top-up-form input { text-transform: none; font-family: var(--font-mono); }
+.account-top-up-note { margin: 0; color: var(--color-text-subtle); font-size: var(--text-small); }

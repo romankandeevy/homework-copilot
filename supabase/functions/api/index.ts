@@ -23,7 +23,10 @@
    ученика проверяет сама функция на Vercel. */
 
 const upstreamOrigin = 'https://homework-copilot-taupe.vercel.app'
-const routes = new Set(['solve', 'chat', 'support', 'admin'])
+/* `payment` зовут двое: браузер ученика и сама Робокасса - её уведомление
+   Result приходит сюда же, с серверов в России, для которых *.vercel.app
+   так же ненадёжен, как для учеников. */
+const routes = new Set(['solve', 'chat', 'support', 'admin', 'payment'])
 
 const forwardedRequestHeaders = [
   'accept',
@@ -149,7 +152,8 @@ Deno.serve(async (request: Request) => {
   const hasBody = request.method !== 'GET' && request.method !== 'HEAD' && request.method !== 'OPTIONS'
   let upstream: Response
   try {
-    upstream = await fetch(`${upstreamOrigin}/api/${route}`, {
+    // Строка запроса идёт дальше как есть: Робокасса умеет слать Result и GET.
+    upstream = await fetch(`${upstreamOrigin}/api/${route}${new URL(request.url).search}`, {
       method: request.method,
       headers,
       ...(hasBody ? { body: await request.arrayBuffer() } : {}),

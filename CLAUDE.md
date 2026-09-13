@@ -59,7 +59,8 @@ React 19, TypeScript, Vite 8, motion. Serverless-функции на Vercel (Nod
   `homeworkModels.ts` (модель под предмет), `worksheet.ts` (калькулятор
   черновика и происхождение ответа), `subjectRules.ts` и `gradeRules.ts`
   (требования к записи по предмету и допустимый приём по классу),
-  `chat*.ts`, `support.ts`.
+  `chat*.ts`, `support.ts`, `payments.ts` и `robokassa.ts` (пополнение
+  баланса через Робокассу, правила - «Оплата через Робокассу» в AGENTS.md).
 - `api/` — тонкие обёртки Vercel над `server/`.
 - `src/admin/` — админка на `/admin`: роли, обязательная 2FA, аудит, разделы
   по ТЗ. Правила и устройство — «Админка» в AGENTS.md. Почтовые уведомления

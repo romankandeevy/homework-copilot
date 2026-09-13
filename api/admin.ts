@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { handleAdminRequest } from '../server/admin.ts'
+import { robokassaConfigFromEnv } from '../server/robokassa.ts'
 
 export default async function handler(request: IncomingMessage, response: ServerResponse) {
   await handleAdminRequest(request, response, {
@@ -13,5 +14,7 @@ export default async function handler(request: IncomingMessage, response: Server
     telegramOwnerChatId: process.env.TELEGRAM_OWNER_CHAT_ID,
     resendApiKey: process.env.RESEND_API_KEY,
     resendFrom: process.env.RESEND_FROM,
+    // Сверка незакрытых заказов идёт тем же cron, что и уведомления.
+    robokassa: robokassaConfigFromEnv(process.env),
   })
 }

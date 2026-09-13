@@ -31,6 +31,9 @@ import { supabase } from '../lib/supabase'
 import { applicationPath } from '../lib/appPath'
 import { formatRubles } from '../lib/currency'
 import { minimumSolutionPriceKopecks } from '../lib/solutionPricing'
+import { createPayment, loadPaymentConfig } from '../lib/payments'
+import type { PaymentConfig } from '../lib/payments'
+import { parseTopUpRubles, topUpRangeLabel } from '../lib/topUpLimits'
 import { deleteMyAccount } from '../lib/accountDeletion'
 import { forgetPendingLegalAcceptance, rememberPendingLegalAcceptance } from '../lib/legalConsent'
 import { getGuestId } from '../lib/guestSolutions'
@@ -708,6 +711,71 @@ function promoErrorMessage(message: string) {
   return 'Не получилось применить промокод'
 }
 
+/* Пополнение через Робокассу. Карточки нет, пока оплата не подключена на
+   сервере: форма, которая ведёт в никуда, - обещание, которого нет в коде.
+   В тестовом режиме её видят только служебные аккаунты, это решает сервер.
+   Сумму проверяют и форма, и сервер, и база - из браузера её не навязать. */
+function TopUpCard() {
+  const [config, setConfig] = useState<PaymentConfig | null>(null)
+  const [amount, setAmount] = useState('')
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!supabase) return
+    let active = true
+    loadPaymentConfig()
+      .then((next) => { if (active) setConfig(next) })
+      .catch(() => undefined)
+    return () => { active = false }
+  }, [])
+
+  if (!config?.enabled) return null
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (sending) return
+    const parsed = parseTopUpRubles(amount)
+    if (!parsed.ok) {
+      setError(parsed.error)
+      return
+    }
+    setSending(true)
+    setError('')
+    try {
+      const payment = await createPayment(parsed.kopecks)
+      window.location.assign(payment.url)
+    } catch (paymentError) {
+      setError(paymentError instanceof Error ? paymentError.message : 'Не получилось перейти к оплате')
+      setSending(false)
+    }
+  }
+
+  return (
+    <section className="account-plan-card" aria-labelledby="account-top-up-title">
+      <header>
+        <h3 id="account-top-up-title">Пополнить баланс</h3>
+        <span>{topUpRangeLabel()}</span>
+      </header>
+      <form className="account-promo-form account-top-up-form" onSubmit={submit} noValidate>
+        <label className="sr-only" htmlFor="account-top-up-amount">Сумма пополнения в рублях</label>
+        <input
+          id="account-top-up-amount"
+          value={amount}
+          onChange={(event) => { setAmount(event.target.value.slice(0, 12)); setError('') }}
+          inputMode="numeric"
+          placeholder="Сумма, ₽"
+          autoComplete="off"
+        />
+        <button type="submit" disabled={sending}>{sending ? 'Переходим…' : 'Перейти к оплате'}</button>
+      </form>
+      <p className="account-top-up-note">Оплата проходит на странице Робокассы. Деньги придут на баланс, как только она подтвердит платёж.</p>
+      {config.testMode && <p className="account-top-up-note">Тестовый режим: деньги не списываются, форму видят только служебные аккаунты.</p>}
+      {error && <p className="account-promo-message is-error" role="alert">{error}</p>}
+    </section>
+  )
+}
+
 /* Тариф и промокод. Тариф задаёт дневной предел решений и состав услуги,
    цену решения он не меняет. Промокод начисляет деньги или подключает
    тариф - что именно, решает админка. Ввод промокода можно выключить
@@ -1005,6 +1073,8 @@ function ProfileView({ user, account, notice, initialView, theme, onToggleTheme,
               <span>за решение, точная цена зависит от задачи</span>
             </div>
           </section>
+
+          <TopUpCard />
 
           <PlanAndPromo onReloadAccount={onReloadAccount} />
 
