@@ -38,6 +38,9 @@ export function NotFoundPage() {
 
       <main className="not-found" aria-labelledby="not-found-title">
         <div className="not-found-message">
+          {/* Номер ошибки - фоном за этой колонкой, а не заголовком: крупное
+              «404» узнают с первого взгляда, а что случилось, сказано словами. */}
+          <span className="not-found-watermark" aria-hidden="true">404</span>
           <span className="not-found-kicker">Ошибка 404</span>
           <h1 id="not-found-title">Страница не найдена</h1>
           <p>

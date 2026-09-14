@@ -7,6 +7,7 @@
   display: flex;
   min-height: 100dvh;
   flex-direction: column;
+  overflow: clip;
   isolation: isolate;
   background: var(--color-canvas);
   color: var(--color-text);
@@ -28,6 +29,33 @@
   -webkit-mask-image: linear-gradient(to bottom, #000, transparent);
   mask-image: linear-gradient(to bottom, #000, transparent);
   pointer-events: none;
+}
+
+/* Крупное «404» фоном: серое, под наклоном, за колонкой с заголовком, а
+   не посреди страницы - там его закрывала карта разделов, и от «404»
+   оставалось «4С». Цвет - текст на шести процентах: в обеих темах это тень
+   на бумаге, а не второй заголовок. Что шире колонки на телефоне, страница
+   обрезает (`overflow: clip` выше), прокрутки вбок нет. */
+.not-found-watermark {
+  position: absolute;
+  z-index: -1;
+  top: 50%;
+  left: 50%;
+  color: color-mix(in oklch, var(--color-text) 6%, transparent);
+  font-family: var(--font-display);
+  font-size: clamp(10rem, 20vw, 18rem);
+  font-weight: var(--weight-display);
+  line-height: 0.8;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+  transform: translate(-50%, -50%) rotate(-10deg);
+  pointer-events: none;
+  user-select: none;
+  animation: not-found-watermark-in 900ms var(--ease-out) both;
+}
+
+@keyframes not-found-watermark-in {
+  from { opacity: 0; transform: translate(-50%, -46%) rotate(-6deg) scale(0.96); }
 }
 
 .not-found-header,
@@ -69,6 +97,7 @@
 /* ─── Что случилось ────────────────────────────────────────────────── */
 
 .not-found-message {
+  position: relative;
   display: grid;
   justify-items: start;
   gap: var(--space-5);
