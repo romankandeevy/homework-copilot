@@ -268,6 +268,14 @@ describe('Homework Copilot task flow', () => {
     expect(document.head.querySelector('meta[name="robots"]')).toHaveAttribute('content', 'noindex, nofollow')
   })
 
+  it('на опечатке в адресе предлагает ближайший раздел главной кнопкой', () => {
+    window.history.replaceState({}, '', '/shedule')
+    render(<App />)
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Страница не найдена' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Открыть «Расписание»' })).toHaveAttribute('href', '/schedule')
+  })
+
   it('оставляет прежний адрес `/main` рабочим', () => {
     window.history.replaceState({}, '', '/main')
     render(<App />)

@@ -99,104 +99,6 @@ function SupportLauncher({ onClick }: { onClick: () => void }) {
   )
 }
 
-/* Подвал двух видов.
-
-   Полный - на витрине и на страницах документов: там он и есть содержание
-   страницы. В рабочем приложении он был вреден: замер 8 сентября на экране
-   375×812 дал 998 пикселей подвала при вьюпорте 812. Человек открыл
-   приложение решить задачу, а под ней развёрнут портал с пятью документами
-   и вторым меню, повторяющим нижнюю панель слово в слово.
-
-   Рабочий подвал - одна строка. Документы никуда не деваются: каждая
-   юридическая страница перечисляет все остальные, поэтому одной ссылки
-   хватает, чтобы дойти до любой. */
-function SiteFooter({ onOpenSupport, compact = false }: { onOpenSupport?: () => void; compact?: boolean }) {
-  if (compact) {
-    return (
-      <footer className="site-footer is-compact">
-        <p className="site-footer-disclaimer">Решения помогают разобраться, а не заменяют работу над задачей.</p>
-        <nav className="site-footer-compact-links" aria-label="Служебные ссылки">
-          <a href="/terms">Документы</a>
-          {/* Реквизиты исполнителя - на каждой странице, как требует модерация оплаты. */}
-          <a href="/contacts">Реквизиты</a>
-          {/* Ссылки на поддержку здесь нет, когда рядом уже висит плавающая
-              кнопка: два входа в одно окно на одном экране - это дубль. */}
-          {onOpenSupport && <button type="button" onClick={onOpenSupport}>Поддержка</button>}
-          <span>© 2026 Homework Copilot</span>
-        </nav>
-      </footer>
-    )
-  }
-
-  return (
-    <footer className="site-footer">
-      <div className="site-footer-hero">
-        <a className="site-footer-brand" href="/">
-          <span className="site-footer-monogram" aria-hidden="true"><span>H</span><span>C</span></span>
-          <span className="site-footer-brand-copy">
-            <strong><span>Homework</span><span>Copilot</span></strong>
-            <small>Понятная домашняя работа</small>
-          </span>
-        </a>
-
-        <section className="site-footer-support" aria-labelledby="site-footer-support-title">
-          <div>
-            <span className="site-footer-eyebrow">Поддержка</span>
-            <h2 id="site-footer-support-title">Помощь рядом</h2>
-            <p>Ответим прямо в личном кабинете</p>
-          </div>
-          {onOpenSupport ? (
-            <button className="site-footer-support-action" type="button" onClick={onOpenSupport}>
-              Написать в поддержку
-              <ArrowRight size={18} weight="bold" aria-hidden="true" />
-            </button>
-          ) : (
-            <a className="site-footer-support-action" href="/support">
-              Написать в поддержку
-              <ArrowRight size={18} weight="bold" aria-hidden="true" />
-            </a>
-          )}
-        </section>
-      </div>
-
-      <div className="site-footer-directory">
-
-        <nav className="site-footer-column" aria-label="Сервис">
-          <h2>Сервис</h2>
-          {/* Только запущенное. «ЦДЗ» отсюда убран: пункт обещал учебники,
-              которых в продукте нет, и вёл на заглушку «раздел закрыт». */}
-          <a href="/app">Решить задачу</a>
-          <a href="/solutions">Решения</a>
-          <a href="/chat">ИИ-чат</a>
-          <a href="/schedule">Расписание</a>
-        </nav>
-
-        {/* «Написать в поддержку» стояло в подвале дважды: крупной кнопкой
-            в блоке «Помощь рядом» и строкой здесь, в двадцати сантиметрах
-            друг от друга. Кнопка выше заметнее, строка ушла. */}
-        <nav className="site-footer-column" aria-label="Помощь">
-          <h2>Помощь</h2>
-          <a href="/support#faq">Частые вопросы</a>
-        </nav>
-
-        <nav className="site-footer-column site-footer-column-documents" aria-label="Документы">
-          <h2>Документы</h2>
-          <a href="/terms">Пользовательское соглашение</a>
-          <a href="/privacy">Политика данных</a>
-          <a href="/consent">Согласие на обработку данных</a>
-          <a href="/cookies">Cookie и хранилище</a>
-          <a href="/offer">Публичная оферта</a>
-          <a href="/contacts">Реквизиты и контакты</a>
-        </nav>
-      </div>
-      <div className="site-footer-meta">
-        <span>© 2026 Homework Copilot</span>
-        <span className="site-footer-disclaimer">Решения помогают разобраться, а не заменяют работу над задачей.</span>
-      </div>
-    </footer>
-  )
-}
-
 /* «Печатает» в обе стороны: канал support-typing:<id> общий с админкой.
    Канал с тем же именем клиент отдаёт повторно, поэтому прежний, ещё не
    закрытый канал снимаем до подписки - иначе новая подписка молча не
@@ -495,4 +397,4 @@ export function SupportCenter({ user, supabaseClient, initialCategory, initialCo
   )
 }
 
-export { SiteFooter, SupportLauncher }
+export { SupportLauncher }

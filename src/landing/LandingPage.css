@@ -1162,15 +1162,12 @@
   margin-top: var(--space-2);
 }
 
-/* Подвал у продукта общий, но на витрине он должен встать по той же
-   сетке, что и секции, и не отваливаться от последнего экрана. */
+/* Подвал у продукта общий. Колонку и поля он по умолчанию берёт ровно
+   те, что у `.landing-shell`, поэтому здесь только расстояние до
+   последнего экрана. */
 .landing-final { padding-bottom: clamp(1.5rem, 3vw, 2.5rem); }
 
-.landing > .site-footer {
-  width: min(100% - 2 * clamp(1.25rem, 4vw, 3.5rem), 84rem - 2 * clamp(1.25rem, 4vw, 3.5rem));
-  margin-top: clamp(2.5rem, 5vw, 4.5rem);
-  margin-bottom: clamp(1.25rem, 4vw, 3.5rem);
-}
+.landing > .site-footer { margin-top: clamp(2.5rem, 5vw, 4.5rem); }
 
 /* ─── Адаптив ──────────────────────────────────────────────────────── */
 

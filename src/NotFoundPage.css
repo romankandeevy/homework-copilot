@@ -1,0 +1,313 @@
+/* Страница, которой нет. Своих красок нет: всё из tokens.css. Кобальт - у
+   главного действия и у раздела, который угадан по опечатке; красный - только
+   у узла «Ты здесь», потому что это и есть ошибка. */
+
+.not-found-page {
+  position: relative;
+  display: flex;
+  min-height: 100dvh;
+  flex-direction: column;
+  isolation: isolate;
+  background: var(--color-canvas);
+  color: var(--color-text);
+}
+
+/* Клетка тетради, как на первом экране витрины: тот же шаг, гаснет книзу.
+   По ней страница узнаётся своей ещё до того, как прочитан заголовок. */
+.not-found-page::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 0 0 auto;
+  height: min(44rem, 85vh);
+  background-image:
+    linear-gradient(var(--color-border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--color-border) 1px, transparent 1px);
+  background-size: 2.5rem 2.5rem;
+  opacity: 0.5;
+  -webkit-mask-image: linear-gradient(to bottom, #000, transparent);
+  mask-image: linear-gradient(to bottom, #000, transparent);
+  pointer-events: none;
+}
+
+.not-found-header,
+.not-found {
+  width: min(calc(100% - 3rem), 76rem);
+  margin-inline: auto;
+}
+
+.not-found-header {
+  display: flex;
+  min-height: 5rem;
+  align-items: center;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.not-found-brand {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  gap: var(--space-4);
+  color: var(--color-text);
+  font-family: var(--font-display);
+  font-size: clamp(1rem, 1.1vw, 1.15rem);
+  font-weight: var(--weight-display);
+  line-height: 1.1;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.not-found {
+  display: grid;
+  flex: 1;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  align-items: center;
+  gap: clamp(2.5rem, 6vw, 6rem);
+  padding-block: clamp(3rem, 8vw, 6rem);
+}
+
+/* ─── Что случилось ────────────────────────────────────────────────── */
+
+.not-found-message {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-5);
+}
+
+.not-found-kicker,
+.not-found-route h2 {
+  color: var(--color-text-subtle);
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.08em;
+  line-height: var(--leading-ui);
+  text-transform: uppercase;
+}
+
+.not-found-message h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-title);
+  font-weight: var(--weight-display);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-title);
+  /* «Страница / не найдена», а не «Страница не / найдена». */
+  text-wrap: balance;
+}
+
+.not-found-message p {
+  max-width: 34rem;
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-lead);
+  line-height: var(--leading-copy);
+}
+
+/* Адрес пришёл из строки браузера и может быть каким угодно: рвётся по
+   любому знаку, а не расталкивает колонку. */
+.not-found-message code {
+  padding: 0.05em 0.35em;
+  border-radius: var(--radius-xs);
+  background: var(--color-surface-sunken);
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  overflow-wrap: anywhere;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+.not-found-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.not-found-primary,
+.not-found-secondary {
+  display: inline-flex;
+  min-height: 3.25rem;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-6);
+  border-radius: var(--radius-control);
+  font-size: var(--text-ui);
+  font-weight: var(--weight-semibold);
+  text-decoration: none;
+  transition:
+    background var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out);
+}
+
+.not-found-primary {
+  border: 1px solid transparent;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.not-found-primary:hover { background: var(--color-accent-hover); transform: translateY(-1px); }
+.not-found-primary:active { transform: none; }
+
+.not-found-secondary {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.not-found-secondary:hover { border-color: var(--color-border-strong); background: var(--color-surface-raised); }
+
+/* ─── Куда идти ────────────────────────────────────────────────────── */
+
+.not-found-route {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-5) var(--space-3) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
+}
+
+.not-found-route h2 {
+  margin: 0;
+  padding-inline: var(--space-3);
+}
+
+.not-found-route ol {
+  /* Центр узла от левого и верхнего края строки. По вертикали это середина
+     первой строки подписи: отступ строки плюс половина её высоты. */
+  --route-x: 1.5rem;
+  --route-y: calc(var(--space-3) + 0.725rem);
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.not-found-route li { position: relative; }
+
+/* Отрезок до следующего узла. Узлы стоят в своих строках на одной высоте,
+   поэтому отрезок длиной в строку попадает ровно в следующий узел. */
+.not-found-route li:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  top: var(--route-y);
+  left: calc(var(--route-x) - 1px);
+  width: 2px;
+  height: 100%;
+  background: var(--color-border);
+  transform-origin: top;
+  animation: not-found-route-draw var(--motion-route) var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 90ms);
+}
+
+/* От «Ты здесь» до маршрута дороги нет - только пунктир. */
+.not-found-route li.is-here::before {
+  background: repeating-linear-gradient(to bottom, var(--color-border-strong) 0 4px, transparent 4px 8px);
+}
+
+@keyframes not-found-route-draw {
+  from { transform: scaleY(0); }
+}
+
+.not-found-row {
+  display: grid;
+  min-height: 3rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-3) var(--space-3) calc(var(--route-x) * 2);
+  border-radius: var(--radius-control);
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+a.not-found-row { transition: background var(--motion-fast) var(--ease-out); }
+a.not-found-row:hover { background: var(--color-surface-raised); }
+
+.not-found-node {
+  position: absolute;
+  z-index: 1;
+  top: calc(var(--route-y) - 0.4375rem);
+  left: calc(var(--route-x) - 0.4375rem);
+  width: 0.875rem;
+  height: 0.875rem;
+  border: 2px solid var(--color-border-strong);
+  border-radius: 50%;
+  background: var(--color-surface);
+  transition: background var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out);
+}
+
+.is-here .not-found-node { border-color: var(--color-danger); }
+
+a.not-found-row:hover .not-found-node,
+a.not-found-row:focus-visible .not-found-node,
+.is-suggested .not-found-node {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+}
+
+.not-found-stop {
+  display: grid;
+  min-width: 0;
+  gap: 0.125rem;
+}
+
+.not-found-stop strong {
+  font-size: var(--text-body);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-ui);
+}
+
+.not-found-stop small {
+  color: var(--color-text-muted);
+  font-size: var(--text-small);
+  line-height: var(--leading-ui);
+}
+
+.is-here .not-found-stop small {
+  overflow: hidden;
+  color: var(--color-text-subtle);
+  font-family: var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.is-suggested .not-found-stop small { color: var(--color-brand-accent); }
+
+.not-found-stop-arrow {
+  margin-top: 0.15rem;
+  color: var(--color-text-subtle);
+  transition: color var(--motion-fast) var(--ease-out), transform var(--motion-fast) var(--ease-out);
+}
+
+a.not-found-row:hover .not-found-stop-arrow { color: var(--color-text); transform: translateX(2px); }
+
+/* Подвал той же колонкой, что шапка и содержимое. */
+.not-found-page > .site-footer.is-compact {
+  width: min(calc(100% - 3rem), 76rem);
+  margin-top: 0;
+}
+
+@media (max-width: 860px) {
+  .not-found {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: var(--space-10);
+    padding-block: var(--space-10) var(--space-12);
+  }
+}
+
+@media (max-width: 560px) {
+  .not-found-header,
+  .not-found,
+  .not-found-page > .site-footer.is-compact { width: min(calc(100% - 2rem), 76rem); }
+  .not-found-header { min-height: 4.25rem; }
+  .not-found-actions { width: 100%; flex-direction: column; }
+  .not-found-primary,
+  .not-found-secondary { width: 100%; }
+  .not-found-route { padding: var(--space-4) var(--space-1) var(--space-1); }
+}

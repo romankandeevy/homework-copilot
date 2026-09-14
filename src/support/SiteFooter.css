@@ -1,0 +1,214 @@
+/* Подвал - нижнее поле страницы. Плоский: DESIGN.md поднимает тенью только
+   то, что действительно лежит поверх другого слоя. Колонка и поля по
+   умолчанию те же, что у витрины (`.landing-shell`), страница документов
+   задаёт свои через `--footer-column` и `--footer-gutter`. Линия сверху идёт
+   во всю ширину экрана, как у шапки витрины. */
+.site-footer {
+  --footer-column: 84rem;
+  --footer-gutter: clamp(1.25rem, 4vw, 3.5rem);
+  width: 100%;
+  margin-top: clamp(4rem, 8vw, 6rem);
+  padding-inline: calc(max(0px, (100% - var(--footer-column)) / 2) + var(--footer-gutter));
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+}
+
+.site-footer-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 0.8fr) minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: var(--space-8) clamp(1.5rem, 4vw, 4rem);
+  padding-block: clamp(2.5rem, 5vw, 4rem);
+}
+
+.site-footer-about {
+  display: grid;
+  align-content: start;
+  justify-items: start;
+  gap: var(--space-3);
+}
+
+/* Знак и имя - те же, что в шапке витрины, и того же размера. */
+.site-footer-brand {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  gap: var(--space-4);
+  color: var(--color-text);
+  font-family: var(--font-display);
+  font-size: clamp(1rem, 1.1vw, 1.15rem);
+  font-weight: var(--weight-display);
+  line-height: 1.1;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.site-footer-about p {
+  max-width: 21rem;
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-small);
+  line-height: var(--leading-copy);
+}
+
+/* Дисплейный шрифт в подвале один раз и весом 400, как везде в продукте. */
+.site-footer-about .site-footer-slogan {
+  margin-top: var(--space-2);
+  color: var(--color-text);
+  font-family: var(--font-display);
+  font-size: clamp(1.35rem, 2vw, 1.75rem);
+  font-weight: var(--weight-display);
+  line-height: var(--leading-compact);
+  /* «Сфоткал. / Понял. Сдал.», а не одинокое «Сдал.» на второй строке. */
+  text-wrap: balance;
+}
+
+.site-footer-column {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  justify-items: start;
+}
+
+/* Заголовок колонки - подпись, а не заголовок раздела: моноширинный, как
+   подписи полей по всему продукту, и в рост ссылки, чтобы стоять на одной
+   линии со знаком слева. */
+.site-footer .site-footer-column h2 {
+  display: flex;
+  min-height: 2.75rem;
+  align-items: center;
+  margin: 0;
+  color: var(--color-text-subtle);
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.08em;
+  line-height: var(--leading-ui);
+  text-transform: uppercase;
+}
+
+/* Ссылки не ниже 44 пикселей - по ним целятся пальцем. Подчёркивание
+   появляется при наведении, а место под него есть всегда: строка не прыгает. */
+.site-footer-column a,
+.site-footer-column button,
+.site-footer-compact-links a,
+.site-footer-compact-links button {
+  position: relative;
+  display: inline-flex;
+  max-width: 100%;
+  min-height: 2.75rem;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 0.28em;
+  transition: color var(--motion-fast) var(--ease-out), text-decoration-color var(--motion-fast) var(--ease-out);
+}
+
+.site-footer-column a,
+.site-footer-column button {
+  font-size: var(--text-ui);
+  line-height: var(--leading-ui);
+}
+
+.site-footer-column a:hover,
+.site-footer-column button:hover,
+.site-footer-compact-links a:hover,
+.site-footer-compact-links button:hover {
+  color: var(--color-text);
+  text-decoration-color: var(--color-border-strong);
+}
+
+.site-footer-column a[aria-current='page'] {
+  color: var(--color-text);
+  font-weight: var(--weight-semibold);
+}
+
+/* Узел висит в поле слева от строки, поэтому текст не сдвигается. */
+.site-footer-column a[aria-current='page']::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: -0.875rem;
+  width: 0.4375rem;
+  height: 0.4375rem;
+  border-radius: 50%;
+  background: var(--color-accent);
+  transform: translateY(-50%);
+}
+
+.site-footer-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-6);
+  padding-block: var(--space-5);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-subtle);
+  font-size: var(--text-small);
+  line-height: var(--leading-ui);
+}
+
+/* Рабочий подвал: одна строка под содержимым, та же линия сверху. Поля у
+   него свои не нужны - их даёт колонка приложения. */
+.site-footer.is-compact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0 var(--space-6);
+  width: min(100%, var(--content-width));
+  margin: clamp(3rem, 6vw, 4.5rem) auto 0;
+  padding: var(--space-2) 0;
+  font-size: var(--text-small);
+  line-height: var(--leading-ui);
+}
+
+.site-footer.is-compact .site-footer-disclaimer {
+  margin: 0;
+  padding-block: var(--space-3);
+  color: var(--color-text-subtle);
+}
+
+.site-footer-compact-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--space-5);
+}
+
+.site-footer-compact-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--space-5);
+  color: var(--color-text-subtle);
+}
+
+@media (max-width: 980px) {
+  .site-footer-main { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .site-footer-about { grid-column: 1 / -1; }
+}
+
+@media (max-width: 560px) {
+  .site-footer-main {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-6) var(--space-5);
+    padding-block: var(--space-10) var(--space-8);
+  }
+
+  /* Документы в две колонки: одной они занимали полэкрана телефона. */
+  .site-footer-column.is-documents { grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--space-5); }
+  .site-footer-column.is-documents h2 { grid-column: 1 / -1; }
+  .site-footer-meta { flex-direction: column; align-items: flex-start; gap: var(--space-1); }
+  .site-footer.is-compact { flex-direction: column; align-items: flex-start; }
+  .site-footer.is-compact .site-footer-disclaimer { padding-block: 0 var(--space-1); }
+  .site-footer-compact-meta { padding-bottom: var(--space-3); }
+}

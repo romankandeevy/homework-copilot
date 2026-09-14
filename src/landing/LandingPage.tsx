@@ -25,7 +25,7 @@ import {
   Sun,
   X,
 } from '@phosphor-icons/react'
-import { SiteFooter } from '../support/SupportCenter'
+import { SiteFooter } from '../support/SiteFooter'
 import { AnalysisPreview, NotebookPreview, SchedulePreview } from './LandingPreviews'
 import './LandingPage.css'
 
