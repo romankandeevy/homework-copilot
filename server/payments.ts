@@ -276,7 +276,7 @@ async function paymentConfig(options: PaymentServerOptions, service: ServiceClie
 
 async function createOrder(options: PaymentServerOptions, service: ServiceClient, userId: string, body: Record<string, unknown>) {
   const config = options.robokassa
-  if (!config) throw new PaymentApiError(503, 'Оплата пока не подключена')
+  if (!config) throw new PaymentApiError(503, 'Оплата временно недоступна')
   const amount = checkTopUpKopecks(Number(body.amountKopecks))
   if (!amount.ok) throw new PaymentApiError(400, amount.error)
   const { data, error } = await service.rpc('create_payment_order', { p_user_id: userId, p_amount: amount.kopecks, p_is_test: config.testMode })

@@ -7,7 +7,7 @@
    приглашение - миграции кошелька, проход модели и проверка правилами -
    `server/homeworkSolver.ts`, чертёж - `GeometryNotebookLayoutV1`,
    значки разбора - `src/solution/WrittenAnalysis.tsx`, предметы и классы -
-   `src/CopyTask.tsx`. Ничего сверх этого страница не обещает. */
+   `src/lib/subjects.ts`. Ничего сверх этого страница не обещает. */
 
 import { useCallback, useEffect, useState } from 'react'
 import {
@@ -16,7 +16,9 @@ import {
   ChatsCircle,
   Check,
   CheckCircle,
+  Lightbulb,
   List,
+  Minus,
   Moon,
   Notebook,
   PencilSimpleLine,
@@ -25,8 +27,10 @@ import {
   Sun,
   X,
 } from '@phosphor-icons/react'
+import { solvableSubjects } from '../lib/subjects'
 import { SiteFooter } from '../support/SiteFooter'
-import { AnalysisPreview, NotebookPreview, SchedulePreview } from './LandingPreviews'
+import { SupportLauncher } from '../support/SupportLauncher'
+import { NotebookPreview } from './LandingPreviews'
 import './LandingPage.css'
 
 const appPath = '/app'
@@ -166,7 +170,27 @@ function Reveal({
   )
 }
 
-function CompareRow({ row, index }: { row: (typeof comparison)[number]; index: number }) {
+function CompareCell({ who, cell, className }: { who: string; cell: ComparisonCell; className: string }) {
+  const { label, icon: Icon } = verdicts[cell.verdict]
+
+  return (
+    <span className={`compare-cell ${className}`} role="cell">
+      <span className="compare-cell-top">
+        {/* Подпись колонки видна только на телефоне, где шапки таблицы нет.
+            На широком экране она снята `display: none` и читалке не
+            повторяется: там ячейку с колонкой связывает шапка. */}
+        <span className="compare-who">{who}</span>
+        <span className={`compare-mark is-${cell.verdict}`}>
+          <Icon size={15} weight="bold" aria-hidden="true" />
+          {label}
+        </span>
+      </span>
+      <span className="compare-text">{cell.text}</span>
+    </span>
+  )
+}
+
+function CompareRow({ row, index }: { row: ComparisonRow; index: number }) {
   const { ref, inView } = useInView(compareMargin)
 
   return (
@@ -177,13 +201,9 @@ function CompareRow({ row, index }: { row: (typeof comparison)[number]; index: n
       data-revealed={inView ? 'true' : 'false'}
       style={{ '--row-delay': `${index * 0.07}s` } as React.CSSProperties}
     >
-      <span className="compare-question" role="cell">{row.question}</span>
-      <span className="compare-gdz" role="cell">{row.gdz}</span>
-      <span className="compare-ours" role="cell">
-        {/* Черта дорисовывается под нашим ответом: ею строка и «сходится». */}
-        <i aria-hidden="true" className="compare-underline" />
-        {row.ours}
-      </span>
+      <span className="compare-question" role="rowheader">{row.question}</span>
+      <CompareCell who="Решебник" cell={row.gdz} className="compare-gdz" />
+      <CompareCell who="Homework Copilot" cell={row.ours} className="compare-ours" />
     </div>
   )
 }
@@ -282,52 +302,90 @@ function LandingHeader({ signedIn, theme, onToggleTheme }: { signedIn: boolean; 
    первого экрана осталось одно: первая задача бесплатна. Всё про цену -
    в секции «Цена», её источник `src/lib/solutionPricing.ts`.
 
-   Предметы и классы - `src/CopyTask.tsx`, срок - карточка ожидания в
-   `SolutionQueue`, право на бесплатное решение - `public.claim_guest_solution`. */
+   Предметы и классы - `src/lib/subjects.ts`, срок - карточка ожидания в
+   `SolutionQueue`, право на бесплатное решение - `public.claim_guest_solution`.
+
+   14 сентября 2026 каждое значение стало законченным словом. Было
+   «бесплатно», «14» и «15-70 с», а «предметов» стояло в подписи под числом,
+   и владелец прочёл строку как «бесплатно 14 - чего?»: голое число рядом с
+   соседним словом читается его продолжением. Теперь значение само говорит, о
+   чём оно, а группы «значение + подпись» разведены линиями (`.hero-mark`). */
 const heroMarks = [
-  { value: 'бесплатно', note: 'первая задача, без регистрации' },
-  { value: '14', note: 'предметов, 5-11 класс' },
-  { value: '15-70 с', note: 'обычно занимает разбор' },
+  { value: 'Бесплатно', note: 'первая задача, без регистрации' },
+  { value: '14 предметов', note: '5-11 класс' },
+  { value: '15-70 секунд', note: 'обычно занимает решение' },
 ]
 
+/* Шаги пишутся для человека, который продукт ещё не видел: что он делает
+   руками и что получает взамен. 14 сентября 2026 тексты переписаны по
+   замечанию владельца - прежние были точными, но понятными только тому, кто
+   уже пользовался («разбор», «проверяется решение» без объяснения, что это). */
 const steps = [
   {
     icon: CameraPlus,
-    title: 'Приносишь условие',
-    text: 'Фотография с телефона, скриншот из буфера обмена или текст. Выбираешь предмет - по нему проверяется решение. Класс можно не указывать.',
+    title: 'Присылаешь задачу',
+    text: 'Фотографируешь условие в учебнике или тетради, вставляешь скриншот или печатаешь текст. Выбираешь предмет. Класс указывать не обязательно, но с ним задачу решат способом, который проходят в этом классе.',
   },
   {
-    icon: ShieldCheck,
-    title: 'Сначала объясняем, потом решаем',
-    text: 'Разбор обычными словами - что за задача и каким правилом решается - и только под ним готовая запись. Не вышло - не выдаём и деньги не списываем.',
+    icon: Lightbulb,
+    title: 'Получаешь объяснение и решение',
+    text: 'Обычно через 15-70 секунд приходит ответ. Сначала простыми словами: что это за задача и каким правилом она решается. Под этим - решение по шагам. Если задача не решилась, платить за неё не нужно.',
   },
   {
     icon: PencilSimpleLine,
     title: 'Переписываешь в тетрадь',
-    text: 'Дано, ход решения по шагам, чертёж и ответ. Формулы записаны по-школьному: дроби косой чертой, степени надстрочными, корень знаком √.',
+    text: 'Решение уже оформлено по-школьному: «Дано», «Найти», чертёж, если он нужен, ход решения и ответ. Остаётся переписать его в тетрадь строку за строкой.',
   },
 ]
 
+/* Пример под шагами - та же задача, что в утверждённой тетради
+   (`src/notebook/fixtures.ts`, № 274), и условие здесь дословно то, что
+   прислал ученик. Фикстуру не импортируем: ради одной строки в первый чанк
+   витрины уехала бы вся сцена чертежа.
+
+   Проверку ответа владелец попросил 14 сентября 2026: пример без условия и
+   без проверки читался как картинка, которой надо верить на слово.
+   Пересчитано вручную: 13² - 5² = 169 - 25 = 144 = 12², значит BO = 12 см и
+   BD = 24 см, как в условии; гипотенуза 13 больше катета 12 и меньше суммы
+   катетов 5 + 12 = 17. */
+const proofTask = 'Диагонали ромба ABCD равны 10 см и 24 см. Найдите сторону ромба.'
+
 /* Сравнение с решебником. Здесь только различие форматов - то, чем ГДЗ
    является по устройству: заранее собранный ответ под конкретное издание.
-   Никаких утверждений о чужом качестве: их нечем подтвердить. */
-const comparison = [
+   Никаких утверждений о чужом качестве: их нечем подтвердить.
+
+   14 сентября 2026 у каждой ячейки появилась отметка словом - «Да», «Нет»,
+   «Не всегда». До этого разницу несла только кобальтовая черта под нашей
+   колонкой, и владелец назвал таблицу невнятной: цвет без слова не читается
+   ни на телефоне на солнце, ни читалкой. Вопросы переформулированы так,
+   чтобы «Да» всегда значило «хорошо для ученика». */
+type Verdict = 'yes' | 'no' | 'partly'
+type ComparisonCell = { verdict: Verdict; text: string }
+type ComparisonRow = { question: string; gdz: ComparisonCell; ours: ComparisonCell }
+
+const verdicts = {
+  yes: { label: 'Да', icon: Check },
+  no: { label: 'Нет', icon: X },
+  partly: { label: 'Не всегда', icon: Minus },
+} as const
+
+const comparison: ComparisonRow[] = [
   {
-    question: 'Где искать задачу',
-    gdz: 'В решебнике к своему изданию - если он есть',
-    ours: 'Нигде. Условие приносишь ты: фото или текст',
+    question: 'Подойдёт любой учебник',
+    gdz: { verdict: 'partly', text: 'Только если к твоему изданию есть решебник' },
+    ours: { verdict: 'yes', text: 'Условие приносишь ты: фото или текст' },
   },
   {
-    question: 'Задача из карточки или своего варианта',
-    gdz: 'Не найдётся: решебник собран под учебник',
-    ours: 'Решается так же, как любая другая',
+    question: 'Задача из карточки или свой вариант',
+    gdz: { verdict: 'no', text: 'Решебник собран под учебник - такой задачи в нём нет' },
+    ours: { verdict: 'yes', text: 'Решается так же, как любая другая' },
   },
   {
-    question: 'В каком виде',
-    gdz: 'Как в книге',
-    ours: 'Как запись в тетради - переписывай строкой за строкой',
+    question: 'Готовая запись для тетради',
+    gdz: { verdict: 'partly', text: 'В том виде, в каком решение дал автор решебника' },
+    ours: { verdict: 'yes', text: 'Дано, решение и ответ - переписывай строку за строкой' },
   },
-] as const
+]
 
 /* Четыре карточки, а не шесть плюс ещё три блока рядом.
 
@@ -336,18 +394,31 @@ const comparison = [
    «Сделано под то, как сдают домашку» и «Не только решение задачи»
    наполовину пересказывали друг друга и «Три шага». Слиты в одну: чертёж
    ушёл к записи, чат - к сохранённым решениям, значки забрали к себе
-   картинку из бывшей витрины возможностей. */
+   картинку из бывшей витрины возможностей.
+
+   14 сентября 2026 сетка выровнена: карточки одного размера и одного
+   устройства - значок, заголовок, текст. Во второй лежала картинка разбора,
+   карточка была втрое выше соседей, и владелец увидел «одна маленькая,
+   соседняя огромная». Значки разбора теперь стоят прямо на словах текста:
+   довод тот же, а карточка - как все. */
 const features = [
   {
     icon: Notebook,
     title: 'Запись, а не голый ответ',
-    text: 'Что дано, что найти, каждый шаг с пояснением и вывод. Чертёж строится по условию: треугольники, ромбы, трапеции, окружности - с точками, равными сторонами и прямыми углами на своих местах.',
+    text: 'Что дано, что найти, каждый шаг с пояснением и вывод. Чертёж строится по условию: точки, равные стороны и прямые углы стоят на своих местах.',
   },
   {
     icon: PencilSimpleLine,
     title: 'Школьные значки на месте',
-    text: 'Подлежащее одной чертой, сказуемое двумя, корень дугой, суффикс крышкой, степень окисления над элементом. Разбор выглядит так, как его ждёт учитель.',
-    preview: 'analysis' as const,
+    text: (
+      <>
+        <span className="school-mark is-single">Подлежащее</span> - одной чертой,{' '}
+        <span className="school-mark is-double">сказуемое</span> - двумя,{' '}
+        <span className="school-mark is-wavy">определение</span> - волной,{' '}
+        <span className="school-mark is-dash-dot">обстоятельство</span> - точкой с тире.
+        Корень, суффикс и степень окисления отмечены так, как ждёт учитель.
+      </>
+    ),
   },
   {
     icon: ShieldCheck,
@@ -359,11 +430,6 @@ const features = [
     title: 'Чат рядом, решения не теряются',
     text: 'Спросить, почему шаг именно такой, можно в ИИ-чате - от 20 копеек за ответ. Задача, решённая в аккаунте, остаётся в «Моих решениях», открыть её снова бесплатно.',
   },
-]
-
-const subjects = [
-  'Математика', 'Алгебра', 'Геометрия', 'Физика', 'Химия', 'Биология', 'Информатика',
-  'Русский язык', 'Литература', 'Английский язык', 'История', 'Обществознание', 'География', 'Астрономия',
 ]
 
 const faqs = [
@@ -470,7 +536,6 @@ export default function LandingPage() {
       <main className="landing-main">
         <section className="landing-hero" aria-labelledby="hero-title">
           <div className="landing-shell hero-shell">
-            <div className="hero-column">
             <div className="hero-copy">
               <p className="hero-eyebrow">Домашняя работа по фотографии</p>
               <h1 id="hero-title">Сфоткал.<br />Понял. Сдал.</h1>
@@ -495,26 +560,28 @@ export default function LandingPage() {
               </ul>
             </div>
 
+            {/* Справа от текста пустовало полэкрана. Здесь лежит то, о чём
+                обещает заголовок, - сама страница тетради. Ниже, в разделе
+                «Как это работает», она же показана крупно и с разбором.
+                С 14 сентября 2026 лист размером с текстовый блок слева:
+                владелец счёл прежний мелковатым. */}
+            <aside className="hero-aside" aria-hidden="true">
+              <NotebookPreview />
+              <p className="hero-aside-note">Так приходит решение</p>
+            </aside>
+
             {/* Под кнопками было пусто до самой следующей секции. Здесь то,
                 что человек всё равно ищет глазами первым: цена, охват,
-                сколько ждать. Все четыре числа проверяются по коду. */}
+                сколько ждать. Строка идёт во всю ширину под текстом и листом:
+                в колонке текста три значения не помещались, не слипаясь. */}
             <dl className="hero-marks">
               {heroMarks.map(({ value, note }) => (
-                <div key={note}>
+                <div key={value} className="hero-mark">
                   <dt>{value}</dt>
                   <dd>{note}</dd>
                 </div>
               ))}
             </dl>
-            </div>
-
-            {/* Справа от текста пустовало полэкрана. Здесь лежит то, о чём
-                обещает заголовок, - сама страница тетради. Ниже, в разделе
-                «Как это работает», она же показана крупно и с разбором. */}
-            <aside className="hero-aside" aria-hidden="true">
-              <NotebookPreview compact />
-              <p className="hero-aside-note">Так приходит решение</p>
-            </aside>
           </div>
         </section>
 
@@ -537,16 +604,49 @@ export default function LandingPage() {
               ))}
             </ol>
 
+            {/* Условие - запись - проверка. На широком экране условие и
+                проверка стоят слева от листа, на узком идут по порядку:
+                что прислали, что пришло, как убедиться самому. */}
             <Reveal className="how-proof" delay={120}>
-              <div className="how-proof-copy">
+              <div className="how-proof-head">
                 <h3>Готовая страница, а не абзац текста</h3>
-                <p>Ромб ABCD с диагоналями 10 и 24 см - реальная задача, решённая продуктом.</p>
-                <a className="landing-inline-action" href={appPath}>
-                  Попробовать на своей задаче
-                  <ArrowRight size={16} weight="bold" aria-hidden="true" />
-                </a>
+                <p>Настоящая задача, решённая продуктом: какой её прислали, что пришло в ответ и как проверить ответ самому.</p>
               </div>
+
+              <figure className="how-proof-task">
+                <figcaption className="how-proof-label">Условие, как его прислали</figcaption>
+                <blockquote>
+                  <p><span className="how-proof-number">№ 274.</span> {proofTask}</p>
+                </blockquote>
+              </figure>
+
               <div className="how-proof-visual"><NotebookPreview /></div>
+
+              <div className="how-proof-check">
+                <p className="how-proof-label">
+                  <CheckCircle size={18} weight="duotone" aria-hidden="true" />
+                  Проверь ответ сам
+                </p>
+                <ol>
+                  <li>
+                    <strong>Подставь ответ обратно.</strong> BO = √(AB² - AO²) = √(13² - 5²) = √(169 - 25) = √144 = 12 см,
+                    значит BD = 2 · 12 = 24 см - как в условии.
+                  </li>
+                  <li>
+                    <strong>Прикинь размер.</strong> В треугольнике AOB гипотенуза AB длиннее катета BO = 12 см и короче
+                    суммы катетов 5 + 12 = 17 см. 13 см попадает между ними.
+                  </li>
+                </ol>
+                <p className="how-proof-verdict">
+                  <Check size={16} weight="bold" aria-hidden="true" />
+                  Обе проверки сходятся: сторона ромба 13 см.
+                </p>
+              </div>
+
+              <a className="landing-inline-action how-proof-action" href={appPath}>
+                Попробовать на своей задаче
+                <ArrowRight size={16} weight="bold" aria-hidden="true" />
+              </a>
             </Reveal>
           </div>
         </section>
@@ -562,33 +662,42 @@ export default function LandingPage() {
                 const Icon = feature.icon
                 return (
                   <Reveal key={feature.title} className="feature-row" delay={index * 60}>
-                    <Icon size={24} weight="duotone" aria-hidden="true" />
+                    <Icon size={26} weight="duotone" aria-hidden="true" />
                     <h3>{feature.title}</h3>
                     <p>{feature.text}</p>
-                    {feature.preview === 'analysis' && <AnalysisPreview />}
                   </Reveal>
                 )
               })}
             </div>
 
-            {/* Расписание - самостоятельная бесплатная вещь и не про решение
-                задач, поэтому оно стоит отдельным блоком, а не пятой
-                карточкой. Своей секции с заголовком второго уровня ему не
-                дают: страница и так была длиннее, чем её читают. */}
-            <Reveal className="schedule-band" delay={80}>
-              <div className="schedule-band-copy">
-                <h3>Расписание с фотографии</h3>
-                <p>Снимок доски превращается в редактируемое расписание. Бесплатно и без аккаунта.</p>
-              </div>
-              <SchedulePreview />
-            </Reveal>
-
+            {/* Каждый предмет - ссылка в форму, где он уже выбран. Название в
+                адресе ровно то, что в `src/lib/subjects.ts`: по нему форма и
+                находит предмет (`findSubjectByName`). До 14 сентября 2026
+                здесь были неактивные плашки, а владелец жал на них и ждал,
+                что откроется решение по предмету. */}
             <Reveal className="subject-band" delay={60}>
-              <h3>14 предметов, 5-11 класс</h3>
+              <div className="subject-band-head">
+                <h3>14 предметов, 5-11 класс</h3>
+                <p>Нажми на предмет - откроется форма, где он уже выбран.</p>
+              </div>
               <ul>
-                {subjects.map((subject) => <li key={subject}>{subject}</li>)}
+                {solvableSubjects.map(({ id, name }) => (
+                  <li key={id}>
+                    <a href={`${appPath}?subject=${encodeURIComponent(name)}`}>
+                      {name}
+                      <ArrowRight size={15} weight="bold" aria-hidden="true" />
+                    </a>
+                  </li>
+                ))}
               </ul>
             </Reveal>
+
+            {/* Расписания на витрине нет. До 14 сентября 2026 оно было блоком
+                крупнее карточек про решение, потом - строкой «Ещё есть
+                расписание» в конце секции. Владелец сравнил её с продавцом,
+                который кричит вслед уходящему покупателю про скидку: вещь
+                второстепенная, а звучит как «подожди, ещё одно». Раздел
+                остаётся в подвале и в приложении. */}
           </div>
         </section>
 
@@ -608,9 +717,9 @@ export default function LandingPage() {
 
             <div className="compare-table" role="table" aria-label="Решебник и Homework Copilot">
               <div className="compare-head" role="row">
-                <span role="columnheader" />
-                <span role="columnheader">Решебник</span>
-                <span role="columnheader" className="is-ours">Homework&nbsp;Copilot</span>
+                <span role="columnheader"><span className="sr-only">Что сравниваем</span></span>
+                <span role="columnheader" className="compare-col">Решебник</span>
+                <span role="columnheader" className="compare-col is-ours">Homework&nbsp;Copilot</span>
               </div>
               {comparison.map((row, index) => (
                 <CompareRow key={row.question} row={row} index={index} />
@@ -628,10 +737,10 @@ export default function LandingPage() {
             <div className="price-grid">
               <Reveal className="price-card is-primary">
                 <span className="price-label">Решение задачи</span>
-                <strong className="price-value">от 4 ₽</strong>
+                <strong className="price-value">от&nbsp;4&nbsp;₽</strong>
                 <p>
                   Цену считает сервер по размеру задачи: длинное условие, фотография и счётный предмет дороже,
-                  потолок - 12 ₽. Она показана до отправки, и списывается ровно она. Не решилось или не прошло
+                  потолок - 12&nbsp;₽. Она показана до отправки, и списывается ровно она. Не решилось или не прошло
                   проверку - деньги остаются на балансе.
                 </p>
                 <a className="landing-primary-action" href={appPath}>
@@ -648,17 +757,19 @@ export default function LandingPage() {
                   </li>
                   <li>
                     <span><strong>Старт</strong><small>Новому аккаунту, один раз на устройство</small></span>
-                    <b>20 ₽</b>
+                    <b>20&nbsp;₽</b>
                   </li>
                   <li>
-                    <span><strong>Приглашение друга</strong><small>Как только он зарегистрируется по ссылке и подтвердит почту: ему 5 ₽, тебе 10 ₽</small></span>
-                    <b>+10 ₽</b>
+                    {/* Рубль держится за число неразрывным пробелом: 14 сентября
+                        «₽» от «тебе 10» переносился на отдельную строку. */}
+                    <span><strong>Приглашение друга</strong><small>Как только он зарегистрируется по ссылке и подтвердит почту: ему 5&nbsp;₽, тебе 10&nbsp;₽</small></span>
+                    <b>+10&nbsp;₽</b>
                   </li>
                 </ul>
-                <p className="price-note">
-                  <CheckCircle size={17} weight="duotone" aria-hidden="true" />
-                  Подписки нет. Баланс тратится только на то, что ты запросил.
-                </p>
+                {/* Здесь стояла строка «Подписки нет. Баланс тратится только
+                    на то, что ты запросил» - мелким кеглем под пустым полем.
+                    Снята 14 сентября 2026: она пересказывала заголовок секции,
+                    а «списывается ровно она» уже сказано в карточке цены. */}
               </Reveal>
             </div>
           </div>
@@ -692,6 +803,7 @@ export default function LandingPage() {
       </main>
 
       <SiteFooter />
+      <SupportLauncher />
     </div>
   )
 }

@@ -1,0 +1,518 @@
+/* Страницы профиля и баланса.
+
+   С 14 сентября 2026 это страницы оболочки приложения, а не вкладки окна.
+   Плоские по умолчанию: рамки без теней. Кобальт - у открытой вкладки
+   (маршрут) и у единственного главного действия страницы, перехода к
+   оплате. Кнопки промокода и копирования - графитовые. */
+
+.account-page {
+  width: min(100%, 64rem);
+  gap: var(--space-4);
+}
+
+.account-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3) var(--space-4);
+}
+
+.account-page-identity { display: grid; min-width: 0; gap: var(--space-1); }
+
+.account-page-identity > span {
+  color: var(--color-text-subtle);
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+}
+
+.account-page-identity h1 {
+  margin: 0;
+  overflow: hidden;
+  font-family: var(--font-display);
+  font-size: var(--text-subtitle);
+  font-weight: var(--weight-display);
+  letter-spacing: var(--tracking-snug);
+  line-height: var(--leading-compact);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-page-identity p {
+  margin: 0;
+  overflow: hidden;
+  color: var(--color-text-subtle);
+  font-size: var(--text-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-admin-link {
+  display: inline-flex;
+  min-height: var(--size-control);
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--text-small);
+  font-weight: var(--weight-semibold);
+  text-decoration: none;
+  transition: border-color var(--motion-fast) var(--ease-out), background var(--motion-fast) var(--ease-out);
+}
+
+.account-admin-link:hover { border-color: var(--color-border-strong); background: var(--color-surface-raised); }
+
+.account-page-tabs {
+  display: flex;
+  gap: var(--space-6);
+  overflow-x: auto;
+  border-bottom: 1px solid var(--color-border);
+  scrollbar-width: none;
+}
+
+.account-page-tabs::-webkit-scrollbar { display: none; }
+
+.account-page-tabs a {
+  display: inline-flex;
+  min-height: var(--size-control);
+  align-items: center;
+  gap: var(--space-2);
+  border-bottom: 2px solid transparent;
+  color: var(--color-text-subtle);
+  font-size: var(--text-ui);
+  font-weight: var(--weight-semibold);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out);
+}
+
+.account-page-tabs a:hover { color: var(--color-text); }
+.account-page-tabs a.is-active { border-bottom-color: var(--color-accent); color: var(--color-text); }
+.account-page-tabs strong { color: var(--color-text-muted); font-family: var(--font-mono); font-size: var(--text-caption); font-weight: var(--weight-semibold); }
+
+.account-page-notice {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-border-strong);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--text-ui);
+  line-height: var(--leading-ui);
+}
+
+/* Профиль: личные данные и тема. На широком экране - рядом. */
+
+.account-profile-body { display: grid; align-items: start; gap: var(--space-4); }
+
+.account-page-section,
+.account-card,
+.account-balance-card {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-surface);
+  background: var(--color-surface);
+}
+
+.account-page-section { gap: var(--space-4); }
+.account-page-section > header { display: grid; gap: var(--space-1); }
+
+.account-page-section h2,
+.account-card h2 {
+  margin: 0;
+  font-size: var(--text-body);
+  font-weight: var(--weight-semibold);
+}
+
+.account-page-section > header p { margin: 0; color: var(--color-text-subtle); font-size: var(--text-small); }
+
+.account-profile-form { grid-template-columns: minmax(0, 1fr) 9rem; }
+
+.account-profile-form .account-email-field,
+.account-profile-form .account-form-message,
+.account-profile-form .account-primary-button { grid-column: 1 / -1; }
+
+.account-profile-form .account-email-field { display: grid; gap: var(--space-2); color: var(--color-text-muted); font-size: var(--text-small); font-weight: var(--weight-semibold); }
+.account-profile-form .account-email-field input { background: var(--color-surface-sunken); color: var(--color-text-muted); }
+.account-profile-form .account-primary-button { justify-self: start; min-width: 9rem; }
+
+.account-theme-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+
+.account-theme-options button {
+  display: inline-flex;
+  min-height: 3rem;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--text-small);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+}
+
+.account-theme-options button:hover { border-color: var(--color-border-strong); color: var(--color-text); }
+.account-theme-options button.is-selected { border-color: var(--color-accent); background: var(--color-accent-soft); color: var(--color-text); }
+
+/* Нижняя строка страницы: свои ссылки и действия с аккаунтом. */
+
+.account-page-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+.account-page-links { display: flex; flex-wrap: wrap; gap: 0 var(--space-5); }
+.account-balance-links { padding-top: var(--space-3); border-top: 1px solid var(--color-border); }
+
+.account-page-links a {
+  display: inline-flex;
+  min-height: var(--size-control);
+  align-items: center;
+  color: var(--color-text-muted);
+  font-size: var(--text-small);
+  text-decoration: underline;
+  text-decoration-color: var(--color-border-strong);
+  text-underline-offset: 0.24em;
+}
+
+.account-page-links a:hover { color: var(--color-text); text-decoration-color: currentColor; }
+
+.account-page-footer-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+.account-page-footer-actions button {
+  display: inline-flex;
+  min-height: var(--size-control);
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-small);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+}
+
+.account-page-footer-actions button:hover:not(:disabled) { border-color: var(--color-border-strong); background: var(--color-surface-raised); }
+
+/* Удаление стоит рядом с выходом, поэтому оно тише выхода: приглушённая
+   надпись без рамки, а красным становится только кнопка в подтверждении. */
+.account-page-footer-actions .account-delete-open { border-color: transparent; color: var(--color-text-subtle); font-weight: var(--weight-regular); }
+.account-page-footer-actions .account-delete-open:hover:not(:disabled) { border-color: var(--color-border); background: transparent; color: var(--color-danger); }
+
+.account-delete-confirm {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-surface);
+  background: var(--color-surface-sunken);
+}
+
+.account-delete-confirm h2 { margin: 0; font-size: var(--text-body); font-weight: var(--weight-semibold); }
+.account-delete-confirm p { margin: 0; color: var(--color-text-muted); font-size: var(--text-small); line-height: var(--leading-copy); }
+.account-delete-confirm label { display: grid; gap: var(--space-2); }
+.account-delete-confirm label span { color: var(--color-text-subtle); font-size: var(--text-small); }
+.account-delete-confirm input { min-height: var(--size-control); padding: 0 var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-surface); color: var(--color-text); font: inherit; }
+.account-delete-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); }
+.account-delete-actions button { min-height: var(--size-control); padding: 0 var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-control); background: transparent; color: var(--color-text); font: inherit; font-weight: var(--weight-semibold); cursor: pointer; }
+.account-delete-actions .is-danger { border-color: transparent; background: var(--color-danger); color: var(--color-on-accent); }
+.account-delete-actions .is-danger:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* Баланс. На телефоне - одна колонка по порядку важности: сумма,
+   пополнение, промокод, приглашение, операции. */
+
+.account-balance-grid { display: grid; align-items: start; gap: var(--space-4); }
+
+.account-balance-card { border-radius: var(--radius-panel); }
+
+.account-balance-card h2 {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-small);
+  font-weight: var(--weight-semibold);
+}
+
+.account-balance-amount {
+  font-family: var(--font-display);
+  font-size: var(--text-statement);
+  font-weight: var(--weight-display);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-tight);
+  line-height: 1;
+}
+
+.account-balance-rate {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--space-2);
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-small);
+  line-height: var(--leading-ui);
+}
+
+.account-balance-rate strong { color: var(--color-text); font-family: var(--font-mono); font-size: var(--text-ui); font-weight: var(--weight-semibold); }
+
+.account-card-note { margin: 0; color: var(--color-text-subtle); font-size: var(--text-small); line-height: var(--leading-ui); }
+
+.account-card > header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-1) var(--space-3); }
+.account-card > header > span { color: var(--color-text-subtle); font-size: var(--text-small); }
+
+.account-inline-form { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+.account-inline-form input {
+  min-width: 0;
+  min-height: var(--size-control);
+  flex: 1 1 9rem;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  outline: 0;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.account-inline-form input::placeholder { color: var(--color-text-subtle); }
+.account-inline-form input:focus { border-color: var(--color-accent-hover); box-shadow: 0 0 0 3px var(--color-accent-soft); }
+.account-inline-form input[aria-invalid='true'] { border-color: var(--color-danger); }
+.account-inline-form input.is-amount,
+.account-inline-form input.is-code { font-family: var(--font-mono); }
+.account-inline-form input.is-code { text-transform: uppercase; }
+.account-inline-form input.is-code::placeholder { font-family: var(--font-sans); text-transform: none; }
+
+.account-inline-form button {
+  min-height: var(--size-control);
+  flex: 0 0 auto;
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-strong);
+  border-radius: var(--radius-control);
+  background: var(--color-strong);
+  color: var(--color-on-strong);
+  font: inherit;
+  font-size: var(--text-small);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+}
+
+.account-inline-form button:not(:disabled):hover { background: color-mix(in oklch, var(--color-strong) 88%, var(--color-text)); }
+.account-inline-form button.is-primary { border-color: var(--color-accent); background: var(--color-accent); color: var(--color-on-accent); }
+.account-inline-form button.is-primary:not(:disabled):hover { border-color: var(--color-accent-hover); background: var(--color-accent-hover); }
+.account-inline-form button:disabled { border-color: var(--color-border); background: var(--color-surface-sunken); color: var(--color-text-subtle); cursor: not-allowed; }
+
+/* Ошибка - цветом ошибки и полужирным, со значком: приглушённую строку
+   под промокодом 14 сентября владелец не заметил. */
+.account-inline-error,
+.account-inline-success {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--text-ui);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-ui);
+}
+
+.account-inline-error { color: var(--color-danger); }
+.account-inline-success { color: var(--color-success-strong); }
+.account-inline-error > svg,
+.account-inline-success > svg { flex: 0 0 auto; margin-top: 0.05rem; }
+
+.account-referral-card > header { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: var(--space-3); }
+.account-referral-card > header > svg { margin-top: 0.05rem; color: var(--color-text); }
+.account-referral-card > header > div { display: grid; gap: var(--space-1); }
+.account-referral-card p { margin: 0; color: var(--color-text-muted); font-size: var(--text-small); line-height: var(--leading-copy); }
+.account-referral-card p strong { color: var(--color-text); font-family: var(--font-mono); }
+
+.account-referral-link {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-raised);
+  color: var(--color-text-subtle);
+}
+
+.account-referral-link input {
+  min-width: 0;
+  height: 2.5rem;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font: var(--text-small) / 1 var(--font-mono);
+  text-overflow: ellipsis;
+}
+
+.account-referral-link button,
+.account-referral-state button {
+  display: inline-flex;
+  min-height: var(--size-control);
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-strong);
+  border-radius: var(--radius-control);
+  background: var(--color-strong);
+  color: var(--color-on-strong);
+  font: inherit;
+  font-size: var(--text-small);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+}
+
+.account-referral-link button:hover,
+.account-referral-state button:hover { background: color-mix(in oklch, var(--color-strong) 88%, var(--color-text)); }
+
+.account-referral-stats { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); }
+.account-referral-stats span { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--color-text-subtle); font-size: var(--text-small); }
+.account-referral-stats b { color: var(--color-text); font-family: var(--font-mono); }
+.account-referral-card > small { color: var(--color-text-subtle); font-size: var(--text-small); line-height: var(--leading-ui); }
+
+.account-referral-state {
+  display: flex;
+  min-height: 3.5rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-sunken);
+  color: var(--color-text-muted);
+  font-size: var(--text-small);
+}
+
+.account-referral-state.is-error { color: var(--color-danger); font-weight: var(--weight-semibold); }
+.account-referral-card .account-referral-joined { padding: var(--space-3); border-radius: var(--radius-control); background: var(--color-success-soft); color: var(--color-success-strong); }
+
+.account-wallet-history ul { display: grid; margin: 0; padding: 0; list-style: none; }
+
+.account-wallet-entry {
+  display: grid;
+  min-height: var(--size-control);
+  grid-template-columns: minmax(4.5rem, auto) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding-block: var(--space-2);
+  border-top: 1px solid var(--color-border);
+  font-size: var(--text-small);
+  line-height: var(--leading-ui);
+}
+
+.account-wallet-entry:first-child { border-top: 0; }
+.account-wallet-entry > span { font-family: var(--font-mono); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.account-wallet-entry > span.is-credit { color: var(--color-success-strong); }
+.account-wallet-entry > span.is-debit { color: var(--color-text-muted); }
+.account-wallet-entry > strong { min-width: 0; font-weight: var(--weight-medium); overflow-wrap: anywhere; }
+.account-wallet-entry time { color: var(--color-text-subtle); font-family: var(--font-mono); font-size: var(--text-micro); white-space: nowrap; }
+
+.account-quiet-button {
+  justify-self: start;
+  min-height: var(--size-control);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-small);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+}
+
+.account-quiet-button:hover:not(:disabled) { border-color: var(--color-border-strong); background: var(--color-surface-raised); }
+.account-quiet-button:disabled { color: var(--color-text-subtle); cursor: progress; }
+
+/* На широком экране баланс - две колонки и помещается в экран 1440×900:
+   слева сумма, пополнение и операции, справа промокод и приглашение.
+   Порядок в разметке тот же, что на телефоне. Раскладка зависит от того,
+   какие блоки есть: пополнение и промокод включаются на сервере. */
+@media (min-width: 900px) {
+  .account-profile-body { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); }
+
+  .account-balance-grid {
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    grid-template-areas:
+      "card referral"
+      "history referral";
+  }
+
+  .account-balance-grid.has-promo {
+    grid-template-areas:
+      "card promo"
+      "history referral";
+  }
+
+  .account-balance-grid.has-top-up {
+    grid-template-areas:
+      "card referral"
+      "top-up referral"
+      "history referral";
+  }
+
+  .account-balance-grid.has-top-up.has-promo {
+    grid-template-areas:
+      "card promo"
+      "top-up referral"
+      "history referral";
+  }
+
+  .account-balance-card { grid-area: card; }
+  .account-top-up { grid-area: top-up; }
+  .account-promo { grid-area: promo; }
+  .account-referral-card { grid-area: referral; }
+  .account-wallet-history { grid-area: history; }
+}
+
+@media (max-width: 640px) {
+  .account-page { margin-top: var(--space-4); }
+  .account-page-header { flex-wrap: wrap; }
+  .account-page-section,
+  .account-card,
+  .account-balance-card { padding: var(--space-4); }
+  .account-profile-form { grid-template-columns: 1fr; }
+  .account-profile-form .account-email-field,
+  .account-profile-form .account-form-message,
+  .account-profile-form .account-primary-button { grid-column: auto; }
+  .account-profile-form .account-primary-button { width: 100%; }
+  .account-page-footer { align-items: stretch; flex-direction: column; }
+  .account-page-footer-actions button { flex: 1 1 auto; }
+  .account-inline-form button { flex: 1 0 auto; }
+  .account-referral-link { grid-template-columns: auto minmax(0, 1fr); }
+  .account-referral-link button { grid-column: 1 / -1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .account-admin-link,
+  .account-page-tabs a { transition: none; }
+}

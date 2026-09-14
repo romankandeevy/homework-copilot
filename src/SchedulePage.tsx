@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ChangeEvent } from 'react'
+import type { ChangeEvent, CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import {
   CalendarBlank,
+  CalendarMinus,
+  CalendarPlus,
   Check,
+  Clock,
   ImageSquare,
   MagicWand,
   Plus,
@@ -14,16 +17,15 @@ import {
   X,
 } from '@phosphor-icons/react'
 import {
+  changeLessonRange,
   defaultLessonTimes,
-  getScheduleTeacherKey,
-  getScheduleTableCells,
   makeScheduleEntryId,
+  nextLessonTime,
   normalizeLessonTimeRange,
-  parseScheduleCellText,
-  parseScheduleRoomDigits,
-  parseScheduleTableTsv,
-  parseScheduleText,
+  readScheduleSettings,
+  recognizeSchedulePhoto,
   splitLessonTimeRange,
+  writeScheduleRecords,
 } from './scheduleOcr'
 import type { ScheduleEntry, WeekdayId } from './scheduleOcr'
 import type { Json } from './lib/database.types'
@@ -73,14 +75,22 @@ const weekdays: ReadonlyArray<{ id: WeekdayId; label: string; short: string }> =
    подставляется типовое, предметы вписывает сам ученик или распознавание. */
 const starterSchedule: ScheduleEntry[] = []
 
-function loadSchedule() {
+function loadStoredRecords(): unknown {
   try {
     const stored = window.localStorage.getItem(STORAGE_KEY)
-    if (!stored) return starterSchedule
-    return parseScheduleEntries(JSON.parse(stored), starterSchedule)
+    return stored ? JSON.parse(stored) : null
   } catch {
-    return starterSchedule
+    return null
   }
+}
+
+function loadSchedule() {
+  const stored = loadStoredRecords()
+  return stored ? parseScheduleEntries(stored, starterSchedule) : starterSchedule
+}
+
+function loadSaturday() {
+  return readScheduleSettings(loadStoredRecords()).saturday
 }
 
 function parseScheduleEntries(value: unknown, fallback: ScheduleEntry[]) {
@@ -124,29 +134,9 @@ function loadTimeSlots(entries: ScheduleEntry[]) {
   return sortTimes([...defaultLessonTimes, ...entries.map(({ time }) => time)]).slice(0, MAX_TIME_SLOTS)
 }
 
-function nextLessonTime(times: string[]) {
-  const previousEnd = splitLessonTimeRange(times.at(-1) ?? '07:35-08:20').end
-  const [hours, minutes] = previousEnd.split(':').map(Number)
-  const start = Math.min(hours * 60 + minutes + 10, 23 * 60 + 14)
-  const end = Math.min(start + 45, 23 * 60 + 59)
-  const format = (value: number) => `${String(Math.floor(value / 60)).padStart(2, '0')}:${String(value % 60).padStart(2, '0')}`
-  return `${format(start)}-${format(end)}`
-}
-
 function displayLessonTime(value: string) {
   const { start, end } = splitLessonTimeRange(value)
   return `${start.replace(/^0/, '')}-${end.replace(/^0/, '')}`
-}
-
-function ocrStatusLabel(status: string) {
-  const labels: Record<string, string> = {
-    'loading tesseract core': 'Запускаем распознавание',
-    'initializing tesseract': 'Настраиваем OCR',
-    'loading language traineddata': 'Загружаем русский язык',
-    'initializing api': 'Готовим изображение',
-    'recognizing text': 'Читаем строки расписания',
-  }
-  return labels[status] ?? 'Обрабатываем фото'
 }
 
 function lessonWord(count: number) {
@@ -157,38 +147,40 @@ function lessonWord(count: number) {
   return 'уроков'
 }
 
-async function prepareOcrImages(file: File) {
-  if (typeof createImageBitmap !== 'function') return { tableImage: file, detailImage: file, detailRatio: 1 }
+/* Время урока - обычное текстовое поле, а не `type="time"`.
 
-  const bitmap = await createImageBitmap(file)
-  const draw = (preferredScale: number, maxDimension: number, contrast: number) => {
-    const scale = Math.min(preferredScale, maxDimension / Math.max(bitmap.width, bitmap.height))
-    const canvas = document.createElement('canvas')
-    canvas.width = Math.max(1, Math.round(bitmap.width * scale))
-    canvas.height = Math.max(1, Math.round(bitmap.height * scale))
-    const context = canvas.getContext('2d')
-    if (!context) return null
-    context.fillStyle = '#ffffff'
-    context.fillRect(0, 0, canvas.width, canvas.height)
-    context.filter = contrast === 1 ? 'none' : `grayscale(1) contrast(${contrast})`
-    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
-    return canvas
+   14 сентября 2026 владелец не понял этот блок: «время урока... какая-то
+   иконка часов». Системное поле времени каждый браузер рисует по-своему: где-то
+   со значком часов, где-то с AM/PM, которые в узкой колонке обрезались до
+   «08:30 A». Теперь запись всегда 24-часовая, поле выглядит полем, а «8.30»,
+   «8 30» и «830» понимаются одинаково. Правка применяется, когда поле
+   отпустили: на полпути «8:3» не должно переставлять строки таблицы. */
+function LessonTimeField({ value, label, onCommit }: { value: string; label: string; onCommit: (value: string) => void }) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const commit = () => {
+    if (draft === null) return
+    setDraft(null)
+    if (draft.trim() && draft !== value) onCommit(draft)
   }
 
-  const tableImage = draw(bitmap.width < 1800 ? 2.2 : 1, 3200, 1.3)
-  const detailImage = draw(bitmap.width < 1800 ? 4 : 1, 5600, 1)
-  bitmap.close()
-  if (!tableImage || !detailImage) return { tableImage: file, detailImage: file, detailRatio: 1 }
-  return { tableImage, detailImage, detailRatio: detailImage.width / tableImage.width }
-}
-
-function scaleRectangle(rectangle: { left: number; top: number; width: number; height: number }, ratio: number) {
-  return {
-    left: Math.round(rectangle.left * ratio),
-    top: Math.round(rectangle.top * ratio),
-    width: Math.max(1, Math.round(rectangle.width * ratio)),
-    height: Math.max(1, Math.round(rectangle.height * ratio)),
-  }
+  return (
+    <input
+      className="schedule-time-input"
+      type="text"
+      inputMode="numeric"
+      autoComplete="off"
+      spellCheck={false}
+      maxLength={5}
+      value={draft ?? value}
+      aria-label={label}
+      onFocus={(event) => event.currentTarget.select()}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') event.currentTarget.blur()
+      }}
+    />
+  )
 }
 
 /* Класс приходит из профиля и может не прийти вовсе. Подставлять восьмой
@@ -198,6 +190,7 @@ function SchedulePage({ userId = null, grade = null }: { userId?: string | null;
   const reduceMotion = useReducedMotion()
   const [entries, setEntries] = useState<ScheduleEntry[]>(loadSchedule)
   const [timeSlots, setTimeSlots] = useState<string[]>(() => loadTimeSlots(loadSchedule()))
+  const [withSaturday, setWithSaturday] = useState(loadSaturday)
   const [ocrPhase, setOcrPhase] = useState<OcrPhase>('idle')
   const [ocrProgress, setOcrProgress] = useState(0)
   const [ocrMessage, setOcrMessage] = useState('Готовим изображение')
@@ -213,6 +206,11 @@ function SchedulePage({ userId = null, grade = null }: { userId?: string | null;
   const ocrRunRef = useRef(0)
 
   const entriesByCell = useMemo(() => new Map(entries.map((entry) => [`${entry.day}:${entry.time}`, entry])), [entries])
+  /* Суббота - такой же день, как остальные, но её можно убрать: не все
+     учатся по субботам, а без неё таблица шире (14 сентября 2026). Уроки
+     убранной субботы не стираются - вернёшь день, и они на месте. */
+  const visibleDays = withSaturday ? weekdays : weekdays.filter(({ id }) => id !== 'saturday')
+  const shownDay = visibleDays.some(({ id }) => id === activeDay) ? activeDay : visibleDays[0].id
 
   const closeOcr = useCallback(() => {
     ocrRunRef.current += 1
@@ -259,10 +257,11 @@ function SchedulePage({ userId = null, grade = null }: { userId?: string | null;
           : []
         setEntries(nextEntries)
         setTimeSlots(nextTimes.length > 0 ? nextTimes : loadTimeSlots(nextEntries))
+        setWithSaturday(readScheduleSettings(data.entries).saturday)
       } else {
         const { error: createError } = await client.from('user_schedules').insert({
           user_id: userId,
-          entries: entries as unknown as Json,
+          entries: writeScheduleRecords(entries, { saturday: withSaturday }) as unknown as Json,
           time_slots: timeSlots as unknown as Json,
         })
         if (cancelled) return
@@ -285,21 +284,26 @@ function SchedulePage({ userId = null, grade = null }: { userId?: string | null;
 
   useEffect(() => {
     const client = supabase
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(entries))
-    window.localStorage.setItem(TIME_STORAGE_KEY, JSON.stringify(timeSlots))
+    const records = writeScheduleRecords(entries, { saturday: withSaturday })
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(records))
+      window.localStorage.setItem(TIME_STORAGE_KEY, JSON.stringify(timeSlots))
+    } catch {
+      // Хранилище браузера закрыто (приватный режим): аккаунт ниже всё равно сохранит.
+    }
 
     if (!userId || !client || !persistenceReady) return
     setSaveState('saving')
     const timer = window.setTimeout(() => {
       void client.from('user_schedules').upsert({
         user_id: userId,
-        entries: entries as unknown as Json,
+        entries: records as unknown as Json,
         time_slots: timeSlots as unknown as Json,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'user_id' }).then(({ error }) => setSaveState(error ? 'error' : 'saved'))
     }, 500)
     return () => window.clearTimeout(timer)
-  }, [entries, timeSlots, userId, persistenceReady])
+  }, [entries, timeSlots, withSaturday, userId, persistenceReady])
 
   useEffect(() => {
     return () => {
@@ -323,20 +327,23 @@ function SchedulePage({ userId = null, grade = null }: { userId?: string | null;
 
   const updateTimeSlot = (index: number, edge: 'start' | 'end', value: string) => {
     const previous = timeSlots[index]
-    const currentRange = splitLessonTimeRange(previous)
-    const next = `${edge === 'start' ? value : currentRange.start}-${edge === 'end' ? value : currentRange.end}`
-    const normalized = normalizeLessonTimeRange(next, index)
-    const normalizedParts = splitLessonTimeRange(normalized)
-    if (!value || normalizedParts.start >= normalizedParts.end || (normalized !== previous && timeSlots.includes(normalized))) return
-    setTimeSlots((current) => current.map((time, timeIndex) => timeIndex === index ? normalized : time).sort((left, right) => left.localeCompare(right)))
-    setEntries((current) => current.map((entry) => entry.time === previous ? { ...entry, time: normalized } : entry))
+    const next = changeLessonRange(previous, edge, value)
+    if (!next || next === previous || timeSlots.includes(next)) return
+    setTimeSlots((current) => current.map((time) => time === previous ? next : time).sort((left, right) => left.localeCompare(right)))
+    setEntries((current) => current.map((entry) => entry.time === previous ? { ...entry, time: next } : entry))
   }
 
   const removeEntry = (id: string) => setEntries((current) => current.filter((entry) => entry.id !== id))
 
+  const toggleSaturday = () => {
+    if (withSaturday && activeDay === 'saturday') setActiveDay('friday')
+    setWithSaturday((current) => !current)
+  }
+
   const recognizeSchedule = async (file: File) => {
     const runId = ocrRunRef.current + 1
     ocrRunRef.current = runId
+    const isCancelled = () => ocrRunRef.current !== runId
     setPreviewUrl(URL.createObjectURL(file))
     setOcrPhase('reading')
     setOcrProgress(0.03)
@@ -344,183 +351,34 @@ function SchedulePage({ userId = null, grade = null }: { userId?: string | null;
     setOcrError('')
 
     try {
-      const { createWorker, PSM } = await import('tesseract.js')
-      const { tableImage, detailImage, detailRatio } = await prepareOcrImages(file)
-      let pass: 'loading' | 'table' | 'cells' = 'loading'
-      let cellProgress = 0
-      let cellCount = 1
-      // Воркер и wasm-ядро берём со своего домена, а не со стороннего CDN:
-      // иначе компрометация CDN означала бы выполнение произвольного кода
-      // в браузере ученика, а блокировка CDN — отказ распознавания.
-      // Языковые модели остаются внешними — это данные, а не исполняемый код.
-      const assetBase = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/tesseract`
-      const worker = await createWorker(['rus', 'eng'], undefined, {
-        workerPath: `${assetBase}/worker.min.js`,
-        corePath: `${assetBase}/core`,
-        logger: ({ progress, status }) => {
-          if (ocrRunRef.current !== runId) return
-          if (status === 'recognizing text' && pass === 'table') {
-            setOcrProgress(0.15 + (progress || 0) * 0.5)
-            setOcrMessage('Разбираем строки и колонки')
-          } else if (status === 'recognizing text' && pass === 'cells') {
-            setOcrProgress(0.62 + ((cellProgress + (progress || 0)) / cellCount) * 0.34)
-            setOcrMessage(`Читаем ячейку ${Math.min(cellProgress + 1, cellCount)} из ${cellCount}`)
-          } else {
-            setOcrProgress(Math.max(0.03, (progress || 0) * 0.12))
-            setOcrMessage(ocrStatusLabel(status))
-          }
+      const result = await recognizeSchedulePhoto(file, {
+        // Воркер и wasm-ядро берём со своего домена, а не со стороннего CDN:
+        // иначе компрометация CDN означала бы выполнение произвольного кода
+        // в браузере ученика, а блокировка CDN — отказ распознавания.
+        // Языковые модели остаются внешними — это данные, а не исполняемый код.
+        assetBase: `${import.meta.env.BASE_URL.replace(/\/$/, '')}/tesseract`,
+        isCancelled,
+        onProgress: (progress, message) => {
+          if (isCancelled()) return
+          setOcrProgress(progress)
+          setOcrMessage(message)
         },
       })
+      if (!result || isCancelled()) return
+      setOcrRawText(result.rawText)
 
-      try {
-        await worker.setParameters({
-          tessedit_pageseg_mode: PSM.AUTO,
-          preserve_interword_spaces: '1',
-          user_defined_dpi: '300',
-        })
-        pass = 'table'
-        const { data } = await worker.recognize(tableImage, {}, { text: true, tsv: true })
-        if (ocrRunRef.current !== runId) return
-        const primaryTsv = data.tsv ?? ''
-        const tableCells = getScheduleTableCells(primaryTsv)
-        const primaryEntries = parseScheduleTableTsv(primaryTsv)
-        let parsed: ScheduleEntry[]
-
-        if (tableCells.length > 0) {
-          pass = 'cells'
-          cellCount = tableCells.length * 3
-          const primaryByCell = new Map(primaryEntries.map((entry) => [`${entry.day}:${entry.time}`, entry]))
-          const rawTextByCell = new Map<string, string>()
-          await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_BLOCK })
-          parsed = []
-
-          // Воркер OCR один: клетки распознаются по очереди, и отмена проверяется между ними.
-          for (const cell of tableCells) {
-            if (ocrRunRef.current !== runId) return
-            const detailRectangle = scaleRectangle(cell.rectangle, detailRatio)
-            // eslint-disable-next-line no-await-in-loop
-            const { data: cellData } = await worker.recognize(detailImage, { rectangle: detailRectangle }, { text: true })
-            const detail = parseScheduleCellText(cellData.text)
-            rawTextByCell.set(`${cell.day}:${cell.time}`, cellData.text)
-            const fallback = primaryByCell.get(`${cell.day}:${cell.time}`)
-            parsed.push({
-              id: makeScheduleEntryId(),
-              day: cell.day,
-              time: cell.time,
-              subject: detail.subject || fallback?.subject || '',
-              room: detail.room || fallback?.room || '',
-            })
-            cellProgress += 1
-          }
-
-          const unresolvedCells = parsed.filter((entry) => !entry.subject)
-          await worker.setParameters({
-            tessedit_pageseg_mode: PSM.SPARSE_TEXT,
-            tessedit_char_whitelist: '',
-          })
-
-          for (const entry of unresolvedCells) {
-            if (ocrRunRef.current !== runId) return
-            const sourceCell = tableCells.find((cell) => cell.day === entry.day && cell.time === entry.time)
-            if (!sourceCell) continue
-            const detailRectangle = scaleRectangle(sourceCell.rectangle, detailRatio)
-            // eslint-disable-next-line no-await-in-loop
-            const { data: retryData } = await worker.recognize(detailImage, { rectangle: detailRectangle }, { text: true })
-            const retry = parseScheduleCellText(retryData.text)
-            if (retry.subject) entry.subject = retry.subject
-            if (retry.room) entry.room = retry.room
-            const cellKey = `${entry.day}:${entry.time}`
-            rawTextByCell.set(cellKey, `${rawTextByCell.get(cellKey) ?? ''}\n${retryData.text}`)
-            cellProgress += 1
-          }
-
-          const occupiedCells = parsed.filter((entry) => entry.subject)
-          await worker.setParameters({
-            tessedit_pageseg_mode: PSM.SPARSE_TEXT,
-            tessedit_char_whitelist: '0123456789',
-          })
-
-          for (const entry of occupiedCells) {
-            if (ocrRunRef.current !== runId) return
-            const sourceCell = tableCells.find((cell) => cell.day === entry.day && cell.time === entry.time)
-            if (!sourceCell) continue
-            const detailRectangle = scaleRectangle(sourceCell.rectangle, detailRatio)
-            const lowerHalf = {
-              ...detailRectangle,
-              top: Math.round(detailRectangle.top + detailRectangle.height * 0.44),
-              height: Math.max(1, Math.round(detailRectangle.height * 0.56)),
-            }
-            // eslint-disable-next-line no-await-in-loop
-            const { data: roomData } = await worker.recognize(detailImage, { rectangle: lowerHalf }, { text: true })
-            const room = parseScheduleRoomDigits(roomData.text)
-            if (room) entry.room = room
-            cellProgress += 1
-          }
-
-          const roomVotes = new Map<string, Map<string, number>>()
-          for (const entry of parsed) {
-            const teacherKey = getScheduleTeacherKey(rawTextByCell.get(`${entry.day}:${entry.time}`) ?? '')
-            if (!teacherKey || !entry.room || entry.room.includes('/')) continue
-            const votes = roomVotes.get(teacherKey) ?? new Map<string, number>()
-            votes.set(entry.room, (votes.get(entry.room) ?? 0) + 1)
-            roomVotes.set(teacherKey, votes)
-          }
-
-          for (const entry of parsed) {
-            const teacherKey = getScheduleTeacherKey(rawTextByCell.get(`${entry.day}:${entry.time}`) ?? '')
-            const votes = teacherKey ? roomVotes.get(teacherKey) : undefined
-            if (!votes) continue
-            const inferredRoom = [...votes].sort((left, right) => right[1] - left[1])[0]?.[0]
-            if (inferredRoom) entry.room = inferredRoom
-          }
-
-          const roomFrequency = new Map<string, number>()
-          for (const { room } of parsed) {
-            if (/^\d{3}$/.test(room)) roomFrequency.set(room, (roomFrequency.get(room) ?? 0) + 1)
-          }
-          for (const entry of parsed) {
-            if (!/^[7-9]\d{2}$/.test(entry.room)) continue
-            const suffix = entry.room.slice(1)
-            const candidate = [...roomFrequency]
-              .filter(([room]) => /^[1-6]\d{2}$/.test(room) && room.endsWith(suffix))
-              .sort((left, right) => right[1] - left[1])[0]?.[0]
-            if (candidate) entry.room = candidate
-          }
-
-          const stableRoomSubjects = new Set(['Русский язык', 'Литература', 'История', 'Физика', 'Алгебра', 'Геометрия', 'География', 'Биология'])
-          const subjectRooms = new Map<string, Set<string>>()
-          for (const entry of parsed) {
-            if (!stableRoomSubjects.has(entry.subject) || !entry.room || entry.room.includes('/')) continue
-            const rooms = subjectRooms.get(entry.subject) ?? new Set<string>()
-            rooms.add(entry.room)
-            subjectRooms.set(entry.subject, rooms)
-          }
-          for (const entry of parsed) {
-            const rooms = subjectRooms.get(entry.subject)
-            if (!entry.room && rooms?.size === 1) entry.room = [...rooms][0]
-            if (!entry.room && entry.subject === 'Физкультура') entry.room = 'Спортзал'
-          }
-        } else {
-          parsed = parseScheduleText(data.text)
-        }
-
-        setOcrRawText(data.text.trim())
-
-        if (parsed.every((entry) => !entry.subject.trim())) {
-          setOcrError('Не удалось найти строки с уроками. Попробуй более ровное и светлое фото.')
-          setOcrPhase('error')
-          return
-        }
-
-        setOcrRows(parsed)
-        setOcrProgress(1)
-        setOcrPhase('review')
-      } finally {
-        await worker.terminate()
+      if (result.entries.every((entry) => !entry.subject.trim())) {
+        setOcrError('Не удалось найти строки с уроками. Сфотографируй таблицу целиком, ровно и при хорошем свете.')
+        setOcrPhase('error')
+        return
       }
-    } catch (error) {
-      if (ocrRunRef.current !== runId) return
-      setOcrError(error instanceof Error ? error.message : 'OCR не запустился. Попробуй ещё раз.')
+
+      setOcrRows(result.entries)
+      setOcrProgress(1)
+      setOcrPhase('review')
+    } catch {
+      if (isCancelled()) return
+      setOcrError('Распознавание не запустилось. Проверь интернет и попробуй ещё раз: при первом запуске загружается русская модель.')
       setOcrPhase('error')
     }
   }
@@ -530,45 +388,64 @@ function SchedulePage({ userId = null, grade = null }: { userId?: string | null;
     if (file) void recognizeSchedule(file)
   }
 
-  const updateOcrRow = (id: string, field: 'day' | 'time' | 'subject' | 'room', value: string) => {
-    setOcrRows((current) => current.map((entry) => entry.id === id ? { ...entry, [field]: value } as ScheduleEntry : entry))
+  const ocrTimes = sortTimes(ocrRows.map(({ time }) => time))
+  const ocrHasSaturday = ocrRows.some((entry) => entry.day === 'saturday' && Boolean(entry.subject.trim() || entry.room.trim()))
+  // В проверке видны все дни недели, а не только найденные: пропущенный
+  // распознаванием урок можно вписать сразу, не дожидаясь таблицы.
+  const reviewDays = weekdays.filter(({ id }) => id !== 'saturday' || withSaturday || ocrHasSaturday)
+  const ocrEntriesByCell = new Map(ocrRows.map((entry) => [`${entry.day}:${entry.time}`, entry]))
+  const recognizedLessonCount = ocrRows.filter((entry) => entry.subject.trim()).length
+
+  const updateOcrCell = (day: WeekdayId, time: string, field: 'subject' | 'room', value: string) => {
+    setOcrRows((current) => {
+      const existing = current.find((entry) => entry.day === day && entry.time === time)
+      if (existing) return current.map((entry) => entry.id === existing.id ? { ...entry, [field]: value } : entry)
+      return [...current, { id: makeScheduleEntryId(), day, time, subject: field === 'subject' ? value : '', room: field === 'room' ? value : '' }]
+    })
   }
 
   const updateOcrTime = (time: string, edge: 'start' | 'end', value: string) => {
-    const currentRange = splitLessonTimeRange(time)
-    const next = normalizeLessonTimeRange(`${edge === 'start' ? value : currentRange.start}-${edge === 'end' ? value : currentRange.end}`)
+    const next = changeLessonRange(time, edge, value)
+    if (!next || next === time || ocrTimes.includes(next)) return
     setOcrRows((current) => current.map((entry) => entry.time === time ? { ...entry, time: next } : entry))
   }
 
+  const removeOcrRow = (time: string) => setOcrRows((current) => current.filter((entry) => entry.time !== time))
+
   const addOcrTimeSlot = () => {
-    const times = sortTimes(ocrRows.map(({ time }) => time))
-    const next = nextLessonTime(times)
-    const activeDays = weekdays.filter((day) => ocrRows.some((entry) => entry.day === day.id))
-    const days = activeDays.length > 0 ? activeDays : weekdays.slice(0, 5)
+    const next = nextLessonTime(ocrTimes)
     setOcrRows((current) => [
       ...current,
-      ...days.map((day) => ({ id: makeScheduleEntryId(), day: day.id, time: next, subject: '', room: '' })),
+      ...reviewDays.map((day) => ({ id: makeScheduleEntryId(), day: day.id, time: next, subject: '', room: '' })),
     ])
   }
 
   const applyOcrRows = () => {
-    const scannedDays = new Set(ocrRows.map(({ day }) => day))
-    const scannedTimes = sortTimes(ocrRows.map(({ time }) => time))
-    setEntries((current) => [
-      ...current.filter((entry) => !scannedDays.has(entry.day)),
+    const lessons = ocrRows.filter((entry) => entry.subject.trim())
+    // Заменяются только дни, в которых нашёлся хоть один урок: снимок половины
+    // недели не стирает вторую половину.
+    const scannedDays = new Set(lessons.map(({ day }) => day))
+    const kept = entries.filter((entry) => !scannedDays.has(entry.day))
+    setEntries([
+      ...kept,
       // Копия: записи уходят в состояние React, править их на месте нельзя.
       // eslint-disable-next-line no-map-spread
-      ...ocrRows.filter((entry) => entry.subject.trim()).map((entry) => ({ ...entry, subject: entry.subject.trim(), room: entry.room.trim() })),
+      ...lessons.map((entry) => ({ ...entry, subject: entry.subject.trim(), room: entry.room.trim() })),
     ])
-    if (scannedTimes.length > 0) setTimeSlots(scannedTimes.slice(0, MAX_TIME_SLOTS))
+    const scannedTimes = sortTimes(ocrRows.map(({ time }) => time))
+    if (scannedTimes.length > 0) setTimeSlots(sortTimes([...scannedTimes, ...kept.map(({ time }) => time)]).slice(0, MAX_TIME_SLOTS))
+    if (scannedDays.has('saturday')) setWithSaturday(true)
     setImportRevision((current) => current + 1)
     closeOcr()
   }
 
-  const ocrTimes = sortTimes(ocrRows.map(({ time }) => time))
-  const ocrDays = weekdays.filter((day) => ocrRows.some((entry) => entry.day === day.id))
-  const ocrEntriesByCell = new Map(ocrRows.map((entry) => [`${entry.day}:${entry.time}`, entry]))
-  const recognizedLessonCount = ocrRows.filter((entry) => entry.subject.trim()).length
+  const saveStatus = saveState === 'loading'
+    ? 'Загружаем расписание из аккаунта'
+    : saveState === 'error'
+      ? 'Не получилось сохранить в аккаунте'
+      : saveState === 'local'
+        ? 'Только в этом браузере: войди, чтобы расписание осталось при смене телефона'
+        : ''
 
   return (
     <div className="schedule-page">
@@ -600,22 +477,35 @@ function SchedulePage({ userId = null, grade = null }: { userId?: string | null;
         </div>
       </motion.header>
 
-      <section className="schedule-workspace" aria-labelledby="schedule-editor-title">
+      <section
+        className="schedule-workspace"
+        aria-label="Расписание на неделю"
+        style={{ '--schedule-days': visibleDays.length } as CSSProperties}
+      >
         <header className="schedule-toolbar">
-          <div className={`schedule-save-state${saveState === 'error' ? ' is-error' : ''}${saveState === 'local' ? ' is-local' : ''}`}>
-            {saveState === 'loading' || saveState === 'saving'
-              ? <SpinnerGap className="schedule-save-spinner" size={16} weight="bold" aria-hidden="true" />
-              : saveState === 'error' || saveState === 'local'
-                ? <WarningCircle size={16} weight="fill" aria-hidden="true" />
-                : <Check size={16} weight="bold" aria-hidden="true" />}
-            <span id="schedule-editor-title">
-              {/* «Сохраняется в этом браузере» - предупреждение, а не успех:
-                  сменишь телефон или почистишь кэш, и расписания нет.
-                  Галочка отсюда снята, значок и текст говорят одно и то же. */}
-              {saveState === 'loading' ? 'Загружаем расписание из аккаунта' : saveState === 'saving' ? 'Сохраняем в аккаунте' : saveState === 'saved' ? 'Сохранено в аккаунте' : saveState === 'error' ? 'Не получилось сохранить в аккаунте' : 'Только в этом браузере: войди, чтобы расписание осталось при смене телефона'}
-            </span>
+          {/* «Сохранено в аккаунте» снято 14 сентября 2026: владельцу это и
+              так очевидно, надпись была лишней. Строка говорит только то,
+              что требует внимания: загрузку, ошибку и то, что у гостя
+              расписание живёт лишь в этом браузере. «Сохраняется в этом
+              браузере» - предупреждение, а не успех: сменишь телефон или
+              почистишь кэш, и расписания нет. Галочки здесь нет вовсе. */}
+          {saveStatus && (
+            <div className={`schedule-save-state${saveState === 'error' ? ' is-error' : ''}${saveState === 'local' ? ' is-local' : ''}`} role="status">
+              {saveState === 'loading'
+                ? <SpinnerGap className="schedule-save-spinner" size={16} weight="bold" aria-hidden="true" />
+                : <WarningCircle size={16} weight="fill" aria-hidden="true" />}
+              <span>{saveStatus}</span>
+            </div>
+          )}
+          <div className="schedule-toolbar-end">
+            <span className="schedule-toolbar-meta">{timeSlots.length} {lessonWord(timeSlots.length)} · {visibleDays.length} дней</span>
+            <button type="button" className="schedule-saturday-toggle" onClick={toggleSaturday}>
+              {withSaturday
+                ? <CalendarMinus size={17} weight="duotone" aria-hidden="true" />
+                : <CalendarPlus size={17} weight="duotone" aria-hidden="true" />}
+              {withSaturday ? 'Убрать субботу' : 'Вернуть субботу'}
+            </button>
           </div>
-          <span className="schedule-toolbar-meta">{timeSlots.length} {lessonWord(timeSlots.length)} · {weekdays.length} дней</span>
         </header>
 
         {/* Пустая сетка притворялась заполненной: семь одинаковых строк
@@ -641,12 +531,17 @@ function SchedulePage({ userId = null, grade = null }: { userId?: string | null;
             <caption className="sr-only">Учебное расписание на неделю</caption>
             <colgroup>
               <col className="schedule-time-column" />
-              {weekdays.map((day) => <col key={day.id} />)}
+              {visibleDays.map((day) => <col key={day.id} />)}
             </colgroup>
             <thead>
               <tr>
-                <th scope="col">Время</th>
-                {weekdays.map((day) => (
+                {/* Подпись объясняет и значок, и поведение: время одно на
+                    все дни, поправил здесь - поменялось во всей неделе. */}
+                <th scope="col" className="schedule-time-heading">
+                  <span><Clock size={16} weight="duotone" aria-hidden="true" />Время урока</span>
+                  <small>одно на все дни</small>
+                </th>
+                {visibleDays.map((day) => (
                   <th scope="col" key={day.id}>
                     <span>{day.short}</span>
                     <strong>{day.label}</strong>
@@ -663,14 +558,14 @@ function SchedulePage({ userId = null, grade = null }: { userId?: string | null;
               {timeSlots.map((time, rowIndex) => (
                 <tr key={time}>
                   <th scope="row">
-                    <span>{String(rowIndex + 1).padStart(2, '0')}</span>
-                    <div className="schedule-time-range" aria-label={`Время урока ${rowIndex + 1}: ${displayLessonTime(time)}`}>
-                      <input type="time" value={splitLessonTimeRange(time).start} aria-label={`Начало урока ${rowIndex + 1} в недельной таблице`} onChange={(event) => updateTimeSlot(rowIndex, 'start', event.target.value)} />
+                    <span className="schedule-lesson-number">{rowIndex + 1} урок</span>
+                    <div className="schedule-time-range" role="group" aria-label={`Время урока ${rowIndex + 1}: ${displayLessonTime(time)}`}>
+                      <LessonTimeField value={splitLessonTimeRange(time).start} label={`Начало урока ${rowIndex + 1} в недельной таблице`} onCommit={(value) => updateTimeSlot(rowIndex, 'start', value)} />
                       <i aria-hidden="true" />
-                      <input type="time" value={splitLessonTimeRange(time).end} aria-label={`Конец урока ${rowIndex + 1} в недельной таблице`} onChange={(event) => updateTimeSlot(rowIndex, 'end', event.target.value)} />
+                      <LessonTimeField value={splitLessonTimeRange(time).end} label={`Конец урока ${rowIndex + 1} в недельной таблице`} onCommit={(value) => updateTimeSlot(rowIndex, 'end', value)} />
                     </div>
                   </th>
-                  {weekdays.map((day) => {
+                  {visibleDays.map((day) => {
                     const entry = entriesByCell.get(`${day.id}:${time}`)
                     const hasContent = Boolean(entry?.subject.trim() || entry?.room.trim())
                     return (
@@ -714,35 +609,34 @@ function SchedulePage({ userId = null, grade = null }: { userId?: string | null;
 
         <div className="schedule-mobile-board">
           <div className="schedule-day-tabs" role="tablist" aria-label="День недели">
-            {weekdays.map((day) => (
+            {visibleDays.map((day, dayIndex) => (
               <button
                 type="button"
                 role="tab"
                 id={`schedule-day-${day.id}`}
                 aria-controls="schedule-day-panel"
-                aria-selected={activeDay === day.id}
-                className={activeDay === day.id ? 'is-active' : ''}
+                aria-selected={shownDay === day.id}
+                className={shownDay === day.id ? 'is-active' : ''}
                 key={day.id}
                 onClick={() => setActiveDay(day.id)}
                 onKeyDown={(event) => {
-                  const currentIndex = weekdays.findIndex(({ id }) => id === day.id)
                   const nextIndex = event.key === 'ArrowRight'
-                    ? (currentIndex + 1) % weekdays.length
+                    ? (dayIndex + 1) % visibleDays.length
                     : event.key === 'ArrowLeft'
-                      ? (currentIndex + weekdays.length - 1) % weekdays.length
+                      ? (dayIndex + visibleDays.length - 1) % visibleDays.length
                       : event.key === 'Home'
                         ? 0
                         : event.key === 'End'
-                          ? weekdays.length - 1
+                          ? visibleDays.length - 1
                           : null
 
                   if (nextIndex === null) return
                   event.preventDefault()
-                  const nextDay = weekdays[nextIndex]!
+                  const nextDay = visibleDays[nextIndex]
                   setActiveDay(nextDay.id)
                   document.getElementById(`schedule-day-${nextDay.id}`)?.focus()
                 }}
-                tabIndex={activeDay === day.id ? 0 : -1}
+                tabIndex={shownDay === day.id ? 0 : -1}
               >
                 <span>{day.short}</span>
                 <strong>{day.label}</strong>
@@ -750,27 +644,31 @@ function SchedulePage({ userId = null, grade = null }: { userId?: string | null;
             ))}
           </div>
 
+          <p className="schedule-day-note">
+            <Clock size={16} weight="duotone" aria-hidden="true" />
+            <span>Время урока общее для всей недели. Поправишь его здесь, и оно изменится во всех днях.</span>
+          </p>
+
           <div
             className="schedule-day-panel"
             id="schedule-day-panel"
             role="tabpanel"
-            aria-labelledby={`schedule-day-${activeDay}`}
+            aria-labelledby={`schedule-day-${shownDay}`}
           >
             {timeSlots.map((time, rowIndex) => {
-              const day = weekdays.find(({ id }) => id === activeDay) ?? weekdays[0]
-              const entry = entriesByCell.get(`${activeDay}:${time}`)
-              const hasContent = Boolean(entry?.subject.trim() || entry?.room.trim())
+              const day = weekdays.find(({ id }) => id === shownDay) ?? weekdays[0]
+              const entry = entriesByCell.get(`${shownDay}:${time}`)
               return (
                 <div className="schedule-mobile-lesson" key={time}>
                   <div className="schedule-mobile-time">
-                    <span>{String(rowIndex + 1).padStart(2, '0')}</span>
-                    <div className="schedule-time-range" aria-label={`Время урока ${rowIndex + 1}: ${displayLessonTime(time)}`}>
-                      <input type="time" value={splitLessonTimeRange(time).start} aria-label={`Начало урока ${rowIndex + 1}`} onChange={(event) => updateTimeSlot(rowIndex, 'start', event.target.value)} />
+                    <span className="schedule-lesson-number">{rowIndex + 1} урок</span>
+                    <div className="schedule-time-range" role="group" aria-label={`Время урока ${rowIndex + 1}: ${displayLessonTime(time)}`}>
+                      <LessonTimeField value={splitLessonTimeRange(time).start} label={`Начало урока ${rowIndex + 1}`} onCommit={(value) => updateTimeSlot(rowIndex, 'start', value)} />
                       <i aria-hidden="true" />
-                      <input type="time" value={splitLessonTimeRange(time).end} aria-label={`Конец урока ${rowIndex + 1}`} onChange={(event) => updateTimeSlot(rowIndex, 'end', event.target.value)} />
+                      <LessonTimeField value={splitLessonTimeRange(time).end} label={`Конец урока ${rowIndex + 1}`} onCommit={(value) => updateTimeSlot(rowIndex, 'end', value)} />
                     </div>
                   </div>
-                  <div className={`schedule-cell-editor${hasContent ? ' has-content' : ''}`}>
+                  <div className={`schedule-cell-editor${entry?.subject.trim() || entry?.room.trim() ? ' has-content' : ''}`}>
                     <label>
                       <span className="sr-only">Предмет, {day.label.toLocaleLowerCase('ru-RU')}, урок {rowIndex + 1}</span>
                       <input
@@ -778,7 +676,7 @@ function SchedulePage({ userId = null, grade = null }: { userId?: string | null;
                         maxLength={50}
                         placeholder="Предмет"
                         aria-label={`Предмет, ${day.label.toLocaleLowerCase('ru-RU')}, урок ${rowIndex + 1}`}
-                        onChange={(event) => updateCell(activeDay, time, 'subject', event.target.value)}
+                        onChange={(event) => updateCell(shownDay, time, 'subject', event.target.value)}
                       />
                     </label>
                     <div>
@@ -789,7 +687,7 @@ function SchedulePage({ userId = null, grade = null }: { userId?: string | null;
                           maxLength={16}
                           placeholder="Кабинет"
                           aria-label={`Кабинет, ${day.label.toLocaleLowerCase('ru-RU')}, урок ${rowIndex + 1}`}
-                          onChange={(event) => updateCell(activeDay, time, 'room', event.target.value)}
+                          onChange={(event) => updateCell(shownDay, time, 'room', event.target.value)}
                         />
                       </label>
                       {entry && (
@@ -854,7 +752,7 @@ function SchedulePage({ userId = null, grade = null }: { userId?: string | null;
                   <span>{Math.round(ocrProgress * 100)}%</span>
                 </div>
                 <div className="schedule-ocr-progress" aria-hidden="true"><span style={{ transform: `scaleX(${ocrProgress})` }} /></div>
-                <p>Первый запуск может занять чуть дольше: загружается русская OCR-модель.</p>
+                <p>Первый запуск может занять чуть дольше: загружается русская OCR-модель. Само фото никуда не отправляется: его читает браузер.</p>
               </motion.div>
             )}
 
@@ -870,38 +768,45 @@ function SchedulePage({ userId = null, grade = null }: { userId?: string | null;
             {ocrPhase === 'review' && (
               <motion.div className="schedule-ocr-review" key="review" initial={{ opacity: 0.72 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                 <div className="schedule-ocr-review-scroll">
-                  <p className="schedule-ocr-review-intro">Нашли {recognizedLessonCount} {lessonWord(recognizedLessonCount)}. Пустые ячейки можно заполнить вручную.</p>
+                  <p className="schedule-ocr-review-intro">
+                    Нашли {recognizedLessonCount} {lessonWord(recognizedLessonCount)}. Пустые клетки можно заполнить, лишние строки убрать.
+                    В расписание попадёт только то, что здесь видно.
+                  </p>
                   <div className="schedule-ocr-grid-scroll" tabIndex={0} aria-label="Проверка распознанного расписания">
-                    <table className="schedule-ocr-grid">
+                    <table className="schedule-ocr-grid" style={{ '--schedule-days': reviewDays.length } as CSSProperties}>
                       <thead>
                         <tr>
-                          <th scope="col">Время</th>
-                          {ocrDays.map((day) => <th scope="col" key={day.id}>{day.label}</th>)}
+                          <th scope="col">Время урока</th>
+                          {reviewDays.map((day) => <th scope="col" key={day.id}>{day.label}</th>)}
                         </tr>
                       </thead>
                       <tbody>
                         {ocrTimes.map((time, rowIndex) => (
                           <tr key={time}>
                             <th scope="row">
-                              <span>{String(rowIndex + 1).padStart(2, '0')}</span>
-                              <div className="schedule-time-range">
-                                <input type="time" value={splitLessonTimeRange(time).start} aria-label={`Начало распознанного урока ${rowIndex + 1}`} onChange={(event) => updateOcrTime(time, 'start', event.target.value)} />
+                              <div className="schedule-ocr-row-head">
+                                <span className="schedule-lesson-number">{rowIndex + 1} урок</span>
+                                <button type="button" className="schedule-ocr-row-remove" aria-label={`Убрать ${rowIndex + 1} урок из распознанного`} onClick={() => removeOcrRow(time)}>
+                                  <Trash size={16} weight="duotone" aria-hidden="true" />
+                                </button>
+                              </div>
+                              <div className="schedule-time-range" role="group" aria-label={`Время распознанного урока ${rowIndex + 1}`}>
+                                <LessonTimeField value={splitLessonTimeRange(time).start} label={`Начало распознанного урока ${rowIndex + 1}`} onCommit={(value) => updateOcrTime(time, 'start', value)} />
                                 <i aria-hidden="true" />
-                                <input type="time" value={splitLessonTimeRange(time).end} aria-label={`Конец распознанного урока ${rowIndex + 1}`} onChange={(event) => updateOcrTime(time, 'end', event.target.value)} />
+                                <LessonTimeField value={splitLessonTimeRange(time).end} label={`Конец распознанного урока ${rowIndex + 1}`} onCommit={(value) => updateOcrTime(time, 'end', value)} />
                               </div>
                             </th>
-                            {ocrDays.map((day) => {
+                            {reviewDays.map((day) => {
                               const entry = ocrEntriesByCell.get(`${day.id}:${time}`)
-                              if (!entry) return <td key={day.id} />
                               return (
                                 <td key={day.id}>
                                   <label>
                                     <span className="sr-only">Предмет, {day.label.toLocaleLowerCase('ru-RU')}, строка {rowIndex + 1}</span>
-                                    <input value={entry.subject} placeholder="Предмет" aria-label={`Распознанный предмет, ${day.label.toLocaleLowerCase('ru-RU')}, урок ${rowIndex + 1}`} onChange={(event) => updateOcrRow(entry.id, 'subject', event.target.value)} />
+                                    <input value={entry?.subject ?? ''} placeholder="Предмет" aria-label={`Распознанный предмет, ${day.label.toLocaleLowerCase('ru-RU')}, урок ${rowIndex + 1}`} onChange={(event) => updateOcrCell(day.id, time, 'subject', event.target.value)} />
                                   </label>
                                   <label>
                                     <span className="sr-only">Кабинет, {day.label.toLocaleLowerCase('ru-RU')}, строка {rowIndex + 1}</span>
-                                    <input value={entry.room} placeholder={entry.subject ? 'Кабинет' : ''} aria-label={`Распознанный кабинет, ${day.label.toLocaleLowerCase('ru-RU')}, урок ${rowIndex + 1}`} onChange={(event) => updateOcrRow(entry.id, 'room', event.target.value)} />
+                                    <input value={entry?.room ?? ''} placeholder={entry?.subject ? 'Кабинет' : ''} aria-label={`Распознанный кабинет, ${day.label.toLocaleLowerCase('ru-RU')}, урок ${rowIndex + 1}`} onChange={(event) => updateOcrCell(day.id, time, 'room', event.target.value)} />
                                   </label>
                                 </td>
                               )
@@ -926,7 +831,7 @@ function SchedulePage({ userId = null, grade = null }: { userId?: string | null;
 
                 <footer>
                   <button type="button" onClick={closeOcr}>Отмена</button>
-                  <button type="button" disabled={ocrRows.every((entry) => !entry.subject.trim())} onClick={applyOcrRows}>
+                  <button type="button" disabled={recognizedLessonCount === 0} onClick={applyOcrRows}>
                     <Check size={18} weight="bold" aria-hidden="true" /> Подтвердить и добавить
                   </button>
                 </footer>

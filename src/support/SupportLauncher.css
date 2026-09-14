@@ -1,0 +1,59 @@
+/* Плавающий вход в поддержку. Стоит в одном и том же углу на каждой странице,
+   поэтому формы и последние строки страниц обязаны оставлять этот угол
+   свободным, а не кнопка - уходить. */
+.support-launcher {
+  position: fixed;
+  z-index: 30;
+  right: clamp(1rem, 2.5vw, 2rem);
+  bottom: clamp(1rem, 2.5vw, 2rem);
+  display: inline-flex;
+  min-height: 3rem;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  box-shadow: 0 0.75rem 2rem oklch(30% 0.12 260 / 0.2);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--text-small);
+  font-weight: var(--weight-semibold);
+  text-decoration: none;
+  transition:
+    transform var(--motion-ui) var(--ease-out),
+    background var(--motion-ui) var(--ease-standard),
+    box-shadow var(--motion-ui) var(--ease-standard);
+}
+
+.support-launcher svg { transition: transform var(--motion-ui) var(--ease-out); }
+
+/* Наведение должно читаться: владелец не заметил прежнего сдвига на два
+   пикселя. Кнопка темнеет, получает кольцо, а значок кивает. */
+.support-launcher:hover {
+  background: var(--color-accent-hover);
+  box-shadow:
+    0 0 0 0.25rem oklch(55% 0.19 260 / 0.22),
+    0 1rem 2.5rem oklch(30% 0.12 260 / 0.28);
+  transform: translateY(-1px);
+}
+
+.support-launcher:hover svg { transform: rotate(-10deg) scale(1.08); }
+.support-launcher:active { transform: translateY(0); }
+
+.support-launcher:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+
+@media (max-width: 560px) {
+  .support-launcher { right: 0.75rem; bottom: 0.75rem; min-width: 3rem; padding: 0; justify-content: center; }
+  .support-launcher span { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .support-launcher,
+  .support-launcher svg { transition: none; }
+  .support-launcher:hover svg { transform: none; }
+}

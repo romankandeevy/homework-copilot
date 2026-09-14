@@ -1,0 +1,90 @@
+/* «Мои решения»: число решённых, поиск с предметом, дни и догрузка.
+
+   Токены - из дизайн-системы (DESIGN.md). Список плоский: карточка
+   поднимается только наведением, день отделён строкой-датой, а не плашкой.
+   Кобальта здесь нет - он у маршрута и главного действия. */
+
+.solutions-count {
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.solutions-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.solutions-toolbar .route-search {
+  flex: 1 1 20rem;
+  max-width: 36rem;
+}
+
+.solutions-found {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-small);
+}
+
+.solutions-days {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-8);
+}
+
+.solutions-day {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-3);
+}
+
+.solutions-day-title {
+  margin: 0;
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-small);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-copy);
+  text-transform: uppercase;
+}
+
+/* Кнопка слева: правый нижний угол занят плавающей поддержкой. */
+.solutions-more {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3) var(--space-4);
+  padding-top: var(--space-2);
+}
+
+.solutions-more p {
+  margin: 0;
+  color: var(--color-text-subtle);
+  font-family: var(--font-mono);
+  font-size: var(--text-small);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Окошко на главной: последние три карточки в один ряд. Где на три места
+   нет, остаются две - иначе на телефоне блок снова занимает экран. */
+.my-solutions { container-type: inline-size; }
+
+.my-solutions > .solution-cards {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17.5rem), 1fr));
+}
+
+@container (max-width: 53.95rem) {
+  .my-solutions .solution-card:nth-child(n + 3) { display: none; }
+}
+
+.my-solutions .section-link {
+  min-height: var(--size-control);
+  text-decoration: none;
+}

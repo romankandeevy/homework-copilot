@@ -249,6 +249,51 @@ function openStream(response: ServerResponse): SseWriter {
   }
 }
 
+export type ChatSettlement = {
+  chargedKopecks: number
+  refundedKopecks: number
+  balanceKopecks: number | null
+}
+
+/* Итог `settle_chat_generation` читаем строго: без числа списания это не
+   итог. Раньше отсутствующее поле становилось нулём, и ученик читал
+   «Списано 0 ₽, баланс 0 ₽» там, где расчёт не прошёл вовсе. */
+export function readSettlement(value: unknown): ChatSettlement | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const record = value as Record<string, unknown>
+  const finite = (entry: unknown) => (typeof entry === 'number' && Number.isFinite(entry) ? entry : null)
+  const charged = finite(record.chargedKopecks)
+  if (charged === null) return null
+  return {
+    chargedKopecks: charged,
+    refundedKopecks: finite(record.refundedKopecks) ?? 0,
+    balanceKopecks: finite(record.balanceKopecks),
+  }
+}
+
+/* Закрыть генерацию без списания. Строку в статусе `reserved`
+   `assert_chat_quota` пять минут считает активной и отвечает на любой
+   следующий вопрос «Дождись, пока закончится предыдущий ответ».
+   Возвращает текст ошибки, если закрыть не вышло. */
+async function closeGeneration(
+  service: SupabaseClient<Database>,
+  generationId: string,
+  reason: string,
+  startedAt: number,
+): Promise<string | null> {
+  try {
+    const { error } = await service.rpc('settle_chat_generation', {
+      p_generation_id: generationId,
+      p_status: 'failed',
+      p_error: reason.slice(0, 1000),
+      p_duration_ms: Date.now() - startedAt,
+    })
+    return error ? error.message : null
+  } catch (error) {
+    return error instanceof Error ? error.message : 'settle_chat_generation недоступна'
+  }
+}
+
 function sendJson(response: ServerResponse, status: number, payload: unknown) {
   response.statusCode = status
   response.setHeader('Content-Type', 'application/json; charset=utf-8')
@@ -301,7 +346,11 @@ export async function handleChatRequest(
         ? recordError(options, {
           kind: status === 502 || status === 504 ? 'llm' : 'api',
           route: 'chat',
-          message: message ?? 'chat failed',
+          // Что сказал шлюз или база, видно только здесь: ученику уходит
+          // наша фраза, а без строки шлюза причину не найти.
+          message: [message ?? 'chat failed', error instanceof ChatApiError ? error.detail : null]
+            .filter(Boolean)
+            .join(' | '),
           stack: error instanceof Error && !(error instanceof ChatApiError) ? error.stack ?? null : null,
           requestId,
           userId: account?.userId ?? null,
@@ -431,7 +480,7 @@ export async function handleChatRequest(
       .select('id')
       .single()
 
-    const { data: settlement } = await service.rpc('settle_chat_generation', {
+    const { data: settled, error: settleError } = await service.rpc('settle_chat_generation', {
       p_generation_id: generationId,
       p_status: 'succeeded',
       p_input_tokens: answer.inputTokens,
@@ -440,23 +489,43 @@ export async function handleChatRequest(
       p_message_id: assistantMessage?.id ?? null,
       p_duration_ms: Date.now() - startedAt,
     })
+    const settlement = settleError ? null : readSettlement(settled)
+
+    /* Расчёт, который не прошёл, больше не притворяется нулём.
+
+       14 сентября 2026 владелец спросил GPT-5.6 Luna с балансом 53,60 ₽ и
+       прочитал под ответом «Списано 0 ₽, баланс 0 ₽». Расчёт падал в базе
+       (ограничение брони, разбор - миграция
+       20260914200000_chat_charge_without_reserve.sql), а ошибку здесь никто
+       не смотрел: пустой итог превращался в нули, ответ уходил бесплатно,
+       и так с 30 августа. Генерация при этом оставалась `reserved`, и
+       следующий вопрос пять минут получал «Дождись, пока закончится
+       предыдущий ответ».
+
+       Теперь сбой расчёта пишется в журнал ошибок громко, генерация
+       закрывается без списания, чтобы не запирать чат, а строки о расходе
+       под ответом нет вовсе: придуманный ноль хуже молчания. */
+    if (!settlement) {
+      const reason = settleError?.message ?? 'settle_chat_generation вернула пустой итог'
+      await recordError(options, {
+        kind: 'api',
+        route: 'chat',
+        message: 'chat settle failed | ' + reason,
+        stack: null,
+        requestId,
+        userId: account.userId,
+        ip: requestAddress(request, null),
+        input: { modelId, generationId },
+      })
+      await closeGeneration(service, generationId, 'Расчёт не прошёл: ' + reason, startedAt)
+    }
 
     await service
       .from('chat_conversations')
       .update({ last_message_at: new Date().toISOString() })
       .eq('id', body.conversationId)
 
-    stream.send('usage', {
-      chargedKopecks: settlement && typeof settlement === 'object' && !Array.isArray(settlement)
-        ? settlement.chargedKopecks
-        : 0,
-      refundedKopecks: settlement && typeof settlement === 'object' && !Array.isArray(settlement)
-        ? settlement.refundedKopecks
-        : 0,
-      balanceKopecks: settlement && typeof settlement === 'object' && !Array.isArray(settlement)
-        ? settlement.balanceKopecks
-        : null,
-    })
+    if (settlement) stream.send('usage', settlement)
     /* Обрезанный ответ называем обрезанным.
 
        Длину ответа режет баланс: answerCharacterBudget - это то, что
@@ -476,16 +545,20 @@ export async function handleChatRequest(
     // закрывает генерацию, чтобы она не висела активной и не блокировала
     // следующий вопрос.
     if (generationId && service) {
-      try {
-        await service.rpc('settle_chat_generation', {
-          p_generation_id: generationId,
-          p_status: 'failed',
-          p_error: message,
-          p_duration_ms: Date.now() - startedAt,
+      const closeError = await closeGeneration(service, generationId, message, startedAt)
+      // Незакрытая генерация пять минут запирает чат; это надо видеть в
+      // журнале, а не узнавать от ученика.
+      if (closeError) {
+        await recordError(options, {
+          kind: 'api',
+          route: 'chat',
+          message: 'chat generation left open | ' + closeError,
+          stack: null,
+          requestId,
+          userId: account?.userId ?? null,
+          ip: requestAddress(request, null),
+          input: { modelId, generationId },
         })
-      } catch {
-        // Зависшую генерацию закроет реапер; исходную ошибку
-        // пользователю это скрывать не должно.
       }
     }
 

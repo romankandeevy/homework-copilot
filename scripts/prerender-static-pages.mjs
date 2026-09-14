@@ -13,33 +13,38 @@
    настоящим браузером и кладём разметку обратно в файлы.
 
    Отрисовываются только те адреса, у которых есть смысл вне приложения:
-   витрина и пять юридических документов. `/app`, `/chat`, `/solutions` и
+   витрина и шесть документов под /docs/. `/app`, `/chat`, `/solutions` и
    `/schedule` живут за входом и закрыты `noindex` - отрисовывать там нечего.
    `/support` тоже `noindex` (`siteMetadata.ts`), и его содержимое - личная
    переписка, а не страница для поиска.
 
    Скрипт идёт после `create-static-routes.mjs`: тот раскладывает файлы и
    заголовки, этот наполняет их телом. */
-/* Адреса обходятся по очереди одной вкладкой: их шесть, параллелить нечего. */
+/* Адреса обходятся по очереди одной вкладкой: их семь, параллелить нечего. */
 /* eslint-disable no-await-in-loop */
 import { createServer } from 'node:http'
 import { readFile, writeFile } from 'node:fs/promises'
 import { extname, join, resolve } from 'node:path'
 import { chromium } from '@playwright/test'
+import { legalDocumentKinds } from '../src/lib/siteMetadata.ts'
 
 const outputDirectory = resolve('dist')
 
 /* Адрес, признак того, что страница дорисована, и файлы, в которые ложится
    результат. Витрина живёт в корневом `index.html`, документы - в двух копиях
-   сразу: каталогом и файлом рядом, как их и раскладывает предыдущий скрипт. */
+   сразу: каталогом и файлом рядом, как их и раскладывает предыдущий скрипт.
+
+   С 14 сентября 2026 документы живут под /docs/, и отрисовываются только
+   новые адреса. На прежних (/terms, /privacy…) лежит страница мгновенного
+   перехода с каноническим адресом нового документа - её отрисовывать не
+   нужно, поисковик уйдёт по переходу. */
 const pages = [
   { path: '/', ready: '#hero-title', files: ['index.html'] },
-  { path: '/terms', ready: '.legal-document h1', files: ['terms/index.html', 'terms.html'] },
-  { path: '/privacy', ready: '.legal-document h1', files: ['privacy/index.html', 'privacy.html'] },
-  { path: '/consent', ready: '.legal-document h1', files: ['consent/index.html', 'consent.html'] },
-  { path: '/cookies', ready: '.legal-document h1', files: ['cookies/index.html', 'cookies.html'] },
-  { path: '/offer', ready: '.legal-document h1', files: ['offer/index.html', 'offer.html'] },
-  { path: '/contacts', ready: '.legal-document h1', files: ['contacts/index.html', 'contacts.html'] },
+  ...legalDocumentKinds.map((kind) => ({
+    path: `/docs/${kind}`,
+    ready: '.legal-document h1',
+    files: [`docs/${kind}/index.html`, `docs/${kind}.html`],
+  })),
 ]
 
 /* Появление секций при прокрутке сделано прозрачностью, и до срабатывания

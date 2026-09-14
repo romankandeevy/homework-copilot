@@ -21,7 +21,6 @@ import {
   Scroll,
   TextAa,
   House,
-  MagnifyingGlass,
   Moon,
   Notebook,
   SpinnerGap,
@@ -51,7 +50,7 @@ import { bindPendingReferral, preparePendingReferralClaim } from './lib/referral
 import { forgetGuestSolution, getGuestId, guestSolutionUsed, rememberGuestSolutionUsed } from './lib/guestSolutions'
 import { takeYandexReturn } from './lib/yandexReturn'
 import { completeYandexSignIn } from './lib/yandexAuth'
-import { applySeoMetadata, getSeoMetadata } from './lib/siteMetadata'
+import { applySeoMetadata, getSeoMetadata, legalDocumentKind } from './lib/siteMetadata'
 import { estimateSolutionPrice } from './lib/solutionPricing'
 import { findSubjectByName } from './lib/subjects'
 import {
@@ -86,8 +85,9 @@ import type { SolutionJob } from './lib/solutionJobs'
 import { SolutionQueue } from './solution/SolutionQueue'
 import { SolutionVerificationPanel } from './solution/SolutionVerificationPanel'
 import { WrittenAnalysis } from './solution/WrittenAnalysis'
-import { SolutionCard } from './solution/SolutionCard'
-import { SupportCenter, SupportLauncher } from './support/SupportCenter'
+import { MySolutions, SolutionsPage } from './solution/SolutionsPage'
+import { SupportCenter } from './support/SupportCenter'
+import { SupportLauncher } from './support/SupportLauncher'
 import { SiteFooter } from './support/SiteFooter'
 import { NotFoundPage } from './NotFoundPage'
 import type { SupportCategory, SupportPrefill } from './support/SupportCenter'
@@ -101,11 +101,12 @@ const DesignSystemPlayground = lazy(() => import('./DesignSystemPlayground'))
 const NotebookCanvas = lazy(() => import('./NotebookCanvas'))
 const ChatPage = lazy(() => import('./chat/ChatPage'))
 const AccountDialog = lazy(() => import('./account/AccountDialog'))
+const ProfilePage = lazy(() => import('./account/ProfilePage'))
+const BalancePage = lazy(() => import('./account/BalancePage'))
 const SchedulePage = lazy(() => import('./SchedulePage'))
 const AdminApp = lazy(() => import('./admin/AdminApp'))
 
 type Theme = 'light' | 'dark'
-type AccountView = 'profile' | 'wallet'
 type TextbookId = string
 type TextbookSourceType = 'pdf' | 'epub' | 'image' | 'link' | 'official' | 'photo'
 
@@ -273,7 +274,22 @@ const applicationRoutes = [
 // и доступен из подвала, поэтому мёртвых ссылок не появляется.
 const navigation = applicationRoutes.filter(({ label }) => label !== 'ЦДЗ')
 
-type NavigationLabel = (typeof applicationRoutes)[number]['label']
+/* Профиль и баланс - такие же адреса, как разделы (14 сентября 2026): их
+   открывают по ссылке, сохраняют, листают назад и вперёд. В меню разделов
+   их нет - в шапке у них свои ссылки, сумма и имя. */
+const accountRoutes = [
+  { label: 'Профиль', path: '/profile' },
+  { label: 'Баланс', path: '/balance' },
+] as const
+
+type AccountRouteLabel = (typeof accountRoutes)[number]['label']
+type NavigationLabel = (typeof applicationRoutes)[number]['label'] | AccountRouteLabel
+
+const routeDestinations: readonly { label: NavigationLabel; path: string }[] = [...applicationRoutes, ...accountRoutes]
+
+function isAccountRoute(label: NavigationLabel): label is AccountRouteLabel {
+  return label === 'Профиль' || label === 'Баланс'
+}
 
 function currentNavigationRoute(pathname = window.location.pathname): { label: NavigationLabel; solution: SolutionState | null } {
   const path = currentApplicationPath(pathname)
@@ -282,7 +298,7 @@ function currentNavigationRoute(pathname = window.location.pathname): { label: N
   // `/main` — прежний адрес рабочей главной. Ссылки на него уже разошлись,
   // поэтому он продолжает открывать приложение и лишь переписывается на `/app`.
   if (path === '/main') return { label: 'Главная', solution: null }
-  const destination = applicationRoutes.find((item) => item.path === path)
+  const destination = routeDestinations.find((item) => item.path === path)
   if (destination) return { label: destination.label, solution: null }
 
   // Подпись задачи — не только номер: у решения по вписанному условию это
@@ -314,7 +330,7 @@ const knownApplicationPaths = new Set([
   // `/` попадает сюда с возврата авторизации: витрина отдаёт его приложению,
   // а `normalizeNavigationPath` переписывает на `/app`.
   '/', '/app', '/main', '/solutions', '/base', '/cdz', '/tasks', '/textbooks',
-  '/chat', '/schedule', '/support',
+  '/chat', '/schedule', '/support', '/profile', '/balance',
 ])
 
 function isKnownApplicationPath(pathname: string) {
@@ -536,23 +552,53 @@ function ThemeToggle({ theme, onToggle }: { theme: Theme; onToggle: () => void }
 
   return (
     <button className="utility-button" type="button" onClick={onToggle} aria-label={theme === 'light' ? 'Включить тёмную тему' : 'Включить светлую тему'}>
-      <Icon size={20} weight="duotone" aria-hidden="true" />
+      <Icon size={20} weight="regular" aria-hidden="true" />
     </button>
   )
 }
 
-function ProfileButton({ user, account, onClick, compact = false }: { user: User | null; account: AccountData | null; onClick: () => void; compact?: boolean }) {
+/* Обычный клик уводит роутером, а Ctrl, Cmd, средняя кнопка и «открыть в
+   новой вкладке» работают как у любой ссылки. */
+function isPlainLeftClick(event: { defaultPrevented: boolean; metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean; button: number }) {
+  return !(event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0)
+}
+
+/* Имя вошедшего в шапке - ссылка на `/profile`, как пункт меню: с 14
+   сентября 2026 профиль - страница, её открывают в новой вкладке и
+   сохраняют. У гостя это по-прежнему кнопка: окно входа открывается на
+   месте, и человек не теряет раздел, в котором был. */
+function ProfileButton({ user, account, active = false, onClick, compact = false }: { user: User | null; account: AccountData | null; active?: boolean; onClick: () => void; compact?: boolean }) {
   const name = account?.profile.full_name || (user ? user.email?.split('@')[0] : 'Войти') || 'Ученик'
   // Класс не выдумываем: Google его не передаёт, и пока ученик не выбрал, его нет.
   const grade = account?.profile.grade
   const subtitle = user ? (grade ? `${grade} класс` : account ? 'Класс не выбран' : '') : 'Аккаунт'
-
-  return (
-    <button className={`profile-button${compact ? ' is-compact' : ''}`} type="button" aria-label={user ? 'Открыть профиль' : 'Войти или зарегистрироваться'} onClick={onClick}>
+  const className = `profile-button${compact ? ' is-compact' : ''}`
+  const content = (
+    <>
       <span><UserCircle size={21} weight="duotone" aria-hidden="true" /></span>
       {!compact && <span><strong>{name}</strong><small>{subtitle}</small></span>}
       {!compact && <CaretRight size={14} weight="bold" aria-hidden="true" />}
-    </button>
+    </>
+  )
+
+  if (!user) {
+    return <button className={className} type="button" aria-label="Войти или зарегистрироваться" onClick={onClick}>{content}</button>
+  }
+
+  return (
+    <a
+      className={className}
+      href={applicationPath('/profile')}
+      aria-label={`Профиль: ${name}${subtitle ? `, ${subtitle}` : ''}`}
+      aria-current={active ? 'page' : undefined}
+      onClick={(event) => {
+        if (!isPlainLeftClick(event)) return
+        event.preventDefault()
+        onClick()
+      }}
+    >
+      {content}
+    </a>
   )
 }
 
@@ -739,7 +785,10 @@ function ProductTopbar({
                 onNavigate(label)
               }}
             >
-              <Icon size={19} weight="duotone" aria-hidden="true" />
+              {/* Значки разделов линейные, одного размера и веса с кнопкой
+                  темы. 14 сентября владелец назвал прежние двухцветные
+                  «мультяшными»: второй тон заливки спорил с подписью. */}
+              <Icon size={20} weight="regular" aria-hidden="true" />
               <span className="navigation-label">{label}</span>
             </a>
           )
@@ -748,8 +797,8 @@ function ProductTopbar({
 
       <div className="topbar-actions">
         <ThemeToggle theme={theme} onToggle={onToggleTheme} />
-        {user && <BalanceControl balance={account?.balance ?? null} onOpenWallet={onOpenWallet} />}
-        <ProfileButton user={user} account={account} onClick={onOpenAccount} />
+        {user && <BalanceControl balance={account?.balance ?? null} active={activeLabel === 'Баланс'} onOpenWallet={onOpenWallet} />}
+        <ProfileButton user={user} account={account} active={activeLabel === 'Профиль'} onClick={onOpenAccount} />
       </div>
     </header>
   )
@@ -764,14 +813,27 @@ function pendingSolutionPrice(payload: { condition?: string; imageDataUrl?: stri
   })
 }
 
-// «Пополнить» обещало оплату, которой у обычного аккаунта нет: карточка
-// пополнения появляется, только когда оплату включил сервер.
-function BalanceControl({ balance, onOpenWallet }: { balance: number | null; onOpenWallet: () => void }) {
+/* Сумма в шапке - ссылка на `/balance`. До 14 сентября 2026 рядом с ней
+   стояло «Открыть →»: читалось как отдельная кнопка, хотя это был текст, а
+   открывало баланс нажатие на всё целиком. Владелец назвал это абсурдом.
+   «Пополнить» здесь тоже нет: оно обещало оплату, которой у обычного
+   аккаунта нет, - пополнение живёт на странице баланса и появляется,
+   только когда оплату включил сервер. */
+function BalanceControl({ balance, active, onOpenWallet }: { balance: number | null; active: boolean; onOpenWallet: () => void }) {
   return (
-    <button className="balance-control" type="button" aria-label={`Открыть баланс: ${formatRubles(balance ?? 0)}`} onClick={onOpenWallet}>
-      <span><small>Баланс</small><strong>{formatRubles(balance ?? 0)}</strong></span>
-      <span className="balance-open">Открыть <ArrowRight size={15} weight="bold" aria-hidden="true" /></span>
-    </button>
+    <a
+      className="balance-control"
+      href={applicationPath('/balance')}
+      aria-current={active ? 'page' : undefined}
+      onClick={(event) => {
+        if (!isPlainLeftClick(event)) return
+        event.preventDefault()
+        onOpenWallet()
+      }}
+    >
+      <small>Баланс</small>
+      <strong>{formatRubles(balance ?? 0)}</strong>
+    </a>
   )
 }
 
@@ -822,140 +884,7 @@ function GuestSolutionsNote({ onOpenAccount, freeSolutionUsed = false }: { onOpe
   )
 }
 
-function MySolutions({ items, onOpenAll, onOpenSolution }: { items: readonly PersonalSolution[]; onOpenAll: () => void; onOpenSolution: (state: SolutionState) => void }) {
-  return (
-    <section className="my-solutions" aria-labelledby="my-solutions-title">
-      <header className="section-heading">
-        <div><h2 id="my-solutions-title">Мои решения</h2><p>Задачи, которые ты решил в этом аккаунте.</p></div>
-        <button className="section-link" type="button" onClick={onOpenAll}>Все мои решения <ArrowRight size={17} weight="bold" aria-hidden="true" /></button>
-      </header>
-      {items.length > 0 ? <div className="solution-cards">
-        {items.map(({ textbookId, task, time, mode, source, solution }) => (
-          <SolutionCard
-            key={`${textbookId}-${task}-${time}`}
-            solution={solution}
-            subject={solution.subject || getTextbook(textbookId).subject}
-            time={time}
-            onOpen={() => onOpenSolution({ textbookId, task, mode, source })}
-          />
-        ))}
-      </div> : <p className="collection-empty">Пока здесь пусто. Первое решение появится после запроса.</p>}
-    </section>
-  )
-}
-
-/* Личная история решений.
-
-   Общей базы здесь больше нет. Она пополнялась только решениями по номеру
-   из размеченного учебника, а индекс учебников удалён: в каталоге не
-   прибавилось ни одной записи с 28 августа и не могло прибавиться. Раздел
-   занимал вкладку, поиск и карточку на главной, и ничего не отдавал. */
-function SolutionsPage({
-  user,
-  personalSolutions,
-  textbooks: items,
-  onOpenAccount,
-  onOpenSolution,
-  onStartTask,
-}: {
-  user: User | null
-  personalSolutions: readonly PersonalSolution[]
-  textbooks: readonly Textbook[]
-  onOpenAccount: () => void
-  onOpenSolution: (state: SolutionState) => void
-  onStartTask: () => void
-}) {
-  const [query, setQuery] = useState('')
-  const normalizedQuery = query.trim().toLocaleLowerCase('ru')
-  // Ищется и по условию: карточка его показывает, значит по нему и находят.
-  const matches = (textbook: Textbook, task: string, condition: string) => (
-    `${textbook.subject} ${task} ${condition}`.toLocaleLowerCase('ru').includes(normalizedQuery)
-  )
-  const personalResults = personalSolutions.filter(({ textbookId, task, solution }) => (
-    matches(getTextbook(textbookId, items), task, solution.condition)
-  ))
-  const hasSolutions = personalSolutions.length > 0
-
-  return (
-    <section className="route-page solutions-page" aria-labelledby="solutions-page-title">
-      <header className="route-page-header">
-        <h1 id="solutions-page-title">Мои решения</h1>
-        <p>Задачи, которые ты уже решил. Открыть любую можно снова и бесплатно.</p>
-      </header>
-
-      {/* Поиск появляется, когда есть в чём искать. */}
-      {user && hasSolutions && (
-        <label className="route-search" htmlFor="solutions-search">
-          <MagnifyingGlass size={20} weight="duotone" aria-hidden="true" />
-          <span>Найти решение</span>
-          <input
-            id="solutions-search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Предмет или слово из условия"
-            autoComplete="off"
-          />
-        </label>
-      )}
-
-      {/* Самый частый экран нового человека. До 8 сентября здесь стояли
-          заголовок, подзаголовок и мелкая строка-ссылка - и семьсот пикселей
-          пустоты под ними: страница читалась как недогрузившаяся. Теперь то
-          же, что и у пустой истории вошедшего: карточка со значком,
-          объяснением и действием. */}
-      {!user ? (
-        <section className="route-empty" aria-labelledby="solutions-empty-title">
-          <Notebook size={34} weight="duotone" aria-hidden="true" />
-          <div>
-            <h2 id="solutions-empty-title">Здесь будут твои решения</h2>
-            <p>
-              Первую задачу можно решить без аккаунта. Чтобы решения сохранялись и открывались
-              снова бесплатно, нужен вход - новому аккаунту заодно придут 20 ₽, один раз на устройство.
-            </p>
-            <div className="route-empty-actions">
-              <button className="route-secondary-action" type="button" onClick={onStartTask}>Решить задачу</button>
-              <button className="route-quiet-action" type="button" onClick={onOpenAccount}>
-                Войти
-                <ArrowRight size={16} weight="bold" aria-hidden="true" />
-              </button>
-            </div>
-          </div>
-        </section>
-      )
-        : personalResults.length > 0 ? (
-          <div className="solution-cards">
-            {personalResults.map(({ textbookId, task, time, mode, source, solution }) => (
-              <SolutionCard
-                key={`${textbookId}-${task}-${time}`}
-                solution={solution}
-                subject={solution.subject || getTextbook(textbookId, items).subject}
-                time={time}
-                onOpen={() => onOpenSolution({ textbookId, task, mode, source })}
-              />
-            ))}
-          </div>
-        ) : hasSolutions ? (
-          <section className="route-empty" aria-labelledby="solutions-empty-title">
-            <MagnifyingGlass size={34} weight="duotone" aria-hidden="true" />
-            <div>
-              <h2 id="solutions-empty-title">По запросу «{query.trim()}» ничего нет</h2>
-              <p>Попробуй другой предмет или слово из условия.</p>
-            </div>
-          </section>
-        ) : (
-          <section className="route-empty" aria-labelledby="solutions-empty-title">
-            <Notebook size={34} weight="duotone" aria-hidden="true" />
-            <div>
-              <h2 id="solutions-empty-title">Решений пока нет</h2>
-              <p>Отправь задачу с главной — она появится здесь и останется в истории. Открыть её снова можно бесплатно.</p>
-              <button className="route-secondary-action" type="button" onClick={onStartTask}>Решить задачу</button>
-            </div>
-          </section>
-        )}
-    </section>
-  )
-}
-
+/* «Мои решения» и их окошко на главной - в `src/solution/SolutionsPage.tsx`. */
 
 function UnderstandingPage({
   solution,
@@ -1396,7 +1325,9 @@ function HomePage() {
   // `signin` приходит с витрины: там «Войти» должен открывать окно аккаунта,
   // а не высаживать человека на рабочую главную с просьбой поискать вход.
   const [accountOpen, setAccountOpen] = useState(() => ['reset', 'verified', 'confirm', 'signin', 'yandex'].includes(new URLSearchParams(window.location.search).get('auth') ?? ''))
-  const [accountView, setAccountView] = useState<AccountView>('profile')
+  // Страница аккаунта, на которой гостю уже показали вход: закрыл окно -
+  // само оно больше не откроется, и после выхода тоже.
+  const accountRouteSignInShownRef = useRef<NavigationLabel | null>(null)
   const [passwordRecovery, setPasswordRecovery] = useState(() => new URLSearchParams(window.location.search).get('auth') === 'reset')
   // Аккаунт без единой отметки о согласии: окно согласия его не отпускает.
   const [legalGateUserId, setLegalGateUserId] = useState<string | null>(null)
@@ -1514,7 +1445,7 @@ function HomePage() {
       ? '/support'
       : selectedSolution
         ? `/solutions/${encodeURIComponent(selectedSolution.textbookId)}/${encodeURIComponent(selectedSolution.task)}`
-        : applicationRoutes.find((item) => item.label === activeNavigation)?.path ?? '/app'
+        : routeDestinations.find((item) => item.label === activeNavigation)?.path ?? '/app'
     applySeoMetadata(getSeoMetadata(route, selectedSolution?.task))
   }, [activeNavigation, selectedSolution, supportOpen])
 
@@ -1743,10 +1674,17 @@ function HomePage() {
     const followPayment = async () => {
       const { loadPaymentStatus, readPaymentReturn, withoutPaymentReturn } = await import('./lib/payments')
       const paymentReturn = readPaymentReturn(window.location.search)
-      window.history.replaceState({}, '', withoutPaymentReturn(window.location.href))
+      /* Адреса возврата зарегистрированы у Робокассы и остаются прежними
+         (`/app?payment=…`), а после разбора показывается страница баланса:
+         с 14 сентября 2026 это `/balance`, а не окно. Запись возврата в
+         истории заменяется - «назад» не вернёт на технический адрес. */
+      const cleanUrl = new URL(withoutPaymentReturn(window.location.href), window.location.origin)
+      if (paymentReturn) cleanUrl.pathname = applicationPath('/balance')
+      window.history.replaceState({}, '', `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`)
       if (!paymentReturn || !active) return
-      setAccountView('wallet')
-      setAccountOpen(true)
+      setSelectedSolution(null)
+      setActiveNavigation('Баланс')
+      scrollRouteToTop(routeScrollRef.current)
       if (paymentReturn.outcome === 'fail' || !paymentReturn.invId) {
         setAccountNotice(paymentReturn.outcome === 'fail'
           ? 'Оплата не завершена. Если деньги всё же списались, баланс пополнится сам в течение нескольких минут'
@@ -1837,18 +1775,63 @@ function HomePage() {
   const rememberAccountTrigger = () => {
     accountTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
   }
-  const openAccount = () => {
+  const openSignIn = () => {
     rememberAccountTrigger()
     setAccountNotice('')
-    setAccountView('profile')
     setAccountOpen(true)
+  }
+  /* С 14 сентября 2026 профиль и баланс - страницы `/profile` и `/balance`.
+     Окном остались вход и регистрация гостя, согласие с документами и новый
+     пароль. Всё, что звало профиль или кошелёк (шапка, чат, нехватка денег,
+     возврат с оплаты), ведёт на страницы; гостю вместо них - вход. */
+  const openAccount = () => {
+    if (!user) {
+      openSignIn()
+      return
+    }
+    navigate('Профиль')
   }
   const openWallet = () => {
-    rememberAccountTrigger()
-    setAccountNotice('')
-    setAccountView('wallet')
-    setAccountOpen(true)
+    if (!user) {
+      openSignIn()
+      return
+    }
+    navigate('Баланс')
   }
+  const openAccountPage = (page: 'profile' | 'balance') => navigate(page === 'profile' ? 'Профиль' : 'Баланс')
+
+  /* Вход завершился, пока окно было открыто: профиля в окне больше нет, и
+     окно закрывается. Если потоку есть что сказать («Почта подтверждена»,
+     «Пароль обновлён», итог входа через Яндекс ID), это показывает страница
+     профиля - раньше те же слова стояли над профилем в окне. Без сообщения
+     человек остаётся там, где входил. */
+  useEffect(() => {
+    if (!accountOpen || !user || passwordRecovery) return
+    setAccountOpen(false)
+    sessionStorage.removeItem('homework-copilot:google-auth-pending')
+    const cleanUrl = new URL(window.location.href)
+    cleanUrl.searchParams.delete('auth')
+    window.history.replaceState(window.history.state, '', `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`)
+    if (!accountNotice) return
+    if (currentApplicationPath() !== '/profile') window.history.pushState({}, '', applicationPath('/profile'))
+    setSelectedSolution(null)
+    setActiveNavigation('Профиль')
+    scrollRouteToTop(routeScrollRef.current)
+  }, [accountNotice, accountOpen, passwordRecovery, user])
+
+  /* Гость, открывший `/profile` или `/balance`, видит вход. Один раз на
+     заход в страницу: закрыл окно - остаётся объяснение с кнопкой «Войти»;
+     вышедшему из аккаунта окно само не выскакивает. */
+  const accountRouteActive = isAccountRoute(activeNavigation)
+  useEffect(() => {
+    if (!accountRouteActive) {
+      accountRouteSignInShownRef.current = null
+      return
+    }
+    if (!authReady || !supabaseClient || accountRouteSignInShownRef.current === activeNavigation) return
+    accountRouteSignInShownRef.current = activeNavigation
+    if (!user) setAccountOpen(true)
+  }, [accountRouteActive, activeNavigation, authReady, supabaseClient, user])
   const closeAccount = useCallback(() => {
     setAccountOpen(false)
     setAccountNotice('')
@@ -1890,7 +1873,7 @@ function HomePage() {
     if (error) throw error
   }, [supabaseClient])
   const navigate = (label: NavigationLabel, solution: SolutionState | null = null) => {
-    const destination = applicationRoutes.find((item) => item.label === label)
+    const destination = routeDestinations.find((item) => item.label === label)
     if (!destination) return
     const path = solution
       ? `/solutions/${encodeURIComponent(solution.textbookId)}/${encodeURIComponent(solution.task)}`
@@ -1898,6 +1881,9 @@ function HomePage() {
     if (currentApplicationPath() !== path) window.history.pushState({}, '', applicationPath(path))
     setSelectedSolution(solution)
     setActiveNavigation(label)
+    // Сообщение над профилем или балансом относится к переходу, которым туда
+    // попали, и в следующий раздел не переезжает.
+    setAccountNotice('')
     scrollRouteToTop(routeScrollRef.current)
   }
   const openSolution = (state: SolutionState) => navigate('Решения', state)
@@ -1926,13 +1912,26 @@ function HomePage() {
     }, 0)
 
   const openBalanceShortfall = (required: number, balance: number) => {
-    rememberAccountTrigger()
-    setAccountView('wallet')
+    navigate('Баланс')
     setAccountNotice(`Не хватает на решение: нужно ${formatRubles(required)}, на балансе ${formatRubles(balance)}`)
-    setAccountOpen(true)
   }
 
   const submitFromForm = async (submissions: TaskSubmission[]) => {
+    /* Гостю положено одно бесплатное решение (`claim_guest_solution`), и
+       форма это уже говорит. Здесь страховка: вторая задача гостя - или
+       новая, пока бесплатная ещё решается, - встала бы в очередь и через
+       минуту упала бы отказом базы. Лучше сказать сразу. */
+    if (supabaseClient && !user && !guestFreeSolutionUsed) {
+      const freeTaskRunning = visibleJobs.some((job) => isActiveJob(job) && job.deviceId === deviceIdRef.current)
+      if (submissions.length > 1 || freeTaskRunning) {
+        rememberAccountTrigger()
+        setAccountNotice(freeTaskRunning
+          ? 'Бесплатная задача уже решается. Следующие решаются в аккаунте: новому аккаунту 20 ₽, один раз на устройство'
+          : 'Без аккаунта бесплатно решается одна задача. Несколько сразу решаются в аккаунте: новому аккаунту 20 ₽, один раз на устройство')
+        setAccountOpen(true)
+        return false
+      }
+    }
     // Нехватку видно сразу за все задачи формы: иначе часть встала бы в
     // очередь, а остальные пропали бы вместе с очищенной формой.
     if (supabaseClient && user && account) {
@@ -2502,7 +2501,10 @@ function HomePage() {
             <div className="home-content">
               <CopyTask
                 onSubmit={submitFromForm}
-                signedIn={Boolean(user)}
+                onRequireAccount={openAccount}
+                // Без Supabase гостевых правил нет (как у `solvingAsGuest`):
+                // бесплатное решение там не считается, и задач можно несколько.
+                signedIn={Boolean(user) || !authIsConfigured}
                 freeSolutionUsed={guestFreeSolutionUsed}
                 defaultGrade={account?.profile.grade ? `${account.profile.grade} класс` : ''}
                 subjects={availableSubjects}
@@ -2523,7 +2525,14 @@ function HomePage() {
                     // нечего, поэтому ведём в общую поддержку.
                     onOpenSupport={() => openSupport()}
                   />
-                  {user && <MySolutions items={personalSolutions} onOpenAll={() => navigate('Решения')} onOpenSolution={openSolution} />}
+                  {user && (
+                    <MySolutions
+                      items={personalSolutions}
+                      subjectOf={(textbookId) => getTextbook(textbookId, availableTextbooks).subject}
+                      onOpenAll={() => navigate('Решения')}
+                      onOpenSolution={openSolution}
+                    />
+                  )}
                 </div>
               )}
             </div>
@@ -2540,6 +2549,32 @@ function HomePage() {
               ratingClient={featureEnabled(publicConfig, 'solution_rating') ? supabaseClient : null}
               ratingGuestId={user ? null : guestJobId}
             />
+          ) : isAccountRoute(activeNavigation) ? (
+            <Suspense fallback={<div className="route-loading" role="status">Загружаем аккаунт…</div>}>
+              {activeNavigation === 'Профиль' ? (
+                <ProfilePage
+                  user={user}
+                  account={account}
+                  notice={accountNotice}
+                  theme={theme}
+                  onToggleTheme={toggleTheme}
+                  onReloadAccount={refreshAccount}
+                  onNavigate={openAccountPage}
+                  onSignIn={openSignIn}
+                  onSignedOut={() => navigate('Главная')}
+                />
+              ) : (
+                <BalancePage
+                  user={user}
+                  account={account}
+                  notice={accountNotice}
+                  promoEnabled={featureEnabled(publicConfig, 'promo_codes')}
+                  onReloadAccount={refreshAccount}
+                  onNavigate={openAccountPage}
+                  onSignIn={openSignIn}
+                />
+              )}
+            </Suspense>
           ) : activeNavigation === 'ИИ-чат' ? (
             chatEnabled
               ? <Suspense fallback={<div className="route-loading" role="status">Загружаем чат…</div>}><ChatPage userId={user?.id ?? null} onRequireAuth={openAccount} onOpenWallet={openWallet} /></Suspense>
@@ -2550,9 +2585,9 @@ function HomePage() {
               : <FeatureOffNotice title="Расписание временно выключено" onGoHome={() => navigate('Главная')} />
           ) : activeNavigation === 'Решения' ? (
             <SolutionsPage
-              user={user}
-              personalSolutions={personalSolutions}
-              textbooks={availableTextbooks}
+              signedIn={Boolean(user)}
+              items={personalSolutions}
+              subjectOf={(textbookId) => getTextbook(textbookId, availableTextbooks).subject}
               onOpenAccount={openAccount}
               onOpenSolution={openSolution}
               onStartTask={() => navigate('Главная')}
@@ -2561,29 +2596,26 @@ function HomePage() {
             <CdzComingSoon onGoHome={() => navigate('Главная')} />
           )}
         </div>
-        {/* Вход в поддержку один на экран. Пузырь виден без прокрутки, но на
-            главной он перекрывал угол «Решить» и снят оттуда - там его роль
-            берёт строка в подвале. Раньше на одном экране стояли все три:
-            пузырь, кнопка в подвале и ссылка в колонке «Помощь». */}
-        <SiteFooter onOpenSupport={activeNavigation === 'Главная' ? () => openSupport() : undefined} compact />
+        {/* Подвал тот же, что на витрине и в документах: 14 сентября
+            владелец увидел в разделах два разных подвала. */}
+        <SiteFooter onOpenSupport={() => openSupport()} />
       </div>
-      {activeNavigation !== 'Главная' && <SupportLauncher onClick={() => openSupport()} />}
+      {/* Плавающая поддержка - на каждой странице и в одном углу, включая
+          главную. Форма «Решить» оставляет этот угол свободным сама. */}
+      <SupportLauncher onClick={() => openSupport()} />
       {supportOpen && createPortal(
         <SupportCenter user={user} supabaseClient={supabaseClient} initialCategory={supportCategory} initialContext={supportContext} onRequireAuth={openAccount} onClose={closeSupport} />,
         document.body,
       )}
-      {(accountOpen || legalAcceptanceRequired) && (
+      {/* Окно - только вход гостя, согласие и новый пароль: вошедшему профиль
+          и баланс показывают страницы (14 сентября 2026). */}
+      {(legalAcceptanceRequired || (accountOpen && (!user || passwordRecovery))) && (
         <Suspense fallback={null}>
           <AccountDialog
             user={user}
-            account={account}
             passwordRecovery={passwordRecovery}
             notice={accountNotice}
-            initialView={accountView}
-            theme={theme}
-            onToggleTheme={toggleTheme}
             onClose={legalAcceptanceRequired ? keepLegalGateOpen : closeAccount}
-            onReloadAccount={refreshAccount}
             returnFocusRef={accountTriggerRef}
             legalAcceptanceRequired={legalAcceptanceRequired}
             onLegalAccepted={() => setLegalGateUserId(null)}
@@ -2611,12 +2643,20 @@ function App() {
     }
   }
 
-  if (pathname === '/privacy') return <><LegalPage kind="privacy" /><PrivacyNotice /></>
-  if (pathname === '/terms' || pathname === '/agreement') return <><LegalPage kind="terms" /><PrivacyNotice /></>
-  if (pathname === '/consent') return <><LegalPage kind="consent" /><PrivacyNotice /></>
-  if (pathname === '/cookies') return <><LegalPage kind="cookies" /><PrivacyNotice /></>
-  if (pathname === '/offer') return <><LegalPage kind="offer" /><PrivacyNotice /></>
-  if (pathname === '/contacts') return <><LegalPage kind="contacts" /><PrivacyNotice /></>
+  /* Документы живут под /docs/ с 14 сентября 2026. Прежние адреса (/terms,
+     /agreement, /privacy и остальные) уже разошлись в письмах и отметках
+     согласия, поэтому открывают тот же документ, а адрес переписывается на
+     новый - как `/main` на `/app`. Переписывается до отрисовки: подвал
+     отмечает открытый документ по текущему адресу. Запрос и якорь
+     (`#section-8`) едут вместе с адресом. */
+  const legalKind = legalDocumentKind(pathname)
+  if (legalKind) {
+    const documentPath = `/docs/${legalKind}`
+    if (pathname !== documentPath) {
+      window.history.replaceState(window.history.state, '', `${applicationPath(documentPath)}${window.location.search}${window.location.hash}`)
+    }
+    return <><LegalPage kind={legalKind} /><PrivacyNotice /></>
+  }
 
   if (pathname === '/admin') {
     return <Suspense fallback={null}><AdminApp /></Suspense>

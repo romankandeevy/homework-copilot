@@ -58,40 +58,58 @@ export const metadataByPath: Record<string, SeoMetadata> = {
     path: '/support',
     robots: 'noindex, nofollow',
   },
-  '/privacy': {
+  /* Профиль и баланс - страницы с 14 сентября 2026. Личные, поэтому
+     закрыты от поиска; статика под них нужна, чтобы прямой заход не
+     отдавал 404. */
+  '/profile': {
+    title: 'Профиль - Homework Copilot',
+    description: 'Имя, класс и оформление аккаунта Homework Copilot.',
+    path: '/profile',
+    robots: 'noindex, nofollow',
+  },
+  '/balance': {
+    title: 'Баланс - Homework Copilot',
+    description: 'Баланс аккаунта Homework Copilot и история операций.',
+    path: '/balance',
+    robots: 'noindex, nofollow',
+  },
+  /* Документы - один раздел сайта под /docs/ (аудит владельца 14 сентября
+     2026). Прежние адреса в корне продолжают работать: `legacyDocumentPaths`
+     ниже. */
+  '/docs/privacy': {
     title: 'Политика обработки персональных данных - Homework Copilot',
     description: 'Какие данные использует Homework Copilot, зачем они нужны и как управлять своими данными.',
-    path: '/privacy',
+    path: '/docs/privacy',
     robots: 'index, follow',
   },
-  '/terms': {
+  '/docs/terms': {
     title: 'Пользовательское соглашение - Homework Copilot',
     description: 'Правила использования Homework Copilot, аккаунта, решений и баланса.',
-    path: '/terms',
+    path: '/docs/terms',
     robots: 'index, follow',
   },
-  '/consent': {
+  '/docs/consent': {
     title: 'Согласие на обработку персональных данных - Homework Copilot',
     description: 'Отдельное согласие пользователя на обработку персональных данных в Homework Copilot.',
-    path: '/consent',
+    path: '/docs/consent',
     robots: 'noindex, follow',
   },
-  '/cookies': {
+  '/docs/cookies': {
     title: 'Cookie и локальное хранение - Homework Copilot',
     description: 'Какие данные Homework Copilot сохраняет в браузере и почему рекламные cookie не используются.',
-    path: '/cookies',
+    path: '/docs/cookies',
     robots: 'index, follow',
   },
-  '/offer': {
+  '/docs/offer': {
     title: 'Публичная оферта - Homework Copilot',
-    description: 'Статус платных услуг и публичной оферты Homework Copilot.',
-    path: '/offer',
+    description: 'Публичная оферта Homework Copilot: цена решения, пополнение баланса через Робокассу, чек и возвраты.',
+    path: '/docs/offer',
     robots: 'index, follow',
   },
-  '/contacts': {
+  '/docs/contacts': {
     title: 'Реквизиты и контакты - Homework Copilot',
     description: 'Исполнитель услуг Homework Copilot: самозанятый, ИНН и контакты для связи.',
-    path: '/contacts',
+    path: '/docs/contacts',
     robots: 'index, follow',
   },
   '/admin': {
@@ -102,13 +120,40 @@ export const metadataByPath: Record<string, SeoMetadata> = {
   },
 }
 
+export const legalDocumentKinds = ['terms', 'privacy', 'consent', 'cookies', 'offer', 'contacts'] as const
+export type LegalDocumentKind = (typeof legalDocumentKinds)[number]
+
+/* Прежние адреса документов. До 14 сентября 2026 документы лежали в корне, и
+   эти адреса уже стоят в письмах, в отметках согласия и в поиске - поэтому
+   работают и дальше. На Pages по ним лежит страница с каноническим адресом
+   нового документа и мгновенным переходом (scripts/create-static-routes.mjs),
+   в разработке и на превью адрес переписывает клиент (`App`), как `/main` на
+   `/app`. `/docs` без хвоста открывает соглашение: оно первое в списке
+   документов, а отдельная страница-оглавление повторяла бы тот же список. */
+export const legacyDocumentPaths: Record<string, string> = {
+  '/terms': '/docs/terms',
+  '/agreement': '/docs/terms',
+  '/privacy': '/docs/privacy',
+  '/consent': '/docs/consent',
+  '/cookies': '/docs/cookies',
+  '/offer': '/docs/offer',
+  '/contacts': '/docs/contacts',
+  '/docs': '/docs/terms',
+}
+
 function normalizePath(pathname: string) {
   const path = pathname.replace(/\/+$/, '') || '/'
   if (path === '/main') return '/app'
   if (path === '/base') return '/solutions'
   if (path === '/tasks' || path === '/textbooks') return '/cdz'
-  if (path === '/agreement') return '/terms'
+  if (Object.hasOwn(legacyDocumentPaths, path)) return legacyDocumentPaths[path]
   return path
+}
+
+/* Какой документ открыт по адресу, с учётом прежних адресов. */
+export function legalDocumentKind(pathname: string): LegalDocumentKind | null {
+  const kind = /^\/docs\/([a-z]+)$/.exec(normalizePath(pathname))?.[1]
+  return legalDocumentKinds.find((item) => item === kind) ?? null
 }
 
 export function getSeoMetadata(pathname: string, task?: string): SeoMetadata {

@@ -70,15 +70,48 @@ export type StreamResult = {
   truncated: boolean
 }
 
+// Ученик видит одну понятную фразу, а что именно сказал шлюз, уходит
+// в `detail` и дальше только в журнал ошибок (14 сентября 2026). Раньше
+// в плашку попадало «Модель сейчас недоступна: Network error, please try
+// again later.» - половина по-английски, на экране семиклассника.
+const modelUnavailableMessage = 'Модель сейчас не отвечает. Попробуй ещё раз или выбери другую модель'
+const serviceUnavailableMessage = 'Чат временно недоступен. Попробуй позже'
+const emptyAnswerMessage = 'Модель не прислала ответ. Попробуй ещё раз или выбери другую модель'
+
 // Провайдер отдаёт ошибки с кодом 200 и телом {"code":…,"msg":…} — включая
 // 401 и 422. Проверять response.ok недостаточно, смотрим и в тело.
-function providerErrorFromPayload(parsed: Record<string, unknown>): ChatApiError | null {
+export function providerErrorFromPayload(parsed: Record<string, unknown>): ChatApiError | null {
+  // Responses API сообщает о сбое отдельным событием, а не кодом.
+  if (parsed.type === 'error' || parsed.type === 'response.failed') {
+    return new ChatApiError(502, modelUnavailableMessage, `kie ${String(parsed.type)}: ${JSON.stringify(parsed).slice(0, 300)}`)
+  }
   const code = typeof parsed.code === 'number' ? parsed.code : null
   if (code === null || code === 200) return null
-  const message = typeof parsed.msg === 'string' ? parsed.msg : 'Модель отклонила запрос'
-  if (code === 401 || code === 403) return new ChatApiError(502, 'Провайдер отклонил ключ доступа')
-  if (code === 422) return new ChatApiError(400, 'Модель не приняла запрос')
-  return new ChatApiError(502, 'Модель сейчас недоступна: ' + message.slice(0, 120))
+  const detail = `kie ${code}: ${typeof parsed.msg === 'string' ? parsed.msg.slice(0, 300) : 'без текста'}`
+  if (code === 401 || code === 403) return new ChatApiError(502, serviceUnavailableMessage, detail)
+  if (code === 422) return new ChatApiError(400, 'Модель не приняла запрос. Попробуй сформулировать вопрос иначе', detail)
+  return new ChatApiError(502, modelUnavailableMessage, detail)
+}
+
+/* Шлюз отвечает ошибкой не потоком, а обычным JSON.
+
+   14 сентября 2026 владелец выбрал в чате модель по умолчанию
+   (gemini-2.5-flash) и через пять секунд получил «Модель не вернула ответ».
+   Шлюз на такой запрос отвечает HTTP 200, `application/json` и телом
+   {"code":500,"msg":"Network error, please try again later."} - без единого
+   кадра `data:`. Разбор потока эти байты молча пропускал, текст оставался
+   пустым, и настоящая причина терялась. Теперь тело без кадров читается
+   как ошибка шлюза. */
+function providerErrorFromBody(body: string): ChatApiError | null {
+  const trimmed = body.trim()
+  if (!trimmed.startsWith('{')) return null
+  try {
+    const parsed = JSON.parse(trimmed) as unknown
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null
+    return providerErrorFromPayload(parsed as Record<string, unknown>)
+  } catch {
+    return null
+  }
 }
 
 function contentParts(content: string | ChatContentPart[]): ChatContentPart[] {
@@ -159,10 +192,23 @@ export async function streamModelAnswer(args: StreamArgs): Promise<StreamResult>
 
   if (!response.ok || !response.body) {
     clearTimeout(timeout)
+    const detail = `kie http ${response.status}`
     if (response.status === 401 || response.status === 403) {
-      throw new ChatApiError(502, 'Провайдер отклонил ключ доступа')
+      throw new ChatApiError(502, serviceUnavailableMessage, detail)
     }
-    throw new ChatApiError(502, 'Модель сейчас недоступна')
+    throw new ChatApiError(502, modelUnavailableMessage, detail)
+  }
+
+  if ((response.headers.get('content-type') ?? '').includes('application/json')) {
+    clearTimeout(timeout)
+    let body = ''
+    try {
+      body = await response.text()
+    } catch {
+      // Тело не дочиталось - останется общая фраза.
+    }
+    throw providerErrorFromBody(body)
+      ?? new ChatApiError(502, modelUnavailableMessage, `kie json без кадров: ${body.slice(0, 300)}`)
   }
 
   const decoder = new TextDecoder()
@@ -226,7 +272,11 @@ export async function streamModelAnswer(args: StreamArgs): Promise<StreamResult>
 
       for (const frame of frames) {
         const dataLine = frame.split('\n').find((entry) => entry.startsWith('data:'))
-        if (!dataLine) continue
+        if (!dataLine) {
+          const bodyError = providerErrorFromBody(frame)
+          if (bodyError) throw bodyError
+          continue
+        }
         const payload = dataLine.slice('data:'.length).trim()
         if (!payload || payload === '[DONE]') continue
 
@@ -297,7 +347,11 @@ export async function streamModelAnswer(args: StreamArgs): Promise<StreamResult>
     }
   }
 
-  if (!text.trim()) throw new ChatApiError(502, 'Модель не вернула ответ')
+  if (!text.trim()) {
+    // Ошибка шлюза без заголовка JSON остаётся недочитанным хвостом буфера.
+    throw providerErrorFromBody(buffered.replace(/^data:/, ''))
+      ?? new ChatApiError(502, emptyAnswerMessage, 'kie: поток без текста')
+  }
 
   return { text, inputTokens, outputTokens, creditsConsumed, truncated }
 }

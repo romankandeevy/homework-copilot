@@ -1,16 +1,21 @@
-/* ИИ-чат оформлен как тетрадный лист: слева поле с красной линией,
-   реплики — записи на листе, а не пузыри, а кобальт остаётся только на отправке. */
+/* ИИ-чат - тетрадный лист с полем.
+
+   14 сентября 2026 владелец заметил, что красная линия поля ничего не
+   значит: на поле стояло только время реплик. Теперь в поле живут диалоги
+   («Новый чат», история, переименование, удаление), а правее линии идёт
+   сама переписка на чистом листе, без клеток и линеек. Выбор модели - в
+   шапке переписки, над ответами, которые он меняет. Кобальт остаётся на
+   «Отправить» и на открытом диалоге. */
 
 .chat-page {
   --chat-pad: var(--space-6);
-  --chat-margin: 4.75rem;
-  --chat-rule-x: calc(var(--chat-pad) + var(--chat-margin));
+  --chat-sidebar-width: 17rem;
+  --chat-reading-width: 46rem;
   --chat-rule-color: color-mix(in oklch, var(--color-danger) 68%, transparent);
-  --chat-body-inset: calc(var(--chat-margin) + var(--space-4));
 
   display: grid;
   width: min(100%, 76rem);
-  gap: var(--space-5);
+  gap: var(--space-4);
   margin: var(--space-6) auto var(--space-8);
   min-width: 0;
 }
@@ -21,16 +26,9 @@
 
 .chat-heading {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: var(--space-4);
-  padding: 0 var(--space-1);
-}
-
-.chat-heading-copy {
-  display: grid;
   gap: var(--space-2);
   min-width: 0;
+  padding: 0 var(--space-1);
 }
 
 .chat-title-line {
@@ -63,22 +61,6 @@
   line-height: var(--leading-ui);
 }
 
-.chat-drawer-trigger {
-  display: none;
-  min-height: var(--size-control);
-  align-items: center;
-  gap: var(--space-2);
-  padding: 0 var(--space-4);
-  border: var(--border-thin) solid var(--color-border-strong);
-  border-radius: var(--radius-control);
-  background: var(--color-surface);
-  color: var(--color-text);
-  font-size: var(--text-ui);
-  font-weight: var(--weight-semibold);
-  white-space: nowrap;
-  cursor: pointer;
-}
-
 .chat-demo-banner {
   margin: 0;
   padding: var(--space-3) var(--space-4);
@@ -90,11 +72,12 @@
   line-height: var(--leading-ui);
 }
 
+/* Лист. Высоту ставит ChatPage (--chat-fit-height): нижний край листа
+   стоит над кнопкой поддержки. Без замера - прежняя высота. */
 .chat-workspace {
   display: grid;
-  grid-template-columns: 16rem minmax(0, 1fr);
-  height: min(68vh, 44rem);
-  min-height: 24rem;
+  grid-template-columns: var(--chat-sidebar-width) minmax(0, 1fr);
+  height: max(22rem, var(--chat-fit-height, min(68vh, 44rem)));
   min-width: 0;
   border: var(--border-thin) solid var(--color-border);
   border-radius: var(--radius-panel);
@@ -102,43 +85,29 @@
   overflow: hidden;
 }
 
-/* Боковая панель со списком диалогов */
+/* Поле листа: за красной линией - диалоги */
 
 .chat-sidebar {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   min-width: 0;
-  border-right: var(--border-thin) solid var(--color-border);
+  border-right: var(--border-thin) solid var(--chat-rule-color);
   background: var(--color-surface-raised);
   overflow: hidden;
 }
 
 .chat-sidebar-head {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
-  border-bottom: var(--border-thin) solid var(--color-border);
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-3) var(--space-2);
 }
 
-.chat-sidebar-head h3 {
-  margin: 0;
-  overflow: hidden;
-  color: var(--color-text-subtle);
-  font-family: var(--font-mono);
-  font-size: var(--text-micro);
-  font-weight: var(--weight-semibold);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Новый чат — тихое действие: главный кобальт живёт только на «Отправить». */
+/* Новый чат - тихое действие: главный кобальт живёт только на «Отправить». */
 .chat-new-chat {
   display: inline-flex;
+  width: 100%;
   min-height: var(--size-control);
   align-items: center;
-  justify-content: center;
   gap: var(--space-2);
   padding: 0 var(--space-3);
   border: var(--border-thin) solid var(--color-border);
@@ -154,19 +123,28 @@
 
 .chat-new-chat:hover:not(:disabled) {
   border-color: var(--color-border-strong);
-  background: var(--color-surface-raised);
+  background: var(--color-surface-sunken);
 }
 
 .chat-new-chat:disabled {
-  border-color: var(--color-border);
-  background: var(--color-surface-sunken);
   color: var(--color-text-subtle);
   cursor: not-allowed;
 }
 
+.chat-sidebar-title {
+  margin: 0;
+  padding: 0 var(--space-2);
+  color: var(--color-text-subtle);
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-ui);
+  text-transform: uppercase;
+}
+
 .chat-sidebar-state {
   margin: 0;
-  padding: var(--space-4);
+  padding: var(--space-2) var(--space-4) var(--space-4);
   color: var(--color-text-subtle);
   font-size: var(--text-small);
   line-height: var(--leading-ui);
@@ -180,7 +158,7 @@
 }
 
 .chat-sidebar-state.is-error button {
-  min-height: 2.25rem;
+  min-height: var(--size-control);
   padding: 0 var(--space-3);
   border: var(--border-thin) solid var(--color-border-strong);
   border-radius: var(--radius-control);
@@ -195,8 +173,8 @@
   display: grid;
   align-content: start;
   gap: var(--space-1);
-  padding: var(--space-2);
   margin: 0;
+  padding: 0 var(--space-2) var(--space-3);
   list-style: none;
   overflow-y: auto;
 }
@@ -213,7 +191,7 @@
 .chat-conversation-list li:hover { background: var(--color-surface-sunken); }
 .chat-conversation-list li.is-active { background: var(--color-accent-soft); }
 
-/* Открытый диалог отмечен кобальтовой засечкой — так же, как активный маршрут. */
+/* Открытый диалог отмечен кобальтовой засечкой - так же, как активный маршрут. */
 .chat-conversation-list li.is-active::before {
   content: '';
   position: absolute;
@@ -227,9 +205,7 @@
 
 .chat-conversation-open {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: baseline;
-  gap: var(--space-2);
+  gap: 0.125rem;
   min-width: 0;
   min-height: 2.75rem;
   padding: var(--space-2) var(--space-3);
@@ -245,6 +221,7 @@
   overflow: hidden;
   font-size: var(--text-small);
   font-weight: var(--weight-medium);
+  line-height: var(--leading-ui);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -263,14 +240,14 @@
 
 .chat-conversation-actions {
   display: flex;
-  gap: 0.15rem;
-  padding-right: var(--space-2);
+  gap: 0.125rem;
+  padding-right: var(--space-1);
 }
 
 .chat-conversation-actions button {
   display: inline-flex;
-  width: 2rem;
-  height: 2rem;
+  width: 2.25rem;
+  height: 2.25rem;
   align-items: center;
   justify-content: center;
   border: 0;
@@ -279,39 +256,97 @@
   color: var(--color-text-subtle);
   opacity: 0;
   cursor: pointer;
-  transition: opacity var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out);
+  transition: opacity var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out), background var(--motion-fast) var(--ease-out);
 }
 
 .chat-conversation-list li:hover .chat-conversation-actions button,
-.chat-conversation-list li:focus-within .chat-conversation-actions button { opacity: 1; }
+.chat-conversation-list li:focus-within .chat-conversation-actions button,
+.chat-conversation-list li.is-active .chat-conversation-actions button { opacity: 1; }
 .chat-conversation-actions button:focus-visible { opacity: 1; }
-.chat-conversation-actions button:hover { color: var(--color-text); }
+.chat-conversation-actions button:hover { background: var(--color-surface); color: var(--color-text); }
 
-/* Лист с записями */
+/* Пальцем наведения не бывает: переименовать и удалить видны всегда,
+   и цель нажатия - не меньше 44 пикселей. */
+@media (hover: none), (pointer: coarse) {
+  .chat-conversation-actions button {
+    width: 2.75rem;
+    height: 2.75rem;
+    opacity: 1;
+  }
+}
+
+/* Переписка: чистый лист правее поля */
 
 .chat-main {
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto auto;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
   min-width: 0;
   min-height: 0;
+}
+
+.chat-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  min-height: 3.75rem;
+  padding: var(--space-2) var(--space-3) var(--space-2) var(--chat-pad);
+  border-bottom: var(--border-thin) solid var(--color-border);
+}
+
+.chat-toolbar-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: var(--text-ui);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-ui);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Кнопки шапки нужны только там, где поля с диалогами не видно. */
+.chat-toolbar-button {
+  display: none;
+  flex: 0 0 auto;
+  min-width: var(--size-control);
+  min-height: var(--size-control);
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  border: var(--border-thin) solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--text-small);
+  font-weight: var(--weight-semibold);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.chat-toolbar-new { padding: 0; }
+
+.chat-toolbar-button:hover:not(:disabled) {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-raised);
+}
+
+.chat-toolbar-button:disabled {
+  color: var(--color-text-subtle);
+  cursor: not-allowed;
 }
 
 .chat-thread {
   display: grid;
   align-content: start;
   min-width: 0;
-  padding: var(--space-2) var(--chat-pad) var(--space-6);
-  overflow-y: auto;
+  padding: var(--space-5) var(--chat-pad) var(--space-6);
   overflow-x: hidden;
-  background-image: linear-gradient(
-    to right,
-    transparent 0,
-    transparent calc(var(--chat-rule-x) - 1px),
-    var(--chat-rule-color) calc(var(--chat-rule-x) - 1px),
-    var(--chat-rule-color) var(--chat-rule-x),
-    transparent var(--chat-rule-x)
-  );
-  background-attachment: local;
+  overflow-y: auto;
 }
 
 .chat-thread:focus-visible {
@@ -326,8 +361,9 @@
   align-content: start;
   justify-items: start;
   gap: var(--space-3);
+  max-width: var(--chat-reading-width);
   margin: 0;
-  padding: var(--space-6) 0 var(--space-6) var(--chat-body-inset);
+  padding: var(--space-5) 0;
   color: var(--color-text-muted);
   font-size: var(--text-small);
   line-height: var(--leading-ui);
@@ -366,13 +402,14 @@
   cursor: pointer;
 }
 
-/* Пустой лист объясняет раздел, показывает примеры вопросов и цену ответа. */
+/* Пустой лист объясняет раздел и подсказывает начало вопроса. */
 
 .chat-empty {
   display: grid;
   justify-items: start;
   gap: var(--space-3);
-  padding: var(--space-4) 0 var(--space-5) var(--chat-body-inset);
+  max-width: var(--chat-reading-width);
+  padding: var(--space-3) 0 var(--space-5);
 }
 
 .chat-empty-label {
@@ -381,6 +418,7 @@
   font-family: var(--font-mono);
   font-size: var(--text-micro);
   font-weight: var(--weight-semibold);
+  text-transform: uppercase;
 }
 
 .chat-empty h3 {
@@ -439,68 +477,52 @@
 
 .chat-empty-ideas button > svg { color: var(--color-text-subtle); }
 
-.chat-empty-price {
-  max-width: 54ch;
-  margin: var(--space-1) 0 0;
-  color: var(--color-text-subtle);
-  font-size: var(--text-caption);
-  line-height: var(--leading-ui);
-}
-
-/* Запись на листе: слева поле со временем, справа сама реплика. */
+/* Запись: подпись с автором и временем, под ней текст. Вопрос лежит в
+   плоской рамке, ответ - открытым текстом листа. Пузырей нет. */
 
 .chat-entry {
   display: grid;
-  grid-template-columns: var(--chat-margin) minmax(0, 1fr);
-  column-gap: var(--space-4);
-  min-width: 0;
-  padding-block: var(--space-4);
-}
-
-.chat-entry.is-user:not(:first-child) {
-  margin-top: var(--space-2);
-  padding-top: var(--space-6);
-  border-top: var(--border-thin) solid var(--color-border);
-}
-
-.chat-entry-margin {
-  display: grid;
-  justify-items: end;
-  padding-right: var(--space-3);
-  padding-top: 0.15rem;
-}
-
-.chat-entry-time {
-  color: var(--color-text-subtle);
-  font-family: var(--font-mono);
-  font-size: var(--text-micro);
-  font-variant-numeric: tabular-nums;
-}
-
-.chat-entry-main {
-  display: grid;
   gap: var(--space-2);
   min-width: 0;
-  max-width: 46rem;
+  max-width: var(--chat-reading-width);
+  padding-block: var(--space-3);
 }
 
-.chat-entry-author {
+.chat-entry.is-user:not(:first-child) { margin-top: var(--space-4); }
+
+.chat-entry-meta {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-2);
   margin: 0;
   color: var(--color-text-subtle);
   font-family: var(--font-mono);
   font-size: var(--text-micro);
   font-weight: var(--weight-semibold);
+  line-height: var(--leading-ui);
+}
+
+.chat-entry-time {
+  font-weight: var(--weight-medium);
+  font-variant-numeric: tabular-nums;
 }
 
 .chat-entry-body { min-width: 0; }
 
-/* Вопрос ученика — заголовок записи, ответ модели — основной текст под ним. */
+.chat-entry.is-user .chat-entry-body {
+  padding: var(--space-3) var(--space-4);
+  border: var(--border-thin) solid var(--color-border);
+  border-radius: var(--radius-surface);
+  background: var(--color-surface-raised);
+}
+
 .chat-user-text {
   margin: 0;
   color: var(--color-text);
-  font-size: var(--text-lead);
+  font-size: var(--text-body);
   font-weight: var(--weight-medium);
-  line-height: var(--leading-ui);
+  line-height: var(--leading-copy);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -630,13 +652,12 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-1);
-  margin: 0;
-  padding-top: var(--space-1);
+  margin: 0 0 0 calc(var(--space-2) * -1);
 }
 
 .chat-message-action {
   display: inline-flex;
-  min-height: 2.25rem;
+  min-height: var(--size-control);
   align-items: center;
   gap: var(--space-2);
   padding: 0 var(--space-3) 0 var(--space-2);
@@ -655,9 +676,10 @@
   color: var(--color-text);
 }
 
-/* Расход — заметка на полях, а не отдельная карточка. */
+/* Расход - короткая заметка под ответом, а не отдельная карточка. */
 .chat-usage {
-  margin: var(--space-2) 0 0 var(--chat-body-inset);
+  max-width: var(--chat-reading-width);
+  margin: 0;
   color: var(--color-text-subtle);
   font-family: var(--font-mono);
   font-size: var(--text-caption);
@@ -700,13 +722,14 @@
   cursor: pointer;
 }
 
-/* Ввод собран в одну группу: поле, вложения и панель управления живут в одной рамке. */
+/* Ввод: поле, вложения и панель управления в одной рамке, под ней оговорка
+   и цена. */
 
 .chat-composer {
   display: grid;
   gap: var(--space-2);
   min-width: 0;
-  padding: var(--space-4) var(--chat-pad);
+  padding: var(--space-3) var(--chat-pad);
   border-top: var(--border-thin) solid var(--color-border);
   background: var(--color-surface);
 }
@@ -811,7 +834,7 @@
   min-width: 0;
 }
 
-.chat-composer-right { display: flex; }
+.chat-composer-right { display: flex; margin-left: auto; }
 
 .chat-icon-button {
   display: inline-flex;
@@ -889,7 +912,13 @@
 .chat-web-toggle:has(input:focus-visible) { box-shadow: var(--focus-ring); }
 .chat-web-toggle:has(input:disabled) { color: var(--color-border-strong); cursor: not-allowed; }
 
-.chat-model-select { position: relative; min-width: 0; }
+/* Выбор модели - в шапке переписки, меню раскрывается вниз. */
+
+.chat-model-select {
+  position: relative;
+  flex: 0 1 auto;
+  min-width: 0;
+}
 
 .chat-model-trigger {
   display: inline-flex;
@@ -898,16 +927,19 @@
   align-items: center;
   gap: var(--space-2);
   padding: 0 var(--space-3);
-  border: 0;
+  border: var(--border-thin) solid var(--color-border);
   border-radius: var(--radius-control);
-  background: transparent;
+  background: var(--color-surface);
   color: var(--color-text);
   cursor: pointer;
-  transition: background var(--motion-fast) var(--ease-out);
+  transition: border-color var(--motion-fast) var(--ease-out), background var(--motion-fast) var(--ease-out);
 }
 
-.chat-model-trigger:hover:not(:disabled) { background: var(--color-surface-sunken); }
-.chat-model-trigger[aria-expanded='true'] { background: var(--color-surface-sunken); }
+.chat-model-trigger:hover:not(:disabled),
+.chat-model-trigger[aria-expanded='true'] {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-raised);
+}
 
 .chat-model-trigger:disabled {
   color: var(--color-text-subtle);
@@ -915,9 +947,20 @@
 }
 
 .chat-model-trigger-copy {
-  display: grid;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
   min-width: 0;
   text-align: left;
+}
+
+.chat-model-trigger-label {
+  flex: 0 0 auto;
+  color: var(--color-text-subtle);
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
 }
 
 .chat-model-trigger-copy strong {
@@ -930,11 +973,11 @@
 
 .chat-model-menu {
   position: absolute;
-  bottom: calc(100% + var(--space-2));
-  left: 0;
+  top: calc(100% + var(--space-2));
+  right: 0;
   z-index: 20;
   display: grid;
-  width: min(24rem, 88vw);
+  width: min(24rem, calc(100vw - var(--space-8)));
   max-height: 20rem;
   gap: var(--space-1);
   padding: var(--space-2);
@@ -1035,9 +1078,25 @@
 
 @keyframes chat-spin { to { transform: rotate(360deg); } }
 
+.chat-composer-notes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-4);
+  padding-inline: var(--space-1);
+}
+
+.chat-disclaimer {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-ui);
+}
+
 .chat-price-hint {
   margin: 0;
-  padding-inline: var(--space-2);
   color: var(--color-text-subtle);
   font-size: var(--text-caption);
   line-height: var(--leading-ui);
@@ -1070,6 +1129,8 @@
   place-items: center;
   padding: var(--space-4);
 }
+
+.chat-drawer-backdrop { display: flex; }
 
 .chat-dialog {
   display: grid;
@@ -1182,12 +1243,14 @@
   color: oklch(99% 0 0);
 }
 
+/* Панель на телефоне - то же поле листа, поэтому и линия та же. Панель
+   живёт в портале вне .chat-page, переменные листа сюда не доходят. */
 .chat-drawer {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
   width: min(20rem, 88vw);
   height: 100%;
-  border-right: var(--border-thin) solid var(--color-border);
+  border-right: var(--border-thin) solid color-mix(in oklch, var(--color-danger) 68%, transparent);
   background: var(--color-surface-raised);
   box-shadow: var(--shadow-overlay);
   overflow: hidden;
@@ -1212,76 +1275,58 @@
   cursor: pointer;
 }
 
+.chat-drawer .chat-sidebar-head { padding-top: var(--space-1); }
+
 /* Адаптив */
 
 @media (max-width: 980px) {
-  .chat-page { margin: var(--space-5) auto var(--space-8); }
-  .chat-drawer-trigger { display: inline-flex; }
+  .chat-page { margin: var(--space-5) auto var(--space-6); }
+  .chat-workspace { grid-template-columns: minmax(0, 1fr); }
   .chat-sidebar { display: none; }
-
-  .chat-workspace {
-    grid-template-columns: minmax(0, 1fr);
-    height: auto;
-    min-height: 0;
-  }
-
-  .chat-thread {
-    min-height: 18rem;
-    max-height: 60vh;
-  }
+  .chat-toolbar { padding-left: var(--space-3); }
+  .chat-toolbar-button { display: inline-flex; }
 }
 
 @media (max-width: 680px) {
   .chat-page {
     --chat-pad: var(--space-4);
-    --chat-margin: 2.75rem;
 
-    gap: var(--space-4);
-    margin: var(--space-4) auto var(--space-6);
-  }
-
-  .chat-heading {
-    grid-template-columns: minmax(0, 1fr);
-    align-items: stretch;
     gap: var(--space-3);
+    margin: var(--space-4) auto var(--space-5);
   }
 
+  /* Пояснение под заголовком повторяет подписи у поля ввода, а на
+     телефоне каждая строка отнимает место у переписки. */
+  .chat-heading p { display: none; }
   .chat-title-line h1 { font-size: var(--text-heading); }
   .chat-title-line > span { font-size: var(--text-ui); }
-  .chat-drawer-trigger { justify-content: center; width: 100%; }
 
-  .chat-entry { column-gap: var(--space-3); padding-block: var(--space-3); }
-  .chat-entry-margin { padding-right: var(--space-2); }
-  .chat-user-text { font-size: var(--text-body); font-weight: var(--weight-semibold); }
+  .chat-toolbar-title { display: none; }
+  .chat-toolbar .chat-model-select { margin-left: auto; }
+  .chat-model-trigger-label { display: none; }
+
+  .chat-entry.is-user .chat-entry-body { padding: var(--space-2) var(--space-3); }
   .chat-empty h3 { font-size: var(--text-lead); }
   .chat-message-photos img { width: 4.5rem; height: 4.5rem; }
 
-  .chat-composer { padding: var(--space-3) var(--space-4) var(--space-4); }
-  .chat-composer-controls { row-gap: var(--space-2); }
-  .chat-composer-left { flex: 1 1 auto; }
-  .chat-composer-right { flex: 0 0 auto; margin-left: auto; }
-  .chat-model-select { flex: 1 1 8rem; min-width: 0; }
-  .chat-model-trigger { width: 100%; }
-  .chat-model-menu { left: 0; right: auto; width: min(20rem, calc(100vw - var(--space-8))); }
+  .chat-composer { padding: var(--space-3); }
+  .chat-composer-notes { display: grid; gap: 0.125rem; }
 }
 
 @media (max-width: 420px) {
   .chat-page { --chat-pad: var(--space-3); }
 
-  /* На узком экране «чистый лист» должен помещаться целиком, без прокрутки ленты. */
-  .chat-thread { max-height: 64vh; padding-bottom: var(--space-4); }
-  .chat-empty { gap: var(--space-2); padding-block: var(--space-3); }
-  .chat-empty-ideas { gap: var(--space-1); }
+  .chat-drawer-trigger { padding: 0; }
+  .chat-drawer-trigger span { display: none; }
 
-  .chat-composer-left { width: 100%; }
-  .chat-composer-right { width: 100%; }
+  .chat-empty { gap: var(--space-2); padding-block: var(--space-2); }
+  .chat-empty-ideas { gap: var(--space-1); }
+  .chat-empty-copy { display: none; }
+
+  .chat-web-toggle { padding-inline: var(--space-2); }
   .chat-send,
-  .chat-stop { width: 100%; }
-  .chat-web-toggle { padding-inline: var(--space-2); font-size: var(--text-caption); }
-  .chat-model-trigger { padding-inline: var(--space-2); }
-  .chat-empty-ideas button { font-size: var(--text-caption); }
+  .chat-stop { padding-inline: var(--space-4); }
   .chat-message-photos img { width: 4rem; height: 4rem; }
-  .chat-usage { font-size: var(--text-micro); }
   .chat-failure button { width: 100%; }
 }
 
@@ -1293,9 +1338,8 @@
   .chat-model-trigger,
   .chat-composer-field,
   .chat-message-action,
+  .chat-conversation-actions button,
   .chat-empty-ideas button,
   .chat-send,
   .chat-stop { transition: none; }
 }
-
-.chat-drawer-backdrop { display: flex; }

@@ -137,14 +137,33 @@
 .utility-button:hover { border-color: var(--color-border-strong); background: var(--color-surface-raised); }
 .utility-button:active { transform: translateY(1px) scale(0.97); }
 
+/* Лента разделов - во всю ширину, а поля и предел ширины - у содержимого.
+
+   До 14 сентября поля стояли на самой ленте, и подвал внутри неё получал их
+   дважды: свои и ленты. Линия над ним не доходила до краёв экрана, а колонка
+   сидела не там, где на витрине. Теперь подвал лежит в ленте без полей и
+   раскладывается ровно как на витрине, а поля переехали в `.product-route`.
+
+   Снизу - запас под плавающую поддержку (`SupportLauncher.css`: 3rem ростом
+   плюс отступ от края). Без него в конце страницы кнопка ложилась на
+   последнюю строку подвала. */
 .product-content {
-  width: min(100%, 100rem);
+  --product-gutter: clamp(1.5rem, 3vw, 3.5rem);
+  --launcher-reserve: calc(3rem + clamp(1rem, 2.5vw, 2rem) + var(--space-4));
+  width: 100%;
   min-width: 0;
-  margin-inline: auto;
-  padding: 0 clamp(1.5rem, 3vw, 3.5rem) var(--space-12);
+  padding: 0 0 var(--launcher-reserve);
 }
 
-.product-route { min-height: calc(100dvh - 5rem); }
+.product-route {
+  box-sizing: border-box;
+  width: min(100%, 100rem);
+  min-width: 0;
+  min-height: calc(100dvh - 5rem);
+  margin-inline: auto;
+  padding-right: max(var(--product-gutter), env(safe-area-inset-right));
+  padding-left: max(var(--product-gutter), env(safe-area-inset-left));
+}
 
 .page-header {
   display: flex;
@@ -200,54 +219,53 @@
   cursor: pointer;
 }
 
+/* Сумма в шапке - ссылка на `/balance` (14 сентября 2026). Рядом с ней
+   стояло «Открыть →» на графитовой плашке: читалось как отдельная кнопка,
+   хотя открывало баланс нажатие на всё целиком. Теперь ссылка - сама
+   плашка с суммой, цель нажатия от 44 пикселей, а наведение подчёркивает
+   сумму: видно, что это ссылка. Открытый баланс отмечен, как раздел. */
 .balance-control {
-  display: inline-flex;
-  min-height: 2.875rem;
-  align-items: center;
-  gap: var(--space-4);
-  padding: 0.35rem 0.45rem 0.35rem var(--space-3);
+  display: inline-grid;
+  min-height: var(--size-control);
+  align-content: center;
+  gap: 0.08rem;
+  padding: 0 var(--space-3);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-surface);
   background: var(--color-surface);
   color: var(--color-text);
-  font: inherit;
   text-align: left;
+  text-decoration: none;
   cursor: pointer;
   transition: border-color var(--motion-fast) var(--ease-out), background var(--motion-fast) var(--ease-out), transform var(--motion-instant) var(--ease-out);
-}
-
-.balance-control > span:first-child {
-  display: grid;
-  gap: 0.08rem;
 }
 
 .balance-control small {
   color: var(--color-text-subtle);
   font-size: var(--text-micro);
+  line-height: 1.2;
 }
 
 .balance-control strong {
+  font-family: var(--font-mono);
   font-size: var(--text-small);
   font-weight: var(--weight-semibold);
+  line-height: 1.2;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 0.2em;
   white-space: nowrap;
-}
-
-.balance-open {
-  display: inline-flex;
-  min-height: 2.1rem;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  padding-inline: var(--space-3);
-  border-radius: var(--radius-control);
-  background: var(--color-strong);
-  color: var(--color-on-strong);
-  font-size: var(--text-caption);
-  font-weight: var(--weight-semibold);
+  transition: text-decoration-color var(--motion-fast) var(--ease-out);
 }
 
 .balance-control:hover { border-color: var(--color-border-strong); background: var(--color-surface-raised); }
+.balance-control:hover strong { text-decoration-color: currentColor; }
 .balance-control:active { transform: translateY(1px); }
+.balance-control[aria-current='page'] { border-color: var(--color-accent); }
+
+/* Имя вошедшего - тоже ссылка, на `/profile`. У гостя это кнопка входа. */
+.profile-button { text-decoration: none; }
+.profile-button[aria-current='page'] { border-color: var(--color-accent); }
 
 .profile-button {
   display: grid;
@@ -376,19 +394,21 @@
 
 .copy-task-price > span {
   color: var(--color-text-muted);
-  font-size: var(--text-small);
+  font-size: var(--text-ui);
 }
 
 /* Бесплатное первое решение - не цена, а обещание, и цвет у него тот же,
    что был у зелёной строки под ценой. */
 .copy-task-price.is-free strong { color: var(--color-success-strong); }
 
-.copy-task-price em {
+/* Оговорка к «от 4 ₽»: одного числа без неё быть не должно (CLAUDE.md).
+   Стоит, только пока задачи нет: точная цена - она же на кнопке - оговорки
+   не требует. Кегль обычный: мелкую серую строку под формой владелец
+   14 сентября не смог прочитать и попросил убрать. */
+.copy-task-price small {
   flex-basis: 100%;
-  color: var(--color-success-strong);
-  font-size: var(--text-small);
-  font-style: normal;
-  font-weight: var(--weight-semibold);
+  color: var(--color-text-muted);
+  font-size: var(--text-ui);
   line-height: var(--leading-copy);
 }
 
@@ -716,10 +736,7 @@
   .product-shell { display: block; padding-bottom: calc(5rem + env(safe-area-inset-bottom)); }
   .product-sidebar,
 .product-seam { display: none; }
-  .product-content {
-    padding-right: max(var(--space-6), env(safe-area-inset-right));
-    padding-left: max(var(--space-6), env(safe-area-inset-left));
-  }
+  .product-content { --product-gutter: var(--space-6); }
   .page-header { min-height: 5.5rem; }
   .page-heading { margin-right: auto; }
   .page-heading span { display: none; }
@@ -733,10 +750,7 @@
   .destination-section { order: 4; }
 
 @media (max-width: 640px) {
-  .product-content {
-    padding-right: max(var(--space-4), env(safe-area-inset-right));
-    padding-left: max(var(--space-4), env(safe-area-inset-left));
-  }
+  .product-content { --product-gutter: var(--space-4); }
   .page-header { gap: var(--space-3); }
   .page-heading { display: none; }
   .header-actions { margin-left: auto; }
@@ -932,31 +946,46 @@
   color: var(--color-danger);
 }
 
+/* Главная кнопка формы - во всю ширину колонки и сразу под полями, ростом
+   4,5rem, как `task-action` в DESIGN.md.
+
+   14 сентября владелец: кнопка «уехала далеко от поля» (стояла в правом
+   углу строки с «Добавить задачу») и «странная анимация, какой больше нигде
+   нет» - подъём на два пикселя с тенью и сжатие при нажатии. Наведение
+   теперь то же, что у главной кнопки витрины (`.landing-primary-action`):
+   темнее, на пиксель вверх, кобальтовая тень. */
 .copy-task-submit {
-  display: inline-flex;
-  min-height: 4.25rem;
+  display: flex;
+  width: 100%;
+  min-height: 4.5rem;
   align-items: center;
   justify-content: center;
   gap: var(--space-3);
-  padding: 0 var(--space-5);
+  padding: var(--space-2) var(--space-6);
   border: 1px solid transparent;
   border-radius: var(--radius-control);
   background: var(--color-accent);
   color: var(--color-on-accent);
-  font-size: var(--text-ui);
-  font-weight: var(--weight-bold);
-  white-space: nowrap;
+  font-size: var(--text-body);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-ui);
+  text-align: center;
   cursor: pointer;
-  transition: background var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out), transform var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out);
+  transition:
+    background var(--motion-fast) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-fast) var(--ease-out);
 }
+
+.copy-task-submit > svg { flex: none; }
 
 .copy-task-submit:hover:not(:disabled) {
   background: var(--color-accent-hover);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-raised);
+  transform: translateY(-1px);
+  box-shadow: 0 0.5rem 1.5rem color-mix(in oklch, var(--color-accent) 34%, transparent);
 }
 
-.copy-task-submit:active:not(:disabled) { transform: scale(0.98); }
+.copy-task-submit:active:not(:disabled) { transform: none; }
 .copy-task-submit:disabled {
   border-color: var(--color-disabled-on-accent-border);
   background: var(--color-disabled-on-accent);
@@ -978,13 +1007,18 @@
 
 .base-match.is-ready { color: var(--color-success-strong); }
 
-.task-entry-helper {
-  min-height: 1.5rem;
-  margin: 0;
-  color: var(--color-text-subtle);
-  font-size: var(--text-caption);
-  line-height: var(--leading-copy);
+/* Ошибка стоит под той карточкой, к которой относится, и обычным кеглем:
+   её надо прочитать с первого взгляда, а не угадывать. */
+.task-entry-error,
+.task-form-error {
+  margin: var(--space-3) 0 0;
+  color: var(--color-danger);
+  font-size: var(--text-ui);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-ui);
 }
+
+.task-form-error { margin: 0; }
 
 .home-column { gap: var(--space-12); }
 
@@ -1831,7 +1865,6 @@
   .my-solutions { order: 2; }}
 
 @media (max-width: 640px) {
-  .balance-open { padding-inline: var(--space-2); }
   .cdz-coming-soon {
     min-height: 0;
     grid-template-columns: 1fr;
@@ -1908,8 +1941,10 @@
 
   .navigation-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 
-  /* Место под панель, иначе она садится на последний блок страницы. */
-.product-content { padding-bottom: calc(4.5rem + env(safe-area-inset-bottom)); }
+  /* Место под панель разделов и над ней - под плавающую поддержку: здесь
+     она стоит над панелью (4,5rem от низа, 3rem ростом). Без запаса в конце
+     страницы панель садится на последний блок, а поддержка - на подвал. */
+.product-content { --launcher-reserve: calc(7.5rem + var(--space-3) + env(safe-area-inset-bottom)); }
   .product-route { min-height: calc(100dvh - 3.5rem); }
   .support-launcher { bottom: calc(4.5rem + env(safe-area-inset-bottom)); }}
 
@@ -2276,29 +2311,37 @@
 
    Домашнее задание задают не по одному предмету, поэтому форма - список.
    Пока задача одна, список выглядит ровно как прежняя форма: ни рамок, ни
-   нумерации, ни лишнего слова. Всё это появляется со второй задачей, когда
-   разделять их действительно нужно. */
+   нумерации, ни лишнего слова. Со второй задачи каждая становится карточкой
+   со своей рамкой, номером, ценой и крестиком: тонкой линии между ними,
+   как было до 14 сентября, не хватало, чтобы понять, где кончается одна
+   задача и начинается другая. */
 .task-entries {
   display: grid;
-  gap: var(--space-4);
+  gap: var(--space-3);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.task-entries > li + li {
-  padding-top: var(--space-4);
-  border-top: var(--border-thin) solid var(--color-border);
+.task-entry { min-width: 0; }
+
+.task-entry.is-card {
+  padding: var(--space-2) var(--space-4) var(--space-4);
+  border: var(--border-thin) solid var(--color-border);
+  border-radius: var(--radius-surface);
 }
+
+.task-entry.is-card.has-error { border-color: var(--color-danger); }
 
 .task-entry-head {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  margin-bottom: var(--space-2);
+  margin-bottom: var(--space-1);
 }
 
 .task-entry-number {
+  margin-inline-end: auto;
   color: var(--color-text-muted);
   font-family: var(--font-mono);
   font-size: var(--text-caption);
@@ -2307,70 +2350,105 @@
 }
 
 .task-entry-price {
-  margin-inline-start: auto;
   color: var(--color-text-muted);
-  font-size: var(--text-small);
+  font-size: var(--text-ui);
   font-weight: var(--weight-semibold);
   font-variant-numeric: tabular-nums;
 }
 
+/* Крестик - настоящая цель для пальца, 44 на 44, хотя рисунок в нём мелкий.
+   Правым краем он садится вровень с полями карточки. */
 .task-entry-remove {
   display: inline-flex;
+  width: 2.75rem;
+  height: 2.75rem;
+  flex: none;
   align-items: center;
   justify-content: center;
-  width: 2rem;
-  height: 2rem;
+  margin-inline-end: calc(-1 * var(--space-3));
   padding: 0;
-  border: var(--border-thin) solid var(--color-border);
+  border: var(--border-thin) solid transparent;
   border-radius: var(--radius-control);
-  background: var(--color-surface);
+  background: transparent;
   color: var(--color-text-muted);
   cursor: pointer;
+  transition: background var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out);
 }
 
 .task-entry-remove:hover {
-  border-color: var(--color-border-strong);
+  border-color: var(--color-border);
+  background: var(--color-surface-raised);
   color: var(--color-text);
 }
 
+/* «Решить» стоит в строке с фото, предметом и классом. Под ней - ошибка
+   формы и «Добавить задачу» тихой кнопкой по левому краю: правый нижний
+   угол экрана занимает плавающая поддержка. */
 .task-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  display: grid;
+  justify-items: start;
   gap: var(--space-3);
+  margin-top: var(--space-1);
 }
 
 .task-add {
   display: inline-flex;
-  min-height: 3rem;
+  min-height: 2.75rem;
   align-items: center;
   gap: var(--space-2);
   padding: 0 var(--space-4);
-  border: var(--border-thin) dashed var(--color-border-strong);
+  border: var(--border-thin) solid var(--color-border);
   border-radius: var(--radius-control);
   background: transparent;
   color: var(--color-text);
   font: inherit;
-  font-size: var(--text-small);
+  font-size: var(--text-ui);
   font-weight: var(--weight-semibold);
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out);
+}
+
+.task-add:hover:not(:disabled) {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-raised);
+}
+
+.task-add:disabled { cursor: wait; opacity: 0.6; }
+
+/* Почему вторая карточка не появилась. Строка, а не окно: ответ стоит там,
+   куда нажали, и не перебивает работу. */
+.task-limit-note {
+  display: flex;
+  max-width: 34rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--space-3);
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-ui);
+  line-height: var(--leading-copy);
+}
+
+.task-limit-note > button {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-brand-accent);
+  font: inherit;
+  font-weight: var(--weight-semibold);
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 0.28em;
   cursor: pointer;
 }
 
-.task-add:hover {
-  border-style: solid;
-  background: var(--color-surface-sunken);
-}
+.task-limit-note > button:hover { text-decoration-color: currentColor; }
 
-.task-actions .copy-task-submit {
-  margin-inline-start: auto;
-}
-
-@media (max-width: 40rem) {
-  .task-actions .copy-task-submit,
-  .task-add {
-    flex: 1 1 100%;
-    margin-inline-start: 0;
-  }
+@media (max-width: 560px) {
+  .copy-task-submit { min-height: 4rem; padding-inline: var(--space-4); }
 }
 
 .task-controls input[type="file"] {
@@ -2383,13 +2461,15 @@
   white-space: nowrap;
 }
 
+/* Одна высота с «Решить» в той же строке: разный рост соседей читался бы
+   как съехавшая вёрстка. */
 .task-photo-button,
 .task-select select {
   display: inline-flex;
-  height: 2.75rem;
+  height: 3rem;
   align-items: center;
   gap: var(--space-2);
-  padding: 0 var(--space-4);
+  padding: 0 var(--space-3);
   border: var(--border-thin) solid var(--color-border);
   border-radius: var(--radius-control);
   background: var(--color-surface);
@@ -2412,8 +2492,21 @@
   color: var(--color-danger);
 }
 
-/* Кнопка решения — единственный кобальтовый акцент в форме. */
-.task-controls .copy-task-submit { margin-left: auto; }
+/* Кнопка решения — единственный кобальтовый акцент в форме. Стоит последней
+   в строке с фото, предметом и классом и прижата к правому краю, вровень с
+   полем условия. 14 сентября 2026 владелец: во всю ширину под строкой она
+   «заняла почти полблока», а должна идти сразу после выбора предмета. */
+.task-controls .copy-task-submit {
+  flex: 1 0 auto;
+  width: auto;
+  min-width: 0;
+  max-width: 20rem;
+  min-height: 3rem;
+  margin-left: auto;
+  padding-inline: var(--space-5);
+  font-size: var(--text-ui);
+  white-space: nowrap;
+}
 
 @media (max-width: 560px) {
   .task-controls { display: grid; grid-template-columns: 1fr 1fr; }
@@ -2421,7 +2514,7 @@
   /* Подпись должна помещаться целиком: обрезанный «Предмет — опреде…» скрывал
      ровно то слово, ради которого он написан. */
 .task-select select { width: 100%; padding-inline: var(--space-3); font-size: var(--text-caption); }
-  .task-controls .copy-task-submit { grid-column: 1 / -1; margin-left: 0; justify-content: center; }}
+  .task-controls .copy-task-submit { grid-column: 1 / -1; width: 100%; min-width: 0; margin-left: 0; justify-content: center; }}
 /* Объявление из админки над содержимым приложения. */
 .site-banner {
   display: flex;
@@ -2429,7 +2522,9 @@
   justify-content: space-between;
   gap: var(--space-3);
   margin: var(--space-3) auto 0;
-  width: min(calc(100% - 2 * var(--space-4)), var(--content-width));
+  /* Поля ленты с 14 сентября у `.product-route`, а объявление стоит рядом
+     с ним, поэтому отступает от краёв само. */
+  width: min(calc(100% - 2 * var(--product-gutter, 0px) - 2 * var(--space-4)), var(--content-width));
   padding: var(--space-3) var(--space-4);
   border: 1px solid color-mix(in oklch, var(--color-info) 45%, var(--color-border));
   border-radius: var(--radius-surface);

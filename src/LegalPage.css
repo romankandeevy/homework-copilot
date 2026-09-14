@@ -1,248 +1,274 @@
+/* Страница документа - обычный длинный текст одной колонкой.
+
+   До 14 сентября 2026 документ был свёрстан брошюрой: раздел «заголовок
+   слева, текст справа», боковая панель со списком, полоса фоном под шапкой -
+   вместе с линией шапки она читалась двойной чертой, как ошибка. Владелец на
+   аудите: «слишком красивый», маленький и удобный, такой хочется читать и
+   придираться. Теперь как на обычных сайтах: шапка с одной линией, список
+   документов, заголовок, текст с привычными заголовками разделов. Без
+   карточек, сетки и украшений; цвета и шрифты - те же токены, обе темы.
+
+   Шапка, текст и подвал стоят на одной левой кромке: колонка 76rem с полями
+   по полтора рема, как у подвала. Строка текста уже - около 75 знаков, и
+   правое поле на широком экране остаётся под плавающую кнопку поддержки:
+   текст под неё не заходит. */
 .legal-page {
+  --legal-column: 79rem;
+  --legal-gutter: 1.5rem;
+  --legal-measure: 46rem;
   min-height: 100dvh;
-  background:
-    linear-gradient(var(--color-border) 1px, transparent 1px) 0 8.5rem / 100% 4rem no-repeat,
-    var(--color-canvas);
+  background: var(--color-canvas);
+  color: var(--color-text);
 }
 
-/* Подвал той же колонкой, что шапка и текст: 76rem и поля по полтора рема. */
+.legal-header,
+.legal-main {
+  padding-inline: calc(max(0px, (100% - var(--legal-column)) / 2) + var(--legal-gutter));
+}
+
 .legal-page > .site-footer {
-  --footer-column: 79rem;
-  --footer-gutter: 1.5rem;
+  --footer-column: var(--legal-column);
+  --footer-gutter: var(--legal-gutter);
   margin-top: 0;
 }
 
+/* Одна шапка и одна линия под ней. */
 .legal-header {
   display: flex;
-  min-height: 6rem;
+  min-height: 4.5rem;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-6);
-  width: min(calc(100% - 3rem), 76rem);
-  margin: 0 auto;
+  gap: var(--space-4);
   border-bottom: 1px solid var(--color-border);
 }
 
-.legal-brand,
-.legal-back {
+/* Знак и имя - те же, что в шапке витрины и в подвале. */
+.legal-brand {
   display: inline-flex;
-  min-width: 2.75rem;
   min-height: 2.75rem;
   align-items: center;
+  gap: var(--space-4);
   color: var(--color-text);
-  text-decoration: none;
-}
-
-.legal-brand {
-  gap: var(--space-3);
-  font-weight: var(--weight-semibold);
-}
-
-.legal-brand-mark {
   font-family: var(--font-display);
-  font-size: 1.35rem;
-  letter-spacing: var(--tracking-tight);
+  font-size: clamp(1rem, 1.1vw, 1.15rem);
+  font-weight: var(--weight-display);
+  line-height: 1.1;
+  text-decoration: none;
+  white-space: nowrap;
 }
-
-.legal-brand-mark span { color: var(--color-brand-accent); }
 
 .legal-back {
+  display: inline-flex;
   min-height: 2.75rem;
+  align-items: center;
   gap: var(--space-2);
+  margin-right: calc(-1 * var(--space-3));
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-control);
   color: var(--color-text-muted);
-  font-size: var(--text-small);
+  font-size: var(--text-ui);
   font-weight: var(--weight-semibold);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out);
 }
 
-.legal-back:hover { color: var(--color-text); }
-
-.legal-layout {
-  display: grid;
-  grid-template-columns: 13rem minmax(0, 1fr);
-  gap: clamp(2rem, 7vw, 7rem);
-  width: min(calc(100% - 3rem), 76rem);
-  margin: 0 auto;
-  padding: clamp(4rem, 8vw, 7.5rem) 0;
+.legal-back:hover {
+  background: var(--color-surface-raised);
+  color: var(--color-text);
 }
 
-.legal-meta {
-  align-self: start;
-  position: sticky;
-  top: var(--space-6);
-  display: grid;
-  gap: var(--space-5);
+.legal-main {
+  padding-block: clamp(2rem, 4vw, 3rem) clamp(4rem, 8vw, 6rem);
 }
 
-.legal-meta > span,
-.legal-document > header > span {
+/* Список документов: все шесть всегда, открытый отмечен `aria-current`.
+   Кобальт на странице один - черта под открытым документом, как узел
+   «ты здесь» в подвале. */
+.legal-documents {
+  margin-bottom: clamp(2.5rem, 5vw, 3.5rem);
+}
+
+.legal-documents-label {
+  display: block;
   color: var(--color-text-subtle);
   font-family: var(--font-mono);
   font-size: var(--text-micro);
   font-weight: var(--weight-semibold);
-  letter-spacing: var(--tracking-wide);
+  letter-spacing: 0.08em;
+  line-height: var(--leading-ui);
   text-transform: uppercase;
 }
 
-.legal-meta p {
+.legal-documents ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-6);
   margin: 0;
-  color: var(--color-text-muted);
-  font-size: var(--text-small);
-  line-height: var(--leading-copy);
+  padding: 0;
+  list-style: none;
 }
 
-.legal-meta nav {
-  display: grid;
-  gap: var(--space-1);
-}
-
-.legal-meta a {
+.legal-documents a {
   display: inline-flex;
   min-height: 2.75rem;
   align-items: center;
-  gap: var(--space-2);
-  color: var(--color-text);
-  font-size: var(--text-small);
-  font-weight: var(--weight-semibold);
-  line-height: var(--leading-ui);
+  color: var(--color-text-muted);
+  font-size: var(--text-ui);
+  font-weight: var(--weight-medium);
+  line-height: 1.3;
   text-decoration: underline;
+  text-decoration-color: transparent;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.4em;
+  transition: color var(--motion-fast) var(--ease-out), text-decoration-color var(--motion-fast) var(--ease-out);
+}
+
+.legal-documents a:hover {
+  color: var(--color-text);
   text-decoration-color: var(--color-border-strong);
 }
 
-.legal-meta nav a {
-  justify-content: space-between;
-  min-width: 0;
-  border-bottom: 1px solid var(--color-border);
-  text-decoration: none;
+.legal-documents a[aria-current='page'] {
+  color: var(--color-text);
+  font-weight: var(--weight-semibold);
+  text-decoration-color: var(--color-accent);
+  text-decoration-thickness: 2px;
 }
 
-.legal-document { min-width: 0; max-width: 48rem; }
+.legal-document {
+  max-width: var(--legal-measure);
+}
 
-.legal-document > header {
-  display: grid;
-  gap: var(--space-5);
-  padding-bottom: clamp(3rem, 6vw, 5rem);
-  border-bottom: 2px solid var(--color-text);
+.legal-document-header {
+  margin-bottom: clamp(2rem, 4vw, 2.75rem);
+}
+
+.legal-kicker {
+  margin: 0 0 var(--space-2);
+  color: var(--color-text-subtle);
+  font-size: var(--text-small);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-ui);
 }
 
 .legal-document h1 {
-  max-width: 100%;
   margin: 0;
   font-family: var(--font-display);
-  font-size: clamp(2.2rem, 4vw, 4rem);
+  font-size: clamp(1.75rem, 3.2vw, 2.5rem);
   font-weight: var(--weight-display);
-  letter-spacing: var(--tracking-tight);
-  line-height: var(--leading-title);
-  overflow-wrap: normal;
+  letter-spacing: 0;
+  line-height: 1.15;
+  overflow-wrap: break-word;
+  text-wrap: balance;
 }
 
-.legal-document > header p {
-  max-width: 39rem;
-  margin: 0;
+.legal-version {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-4);
+  margin: var(--space-4) 0 0;
+  color: var(--color-text-subtle);
+  font-size: var(--text-small);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--leading-ui);
+}
+
+.legal-intro {
+  margin: var(--space-5) 0 0;
   color: var(--color-text-muted);
   font-size: var(--text-lead);
   line-height: var(--leading-copy);
 }
 
-.legal-sections { counter-reset: legal-section; }
-
+/* Разделы идут подряд: привычный заголовок, под ним абзацы. Якорь -
+   `id="section-N"` у раздела, на него ссылается окно баланса. */
 .legal-sections section {
-  display: grid;
-  grid-template-columns: minmax(12rem, 0.62fr) minmax(0, 1fr);
-  gap: var(--space-8);
-  padding: var(--space-8) 0;
-  border-bottom: 1px solid var(--color-border);
+  scroll-margin-top: var(--space-6);
+}
+
+.legal-sections section + section {
+  margin-top: var(--space-8);
 }
 
 .legal-sections h2 {
-  margin: 0;
-  font-size: var(--text-body);
+  margin: 0 0 var(--space-3);
+  color: var(--color-text);
+  font-size: 1.25rem;
   font-weight: var(--weight-semibold);
-  line-height: var(--leading-ui);
+  line-height: 1.35;
 }
 
 .legal-sections p {
-  grid-column: 2;
   margin: 0;
-  color: var(--color-text-muted);
+  color: var(--color-text);
+  font-size: var(--text-body);
   line-height: var(--leading-copy);
 }
 
-.legal-sections h2 + p { grid-row: 1; }
-.legal-sections p + p { margin-top: calc(-1 * var(--space-5)); }
+.legal-sections p + p {
+  margin-top: var(--space-3);
+}
+
+/* Ссылка внутри абзаца - строчная: прежняя высота в 44 пикселя раздвигала
+   строки абзаца, и текст шёл неровно. Длинная почта переносится, а не
+   распирает страницу на телефоне. */
 .legal-sections a {
-  display: inline-flex;
-  min-height: 2.75rem;
-  align-items: center;
   color: var(--color-text);
-  font-weight: var(--weight-medium);
-  vertical-align: middle;
+  overflow-wrap: anywhere;
+  text-decoration: underline;
+  text-decoration-color: var(--color-border-strong);
+  text-underline-offset: 0.18em;
+}
+
+.legal-sections a:hover {
+  text-decoration-color: currentColor;
 }
 
 .legal-storage-clear {
   display: inline-flex;
-  width: fit-content;
   min-height: 2.75rem;
-  grid-column: 2;
   align-items: center;
-  justify-content: center;
   gap: var(--space-2);
+  margin-top: var(--space-4);
   padding: 0 var(--space-4);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-control);
-  background: var(--color-strong);
-  color: var(--color-on-strong);
-  font: inherit;
-  font-size: var(--text-small);
-  font-weight: var(--weight-semibold);
+  background: var(--color-surface);
+  color: var(--color-text);
   cursor: pointer;
+  font: inherit;
+  font-size: var(--text-ui);
+  font-weight: var(--weight-semibold);
+  transition: background var(--motion-fast) var(--ease-out);
 }
 
-.legal-storage-clear:hover { background: var(--color-text); }
-.legal-storage-clear:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
-
-.legal-footer {
-  display: flex;
-  min-height: 6rem;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-6);
-  width: min(calc(100% - 3rem), 76rem);
-  margin: 0 auto;
-  border-top: 1px solid var(--color-border);
-  color: var(--color-text-subtle);
-  font-size: var(--text-small);
-}
-
-.legal-footer a {
-  display: inline-flex;
-  min-height: 2.75rem;
-  align-items: center;
-  color: var(--color-text-muted);
+.legal-storage-clear:hover {
+  background: var(--color-surface-sunken);
 }
 
 @media (max-width: 760px) {
-  .legal-page { background: var(--color-canvas); }
-  .legal-page > .site-footer { --footer-column: 78rem; --footer-gutter: 1rem; }
-  .legal-header,
-  .legal-layout,
-  .legal-footer { width: min(calc(100% - 2rem), 76rem); }
-  .legal-header { min-height: 4.75rem; }
-  .legal-brand > span:last-child { display: none; }
-  .legal-back { font-size: var(--text-caption); }
-  .legal-layout { grid-template-columns: 1fr; gap: var(--space-8); padding: var(--space-12) 0 var(--space-16); }
-  .legal-meta { position: static; grid-template-columns: 1fr; gap: var(--space-3); }
-  .legal-meta nav { grid-template-columns: 1fr 1fr; gap: 0 var(--space-4); }
-  .legal-meta nav a { max-width: none; font-size: var(--text-caption); }
-  .legal-document > header { padding-bottom: var(--space-10); }
-  .legal-document h1 { max-width: 100%; font-size: clamp(1.55rem, 6vw, 2.1rem); letter-spacing: 0; overflow-wrap: anywhere; }
-  .legal-sections section { grid-template-columns: 1fr; gap: var(--space-3); padding: var(--space-6) 0; }
-  .legal-sections p,
-  .legal-sections h2 + p { grid-column: 1; grid-row: auto; }
-  .legal-sections p + p { margin-top: 0; }
-  .legal-storage-clear { width: 100%; grid-column: 1; }
-  .legal-footer { align-items: flex-start; flex-direction: column; justify-content: center; gap: var(--space-2); }
+  .legal-page { --legal-gutter: 1rem; }
+  .legal-header { min-height: 4rem; }
 }
 
-@media (max-width: 430px) {
-  .legal-meta nav { grid-template-columns: 1fr; }
+/* Телефон. Имя в шапке прячется, знак остаётся: рядом с «Вернуться в
+   сервис» имя целиком не помещается. Список документов - в две колонки:
+   одной он занимал треть первого экрана, а заголовок документа уезжал вниз. */
+@media (max-width: 560px) {
+  .legal-brand .brand-name { display: none; }
+  .legal-documents ul {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 var(--space-4);
+  }
+  .legal-documents a { font-size: var(--text-small); }
+  .legal-document h1 { font-size: clamp(1.375rem, 6vw, 1.75rem); }
+  .legal-sections h2 { font-size: 1.125rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .legal-back,
+  .legal-documents a,
+  .legal-storage-clear { transition: none; }
 }

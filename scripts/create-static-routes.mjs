@@ -13,13 +13,15 @@
 /* eslint-disable no-await-in-loop */
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
-import { getSeoMetadata, metadataByPath, siteOrigin } from '../src/lib/siteMetadata.ts'
+import { getSeoMetadata, legacyDocumentPaths, metadataByPath, siteOrigin } from '../src/lib/siteMetadata.ts'
 
 const outputDirectory = resolve('dist')
 
 /* Прежние адреса. Ссылки на них уже разошлись, поэтому страницы остаются,
-   но каноническим объявляют новый адрес — его же вернёт `getSeoMetadata`. */
-const legacyPaths = ['/main', '/base', '/tasks', '/textbooks', '/agreement']
+   но каноническим объявляют новый адрес — его же вернёт `getSeoMetadata`.
+   Прежние адреса документов (и `/agreement` среди них) разложены ниже
+   отдельно: там не копия приложения, а мгновенный переход. */
+const legacyPaths = ['/main', '/base', '/tasks', '/textbooks']
 
 const routes = [...Object.keys(metadataByPath), ...legacyPaths]
   .filter((path) => path !== '/')
@@ -96,6 +98,46 @@ for (const { directory, metadata } of routes) {
   /* Тот же файл рядом с каталогом. Pages иначе отвечает на `/app` редиректом
      на `/app/`, и лишний переход получала каждая ссылка продукта — включая
      возврат авторизации, где в адресе едет одноразовый код. */
+  await writeFile(resolve(outputDirectory, `${directory}.html`), html, 'utf8')
+}
+
+/* Прежние адреса документов: /terms, /agreement, /privacy, /consent,
+   /cookies, /offer, /contacts и `/docs` без хвоста.
+
+   14 сентября 2026 документы переехали под /docs/, а старые адреса уже стоят
+   в письмах, в отметках согласия и в поиске. Отвечать редиректом Pages не
+   умеет, поэтому здесь лежит маленькая страница: канонический адрес - новый,
+   `meta refresh` - для обходчиков без скриптов, `location.replace` - чтобы
+   вместе с адресом доехали запрос и якорь (`/terms#section-8`). Копия
+   приложения тут не нужна: человек на этой странице не задерживается. */
+function renderDocumentRedirect(target) {
+  const metadata = getSeoMetadata(target)
+  const canonicalUrl = new URL(target, siteOrigin).toString()
+  const title = escapeAttribute(metadata.title)
+  return [
+    '<!doctype html>',
+    '<html lang="ru">',
+    '  <head>',
+    '    <meta charset="UTF-8" />',
+    '    <meta name="color-scheme" content="light dark" />',
+    `    <title>${title}</title>`,
+    `    <link rel="canonical" href="${canonicalUrl}" />`,
+    `    <meta http-equiv="refresh" content="0; url=${target}" />`,
+    `    <script>location.replace(${JSON.stringify(target)} + location.search + location.hash)</script>`,
+    '  </head>',
+    '  <body>',
+    `    <p>Документ открывается по новому адресу: <a href="${target}">${title}</a></p>`,
+    '  </body>',
+    '</html>',
+    '',
+  ].join('\n')
+}
+
+for (const [legacyPath, target] of Object.entries(legacyDocumentPaths)) {
+  const directory = legacyPath.replace(/^\//, '')
+  const html = renderDocumentRedirect(target)
+  await mkdir(resolve(outputDirectory, directory), { recursive: true })
+  await writeFile(resolve(outputDirectory, directory, 'index.html'), html, 'utf8')
   await writeFile(resolve(outputDirectory, `${directory}.html`), html, 'utf8')
 }
 

@@ -1,11 +1,14 @@
 /* Превью продукта для витрины.
-   Это не декоративные картинки: каждое повторяет реальную поверхность
-   приложения - форму постановки задачи, тетрадную страницу решения,
-   ИИ-чат и расписание. Ничего интерактивного здесь нет: работать
-   с продуктом ученик идёт на `/app`, а витрина только показывает, что
-   он там увидит. */
+   Это не декоративная картинка: тетрадная страница повторяет то, что
+   приходит в приложении, - «Дано» и «Найти» через разделитель, чертёж,
+   ход решения строками. Ничего интерактивного здесь нет: работать с
+   продуктом ученик идёт на `/app`, а витрина только показывает, что он там
+   увидит.
 
-import { ImageSquare } from '@phosphor-icons/react'
+   14 сентября 2026 отсюда ушли картинки разбора предложения и расписания:
+   значки разбора стоят прямо на словах в карточке, а расписание на витрине -
+   одна строка текста. `NotebookPreview` берёт и студия роликов
+   (`src/promo/realUi.tsx`). */
 
 /* Ромб с диагоналями 10 и 24 - та самая фигура, которую движок строит
    по условию. Пропорции честные: AC = 70, BD = 168, это ровно 10 к 24. */
@@ -37,10 +40,12 @@ export function RhombusDiagram() {
 
 /* Тетрадная страница: бумага, клетка, красное поле, «Дано» и «Найти»
    через разделитель, чертёж справа и ход решения строками - так решение
-   выглядит в продукте и так же его переписывают в тетрадь. */
-export function NotebookPreview({ compact = false }: { compact?: boolean }) {
+   выглядит в продукте и так же его переписывают в тетрадь. Размер задаёт
+   место, куда страницу поставили: на первом экране витрины она
+   масштабируется целиком от ширины колонки (`.hero-aside`). */
+export function NotebookPreview() {
   return (
-    <figure className={`paper-page${compact ? ' is-compact' : ''}`}>
+    <figure className="paper-page">
       <span className="paper-grid" aria-hidden="true" />
       <span className="paper-margin" aria-hidden="true" />
 
@@ -71,53 +76,5 @@ export function NotebookPreview({ compact = false }: { compact?: boolean }) {
         </div>
       </div>
     </figure>
-  )
-}
-
-/* Разбор со школьными значками: подчёркивания членов предложения - то,
-   что рисует WrittenAnalysis поверх обычных шагов решения. */
-export function AnalysisPreview() {
-  return (
-    <div className="parse-preview">
-      <span className="preview-kicker">Разбор предложения</span>
-      <p className="parse-line">
-        <span className="mark-wavy">Ранний</span>{' '}
-        <span className="mark-single">снег</span>{' '}
-        <span className="mark-double">лежал</span>{' '}
-        <span className="mark-dash-dot">на крышах</span>
-      </p>
-      <ul className="parse-legend">
-        <li><i className="legend-single" aria-hidden="true" />подлежащее</li>
-        <li><i className="legend-double" aria-hidden="true" />сказуемое</li>
-        <li><i className="legend-wavy" aria-hidden="true" />определение</li>
-        <li><i className="legend-dash-dot" aria-hidden="true" />обстоятельство</li>
-      </ul>
-    </div>
-  )
-}
-
-export function SchedulePreview() {
-  const lessons = [
-    { time: '08:30', subject: 'Геометрия', room: '212' },
-    { time: '09:25', subject: 'Химия', room: '308' },
-    { time: '10:30', subject: 'История', room: '104' },
-  ]
-
-  return (
-    <div className="schedule-preview">
-      <div className="schedule-preview-head">
-        <span>Вторник</span>
-        <span className="schedule-preview-badge"><ImageSquare size={14} weight="bold" aria-hidden="true" />Распознано с фото</span>
-      </div>
-      <ul>
-        {lessons.map(({ time, subject, room }) => (
-          <li key={time}>
-            <time>{time}</time>
-            <strong>{subject}</strong>
-            <span>каб. {room}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
   )
 }

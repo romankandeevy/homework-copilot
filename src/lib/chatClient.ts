@@ -54,7 +54,9 @@ export type ChatStreamMeta = {
 export type ChatStreamUsage = {
   chargedKopecks: number
   refundedKopecks: number
-  balanceKopecks: number
+  // Неизвестный баланс - `null`, а не ноль: 14 сентября 2026 пустое поле
+  // превращалось в «баланс 0 ₽» у ученика с 53,60 ₽ на счету.
+  balanceKopecks: number | null
 }
 
 export type ChatStreamRequest = {
@@ -388,6 +390,19 @@ function parseFrameData(frame: SseFrame): Record<string, unknown> | null {
   }
 }
 
+/* Расход под ответом показываем только тогда, когда он известен.
+   Без числа списания строки нет вовсе; без баланса - только списание. */
+export function usageFromPayload(payload: Record<string, unknown>): ChatStreamUsage | null {
+  const charged = payload.chargedKopecks
+  if (typeof charged !== 'number' || !Number.isFinite(charged)) return null
+  const balance = payload.balanceKopecks
+  return {
+    chargedKopecks: charged,
+    refundedKopecks: readNumber(payload, 'refundedKopecks'),
+    balanceKopecks: typeof balance === 'number' && Number.isFinite(balance) ? balance : null,
+  }
+}
+
 function applyFrame(frame: SseFrame, handlers: ChatStreamHandlers) {
   const payload = parseFrameData(frame)
 
@@ -422,11 +437,8 @@ function applyFrame(frame: SseFrame, handlers: ChatStreamHandlers) {
   }
 
   if (frame.event === 'usage') {
-    handlers.onUsage?.({
-      chargedKopecks: readNumber(payload, 'chargedKopecks'),
-      refundedKopecks: readNumber(payload, 'refundedKopecks'),
-      balanceKopecks: readNumber(payload, 'balanceKopecks'),
-    })
+    const usage = usageFromPayload(payload)
+    if (usage) handlers.onUsage?.(usage)
     return
   }
 

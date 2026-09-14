@@ -43,6 +43,55 @@ test.describe('недельное расписание', () => {
     await expect(page.getByLabel('Предмет, понедельник, урок 1 в недельной таблице')).toHaveValue('История')
   })
 
+  test('суббота убирается и возвращается, выбор переживает перезагрузку', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 })
+    await openSchedule(page)
+
+    await page.getByLabel('Предмет, суббота, урок 1 в недельной таблице').fill('Химия')
+    await page.getByRole('button', { name: 'Убрать субботу' }).click()
+    await expect(page.getByRole('columnheader', { name: 'Суббота' })).toHaveCount(0)
+    await expect(page.getByText('7 уроков · 5 дней')).toBeVisible()
+
+    await page.reload()
+    await expect(page.getByRole('heading', { name: 'Расписание' })).toBeVisible()
+    await expect(page.getByRole('columnheader', { name: 'Суббота' })).toHaveCount(0)
+
+    // Уроки убранной субботы не стираются.
+    await page.getByRole('button', { name: 'Вернуть субботу' }).click()
+    await expect(page.getByLabel('Предмет, суббота, урок 1 в недельной таблице')).toHaveValue('Химия')
+  })
+
+  test('прежнее расписание без настройки субботы читается как есть', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 })
+    await page.goto('/app')
+    await page.evaluate(() => {
+      window.localStorage.setItem('homework-copilot:schedule-v1', JSON.stringify([
+        { id: 'old-1', day: 'saturday', time: '08:30-09:15', subject: 'Физика', room: '12' },
+      ]))
+    })
+    await openSchedule(page)
+
+    await expect(page.getByRole('columnheader', { name: 'Суббота' })).toBeVisible()
+    await expect(page.getByLabel('Предмет, суббота, урок 1 в недельной таблице')).toHaveValue('Физика')
+  })
+
+  test('время урока подписано и понимает запись с точкой', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 })
+    await openSchedule(page)
+
+    await expect(page.getByRole('columnheader', { name: /Время урока/ })).toContainText('одно на все дни')
+    const start = page.getByLabel('Начало урока 1 в недельной таблице')
+    await start.fill('8.15')
+    await start.press('Enter')
+    await expect(start).toHaveValue('08:15')
+    // Конец раньше начала не принимается: поле возвращает прежнее время.
+    const end = page.getByLabel('Конец урока 1 в недельной таблице')
+    await end.fill('7:00')
+    await end.press('Enter')
+    await expect(end).toHaveValue('09:15')
+    await expect(page.getByText('Сохранено в аккаунте')).toHaveCount(0)
+  })
+
   test('на телефоне переключает дни без горизонтальной таблицы', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await openSchedule(page)
@@ -61,5 +110,10 @@ test.describe('недельное расписание', () => {
     // Хранение только в браузере - предостережение, а не успех: смысл фразы
     // в том, что при смене телефона расписания не будет.
     await expect(page.getByText(/Только в этом браузере/)).toBeVisible()
+
+    await page.getByRole('tab', { name: 'Сб' }).click()
+    await page.getByRole('button', { name: 'Убрать субботу' }).click()
+    await expect(page.getByRole('tab', { name: 'Сб' })).toHaveCount(0)
+    await expect(page.getByRole('tab', { name: 'Пт' })).toHaveAttribute('aria-selected', 'true')
   })
 })

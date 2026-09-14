@@ -48,14 +48,17 @@ try {
     page.on('pageerror', (error) => runtimeErrors.push(`page: ${error.message}`))
     page.on('requestfailed', (request) => runtimeErrors.push(`network: ${request.url()} ${request.failure()?.errorText ?? ''}`))
 
-    await page.goto(`${origin}/privacy`, { waitUntil: navigationWaitUntil })
+    // Прежний адрес из писем и отметок согласия обязан довести до документа
+    // под /docs/ (14 сентября 2026) - вместе с якорем.
+    await page.goto(`${origin}/privacy#section-8`, { waitUntil: navigationWaitUntil })
+    await page.waitForURL(/\/docs\/privacy#section-8$/)
     await page.locator('h1').filter({ hasText: 'Политика обработки персональных данных' }).waitFor()
     await page.evaluate(() => document.fonts.ready)
 
     const canonical = await page.locator('link[rel="canonical"]').getAttribute('href')
     const robots = await page.locator('meta[name="robots"]').getAttribute('content')
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
-    if (canonical !== 'https://www.homeworkcopilot.ru/privacy') failures.push(`${viewport.width}px: wrong canonical ${canonical}`)
+    if (canonical !== 'https://www.homeworkcopilot.ru/docs/privacy') failures.push(`${viewport.width}px: wrong canonical ${canonical}`)
     if (robots !== 'index, follow') failures.push(`${viewport.width}px: wrong robots ${robots}`)
     if (overflow > 0) failures.push(`${viewport.width}px: horizontal overflow ${overflow}px`)
 
@@ -70,7 +73,7 @@ try {
     await page.locator('.site-footer').scrollIntoViewIfNeeded()
     await page.screenshot({ path: resolve(outputDirectory, `footer-${viewport.width}.png`) })
 
-    for (const route of ['cookies', 'offer', 'terms', 'consent']) {
+    for (const route of ['docs/cookies', 'docs/offer', 'docs/terms', 'docs/consent', 'docs/contacts']) {
       await page.goto(`${origin}/${route}`, { waitUntil: navigationWaitUntil })
       await page.locator('h1').waitFor()
       const routeOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)

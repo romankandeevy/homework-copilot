@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { ChatApiError } from './chatErrors.ts'
 import { streamModelAnswer } from './chatProviders.ts'
 
 /* Фотография в чате доезжает до модели.
@@ -42,6 +43,76 @@ const baseArgs = {
   onDelta: () => undefined,
   onCitation: () => undefined,
 }
+
+/* Шлюз отвечает ошибкой обычным JSON, а не потоком.
+
+   14 сентября 2026 gemini-2.5-flash на каждый запрос отвечала HTTP 200,
+   `application/json` и {"code":500,"msg":"Network error, please try again
+   later."}. Разбор искал кадры `data:`, не находил их и говорил «Модель не
+   вернула ответ» - строка шлюза терялась, а в журнале не было причины. */
+describe('ошибка шлюза без потока', () => {
+  const gatewayError = { code: 500, msg: 'Network error, please try again later.' }
+
+  it('читается из тела application/json', async () => {
+    const fetchImpl = (async () => new Response(JSON.stringify(gatewayError), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json;charset=UTF-8' },
+    })) as unknown as typeof fetch
+
+    const failure = await streamModelAnswer({
+      ...baseArgs,
+      modelId: 'gemini-2.5-flash',
+      fetchImpl,
+      messages: [{ role: 'user', content: 'Привет' }],
+    }).catch((error: unknown) => error)
+
+    expect(failure).toBeInstanceOf(ChatApiError)
+    const error = failure as ChatApiError
+    expect(error.status).toBe(502)
+    // Ученику - наша фраза без латиницы, в журнал - строка шлюза.
+    expect(error.message).toBe('Модель сейчас не отвечает. Попробуй ещё раз или выбери другую модель')
+    expect(error.message).not.toMatch(/[a-z]/i)
+    expect(error.detail).toContain('Network error')
+  })
+
+  it('читается, даже если шлюз назвал тело потоком', async () => {
+    const fetchImpl = (async () => new Response(JSON.stringify(gatewayError), {
+      status: 200,
+      headers: { 'Content-Type': 'text/event-stream' },
+    })) as unknown as typeof fetch
+
+    const failure = await streamModelAnswer({
+      ...baseArgs,
+      modelId: 'gemini-2.5-flash',
+      fetchImpl,
+      messages: [{ role: 'user', content: 'Привет' }],
+    }).catch((error: unknown) => error)
+
+    expect((failure as ChatApiError).detail).toContain('kie 500')
+  })
+
+  it('кадр с кодом ошибки внутри потока тоже не выходит наружу по-английски', async () => {
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(gatewayError)}\n\n`))
+        controller.close()
+      },
+    })
+    const fetchImpl = (async () => new Response(body, {
+      status: 200,
+      headers: { 'Content-Type': 'text/event-stream' },
+    })) as unknown as typeof fetch
+
+    const failure = await streamModelAnswer({
+      ...baseArgs,
+      modelId: 'gemini-3-pro',
+      fetchImpl,
+      messages: [{ role: 'user', content: 'Привет' }],
+    }).catch((error: unknown) => error)
+
+    expect((failure as ChatApiError).message).not.toMatch(/[a-z]/i)
+  })
+})
 
 describe('вложения чата в запросе к модели', () => {
   it('уходят картинкой по протоколу chat/completions', async () => {

@@ -16,13 +16,20 @@ export const notFoundStops: RouteStop[] = [
 const knownDestinations: Destination[] = [
   { path: '/app', label: 'Решить задачу' },
   ...notFoundStops,
-  { path: '/terms', label: 'Пользовательское соглашение' },
-  { path: '/privacy', label: 'Политика данных' },
-  { path: '/consent', label: 'Согласие на обработку данных' },
-  { path: '/cookies', label: 'Cookie и хранилище' },
-  { path: '/offer', label: 'Публичная оферта' },
-  { path: '/contacts', label: 'Реквизиты и контакты' },
+  { path: '/docs/terms', label: 'Пользовательское соглашение' },
+  { path: '/docs/privacy', label: 'Политика данных' },
+  { path: '/docs/consent', label: 'Согласие на обработку данных' },
+  { path: '/docs/cookies', label: 'Cookie и хранилище' },
+  { path: '/docs/offer', label: 'Публичная оферта' },
+  { path: '/docs/contacts', label: 'Реквизиты и контакты' },
 ]
+
+/* С 14 сентября 2026 документы живут под /docs/, но набирают руками чаще
+   короткий прежний адрес: «/contact», «/privaci». Сверяются оба написания,
+   а подсказка ведёт на новый адрес. */
+function spellingsOf(path: string) {
+  return path.startsWith('/docs/') ? [path, path.slice('/docs'.length)] : [path]
+}
 
 function editDistance(from: string, to: string) {
   let previous = Array.from({ length: to.length + 1 }, (_, index) => index)
@@ -47,10 +54,12 @@ export function closestDestination(missingPath: string) {
   const firstSegment = `/${typed.split('/').find(Boolean) ?? ''}`
   let best: { destination: Destination; distance: number } | null = null
   for (const destination of knownDestinations) {
-    const allowed = Math.max(1, Math.floor((destination.path.length - 1) / 3))
-    for (const probe of new Set([typed, firstSegment])) {
-      const distance = editDistance(probe, destination.path)
-      if (distance <= allowed && (!best || distance < best.distance)) best = { destination, distance }
+    for (const spelling of spellingsOf(destination.path)) {
+      const allowed = Math.max(1, Math.floor((spelling.length - 1) / 3))
+      for (const probe of new Set([typed, firstSegment])) {
+        const distance = editDistance(probe, spelling)
+        if (distance <= allowed && (!best || distance < best.distance)) best = { destination, distance }
+      }
     }
   }
   return best?.destination ?? null

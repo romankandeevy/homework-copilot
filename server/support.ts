@@ -234,11 +234,11 @@ async function loadAccountContext(adminClient: SupabaseClient<Database>, user: U
 function paymentContext(account: Awaited<ReturnType<typeof loadAccountContext>>) {
   return {
     payment: {
-      paymentsConnected: false,
+      paymentsConnected: true,
       reviewStatus: 'manual_review_required',
       currentBalance: account.balance,
       recentWalletEntries: account.walletEntries,
-      note: 'Платёжный провайдер пока не подключён. Автоматический возврат не выполняется.',
+      note: 'Пополнения идут через Робокассу. Возврат денег выполняется вручную владельцем (admin_finance_refund) в течение десяти дней.',
     } as unknown as Json,
   }
 }

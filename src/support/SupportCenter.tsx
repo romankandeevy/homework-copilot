@@ -4,7 +4,6 @@ import type { RealtimeChannel, SupabaseClient, User } from '@supabase/supabase-j
 import {
   ArrowLeft,
   ArrowRight,
-  ChatCircleText,
   CheckCircle,
   Checks,
   CircleNotch,
@@ -67,7 +66,7 @@ const categories: { id: SupportCategory; title: string; copy: string; icon: type
 
 const faqs = [
   { question: 'Как получить решение задачи?', answer: 'Впиши условие на главной или приложи фотографию задачи, выбери предмет и нажми «Решить». Предмет обязателен: по нему решение проверяется — единица измерения при ответе, разбор по составу, уравненная реакция. Класс можно не указывать. Готовое решение останется в разделе «Мои решения».' },
-  { question: 'Почему баланс изменился?', answer: 'В истории аккаунта видны все списания и начисления. Решение задачи стоит от 4 ₽: цену считает сервер по размеру задачи — длинное условие, фотография и счётный предмет дороже. Она показана над формой до запуска, и списывается ровно она. Ответ в ИИ-чате списывается отдельно и по факту.' },
+  { question: 'Почему баланс изменился?', answer: 'В истории аккаунта видны все списания и начисления. Решение задачи стоит от 4 ₽: цену считает сервер по размеру задачи — длинное условие, фотография и счётный предмет дороже. Она показана над формой до запуска, и списывается ровно она. Ответ в ИИ-чате списывается отдельно и по факту. Пополнение — от 50 до 15 000 ₽ через Робокассу, в разделе «Баланс».' },
   { question: 'Как работают приглашения?', answer: 'В разделе баланса у каждого есть личная ссылка. Как только новый пользователь зарегистрируется по ней и подтвердит почту, пригласившему начислят 10 ₽, а приглашённому — 5 ₽. Пополнять баланс для этого не нужно. Для существующих аккаунтов бонус не действует.' },
   { question: 'Что делать, если решение кажется неверным?', answer: 'Открой решение и нажми «Сообщить об ошибке». В обращение автоматически попадут полное условие, решение и данные задачи, чтобы владелец мог быстро проверить результат.' },
   { question: 'Можно ли восстановить доступ к аккаунту?', answer: 'Если вход не получается, используй восстановление пароля в окне аккаунта. Для других случаев напиши в поддержку — ответ владельца появится здесь.' },
@@ -90,14 +89,6 @@ async function accessToken(client: SupabaseClient<Database>) {
   return data.session.access_token
 }
 
-function SupportLauncher({ onClick }: { onClick: () => void }) {
-  return (
-    <button className="support-launcher" type="button" onClick={onClick} aria-label="Открыть поддержку">
-      <ChatCircleText size={22} weight="duotone" aria-hidden="true" />
-      <span>Поддержка</span>
-    </button>
-  )
-}
 
 /* «Печатает» в обе стороны: канал support-typing:<id> общий с админкой.
    Канал с тем же именем клиент отдаёт повторно, поэтому прежний, ещё не
@@ -374,7 +365,7 @@ export function SupportCenter({ user, supabaseClient, initialCategory, initialCo
                   </div>
                   {category === 'wrong_solution' && initialContext?.wrongSolution && <div className="support-context-note"><WarningCircle size={19} weight="duotone" aria-hidden="true" /><p><strong>Контекст решения приложится автоматически.</strong><span>Условие, найденное решение и данные задачи уже будут в обращении.</span></p></div>}
                   {category === 'feature' && <div className="support-context-note is-feature"><Lightbulb size={19} weight="duotone" aria-hidden="true" /><p><strong>За полезную идею начислим 10 ₽.</strong><span>Награда доступна после одобрения владельцем.</span></p></div>}
-                  {category === 'payment' && <div className="support-context-note is-payment"><CreditCard size={19} weight="duotone" aria-hidden="true" /><p><strong>Мы проверим баланс и историю операций.</strong><span>Платежи пока не подключены, поэтому автоматический возврат не выполняется.</span></p></div>}
+                  {category === 'payment' && <div className="support-context-note is-payment"><CreditCard size={19} weight="duotone" aria-hidden="true" /><p><strong>Мы проверим баланс и историю операций.</strong><span>Если платёж не пришёл, укажи дату и сумму. Возврат остатка выполняется вручную в течение десяти дней.</span></p></div>}
                   <form className="support-compose" onSubmit={submitMessage}><label htmlFor="support-new-message">Сообщение</label><textarea id="support-new-message" value={messageText} onChange={(event) => setMessageText(event.target.value.slice(0, 4000))} placeholder="Опиши, что произошло…" maxLength={4000} autoFocus /><div className="support-compose-footer"><span>{messageText.length}/4000</span><button className="support-primary-button" type="submit" disabled={sending || !messageText.trim()}>{sending ? <><CircleNotch size={17} className="support-spinner" aria-hidden="true" /> Отправляем…</> : <>Отправить <PaperPlaneTilt size={16} weight="bold" aria-hidden="true" /></>}</button></div></form>
                   <section className="support-history" aria-labelledby="support-history-title"><header><div><span className="support-kicker">История</span><h3 id="support-history-title">Твои обращения</h3></div><span>{loading ? 'Загружаем…' : conversations.length}</span></header>{conversations.length ? <div className="support-conversation-list">{conversations.map((conversation) => <button type="button" key={conversation.id} onClick={() => openConversation(conversation.id)}><span className={`support-status-dot is-${conversation.status}`} /><span className="support-conversation-copy"><strong>{conversation.subject}</strong><small>{conversation.context && typeof conversation.context === 'object' && 'wrongSolution' in conversation.context ? 'Контекст решения приложен' : conversation.category === 'payment' ? 'Проверка баланса и операций' : 'Личное обращение'}</small></span><span className="support-conversation-date">{formatDate(conversation.updated_at)}</span><ArrowRight size={17} weight="bold" aria-hidden="true" /></button>)}</div> : <p className="support-empty">Здесь появятся отправленные обращения.</p>}</section>
                 </>
@@ -397,4 +388,3 @@ export function SupportCenter({ user, supabaseClient, initialCategory, initialCo
   )
 }
 
-export { SupportLauncher }

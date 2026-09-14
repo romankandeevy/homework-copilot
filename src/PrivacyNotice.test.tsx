@@ -9,7 +9,7 @@ describe('PrivacyNotice', () => {
   it('explains necessary storage without pretending it is optional consent', () => {
     const { unmount } = render(<PrivacyNotice />)
     expect(screen.getByText('Без рекламных cookie.')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Как это работает' })).toHaveAttribute('href', '/cookies')
+    expect(screen.getByRole('link', { name: 'Как это работает' })).toHaveAttribute('href', '/docs/cookies')
     fireEvent.click(screen.getByRole('button', { name: /Понятно/ }))
     expect(screen.queryByLabelText('Уведомление о хранении данных')).not.toBeInTheDocument()
 

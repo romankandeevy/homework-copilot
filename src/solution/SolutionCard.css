@@ -85,24 +85,53 @@
   white-space: nowrap;
 }
 
-/* Условие: ровно три строки, дальше многоточие по слову.
+/* Название и условие: по две строки, дальше многоточие по слову.
 
    Обрезка стоит на вложенном элементе без отступов: у -webkit-box отступ
-   внутри показывает четвёртую строку насквозь. Короткое условие оставляет
-   место пустым - запись у всех карточек начинается на одной высоте. */
+   внутри показывает лишнюю строку насквозь. Короткое название и условие
+   оставляют место пустым - запись у всех карточек начинается на одной
+   высоте. Название с 14 сентября 2026: раньше здесь было три строки
+   условия, и задачи с фото не различались. */
+.solution-card-title {
+  display: block;
+  padding: 0.45rem var(--space-4) 0;
+}
+
+.solution-card-title > span {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  min-height: calc(2 * 1.35em);
+  overflow: hidden;
+  color: var(--color-strong);
+  font-size: var(--text-body);
+  font-weight: var(--weight-semibold);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.solution-card-number {
+  margin-right: 0.45em;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  white-space: nowrap;
+}
+
 .solution-card-condition {
   display: block;
-  padding: 0.45rem var(--space-4) 0.8rem;
+  padding: 0.3rem var(--space-4) 0.8rem;
 }
 
 .solution-card-condition > span {
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
-  min-height: calc(3 * 1.5em);
+  min-height: calc(2 * 1.45em);
   overflow: hidden;
+  color: var(--color-text-muted);
   font-size: var(--text-ui);
-  line-height: 1.5;
+  line-height: 1.45;
   overflow-wrap: anywhere;
 }
 

@@ -20,16 +20,16 @@
 
 ## Документы
 
-- [Пользовательское соглашение](https://www.homeworkcopilot.ru/terms)
-- [Политика обработки персональных данных](https://www.homeworkcopilot.ru/privacy)
-- [Cookie и локальное хранение](https://www.homeworkcopilot.ru/cookies)
-- [Публичная оферта](https://www.homeworkcopilot.ru/offer)
-- [Реквизиты и контакты](https://www.homeworkcopilot.ru/contacts)
+- [Пользовательское соглашение](https://www.homeworkcopilot.ru/docs/terms)
+- [Политика обработки персональных данных](https://www.homeworkcopilot.ru/docs/privacy)
+- [Cookie и локальное хранение](https://www.homeworkcopilot.ru/docs/cookies)
+- [Публичная оферта](https://www.homeworkcopilot.ru/docs/offer)
+- [Реквизиты и контакты](https://www.homeworkcopilot.ru/docs/contacts)
 
 ## Ограничения
 
 - Сервис не хранит и не раздаёт содержание чужих учебников: условие даёт ученик.
 - Общей базы чужих решений нет: решение видно только тому, кто его запросил.
 - Данные школьных платформ не запрашиваются и не обрабатываются.
-- Оплата пока не подключена: баланс пополняется только вручную владельцем.
+- Оплата: предоплата баланса через Робокассу, от 50 до 15 000 рублей; неиспользованный остаток возвращается по заявке.
 - Раздел ЦДЗ ещё не запущен.

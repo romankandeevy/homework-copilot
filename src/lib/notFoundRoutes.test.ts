@@ -5,8 +5,11 @@ describe('подсказка на странице 404', () => {
   it.each([
     ['/shedule', '/schedule'],
     ['/solution', '/solutions'],
-    ['/contact', '/contacts'],
-    ['/privaci', '/privacy'],
+    // Документы с 14 сентября 2026 под /docs/: промах в коротком прежнем
+    // адресе и в новом ведёт на новый адрес.
+    ['/contact', '/docs/contacts'],
+    ['/privaci', '/docs/privacy'],
+    ['/docs/term', '/docs/terms'],
     ['/App', '/app'],
     // Раздел угадан верно, ошибка дальше по адресу.
     ['/solutions/abc', '/solutions'],

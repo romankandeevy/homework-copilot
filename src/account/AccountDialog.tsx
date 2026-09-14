@@ -1,47 +1,31 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import type { FormEvent, KeyboardEvent, RefObject } from 'react'
+import type { FormEvent, RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import type { User } from '@supabase/supabase-js'
 import {
   ArrowRight,
-  CaretDown,
   Check,
   CheckCircle,
   ClockCountdown,
-  CopySimple,
   DeviceMobile,
   EnvelopeSimple,
   Eye,
   EyeSlash,
-  Gift,
-  LinkSimple,
   LockKey,
-  Moon,
   ShieldCheck,
-  SignOut,
-  Trash,
-  Sun,
   UserCircle,
-  UsersThree,
   X,
 } from '@phosphor-icons/react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
-import type { AccountData } from '../lib/supabase'
 import { supabase } from '../lib/supabase'
 import { applicationPath } from '../lib/appPath'
-import { formatRubles } from '../lib/currency'
-import { minimumSolutionPriceKopecks } from '../lib/solutionPricing'
-import { createPayment, loadPaymentConfig } from '../lib/payments'
-import type { PaymentConfig } from '../lib/payments'
-import { parseTopUpRubles, topUpRangeLabel } from '../lib/topUpLimits'
-import { deleteMyAccount } from '../lib/accountDeletion'
 import { acceptanceSourceForUser, forgetPendingLegalAcceptance, rememberPendingLegalAcceptance } from '../lib/legalConsent'
 import { getGuestId } from '../lib/guestSolutions'
-import { loadReferralStatus, preparePendingReferralClaim } from '../lib/referrals'
-import type { ReferralStatus } from '../lib/referrals'
-import { formatPhoneDigits, formatPhoneForDisplay, isRussianMobileDigits, phoneDigitsFromInput, russianPhoneE164 } from '../lib/phone'
+import { preparePendingReferralClaim } from '../lib/referrals'
+import { formatPhoneDigits, isRussianMobileDigits, phoneDigitsFromInput, russianPhoneE164 } from '../lib/phone'
 import { startYandexSignIn } from '../lib/yandexAuth'
 import { useModalIsolation } from '../lib/useModalIsolation'
+import GradeSelect from './GradeSelect'
 import PasswordStrength from './PasswordStrength'
 import { isStrongPassword } from './passwordStrengthRules'
 import { authErrorMessage } from './authErrors'
@@ -54,8 +38,6 @@ type AuthMethod = 'email' | 'phone'
 export type AuthMethods = { yandex: boolean; phone: boolean }
 const onlyEmail: AuthMethods = { yandex: false, phone: false }
 type VerificationKind = 'signup'
-type AccountView = 'profile' | 'wallet'
-type Theme = 'light' | 'dark'
 
 const emailResendDelay = 60
 const emailCodeLifetime = 5 * 60
@@ -110,16 +92,15 @@ function formatCountdown(seconds: number) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
 }
 
+/* С 14 сентября 2026 окно - только вход и регистрация гостя, согласие с
+   документами и новый пароль. Профиль и баланс - страницы `/profile` и
+   `/balance` (ProfilePage, BalancePage): владелец хотел открывать их по
+   ссылке с любого места и сохранять адрес. */
 type AccountDialogProps = {
   user: User | null
-  account: AccountData | null
   passwordRecovery: boolean
   notice?: string
-  initialView: AccountView
-  theme: Theme
-  onToggleTheme: () => void
   onClose: () => void
-  onReloadAccount: () => Promise<void>
   returnFocusRef?: RefObject<HTMLElement | null>
   /** У вошедшего нет ни одной отметки о согласии: окно не отпускает, пока их нет. */
   legalAcceptanceRequired?: boolean
@@ -133,127 +114,6 @@ function isValidEmail(value: string) {
 }
 
 const consentErrorMessage = 'Прими соглашение, согласие на обработку данных и подтверди возраст'
-
-/* Классы те же, что в форме задачи (`solvableGrades`): 1-4 класс продукт не
-   решает, и выбранный здесь класс подставлялся в задачу, которую форма не
-   знает. «Университета» здесь нет: в профиле класс хранится числом 1-11. */
-const gradeOptions: readonly number[] = [5, 6, 7, 8, 9, 10, 11]
-
-function GradeSelect({ value, onChange, compact = false }: { value: string; onChange: (value: string) => void; compact?: boolean }) {
-  const listboxId = useId()
-  const containerRef = useRef<HTMLDivElement>(null)
-  const triggerRef = useRef<HTMLButtonElement>(null)
-  const [open, setOpen] = useState(false)
-  const [highlighted, setHighlighted] = useState(Number(value))
-
-  useEffect(() => {
-    if (!open) return
-
-    const dismiss = (event: PointerEvent) => {
-      if (!containerRef.current?.contains(event.target as Node)) setOpen(false)
-    }
-
-    document.addEventListener('pointerdown', dismiss)
-    return () => document.removeEventListener('pointerdown', dismiss)
-  }, [open])
-
-  useEffect(() => {
-    if (!open) return
-    containerRef.current?.querySelector<HTMLElement>(`[data-grade="${highlighted}"]`)?.scrollIntoView?.({ block: 'nearest' })
-  }, [highlighted, open])
-
-  const choose = (grade: number) => {
-    onChange(String(grade))
-    setHighlighted(grade)
-    setOpen(false)
-    triggerRef.current?.focus()
-  }
-
-  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === 'Escape' && open) {
-      event.preventDefault()
-      event.stopPropagation()
-      setOpen(false)
-      triggerRef.current?.focus()
-      return
-    }
-
-    if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
-      event.preventDefault()
-      if (!open) {
-        setHighlighted(Number(value))
-        setOpen(true)
-        return
-      }
-
-      setHighlighted((current) => {
-        if (event.key === 'Home') return gradeOptions[0] ?? current
-        if (event.key === 'End') return gradeOptions[gradeOptions.length - 1] ?? current
-        const index = gradeOptions.indexOf(current)
-        const next = index === -1 ? 0 : Math.min(gradeOptions.length - 1, Math.max(0, index + (event.key === 'ArrowDown' ? 1 : -1)))
-        return gradeOptions[next] ?? current
-      })
-      return
-    }
-
-    if (event.key === 'Enter' && open && event.target === triggerRef.current) {
-      event.preventDefault()
-      if (gradeOptions.includes(highlighted)) choose(highlighted)
-    }
-  }
-
-  return (
-    <div
-      className="account-grade-select"
-      ref={containerRef}
-      onKeyDown={handleKeyDown}
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false)
-      }}
-    >
-      <button
-        ref={triggerRef}
-        className="account-grade-trigger"
-        type="button"
-        role="combobox"
-        aria-label="Класс"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-controls={open ? listboxId : undefined}
-        aria-activedescendant={open ? `${listboxId}-${highlighted}` : undefined}
-        onClick={() => {
-          setHighlighted(Number(value))
-          setOpen((current) => !current)
-        }}
-      >
-        <span>{value ? (compact ? value : `${value} класс`) : 'Выбери'}</span>
-        <CaretDown size={15} weight="bold" aria-hidden="true" />
-      </button>
-
-      {open && (
-        <div id={listboxId} className="account-grade-menu" role="listbox" aria-label="Выбрать класс">
-          {gradeOptions.map((grade) => (
-            <button
-              id={`${listboxId}-${grade}`}
-              key={grade}
-              data-grade={grade}
-              className={`account-grade-option${grade === highlighted ? ' is-highlighted' : ''}`}
-              type="button"
-              role="option"
-              aria-selected={String(grade) === value}
-              tabIndex={-1}
-              onPointerEnter={() => setHighlighted(grade)}
-              onClick={() => choose(grade)}
-            >
-              <span>{grade} класс</span>
-              {String(grade) === value && <Check size={15} weight="bold" aria-hidden="true" />}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
 
 /* Три отметки согласия. Стоят в регистрации и в окне согласия для того, кто
    вошёл, а отметки о согласии у аккаунта нет. */
@@ -270,12 +130,12 @@ function LegalConsents({ agreementAccepted, personalDataAccepted, ageConfirmed, 
       <label className="account-consent">
         <input type="checkbox" checked={agreementAccepted} onChange={(event) => onAgreementChange(event.target.checked)} required />
         <span aria-hidden="true"><Check size={14} weight="bold" /></span>
-        <em>Я принимаю <a href="/terms" target="_blank" rel="noreferrer">пользовательское соглашение</a></em>
+        <em>Я принимаю <a href="/docs/terms" target="_blank" rel="noreferrer">пользовательское соглашение</a></em>
       </label>
       <label className="account-consent">
         <input type="checkbox" checked={personalDataAccepted} onChange={(event) => onPersonalDataChange(event.target.checked)} required />
         <span aria-hidden="true"><Check size={14} weight="bold" /></span>
-        <em>Я отдельно даю <a href="/consent" target="_blank" rel="noreferrer">согласие на обработку персональных данных</a> и прочитал <a href="/privacy" target="_blank" rel="noreferrer">политику данных</a></em>
+        <em>Я отдельно даю <a href="/docs/consent" target="_blank" rel="noreferrer">согласие на обработку персональных данных</a> и прочитал <a href="/docs/privacy" target="_blank" rel="noreferrer">политику данных</a></em>
       </label>
       <label className="account-consent">
         <input type="checkbox" checked={ageConfirmed} onChange={(event) => onAgeChange(event.target.checked)} required />
@@ -1066,477 +926,18 @@ function AuthView({ passwordRecovery, notice, onPasswordUpdated, authMethods = o
   )
 }
 
-type MyPlan = { title: string; features: string[]; dailySolveLimit: number | null; expiresAt: string | null }
-
-function promoErrorMessage(message: string) {
-  if (message.includes('promo code not found')) return 'Такого промокода нет'
-  if (message.includes('promo code expired')) return 'Срок промокода истёк'
-  if (message.includes('promo code not started')) return 'Промокод ещё не начал действовать'
-  if (message.includes('promo code already used')) return 'Этот промокод уже использован на твоём аккаунте'
-  if (message.includes('promo code exhausted')) return 'Промокод закончился'
-  if (message.includes('promo attempts exceeded')) return 'Слишком много попыток. Попробуй через час'
-  if (message.includes('account is blocked')) return 'Аккаунт заблокирован'
-  return 'Не получилось применить промокод'
-}
-
-/* Пополнение через Робокассу. Карточки нет, пока оплата не подключена на
-   сервере: форма, которая ведёт в никуда, - обещание, которого нет в коде.
-   В тестовом режиме её видят только служебные аккаунты, это решает сервер.
-   Сумму проверяют и форма, и сервер, и база - из браузера её не навязать. */
-function TopUpCard() {
-  const [config, setConfig] = useState<PaymentConfig | null>(null)
-  const [configLoaded, setConfigLoaded] = useState(false)
-  const [amount, setAmount] = useState('')
-  const [sending, setSending] = useState(false)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    if (!supabase) return
-    let active = true
-    loadPaymentConfig()
-      .then((next) => { if (active) setConfig(next) })
-      .catch(() => undefined)
-      .finally(() => { if (active) setConfigLoaded(true) })
-    return () => { active = false }
-  }, [])
-
-  /* Сюда ведут и кнопка баланса в шапке, и нехватка денег перед решением.
-     Без строки человек искал бы, где пополнить, и не находил. */
-  if (!config?.enabled) {
-    return configLoaded
-      ? <p className="account-top-up-note" role="note">Пополнить баланс пока нельзя. Рубли приходят по промокоду и за приглашённого друга.</p>
-      : null
-  }
-
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    if (sending) return
-    const parsed = parseTopUpRubles(amount)
-    if (!parsed.ok) {
-      setError(parsed.error)
-      return
-    }
-    setSending(true)
-    setError('')
-    try {
-      const payment = await createPayment(parsed.kopecks)
-      window.location.assign(payment.url)
-    } catch (paymentError) {
-      setError(paymentError instanceof Error ? paymentError.message : 'Не получилось перейти к оплате')
-      setSending(false)
-    }
-  }
-
-  return (
-    <section className="account-plan-card" aria-labelledby="account-top-up-title">
-      <header>
-        <h3 id="account-top-up-title">Пополнить баланс</h3>
-        <span>{topUpRangeLabel()}</span>
-      </header>
-      <form className="account-promo-form account-top-up-form" onSubmit={submit} noValidate>
-        <label className="sr-only" htmlFor="account-top-up-amount">Сумма пополнения в рублях</label>
-        <input
-          id="account-top-up-amount"
-          value={amount}
-          onChange={(event) => { setAmount(event.target.value.slice(0, 12)); setError('') }}
-          inputMode="numeric"
-          placeholder="Сумма, ₽"
-          autoComplete="off"
-        />
-        <button type="submit" disabled={sending}>{sending ? 'Переходим…' : 'Перейти к оплате'}</button>
-      </form>
-      <p className="account-top-up-note">Оплата проходит на странице Робокассы. Деньги придут на баланс, как только она подтвердит платёж.</p>
-      {config.testMode && <p className="account-top-up-note">Тестовый режим: деньги не списываются, форму видят только служебные аккаунты.</p>}
-      {error && <p className="account-promo-message is-error" role="alert">{error}</p>}
-    </section>
-  )
-}
-
-/* Тариф и промокод. Тариф задаёт дневной предел решений и состав услуги,
-   цену решения он не меняет. Промокод начисляет деньги или подключает
-   тариф - что именно, решает админка. Ввод промокода можно выключить
-   флагом promo_codes. */
-function PlanAndPromo({ onReloadAccount }: { onReloadAccount: () => Promise<void> }) {
-  const [plan, setPlan] = useState<MyPlan | null>(null)
-  const [promoEnabled, setPromoEnabled] = useState(true)
-  const [code, setCode] = useState('')
-  const [sending, setSending] = useState(false)
-  const [message, setMessage] = useState('')
-  const [error, setError] = useState('')
-
-  const loadPlan = async () => {
-    if (!supabase) return
-    const [{ data: planData }, { data: configData }] = await Promise.all([
-      supabase.rpc('get_my_plan'),
-      supabase.rpc('get_public_config', { p_guest_id: null }),
-    ])
-    if (planData && typeof planData === 'object' && !Array.isArray(planData)) {
-      const source = planData as Record<string, unknown>
-      setPlan({
-        title: typeof source.title === 'string' ? source.title : 'Базовый',
-        features: Array.isArray(source.features) ? source.features.filter((item): item is string => typeof item === 'string') : [],
-        dailySolveLimit: typeof source.dailySolveLimit === 'number' ? source.dailySolveLimit : null,
-        expiresAt: typeof source.expiresAt === 'string' ? source.expiresAt : null,
-      })
-    }
-    if (configData && typeof configData === 'object' && !Array.isArray(configData)) {
-      const flags = (configData as Record<string, unknown>).flags
-      if (flags && typeof flags === 'object' && !Array.isArray(flags)) setPromoEnabled((flags as Record<string, unknown>).promo_codes !== false)
-    }
-  }
-
-  useEffect(() => { void loadPlan() }, [])
-
-  const redeem = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    if (!supabase || sending || !code.trim()) return
-    setSending(true)
-    setMessage('')
-    setError('')
-    const { data, error: redeemError } = await supabase.rpc('redeem_promo_code', { p_code: code.trim() })
-    setSending(false)
-    if (redeemError) {
-      setError(promoErrorMessage(redeemError.message))
-      return
-    }
-    const result = data && typeof data === 'object' && !Array.isArray(data) ? data as Record<string, unknown> : {}
-    setCode('')
-    setMessage(result.kind === 'plan'
-      ? `Подключён тариф «${String(result.planTitle ?? '')}» на ${String(result.planDays ?? '')} дн.`
-      : `Начислено ${formatRubles(Number(result.amount ?? 0))}`)
-    await Promise.all([onReloadAccount(), loadPlan()])
-  }
-
-  return (
-    <section className="account-plan-card" aria-labelledby="account-plan-title">
-      <header>
-        <h3 id="account-plan-title">Тариф «{plan?.title ?? '…'}»</h3>
-        {plan?.expiresAt && <span>до {new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(new Date(plan.expiresAt))}</span>}
-      </header>
-      {plan && (plan.features.length > 0 || plan.dailySolveLimit !== null) && (
-        <ul>
-          {plan.features.map((feature) => <li key={feature}>{feature}</li>)}
-          {plan.dailySolveLimit !== null && <li>До {plan.dailySolveLimit} решений в сутки</li>}
-        </ul>
-      )}
-      {promoEnabled && (
-        <form className="account-promo-form" onSubmit={redeem}>
-          <label className="sr-only" htmlFor="account-promo-code">Промокод</label>
-          <input id="account-promo-code" value={code} onChange={(event) => setCode(event.target.value.slice(0, 32))} placeholder="Промокод" autoComplete="off" />
-          <button type="submit" disabled={sending || !code.trim()}>{sending ? 'Применяем…' : 'Применить'}</button>
-        </form>
-      )}
-      {message && <p className="account-promo-message" role="status">{message}</p>}
-      {error && <p className="account-promo-message is-error" role="alert">{error}</p>}
-    </section>
-  )
-}
-
-function ReferralCard() {
-  const [referral, setReferral] = useState<ReferralStatus | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [copied, setCopied] = useState(false)
-
-  const load = async () => {
-    if (!supabase) {
-      setLoading(false)
-      setError('Реферальная ссылка временно недоступна')
-      return
-    }
-    setLoading(true)
-    setError('')
-    try {
-      setReferral(await loadReferralStatus(supabase))
-    } catch {
-      setError('Не получилось загрузить реферальную ссылку')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    void load()
-  }, [])
-
-  const referralLink = referral
-    ? `${window.location.origin}/?ref=${encodeURIComponent(referral.code)}`
-    : ''
-
-  const copyLink = async () => {
-    if (!referralLink) return
-    try {
-      await navigator.clipboard.writeText(referralLink)
-      setCopied(true)
-      window.setTimeout(() => setCopied(false), 1800)
-    } catch {
-      setError('Не получилось скопировать ссылку')
-    }
-  }
-
-  return (
-    <section className="account-referral-card" aria-labelledby="account-referral-title">
-      <header>
-        <span className="account-referral-icon"><Gift size={23} weight="duotone" aria-hidden="true" /></span>
-        <div>
-          <h3 id="account-referral-title">Пригласи друга</h3>
-          <p>Как только он зарегистрируется по твоей ссылке и подтвердит почту, тебе начислят <strong>+10 ₽</strong>, а ему — <strong>+5 ₽</strong>. Пополнять ничего не нужно.</p>
-        </div>
-      </header>
-
-      {loading && <p className="account-referral-state" role="status">Создаём личную ссылку…</p>}
-      {!loading && error && <div className="account-referral-state is-error" role="alert"><span>{error}</span><button type="button" onClick={() => { void load() }}>Повторить</button></div>}
-      {!loading && referral && (
-        <>
-          <div className="account-referral-link">
-            <LinkSimple size={18} weight="bold" aria-hidden="true" />
-            <input aria-label="Личная реферальная ссылка" value={referralLink} readOnly onFocus={(event) => event.currentTarget.select()} />
-            <button type="button" onClick={() => { void copyLink() }}><CopySimple size={18} weight="bold" aria-hidden="true" />{copied ? 'Скопировано' : 'Копировать'}</button>
-          </div>
-          <div className="account-referral-stats" aria-label="Статистика приглашений">
-            <span><UsersThree size={18} weight="duotone" aria-hidden="true" /><b>{referral.invitedCount}</b> приглашено</span>
-            <span><Gift size={18} weight="duotone" aria-hidden="true" /><b>{formatRubles(referral.earnedAmount)}</b> начислено</span>
-          </div>
-          {referral.joinedViaReferral && (
-            <p className="account-referral-joined">
-              {referral.joinedRewardStatus === 'rewarded'
-                ? 'Твои +5 ₽ по приглашению уже начислены.'
-                : 'Ты зарегистрирован по приглашению: +5 ₽ придут, как только подтвердишь почту.'}
-            </p>
-          )}
-          <small>Засчитывается только новый аккаунт, зарегистрированный по этой ссылке. Один аккаунт можно привязать один раз; повторных начислений нет.</small>
-        </>
-      )}
-    </section>
-  )
-}
-
-function ProfileView({ user, account, notice, initialView, theme, onToggleTheme, onReloadAccount }: { user: User; account: AccountData | null; notice?: string; initialView: AccountView; theme: Theme; onToggleTheme: () => void; onReloadAccount: () => Promise<void> }) {
-  const [fullName, setFullName] = useState(account?.profile.full_name ?? '')
-  const [grade, setGrade] = useState(account?.profile.grade ? String(account.profile.grade) : '')
-  const [activeView, setActiveView] = useState<AccountView>(initialView)
-  const [loading, setLoading] = useState(false)
-  const [status, setStatus] = useState('')
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    setFullName(account?.profile.full_name ?? '')
-    setGrade(account?.profile.grade ? String(account.profile.grade) : '')
-  }, [account])
-
-  useEffect(() => setActiveView(initialView), [initialView])
-
-  const saveProfile = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    if (!supabase || loading) return
-    setLoading(true)
-    setStatus('')
-    setError('')
-    const { error: updateError } = await supabase
-      .from('profiles')
-      .update({ full_name: fullName.trim(), grade: grade ? Number(grade) : null })
-      .eq('id', user.id)
-
-    if (updateError) setError('Не получилось сохранить профиль')
-    else {
-      await onReloadAccount()
-      setStatus('Профиль сохранён')
-    }
-    setLoading(false)
-  }
-
-  const [deletionOpen, setDeletionOpen] = useState(false)
-  const [deletionWord, setDeletionWord] = useState('')
-
-  const signOut = async () => {
-    if (!supabase || loading) return
-    setLoading(true)
-    const { error: signOutError } = await supabase.auth.signOut({ scope: 'local' })
-    if (signOutError) {
-      setError('Не получилось выйти из аккаунта')
-      setLoading(false)
-    }
-  }
-
-  /* Удаление аккаунта.
-
-     Право на удаление записано в политике, а способом был адрес почты,
-     которого у домена нет. Подтверждение — не «вы уверены?», а ввод слова:
-     кнопка стоит рядом с выходом, и промахнуться по ней слишком легко. */
-  const deleteAccount = async () => {
-    if (!supabase || loading) return
-    setLoading(true)
-    setError('')
-    try {
-      await deleteMyAccount(supabase, user.id)
-      await supabase.auth.signOut({ scope: 'local' })
-      window.location.assign(applicationPath('/'))
-    } catch (deletionError) {
-      const message = deletionError instanceof Error ? deletionError.message : ''
-      setError(message.includes('admin account')
-        ? 'Аккаунт владельца из приложения не удаляется'
-        : 'Не получилось удалить аккаунт. Попробуй ещё раз или напиши в поддержку')
-      setLoading(false)
-      setDeletionOpen(false)
-    }
-  }
-
-  // У аккаунта, вошедшего по телефону, почты нет: вместо неё - номер.
-  const phoneLabel = formatPhoneForDisplay(user.phone)
-  const displayName = account?.profile.full_name || user.email || phoneLabel || 'Ученик'
-
-  return (
-    <div className="account-profile-view">
-      <header className="account-profile-header">
-        <div className="account-profile-identity">
-          <div>
-            <span>Аккаунт</span>
-            <h2 id="account-dialog-title">{displayName}</h2>
-            <p>{user.email || phoneLabel}</p>
-          </div>
-        </div>
-      </header>
-
-      {notice && <p className="account-notice account-profile-notice">{notice}</p>}
-
-      <nav className="account-profile-tabs" aria-label="Раздел аккаунта">
-        <button type="button" className={activeView === 'profile' ? 'is-active' : ''} aria-current={activeView === 'profile' ? 'page' : undefined} onClick={() => setActiveView('profile')}>Профиль</button>
-        <button type="button" className={activeView === 'wallet' ? 'is-active' : ''} aria-current={activeView === 'wallet' ? 'page' : undefined} onClick={() => setActiveView('wallet')}>Баланс <strong>{account ? formatRubles(account.balance) : '…'}</strong></button>
-      </nav>
-
-      {activeView === 'profile' ? (
-        <div className="account-profile-main">
-          <section className="account-profile-section" aria-labelledby="profile-data-title">
-            <header><div><h3 id="profile-data-title">Личные данные</h3><p>Имя и класс используются в интерфейсе.</p></div></header>
-          <form className="account-profile-form" onSubmit={saveProfile}>
-            <label>
-              <span>Имя</span>
-              <input value={fullName} onChange={(event) => setFullName(event.target.value)} maxLength={80} autoComplete="name" required />
-            </label>
-            <div className="account-grade-field">
-              <span>Класс</span>
-              <GradeSelect value={grade} onChange={setGrade} />
-            </div>
-            {(user.email || !phoneLabel) && (
-              <label className="account-email-field">
-                <span>Почта</span>
-                <input value={user.email ?? ''} readOnly />
-              </label>
-            )}
-            {phoneLabel && (
-              <label className="account-email-field">
-                <span>Телефон</span>
-                <input value={phoneLabel} readOnly />
-              </label>
-            )}
-
-            {error && <p className="account-form-message is-error" role="alert">{error}</p>}
-            {status && <p className="account-form-message is-success" role="status"><CheckCircle size={18} weight="fill" aria-hidden="true" />{status}</p>}
-
-            <button className="account-primary-button" type="submit" disabled={loading || fullName.trim().length < 1}>Сохранить</button>
-          </form>
-          </section>
-
-          <section className="account-profile-section account-theme-section" aria-labelledby="profile-theme-title">
-            <header><div><h3 id="profile-theme-title">Тема</h3><p>Настрой вид приложения на этом устройстве.</p></div></header>
-            <div className="account-theme-options">
-              <button type="button" className={theme === 'light' ? 'is-selected' : ''} aria-pressed={theme === 'light'} onClick={() => { if (theme !== 'light') onToggleTheme() }}><Sun size={20} weight="duotone" /> Светлая</button>
-              <button type="button" className={theme === 'dark' ? 'is-selected' : ''} aria-pressed={theme === 'dark'} onClick={() => { if (theme !== 'dark') onToggleTheme() }}><Moon size={20} weight="duotone" /> Тёмная</button>
-            </div>
-          </section>
-        </div>
-      ) : (
-        <div className="account-wallet-view">
-          <section className="account-wallet-hero" aria-labelledby="account-wallet-title">
-            <div><span>Доступно сейчас</span><strong id="account-wallet-title">{account ? formatRubles(account.balance) : '…'}</strong></div>
-            {/* Цена перестала быть плоской: короткая задача текстом стоит
-                четыре рубля, длинная с фотографией по счётному предмету -
-                дороже. Обещать здесь одно число нельзя, поэтому пишем пол
-                цены и то, от чего она зависит. Точная сумма стоит в форме
-                до нажатия «Решить». */}
-            <div className="account-wallet-rate">
-              <strong>от {formatRubles(minimumSolutionPriceKopecks)}</strong>
-              <span>за решение, точная цена зависит от задачи</span>
-            </div>
-          </section>
-
-          <TopUpCard />
-
-          <PlanAndPromo onReloadAccount={onReloadAccount} />
-
-          <ReferralCard />
-
-          <section className="account-wallet-history" aria-labelledby="wallet-history-title">
-            <div><h3 id="wallet-history-title">Последние операции</h3></div>
-            {account?.entries.map((entry) => (
-              <div className="account-wallet-entry" key={entry.id}>
-                <span className={entry.amount > 0 ? 'is-credit' : 'is-debit'}>{entry.amount > 0 ? '+' : ''}{formatRubles(entry.amount)}</span>
-                <strong>{entry.description}</strong>
-                <time dateTime={entry.created_at}>{new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short' }).format(new Date(entry.created_at))}</time>
-              </div>
-            ))}
-            {!account?.entries.length && <p>Операций пока нет.</p>}
-          </section>
-        </div>
-      )}
-
-      <footer className="account-profile-footer">
-        {/* Названия те же, что в подвале сайта: два документа с тремя именами
-            читались как три разных документа. */}
-        <nav aria-label="Документы"><a href="/privacy" target="_blank" rel="noreferrer">Политика данных</a><a href="/terms" target="_blank" rel="noreferrer">Пользовательское соглашение</a></nav>
-        <div className="account-profile-footer-actions">
-          <button type="button" className="account-delete-open" onClick={() => setDeletionOpen(true)} disabled={loading}>
-            <Trash size={17} weight="duotone" aria-hidden="true" /> Удалить аккаунт
-          </button>
-          <button type="button" onClick={() => { void signOut() }} disabled={loading}><SignOut size={18} weight="duotone" aria-hidden="true" /> Выйти</button>
-        </div>
-      </footer>
-
-      {deletionOpen && (
-        <form
-          className="account-delete-confirm"
-          aria-label="Удаление аккаунта"
-          onSubmit={(event) => { event.preventDefault(); void deleteAccount() }}
-        >
-          <h3>Удалить аккаунт навсегда?</h3>
-          <p>
-            Уйдут профиль, баланс и его история, решения задач, диалоги чата с фотографиями,
-            расписание и обращения в поддержку. Восстановить это нельзя, и вернуть баланс — тоже.
-          </p>
-          <label>
-            <span>Впиши «удалить», чтобы подтвердить</span>
-            <input
-              autoFocus
-              value={deletionWord}
-              onChange={(event) => setDeletionWord(event.target.value)}
-              autoComplete="off"
-              placeholder="удалить"
-            />
-          </label>
-          <div className="account-delete-actions">
-            <button type="button" onClick={() => { setDeletionOpen(false); setDeletionWord('') }} disabled={loading}>Отмена</button>
-            <button type="submit" className="is-danger" disabled={loading || deletionWord.trim().toLocaleLowerCase('ru') !== 'удалить'}>
-              {loading ? 'Удаляем…' : 'Удалить аккаунт'}
-            </button>
-          </div>
-        </form>
-      )}
-    </div>
-  )
-}
-
-export default function AccountDialog({ user, account, passwordRecovery, notice, initialView, theme, onToggleTheme, onClose, onReloadAccount, returnFocusRef, legalAcceptanceRequired = false, onLegalAccepted, onPasswordUpdated, authMethods = onlyEmail }: AccountDialogProps) {
+export default function AccountDialog({ user, passwordRecovery, notice, onClose, returnFocusRef, legalAcceptanceRequired = false, onLegalAccepted, onPasswordUpdated, authMethods = onlyEmail }: AccountDialogProps) {
   const reduceMotion = useReducedMotion()
   const dialogRef = useModalIsolation<HTMLElement>(true, onClose, returnFocusRef)
   /* Ссылка из письма о смене пароля открывает сессию: человек уже вошёл, и
-     профиль прятал форму нового пароля - задать его было негде. */
-  const view = !user ? 'auth' : legalAcceptanceRequired ? 'legal' : passwordRecovery ? 'reset' : 'profile'
-  const authLayout = view !== 'profile'
+     профиль прятал форму нового пароля - задать его было негде. Вошедшему
+     без согласия и без смены пароля окно не нужно: приложение его закрывает. */
+  const view = !user ? 'auth' : legalAcceptanceRequired ? 'legal' : 'reset'
 
   return createPortal((
     <AnimatePresence>
       <motion.div
-        className={`account-dialog-backdrop${authLayout ? ' is-auth-backdrop' : ''}`}
+        className="account-dialog-backdrop is-auth-backdrop"
         role="presentation"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -1546,7 +947,7 @@ export default function AccountDialog({ user, account, passwordRecovery, notice,
       >
         <motion.section
           ref={dialogRef}
-          className={`account-dialog${authLayout ? ' is-auth' : ' is-profile'}`}
+          className="account-dialog is-auth"
           role="dialog"
           aria-modal="true"
           aria-labelledby="account-dialog-title"
@@ -1558,9 +959,7 @@ export default function AccountDialog({ user, account, passwordRecovery, notice,
           {view !== 'legal' && <button className="account-dialog-close" type="button" aria-label="Закрыть окно аккаунта" onClick={onClose}><X size={20} weight="bold" aria-hidden="true" /></button>}
           {user && view === 'legal'
             ? <LegalAcceptanceView user={user} onAccepted={() => onLegalAccepted?.()} />
-            : user && view === 'profile'
-              ? <ProfileView user={user} account={account} notice={notice} initialView={initialView} theme={theme} onToggleTheme={onToggleTheme} onReloadAccount={onReloadAccount} />
-              : <AuthView passwordRecovery={passwordRecovery} notice={notice} onPasswordUpdated={user ? onPasswordUpdated ?? (() => undefined) : undefined} authMethods={authMethods} />}
+            : <AuthView passwordRecovery={passwordRecovery || view === 'reset'} notice={notice} onPasswordUpdated={user ? onPasswordUpdated ?? (() => undefined) : undefined} authMethods={authMethods} />}
         </motion.section>
       </motion.div>
     </AnimatePresence>

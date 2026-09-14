@@ -212,7 +212,7 @@ The five destinations remain, in order: **Главная** (`/main`), **Мои �
 
 ### Schedule
 
-The schedule uses one day at a time to keep time, subject, and room fields comfortably editable at every viewport. Six compact day tabs expose the whole week. Photo import opens a centered OCR review dialog; recognized rows remain editable both before and after confirmation.
+The schedule uses one day at a time to keep time, subject, and room fields comfortably editable at every viewport. Compact day tabs expose the whole week: six by default, five when the student removes Saturday with the neutral toolbar control (the choice is stored with the schedule). Lesson times are labelled, always-visible 24-hour fields shared by every day. Photo import opens a centered OCR review dialog; recognized rows remain editable both before and after confirmation.
 
 ### Status and Result
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode, RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
@@ -214,6 +214,7 @@ function ModelPicker({
         }}
       >
         <span className="chat-model-trigger-copy">
+          <span className="chat-model-trigger-label" aria-hidden="true">Модель</span>
           <strong>{selected?.title ?? 'Выбор модели'}</strong>
         </span>
         <CaretDown size={15} weight="bold" aria-hidden="true" />
@@ -256,6 +257,7 @@ function ConversationList({
   conversations,
   status,
   activeId,
+  guest,
   onSelect,
   onRename,
   onDelete,
@@ -264,11 +266,14 @@ function ConversationList({
   conversations: ChatConversation[]
   status: LoadState
   activeId: string | null
+  guest: boolean
   onSelect: (id: string) => void
   onRename: (conversation: ChatConversation) => void
   onDelete: (conversation: ChatConversation) => void
   onRetry: () => void
 }) {
+  if (guest) return <p className="chat-sidebar-state">Диалоги хранятся в аккаунте. Войди, и они появятся здесь.</p>
+
   if (status === 'loading') return <p className="chat-sidebar-state" role="status">Загружаем диалоги…</p>
 
   if (status === 'error') {
@@ -472,6 +477,39 @@ export default function ChatPage({ userId = null, onRequireAuth, onOpenWallet }:
   const fileInputRef = useRef<HTMLInputElement>(null)
   const drawerButtonRef = useRef<HTMLButtonElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const workspaceRef = useRef<HTMLDivElement>(null)
+
+  /* Лист по высоте окна, а угол кнопки поддержки свободен.
+
+     Кнопка поддержки висит в правом нижнем углу каждой страницы, а у чата
+     там поле ввода и «Отправить». Высоту листа считаем от его верхнего
+     края до верхнего края кнопки: страница открывается сверху, поле ввода
+     стоит над кнопкой, а прокрутка вниз уводит его только выше. Кнопку
+     меряем, а не угадываем: её место задают чужие стили и ширина экрана.
+     (14 сентября 2026) */
+  useLayoutEffect(() => {
+    const workspace = workspaceRef.current
+    if (!workspace) return
+
+    const measure = () => {
+      const top = workspace.getBoundingClientRect().top + window.scrollY
+      const launcher = document.querySelector<HTMLElement>('.support-launcher')?.getBoundingClientRect()
+      const bottom = launcher && launcher.height > 0 ? launcher.top - 12 : window.innerHeight - 24
+      workspace.style.setProperty('--chat-fit-height', `${Math.round(bottom - top)}px`)
+    }
+
+    measure()
+    // Кнопка поддержки может появиться позже листа.
+    const late = window.setTimeout(measure, 400)
+    window.addEventListener('resize', measure)
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(measure) : null
+    if (workspace.parentElement) observer?.observe(workspace.parentElement)
+    return () => {
+      window.clearTimeout(late)
+      window.removeEventListener('resize', measure)
+      observer?.disconnect()
+    }
+  }, [])
 
   const selectedModel = useMemo(
     () => models.find((model) => model.id === selectedModelId) ?? models[0] ?? null,
@@ -855,20 +893,23 @@ export default function ChatPage({ userId = null, onRequireAuth, onOpenWallet }:
 
   const lastAssistant = [...messages].reverse().find((message) => message.role === 'assistant') ?? null
   const canRetry = Boolean(lastRequestRef.current && activeConversationId && !streaming)
+  const activeConversation = conversations.find((item) => item.id === activeConversationId) ?? null
 
+  // Поле листа: здесь живут диалоги. На телефоне то же самое выезжает панелью.
   const sidebar = (
     <>
       <div className="chat-sidebar-head">
-        <h3>Диалоги</h3>
-        <button className="chat-new-chat" type="button" onClick={startNewChat} disabled={streaming}>
+        <button className="chat-new-chat" type="button" onClick={startNewChat} disabled={streaming || requiresAuth}>
           <Plus size={16} weight="bold" aria-hidden="true" />
           Новый чат
         </button>
+        <h2 className="chat-sidebar-title">Диалоги</h2>
       </div>
       <ConversationList
         conversations={conversations}
         status={conversationsStatus}
         activeId={activeConversationId}
+        guest={requiresAuth}
         onSelect={(id) => {
           setDrawerOpen(false)
           void openConversation(id)
@@ -883,26 +924,13 @@ export default function ChatPage({ userId = null, onRequireAuth, onOpenWallet }:
   return (
     <section className="chat-page" aria-labelledby="chat-page-title">
       <header className="chat-heading">
-        <div className="chat-heading-copy">
-          <div className="chat-title-line">
-            <h1 id="chat-page-title">ИИ-чат</h1>
-            <span>помощник по домашке</span>
-          </div>
-          <p>
-            Задай вопрос текстом или прикрепи фото задачи. Модель выбираешь сам, а списание проходит после ответа и по факту.
-          </p>
+        <div className="chat-title-line">
+          <h1 id="chat-page-title">ИИ-чат</h1>
+          <span>помощник по домашке</span>
         </div>
-        <button
-          ref={drawerButtonRef}
-          className="chat-drawer-trigger"
-          type="button"
-          aria-haspopup="dialog"
-          aria-expanded={drawerOpen}
-          onClick={() => setDrawerOpen(true)}
-        >
-          <ChatsCircle size={18} weight="bold" aria-hidden="true" />
-          Диалоги
-        </button>
+        <p>
+          Задай вопрос текстом или прикрепи фото задачи. Модель выбираешь сам, а списание проходит после ответа и по факту.
+        </p>
       </header>
 
       {mockMode && (
@@ -911,10 +939,46 @@ export default function ChatPage({ userId = null, onRequireAuth, onOpenWallet }:
         </p>
       )}
 
-      <div className="chat-workspace">
+      <div className="chat-workspace" ref={workspaceRef}>
         <aside className="chat-sidebar" aria-label="Список диалогов">{sidebar}</aside>
 
         <div className="chat-main">
+          {/* Шапка переписки: какой диалог открыт и какая модель отвечает.
+              Выбор модели стоит над ответами, которые он меняет, а не
+              прячется в панели под полем ввода. */}
+          <div className="chat-toolbar">
+            <button
+              ref={drawerButtonRef}
+              className="chat-toolbar-button chat-drawer-trigger"
+              type="button"
+              aria-label="Диалоги"
+              aria-haspopup="dialog"
+              aria-expanded={drawerOpen}
+              onClick={() => setDrawerOpen(true)}
+            >
+              <ChatsCircle size={18} weight="bold" aria-hidden="true" />
+              <span>Диалоги</span>
+            </button>
+            <button
+              className="chat-toolbar-button chat-toolbar-new"
+              type="button"
+              aria-label="Новый чат"
+              onClick={startNewChat}
+              disabled={streaming || requiresAuth}
+            >
+              <Plus size={18} weight="bold" aria-hidden="true" />
+            </button>
+            <h2 className="chat-toolbar-title">{activeConversation?.title || 'Новый чат'}</h2>
+            {!requiresAuth && chatEnabled && modelsStatus === 'ready' && models.length > 0 && (
+              <ModelPicker
+                models={models}
+                value={selectedModel?.id ?? ''}
+                onChange={setSelectedModelId}
+                disabled={streaming}
+              />
+            )}
+          </div>
+
           <div
             className="chat-thread"
             ref={threadRef}
@@ -985,11 +1049,6 @@ export default function ChatPage({ userId = null, onRequireAuth, onOpenWallet }:
                     </li>
                   ))}
                 </ul>
-                <p className="chat-empty-price">
-                  {selectedModel
-                    ? <>Отвечает {selectedModel.title}. Обычный вопрос — {formatKopecks(selectedModel.minChargeKopecks)}, длинный разбор дороже.</>
-                    : 'Модели пока недоступны.'}
-                </p>
               </div>
             )}
 
@@ -1001,69 +1060,68 @@ export default function ChatPage({ userId = null, onRequireAuth, onOpenWallet }:
 
               return (
                 <article key={message.id} className={`chat-entry is-${message.role}`}>
-                  <div className="chat-entry-margin">
+                  {/* Время стояло на красном поле, и поле держало только его.
+                      Теперь поле отдано диалогам, а время - в подписи записи. */}
+                  <p className="chat-entry-meta">
+                    <span className="chat-entry-author">
+                      {isAssistant ? models.find((model) => model.id === message.modelId)?.title ?? 'Ответ' : 'Вопрос'}
+                    </span>
                     <span className="chat-entry-time">{messageTime(message.createdAt)}</span>
+                  </p>
+
+                  <div
+                    className="chat-entry-body"
+                    aria-live={isStreamingMessage ? 'polite' : undefined}
+                    aria-atomic={isStreamingMessage ? false : undefined}
+                  >
+                    {isAssistant
+                      ? <ChatMarkup text={message.content} />
+                      : <p className="chat-user-text">{message.content}</p>}
+                    {isStreamingMessage && message.content === '' && <p className="chat-typing">Модель думает…</p>}
                   </div>
 
-                  <div className="chat-entry-main">
-                    <p className="chat-entry-author">
-                      {isAssistant ? models.find((model) => model.id === message.modelId)?.title ?? 'Ответ' : 'Вопрос'}
+                  {messagePreviews.length > 0 && (
+                    <ul className="chat-message-photos">
+                      {messagePreviews.map((url) => (
+                        <li key={url}><img src={url} alt="Прикреплённая фотография задачи" /></li>
+                      ))}
+                    </ul>
+                  )}
+
+                  {messagePreviews.length === 0 && message.attachments.length > 0 && (
+                    <p className="chat-message-attachments">
+                      <Paperclip size={14} weight="bold" aria-hidden="true" />
+                      {message.attachments.length} {attachmentWord(message.attachments.length)}
                     </p>
+                  )}
 
-                    <div
-                      className="chat-entry-body"
-                      aria-live={isStreamingMessage ? 'polite' : undefined}
-                      aria-atomic={isStreamingMessage ? false : undefined}
-                    >
-                      {isAssistant
-                        ? <ChatMarkup text={message.content} />
-                        : <p className="chat-user-text">{message.content}</p>}
-                      {isStreamingMessage && message.content === '' && <p className="chat-typing">Модель думает…</p>}
-                    </div>
-
-                    {messagePreviews.length > 0 && (
-                      <ul className="chat-message-photos">
-                        {messagePreviews.map((url) => (
-                          <li key={url}><img src={url} alt="Прикреплённая фотография задачи" /></li>
+                  {messageCitations.length > 0 && (
+                    <div className="chat-citations">
+                      <h4>Источники</h4>
+                      <ul>
+                        {messageCitations.map((citation) => (
+                          <li key={citation.url}>
+                            <a href={citation.url} target="_blank" rel="noreferrer noopener">{citation.title || citation.url}</a>
+                          </li>
                         ))}
                       </ul>
-                    )}
+                    </div>
+                  )}
 
-                    {messagePreviews.length === 0 && message.attachments.length > 0 && (
-                      <p className="chat-message-attachments">
-                        <Paperclip size={14} weight="bold" aria-hidden="true" />
-                        {message.attachments.length} {attachmentWord(message.attachments.length)}
-                      </p>
-                    )}
+                  {message.status === 'cancelled' && <p className="chat-message-note">Генерация остановлена. Списываем только фактический расход.</p>}
+                  {message.status === 'failed' && <p className="chat-message-note is-error">Ответ не получен. Деньги за неудачную генерацию не списываются.</p>}
 
-                    {messageCitations.length > 0 && (
-                      <div className="chat-citations">
-                        <h4>Источники</h4>
-                        <ul>
-                          {messageCitations.map((citation) => (
-                            <li key={citation.url}>
-                              <a href={citation.url} target="_blank" rel="noreferrer noopener">{citation.title || citation.url}</a>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    {message.status === 'cancelled' && <p className="chat-message-note">Генерация остановлена. Списываем только фактический расход.</p>}
-                    {message.status === 'failed' && <p className="chat-message-note is-error">Ответ не получен. Деньги за неудачную генерацию не списываются.</p>}
-
-                    {isAssistant && !isStreamingMessage && message.content !== '' && (
-                      <footer className="chat-message-actions">
-                        <CopyAnswerButton text={message.content} />
-                        {message.id === lastAssistant?.id && canRetry && (
-                          <button className="chat-message-action" type="button" onClick={retryAnswer}>
-                            <ArrowClockwise size={15} weight="bold" aria-hidden="true" />
-                            Повторить ответ
-                          </button>
-                        )}
-                      </footer>
-                    )}
-                  </div>
+                  {isAssistant && !isStreamingMessage && message.content !== '' && (
+                    <footer className="chat-message-actions">
+                      <CopyAnswerButton text={message.content} />
+                      {message.id === lastAssistant?.id && canRetry && (
+                        <button className="chat-message-action" type="button" onClick={retryAnswer}>
+                          <ArrowClockwise size={15} weight="bold" aria-hidden="true" />
+                          Повторить ответ
+                        </button>
+                      )}
+                    </footer>
+                  )}
                 </article>
               )
             })}
@@ -1071,8 +1129,10 @@ export default function ChatPage({ userId = null, onRequireAuth, onOpenWallet }:
             {usage && (
               <p className="chat-usage" role="status">
                 Списано {formatKopecks(usage.chargedKopecks)}
-                {usage.refundedKopecks > 0 && <> · возвращено из резерва {formatKopecks(usage.refundedKopecks)}</>}
-                {' '}· баланс {formatKopecks(usage.balanceKopecks)}
+                {/* Неизвестный баланс не печатаем: «баланс 0 ₽» у ученика с
+                    53,60 ₽ на счету пугает сильнее, чем пустое место. Резерва
+                    с 30 августа нет, поэтому и возврата из него не бывает. */}
+                {usage.balanceKopecks !== null && <> · на балансе {formatKopecks(usage.balanceKopecks)}</>}
               </p>
             )}
           </div>
@@ -1171,12 +1231,6 @@ export default function ChatPage({ userId = null, onRequireAuth, onOpenWallet }:
                     </label>
                   )}
 
-                  <ModelPicker
-                    models={models}
-                    value={selectedModel?.id ?? ''}
-                    onChange={setSelectedModelId}
-                    disabled={!chatEnabled || requiresAuth || streaming}
-                  />
                 </div>
 
                 <div className="chat-composer-right">
@@ -1199,15 +1253,21 @@ export default function ChatPage({ userId = null, onRequireAuth, onOpenWallet }:
 
             {attachmentNotice && <p className="chat-attachment-notice" role="alert">{attachmentNotice}</p>}
 
-            <p className="chat-price-hint">
-              {/* Гостю моделей не показывают вовсе: список выдан только тем,
-                  кто вошёл. «Модели пока недоступны» читалось как поломка. */}
-              {requiresAuth
-                ? 'Войди, чтобы задать вопрос: чат платный, и списание идёт с баланса аккаунта.'
-                : selectedModel
-                  ? <>Спишем после ответа и по факту: обычный вопрос — {formatKopecks(selectedModel.minChargeKopecks)}. Заранее с баланса ничего не снимаем, а если модель недоступна, списания не будет вовсе.</>
-                  : 'Список моделей ещё загружается.'}
-            </p>
+            <div className="chat-composer-notes">
+              {/* Оговорка стоит под полем всегда, у гостя тоже: модель уверенно
+                  пишет и неверное, а ученик переписывает ответ в тетрадь.
+                  (14 сентября 2026) */}
+              <p className="chat-disclaimer">ИИ может ошибаться. Проверяй важные ответы.</p>
+              <p className="chat-price-hint">
+                {/* Гостю моделей не показывают вовсе: список выдан только тем,
+                    кто вошёл. «Модели пока недоступны» читалось как поломка. */}
+                {requiresAuth
+                  ? 'Войди, чтобы задать вопрос: чат платный, и списание идёт с баланса аккаунта.'
+                  : selectedModel
+                    ? <>Ответ стоит от {formatKopecks(selectedModel.minChargeKopecks)} и списывается после ответа. Если ответ не пришёл, денег не берём.</>
+                    : 'Список моделей ещё загружается.'}
+              </p>
+            </div>
           </form>
           )}
         </div>

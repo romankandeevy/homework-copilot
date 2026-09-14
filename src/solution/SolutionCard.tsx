@@ -2,6 +2,8 @@ import { CodeSimple, PencilRuler } from '@phosphor-icons/react'
 import { homeworkSolutionForm } from '../lib/homeworkContract'
 import type { HomeworkSolution } from '../lib/homeworkContract'
 import { keyed } from '../lib/listKeys'
+import { describeTask } from '../lib/taskTitle'
+import type { TaskTitle } from '../lib/taskTitle'
 import './SolutionCard.css'
 
 /* Карточка решения в списке.
@@ -15,16 +17,24 @@ import './SolutionCard.css'
    три, запись три, ответ две. Что не влезло, обрезается по слову
    многоточием - никаких полустрок и затуханий: половина строки читается как
    обрыв, а не как «есть ещё». Вместо тумана внизу честная цифра «ещё 12
-   строк». Раскрыть на месте нельзя - вся карточка открывает решение. */
+   строк». Раскрыть на месте нельзя - вся карточка открывает решение.
+
+   С 14 сентября 2026 у карточки есть название (`describeTask`): номер, если
+   он есть, и вопрос задачи. Раньше первой строкой шло условие, а у фото -
+   ничего различимого; владелец с полусотней решений не находил нужное.
+   Условие ниже - то, чего в названии нет, две строки. */
 
 const previewLines = 3
 
-export function SolutionCard({ solution, subject, time, onOpen }: {
+export function SolutionCard({ solution, subject, time, title, onOpen }: {
   solution: HomeworkSolution
   subject: string
   time: string
+  /** Название задачи. Список передаёт своё - по нему же он и ищет. */
+  title?: TaskTitle
   onOpen: () => void
 }) {
+  const label = title ?? describeTask(solution)
   const essay = homeworkSolutionForm(solution.subject, solution.taskType) === 'essay'
   const hasDiagram = solution.diagram.kind !== 'none'
   const code = solution.code?.text.trim() ?? ''
@@ -61,8 +71,15 @@ export function SolutionCard({ solution, subject, time, onOpen }: {
         <time>{time}</time>
       </span>
 
+      <span className="solution-card-title">
+        <span>
+          {label.number && <span className="solution-card-number">{label.number}</span>}
+          {label.title}
+        </span>
+      </span>
+
       <span className="solution-card-condition">
-        <span>{solution.condition}</span>
+        <span>{label.detail}</span>
       </span>
 
       <span className={`solution-card-preview${codeLines.length > 0 ? ' is-code' : essay ? ' is-prose' : ''}`}>

@@ -101,7 +101,7 @@
     },
     {
       "source": "/agreement",
-      "destination": "/terms",
+      "destination": "/docs/terms",
       "permanent": true
     }
   ],

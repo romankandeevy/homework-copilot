@@ -3,6 +3,7 @@ import { ArrowRight } from '@phosphor-icons/react'
 import { applicationPath, currentApplicationPath } from './lib/appPath'
 import { closestDestination, notFoundStops } from './lib/notFoundRoutes'
 import { SiteFooter } from './support/SiteFooter'
+import { SupportLauncher } from './support/SupportLauncher'
 import './NotFoundPage.css'
 
 // Кириллица в адресе приходит процентами: «/%D0%BF...» человек не узнает.
@@ -91,7 +92,8 @@ export function NotFoundPage() {
         </nav>
       </main>
 
-      <SiteFooter compact />
+      <SiteFooter />
+      <SupportLauncher />
     </div>
   )
 }

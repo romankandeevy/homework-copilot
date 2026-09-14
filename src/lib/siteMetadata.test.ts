@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest'
 import { describe, expect, it } from 'vitest'
-import { applySeoMetadata, getSeoMetadata } from './siteMetadata'
+import { applySeoMetadata, getSeoMetadata, legacyDocumentPaths, legalDocumentKind, legalDocumentKinds } from './siteMetadata'
 
 describe('site metadata', () => {
   /* У задачи по фото в адресе служебный ключ, у задачи текстом - начало
@@ -15,7 +15,23 @@ describe('site metadata', () => {
     expect(getSeoMetadata('/main').path).toBe('/app')
     expect(getSeoMetadata('/solutions/geometry/123', '123').robots).toBe('noindex, nofollow')
     expect(getSeoMetadata('/schedule').robots).toBe('noindex, nofollow')
-    expect(getSeoMetadata('/agreement').path).toBe('/terms')
+    expect(getSeoMetadata('/agreement').path).toBe('/docs/terms')
+  })
+
+  /* С 14 сентября 2026 документы живут под /docs/. Прежние адреса уже в
+     письмах и отметках согласия: они обязаны открывать тот же документ и
+     объявлять каноническим новый адрес. */
+  it('moves the documents under /docs/ and keeps the old addresses', () => {
+    expect(legalDocumentKinds.map((kind) => getSeoMetadata(`/docs/${kind}`).path)).toEqual(legalDocumentKinds.map((kind) => `/docs/${kind}`))
+    expect(Object.entries(legacyDocumentPaths).map(([legacy]) => getSeoMetadata(legacy).path)).toEqual(Object.values(legacyDocumentPaths))
+    expect(getSeoMetadata('/privacy/').path).toBe('/docs/privacy')
+    expect(legalDocumentKind('/terms')).toBe('terms')
+    expect(legalDocumentKind('/agreement')).toBe('terms')
+    expect(legalDocumentKind('/docs')).toBe('terms')
+    expect(legalDocumentKind('/docs/contacts/')).toBe('contacts')
+    expect(legalDocumentKind('/docs/unknown')).toBeNull()
+    expect(legalDocumentKind('/app')).toBeNull()
+    expect(getSeoMetadata('/docs/unknown').canonical).toBe(false)
   })
 
   it('updates one canonical and the complete social metadata set', () => {
@@ -26,7 +42,7 @@ describe('site metadata', () => {
     expect(document.title).toBe(metadata.title)
     expect(document.querySelector('meta[name="description"]')).toHaveAttribute('content', metadata.description)
     expect(document.querySelector('meta[name="robots"]')).toHaveAttribute('content', 'index, follow')
-    expect(document.querySelector('link[rel="canonical"]')).toHaveAttribute('href', 'https://www.homeworkcopilot.ru/cookies')
+    expect(document.querySelector('link[rel="canonical"]')).toHaveAttribute('href', 'https://www.homeworkcopilot.ru/docs/cookies')
     expect(document.querySelectorAll('link[rel="canonical"]')).toHaveLength(1)
     expect(document.querySelector('meta[property="og:title"]')).toHaveAttribute('content', metadata.title)
     expect(document.querySelector('meta[name="twitter:description"]')).toHaveAttribute('content', metadata.description)

@@ -1,5 +1,26 @@
 import { describe, expect, it } from 'vitest'
-import { humanChatMessage } from './chatClient'
+import { humanChatMessage, usageFromPayload } from './chatClient'
+
+/* Расход под ответом не выдумывается.
+
+   14 сентября 2026 под ответом GPT-5.6 Luna стояло «Списано 0 ₽, баланс
+   0 ₽» у ученика с 53,60 ₽: расчёт в базе не прошёл, сервер прислал пустой
+   баланс, а разбор заменил его нулём. */
+describe('usageFromPayload', () => {
+  it('неизвестный баланс остаётся неизвестным, а не нулём', () => {
+    expect(usageFromPayload({ chargedKopecks: 20, refundedKopecks: 0, balanceKopecks: null }))
+      .toEqual({ chargedKopecks: 20, refundedKopecks: 0, balanceKopecks: null })
+  })
+
+  it('без числа списания строки расхода нет вовсе', () => {
+    expect(usageFromPayload({ balanceKopecks: 5360 })).toBeNull()
+  })
+
+  it('полный итог проходит как есть', () => {
+    expect(usageFromPayload({ chargedKopecks: 20, refundedKopecks: 0, balanceKopecks: 5340 }))
+      .toEqual({ chargedKopecks: 20, refundedKopecks: 0, balanceKopecks: 5340 })
+  })
+})
 
 /* Сообщение базы наружу не выходит.
 
