@@ -7,6 +7,9 @@ import type { TaskSubmission } from './CopyTask'
 afterEach(() => {
   cleanup()
   window.history.replaceState(null, '', '/')
+  // Черновик формы живёт во вкладке: набранное в одном тесте не должно
+  // всплывать в следующем.
+  window.sessionStorage.clear()
 })
 
 function submitTask(onSubmit: () => Promise<boolean>) {
@@ -40,6 +43,38 @@ describe('CopyTask', () => {
     const condition = screen.getByRole('textbox', { name: 'Условие задачи' })
     expect(condition).toBeEnabled()
     expect(condition).toHaveValue('')
+  })
+
+  /* 14 сентября 2026 нехватка денег на несколько задач уводила на /balance,
+     и форма исчезала вместе с набранным. Черновик во вкладке его возвращает. */
+  it('возвращает набранное условие и предмет после ухода со страницы', () => {
+    const view = render(<CopyTask onSubmit={async () => false} />)
+    fillFirstTask()
+    view.unmount()
+
+    render(<CopyTask onSubmit={async () => false} />)
+    expect(screen.getByRole('textbox', { name: 'Условие задачи' })).toHaveValue('2x + 4 = 10, найти x')
+    expect(screen.getByRole('combobox', { name: 'Предмет' })).toHaveValue('Алгебра')
+  })
+
+  it('стирает черновик, когда задачи ушли на решение', async () => {
+    submitTask(async () => true)
+    await act(async () => {})
+    cleanup()
+
+    render(<CopyTask onSubmit={async () => true} />)
+    expect(screen.getByRole('textbox', { name: 'Условие задачи' })).toHaveValue('')
+  })
+
+  it('не подменяет черновиком предмет из ссылки', () => {
+    const view = render(<CopyTask onSubmit={async () => false} />)
+    fillFirstTask()
+    view.unmount()
+
+    window.history.replaceState(null, '', `/app?subject=${encodeURIComponent('Физика')}`)
+    render(<CopyTask onSubmit={async () => false} />)
+    expect(screen.getByRole('textbox', { name: 'Условие задачи' })).toHaveValue('')
+    expect(screen.getByRole('combobox', { name: 'Предмет' })).toHaveValue('Физика')
   })
 
   it('возвращает поля с тем же условием, если отправка не удалась', async () => {

@@ -156,6 +156,54 @@ function subjectFromAddress(subjects: readonly SolvableSubject[]) {
   return subject && subjects.some((item) => item.name === subject.name) ? subject.name : ''
 }
 
+/* Черновик формы живёт во вкладке (sessionStorage), пока задачи не ушли.
+   14 сентября 2026 нехватка денег на несколько задач стала уводить на
+   страницу баланса, а вход гостя - в профиль, и форма исчезала вместе со
+   всеми набранными условиями. Теперь условие, предмет и класс каждой
+   карточки переживают такой переход и перезагрузку. Фото не храним: пять
+   снимков не помещаются в хранилище, и карточка просит приложить его
+   заново. */
+const draftKey = 'homework-copilot:task-draft'
+
+type DraftEntry = { condition: string; subject: string; grade: string; hadPhoto: boolean }
+
+function loadDraft(subjects: readonly SolvableSubject[]): TaskEntry[] | null {
+  try {
+    const stored = window.sessionStorage.getItem(draftKey)
+    if (!stored) return null
+    const parsed: unknown = JSON.parse(stored)
+    if (!Array.isArray(parsed)) return null
+    const restored = parsed.slice(0, maxTaskEntries).flatMap((item): TaskEntry[] => {
+      if (!item || typeof item !== 'object') return []
+      const draft = item as Partial<DraftEntry>
+      const condition = typeof draft.condition === 'string' ? draft.condition.slice(0, maxConditionLength) : ''
+      const subject = typeof draft.subject === 'string' && subjects.some((entry) => entry.name === draft.subject) ? draft.subject : ''
+      const grade = typeof draft.grade === 'string' && (solvableGrades as readonly string[]).includes(draft.grade) ? draft.grade : ''
+      if (!condition.trim() && !draft.hadPhoto) return []
+      return [{
+        ...emptyEntry(grade, subject),
+        condition,
+        ...(draft.hadPhoto ? { error: 'Фото не сохранилось при переходе, приложи его заново', errorField: 'photo' as const } : {}),
+      }]
+    })
+    return restored.length > 0 ? restored : null
+  } catch {
+    return null
+  }
+}
+
+function saveDraft(entries: readonly TaskEntry[]) {
+  try {
+    const kept: DraftEntry[] = entries
+      .filter((entry) => entry.condition.trim() || entry.imageDataUrl)
+      .map((entry) => ({ condition: entry.condition, subject: entry.subject, grade: entry.grade, hadPhoto: Boolean(entry.imageDataUrl) }))
+    if (kept.length > 0) window.sessionStorage.setItem(draftKey, JSON.stringify(kept))
+    else window.sessionStorage.removeItem(draftKey)
+  } catch {
+    // Хранилище закрыто браузером: черновик просто не переживёт переход.
+  }
+}
+
 /* Фокус переводим после отрисовки: новой карточки или соседней с убранной
    ещё нет в документе в момент нажатия. */
 function afterPaint(callback: () => void) {
@@ -188,7 +236,11 @@ export default function CopyTask({
   // Класс профиля подставляем, только если форма его знает: в старых
   // профилях бывает 1-4 класс, а решаем мы с пятого.
   const defaultGrade = (solvableGrades as readonly string[]).includes(profileGrade) ? profileGrade : ''
-  const [entries, setEntries] = useState<TaskEntry[]>(() => [emptyEntry(defaultGrade, subjectFromAddress(subjects))])
+  const [entries, setEntries] = useState<TaskEntry[]>(() => {
+    // Ссылка с предметом - новый вход в форму, черновик ей не мешает.
+    const addressSubject = subjectFromAddress(subjects)
+    return (!addressSubject && loadDraft(subjects)) || [emptyEntry(defaultGrade, addressSubject)]
+  })
   const [formError, setFormError] = useState('')
   const [limitNote, setLimitNote] = useState<LimitNote>('')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -215,6 +267,12 @@ export default function CopyTask({
     address.searchParams.delete('subject')
     window.history.replaceState(window.history.state, '', `${address.pathname}${address.search}${address.hash}`)
   }, [])
+
+  // Черновик пишется на каждое изменение. Ушли задачи - форма пустеет, и
+  // пустой черновик стирается сам.
+  useEffect(() => {
+    saveDraft(entries)
+  }, [entries])
 
   // Поле подстраивается под объём условия, вместо того чтобы прокручиваться
   // внутри четырёх строк. Сначала сбрасываем высоту: без этого поле умеет

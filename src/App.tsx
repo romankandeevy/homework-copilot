@@ -1343,6 +1343,11 @@ function HomePage() {
   const emailConfirmationStarted = useRef(false)
   const yandexReturnStarted = useRef(false)
   const accountTriggerRef = useRef<HTMLElement | null>(null)
+  /* Вход начался из формы решения («бесплатное уже использовано»). Тогда
+     после входа человек остаётся у формы, а не уезжает в профиль: 14
+     сентября 2026 он там терял набранное условие и видел устаревшее
+     «Зарегистрируйся». */
+  const accountFromSolveRef = useRef(false)
   const supportReturnPathRef = useRef(currentApplicationPath() === '/support' ? '/app' : currentApplicationPath())
   /* На узком экране ленту разделов листает не окно, а `.product-content`. */
   const routeScrollRef = useRef<HTMLDivElement>(null)
@@ -1779,6 +1784,7 @@ function HomePage() {
   }
   const openSignIn = () => {
     rememberAccountTrigger()
+    accountFromSolveRef.current = false
     setAccountNotice('')
     setAccountOpen(true)
   }
@@ -1815,6 +1821,12 @@ function HomePage() {
     cleanUrl.searchParams.delete('auth')
     window.history.replaceState(window.history.state, '', `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`)
     if (!accountNotice) return
+    if (accountFromSolveRef.current) {
+      // Объяснение про бесплатное решение своё отработало: остаёмся у формы.
+      accountFromSolveRef.current = false
+      setAccountNotice('')
+      return
+    }
     if (currentApplicationPath() !== '/profile') window.history.pushState({}, '', applicationPath('/profile'))
     setSelectedSolution(null)
     setActiveNavigation('Профиль')
@@ -1915,7 +1927,7 @@ function HomePage() {
 
   const openBalanceShortfall = (required: number, balance: number) => {
     navigate('Баланс')
-    setAccountNotice(`Не хватает на решение: нужно ${formatRubles(required)}, на балансе ${formatRubles(balance)}`)
+    setAccountNotice(`Не хватает на решение: нужно ${formatRubles(required)}, на балансе ${formatRubles(balance)}. Условия задач сохранены на главной, вернись к ним после пополнения`)
   }
 
   const submitFromForm = async (submissions: TaskSubmission[]) => {
@@ -1927,6 +1939,7 @@ function HomePage() {
       const freeTaskRunning = visibleJobs.some((job) => isActiveJob(job) && job.deviceId === deviceIdRef.current)
       if (submissions.length > 1 || freeTaskRunning) {
         rememberAccountTrigger()
+        accountFromSolveRef.current = true
         setAccountNotice(freeTaskRunning
           ? 'Бесплатная задача уже решается. Следующие решаются в аккаунте: новому аккаунту 20 ₽, один раз на устройство'
           : 'Без аккаунта бесплатно решается одна задача. Несколько сразу решаются в аккаунте: новому аккаунту 20 ₽, один раз на устройство')
@@ -2351,6 +2364,7 @@ function HomePage() {
     const solvingAsGuest = Boolean(supabaseClient) && !user
     if (solvingAsGuest && guestFreeSolutionUsed) {
       rememberAccountTrigger()
+      accountFromSolveRef.current = true
       setAccountNotice('Бесплатное решение уже использовано. Зарегистрируйся — новому аккаунту 20 ₽, один раз на устройство: это пять задач по минимальной цене')
       setAccountOpen(true)
       return false
