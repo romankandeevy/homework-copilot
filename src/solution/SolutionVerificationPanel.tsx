@@ -1,29 +1,39 @@
 import { CheckCircle, WarningCircle } from '@phosphor-icons/react'
 import type { HomeworkDecisionSummary, HomeworkSolutionVerification } from '../lib/homeworkContract'
 
+/* Что проверило решение.
+
+   С 4 сентября проход модели один, а проверяет запись код: правила
+   предмета, калькулятор черновика, разбор чертежа. Панель до 15 сентября
+   говорила про «независимого редактора» и «первый проход модели», и
+   владелец на аудите спросил, почему проходов снова два. Их не два:
+   есть черновик, есть замечания кода к нему и есть починка, если
+   замечания были. Так панель это и называет. */
+
 function DecisionSummary({ value }: { value: HomeworkDecisionSummary }) {
   return (
     <dl className="solution-verification-decisions">
-      <div><dt>Что требуется?</dt><dd>{value.taskGoal}</dd></div>
-      <div><dt>Нужен чертёж?</dt><dd>{value.diagramRequired ? 'Да' : 'Нет'} · {value.diagramReason}</dd></div>
-      <div><dt>Что должно быть?</dt><dd>{value.requiredElements.length > 0 ? value.requiredElements.join(' · ') : 'Дополнительные элементы не нужны'}</dd></div>
-      <div><dt>Формат решения</dt><dd>{value.notebookFormat}</dd></div>
+      <div><dt>Что требуется</dt><dd>{value.taskGoal}</dd></div>
+      <div><dt>Чертёж</dt><dd>{value.diagramRequired ? 'Нужен' : 'Не нужен'} · {value.diagramReason}</dd></div>
+      <div><dt>Что обязано быть в записи</dt><dd>{value.requiredElements.length > 0 ? value.requiredElements.join(' · ') : 'Дополнительные элементы не нужны'}</dd></div>
+      <div><dt>Вид записи</dt><dd>{value.notebookFormat}</dd></div>
     </dl>
   )
 }
 
 export function SolutionVerificationPanel({ verification }: { verification: HomeworkSolutionVerification }) {
   const passed = verification.checks.filter((check) => check.passed).length
+  const repaired = verification.authorIssues.length > 0
 
   return (
     <details className="solution-verification" open>
       <summary>
-        <span><strong>Проверка решения</strong><small>Контрольные вопросы, автопроверка и независимый редактор</small></span>
+        <span><strong>Проверка решения</strong><small>Вопросы модели к себе и проверка записи кодом</small></span>
         <b>{passed}/{verification.checks.length}</b>
       </summary>
       <div className="solution-verification-body">
         <section aria-labelledby="solution-verification-decisions-title">
-          <h2 id="solution-verification-decisions-title">Итоговые ответы движка</h2>
+          <h2 id="solution-verification-decisions-title">Как модель поняла задачу</h2>
           <DecisionSummary value={verification.reviewer} />
         </section>
 
@@ -35,7 +45,7 @@ export function SolutionVerificationPanel({ verification }: { verification: Home
         </section>
 
         <section aria-labelledby="solution-verification-gates-title">
-          <h2 id="solution-verification-gates-title">Контроль качества</h2>
+          <h2 id="solution-verification-gates-title">Проверка кодом</h2>
           <ul className="solution-verification-checks">
             {verification.checks.map((check) => (
               <li className={check.passed ? 'is-passed' : 'has-warning'} key={check.label}>
@@ -46,15 +56,15 @@ export function SolutionVerificationPanel({ verification }: { verification: Home
           </ul>
         </section>
 
-        <details className="solution-verification-first-pass">
-          <summary>Первый проход модели</summary>
-          <DecisionSummary value={verification.author} />
-          <p>
-            {verification.authorIssues.length === 0
-              ? 'Автопроверка не нашла ошибок в первом варианте.'
-              : `Редактор получил замечания: ${verification.authorIssues.join('; ')}.`}
-          </p>
-        </details>
+        {/* Починка - второй вызов модели, и он стоит времени: ученику
+            полезно видеть, из-за чего решение шло дольше. Без замечаний
+            раздела нет: черновик и есть решение. */}
+        {repaired && (
+          <details className="solution-verification-first-pass">
+            <summary>Что исправлено после проверки черновика</summary>
+            <p>Замечания к черновику: {verification.authorIssues.join('; ')}.</p>
+          </details>
+        )}
       </div>
     </details>
   )

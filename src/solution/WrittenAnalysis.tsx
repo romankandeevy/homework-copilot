@@ -80,7 +80,12 @@ function AnnotatedLineRow({ line }: { line: HomeworkAnnotatedLine }) {
 export function WrittenAnalysis({ analysis }: { analysis: HomeworkWrittenAnalysis }) {
   if (analysis.blocks.length === 0) return null
   const title = analysis.title || analysisTitles[analysis.kind]
-  const legend = analysisLegend(analysis.blocks)
+  /* Значки разбора по составу и по членам предложения - школьный стандарт,
+     их не расшифровывают. Аудит 15 сентября: строка «образец - приставка,
+     образец - корень…» под словом читалась как чужой блок. Условные
+     обозначения остаются у прочих разборов, где значок может значить
+     что угодно. */
+  const legend = analysis.kind === 'morphemes' || analysis.kind === 'sentence-parse' ? [] : analysisLegend(analysis.blocks)
 
   return (
     <figure className="written-analysis" aria-label={title}>

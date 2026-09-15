@@ -34,10 +34,8 @@ import CopyTask from './CopyTask'
 import type { TaskSubmission } from './CopyTask'
 import { applicationPath, currentApplicationPath } from './lib/appPath'
 import { keyed } from './lib/listKeys'
-import { NotebookDiagram } from './notebook/NotebookDiagram'
-import { NumberLineFigure } from './notebook/geometry/NumberLineScene'
-import { numberLineParts } from './notebook/numberLineParts'
-import { notebookBlocks } from './notebook/systemOfEquations'
+import { NotebookSheet } from './notebook/NotebookSheet'
+import { solutionCopyText } from './notebook/notebookText'
 import LegalPage from './LegalPage'
 import PrivacyNotice from './PrivacyNotice'
 import type { Database } from './lib/database.types'
@@ -84,7 +82,6 @@ import {
 import type { SolutionJob } from './lib/solutionJobs'
 import { SolutionQueue } from './solution/SolutionQueue'
 import { SolutionVerificationPanel } from './solution/SolutionVerificationPanel'
-import { WrittenAnalysis } from './solution/WrittenAnalysis'
 import { MySolutions, SolutionsPage } from './solution/SolutionsPage'
 import { SupportCenter } from './support/SupportCenter'
 import { SupportLauncher } from './support/SupportLauncher'
@@ -99,6 +96,7 @@ import { installClientErrorReporting } from './lib/clientErrors'
 const DesignSystemPlayground = lazy(() => import('./DesignSystemPlayground'))
 // Холст тетради нужен только в разработке — в главном чанке ему делать нечего.
 const NotebookCanvas = lazy(() => import('./NotebookCanvas'))
+const AuditSheets = lazy(() => import('./notebook/AuditSheets'))
 const ChatPage = lazy(() => import('./chat/ChatPage'))
 const AccountDialog = lazy(() => import('./account/AccountDialog'))
 const ProfilePage = lazy(() => import('./account/ProfilePage'))
@@ -148,24 +146,6 @@ type SolutionState = {
 type PersonalSolution = SolutionState & {
   time: string
   solution: HomeworkSolution
-}
-
-/* Пункты задания вместо номеров.
-
-   Задание «сравните: а) … б) … в) …» приходит строками, размеченными
-   буквами. Своя нумерация поверх них - вторая шкала на том же листе. */
-const partLabelPattern = /^\s*[а-я]\s*\)/u
-
-/* Задание размечено буквами, если с буквы начинаются хотя бы два пункта.
-
-   Раньше требовалось, чтобы с буквы начиналась каждая строка. Когда
-   пункт стал столбиком - «а) 0,7x - 7 > 0», под ним «0,7x > 7 |:0,7» -
-   строки без буквы снова включили нумерацию, и задача 863 вышла листом
-   «1) а) …  2) 0,7x > 7  3) x > 10»: номера поверх букв. */
-function lettered(steps: readonly string[]) {
-  return steps.length > 1
-    && partLabelPattern.test(steps[0])
-    && steps.filter((step) => partLabelPattern.test(step)).length >= 2
 }
 
 const themeStorageKey = 'homework-copilot:theme'
@@ -919,31 +899,7 @@ function UnderstandingPage({
     const source = generatedSolution
     if (!source) return
 
-    const value = [
-      /* Копию переписывают в тетрадь и сдают. Разбор «Что нужно понять» -
-         конспект для себя: он объясняет тему, а в работе для учителя ему
-         места нет. Раньше он уезжал в буфер вместе с записью, и ученик
-         сдавал вместе с решением наши пояснения. */
-      'Условие: ' + source.condition,
-      ...(source.given.length > 0
-        ? ['Дано:', ...notebookBlocks(source.given, source.condition).flatMap((block) => (
-            // В текстовой копии скобку рисует сам знак: система должна
-            // остаться системой и после «Скопировать».
-            block.kind === 'system'
-              ? block.lines.map((line, index) => `${index === 0 ? '{ ' : '  '}${line}`)
-              : [block.line]
-          ))]
-        : []),
-      source.goal.title + ': ' + source.goal.text,
-      'Решение:',
-      // Копия уходит в тетрадь той же записью, что и на листе: с номерами
-      // шагов и без модельной нумерации внутри строки.
-      ...source.steps.map((step, index) => `${index + 1}) ${step.replace(/^\s*\d{1,2}[).]\s*/u, '')}`),
-      // Программа копируется отдельным блоком и без нумерации: её вставляют
-      // в редактор и запускают, а не переписывают в тетрадь построчно.
-      ...(source.code?.text ? ['', 'Программа:', source.code.text] : []),
-      ...(source.answer ? ['Ответ: ' + source.answer] : []),
-    ].join('\n')
+    const value = solutionCopyText(source)
 
     /* Clipboard API есть не везде: он требует защищённого соединения и
        разрешения. Раньше кнопка в таком случае молчала — человек жал и не
@@ -1033,10 +989,6 @@ function UnderstandingPage({
   )
 
   if (generatedSolution) {
-    /* Задание из пунктов а)-г) с координатными прямыми верстается по
-       пунктам: столбик преобразований, под ним прямая, под ней ответ. Если
-       разложить решение по пунктам не вышло, лист остаётся прежним. */
-    const solutionParts = numberLineParts(generatedSolution)
     return (
       <section className="route-page solution-view" aria-labelledby="understanding-page-title">
         <header className="route-page-header">
@@ -1048,144 +1000,7 @@ function UnderstandingPage({
           <p>{generatedSolution.condition}</p>
         </div>
         {explanation}
-        {/* Решение оформлено тетрадной страницей — той же, что обещана на
-            витрине: бумага, клетка, красное поле, рукописная гарнитура.
-            У геометрии эту роль играет GeometryNotebookLayoutV1, здесь —
-            лёгкая HTML-версия для остальных предметов. */}
-        <article className="notebook-sheet" aria-label="Готовая запись для тетради">
-          <span className="notebook-sheet-grid" aria-hidden="true" />
-          <span className="notebook-sheet-margin" aria-hidden="true" />
-          <div className="notebook-sheet-body">
-            {/* Шапка листа как в тетради: «Дано» и «Найти» слева, чертёж
-                справа от них, а не под ними. 7 сентября схема цепи
-                встала под «Найти» посреди листа, и решение уехало вниз. */}
-            <div className={`notebook-sheet-head${generatedSolution.diagram.kind !== 'none' ? ' notebook-sheet-head-with-diagram' : ''}`}>
-            <div className="notebook-sheet-head-text">
-            {generatedSolution.given.length > 0 && (
-              <section className="notebook-sheet-given">
-                <h2>Дано:</h2>
-                {keyed(notebookBlocks(generatedSolution.given, generatedSolution.condition), (block) => (
-                  block.kind === 'system' ? block.lines.join('|') : block.line
-                )).map(({ key, item: block }) => (block.kind === 'system'
-                  ? (
-                    <div className="notebook-system" key={key} role="group" aria-label="Система уравнений">
-                      <svg className="notebook-system-brace" viewBox="0 0 10 100" preserveAspectRatio="none" aria-hidden="true">
-                        <path
-                          d="M9 1 C5 1 5 8 5 22 C5 40 1 46 1 50 C1 54 5 60 5 78 C5 92 5 99 9 99"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.5"
-                          strokeLinecap="round"
-                          vectorEffect="non-scaling-stroke"
-                        />
-                      </svg>
-                      <div className="notebook-system-lines">
-                        {keyed(block.lines, (line) => line).map(({ key: lineKey, item: line }) => <p key={lineKey}>{line}</p>)}
-                      </div>
-                    </div>
-                  )
-                  : <p key={key}>{block.line}</p>))}
-              </section>
-            )}
-            {/* «Найти» без «Дано» в тетради не пишут: пример и неравенство
-                записывают сразу решением. 863 вышла с «Найти: Определить
-                значения x для каждого из четырёх условий» - строкой ни о чём
-                над столбиком. «Доказать» и «Построить» остаются всегда. */}
-            {(generatedSolution.given.length > 0 || generatedSolution.goal.title !== 'Найти') && (
-              <section className="notebook-sheet-goal">
-                <h2>{generatedSolution.goal.title}:</h2>
-                <p>{generatedSolution.goal.text}</p>
-              </section>
-            )}
-            </div>
-            {/* Чертёж стоит там же, где в тетради: справа от «Дано» и
-                «Найти», до хода решения. Раньше он существовал только на
-                SVG-листе геометрии, и у остальных предметов пропадал совсем. */}
-            {/* Прямые пунктов уходят к своим пунктам решения, а не стоят
-                общим блоком в шапке: в тетради каждая прямая нарисована
-                напротив своего пункта, рядом с его ответом. */}
-            {solutionParts.length === 0 && <NotebookDiagram diagram={generatedSolution.diagram} />}
-            </div>
-            <span className="notebook-sheet-divider" aria-hidden="true" />
-            <section className="notebook-sheet-steps">
-              {/* У доказательства в тетради пишут «Доказательство»: по
-                  заголовку видно, что от записи требуется. */}
-              <h2>{generatedSolution.goal.title === 'Доказать' ? 'Доказательство' : 'Решение'}</h2>
-              {/* Развёрнутый ответ - абзацы, а не нумерованный список.
-
-                  Сочинение по литературе на четыре абзаца, разложенное по
-                  пунктам «1) 2) 3)», читается как план, а не как ответ.
-                  Форму даёт контракт: по ней же сервер меряет длину строк. */}
-              {solutionParts.length > 0
-                ? (
-                  <div className="notebook-parts">
-                    {keyed(solutionParts, (part) => `part-${part.label}`).map(({ key, item: part }) => (
-                      <div className="notebook-part" key={key}>
-                        <div className="notebook-part-steps">
-                          {keyed(part.steps, (step) => step).map(({ key: stepKey, item: step }) => (
-                            <p key={stepKey}>{step}</p>
-                          ))}
-                        </div>
-                        <NumberLineFigure line={part.line} description={generatedSolution.diagram.description} />
-                        {part.answer && <p className="notebook-part-answer">Ответ: {part.answer}</p>}
-                      </div>
-                    ))}
-                  </div>
-                )
-                : homeworkSolutionForm(generatedSolution.subject, generatedSolution.taskType) === 'essay'
-                ? (
-                  <div className="notebook-sheet-prose">
-                    {keyed(generatedSolution.steps, (step) => step).map(({ key, item: step }) => (
-                      <p key={key}>{step}</p>
-                    ))}
-                  </div>
-                )
-                : (
-                  /* Нумерацию ставит страница. Но задание из пунктов уже
-                     размечено буквами: а), б), в). 8 сентября на проде
-                     задача 788 вышла листом «1) а) …  2) Так как …  4) б) …» -
-                     две нумерации поверх друг друга, и ни одна не читается.
-                     Там, где строки помечены буквами, счёт ведут буквы. */
-                  <ol className={lettered(generatedSolution.steps) ? 'is-lettered' : undefined}>
-                    {keyed(generatedSolution.steps, (step) => step).map(({ key, item: step }) => (
-                      /* Строка без буквы - продолжение пункта: в тетради она
-                         стоит под выражением, а не под буквой. */
-                      <li
-                        className={lettered(generatedSolution.steps) && !partLabelPattern.test(step) ? 'is-continued' : undefined}
-                        key={key}
-                      >
-                        {step.replace(/^\s*\d{1,2}[).]\s+/u, '')}
-                      </li>
-                    ))}
-                  </ol>
-                )}
-            </section>
-            {/* Программа - не строка тетради.
-
-                7 сентября информатика вернула код на Python, втиснутый в две
-                строки листа: «Python: count = {0:1}; s = 0; ans = 0». Класть
-                его было некуда. Теперь у него своё поле и свой блок:
-                моноширинный, с отступами, с прокруткой внутри себя - лист по
-                ширине он не растягивает. */}
-            {generatedSolution.code?.text && (
-              <section className="notebook-sheet-code">
-                <h2>Программа</h2>
-                <pre><code>{generatedSolution.code.text}</code></pre>
-              </section>
-            )}
-            {generatedSolution.analysis && (
-              <section className="notebook-sheet-analysis">
-                <WrittenAnalysis analysis={generatedSolution.analysis} />
-              </section>
-            )}
-            {generatedSolution.answer && (
-              <section className="notebook-sheet-answer">
-                <h2>Ответ:</h2>
-                <p>{generatedSolution.answer}</p>
-              </section>
-            )}
-          </div>
-        </article>
+        <NotebookSheet solution={generatedSolution} />
         {disclaimer}
         {guestInvite}
         {generatedSolution.verification && <SolutionVerificationPanel verification={generatedSolution.verification} />}
@@ -2652,6 +2467,12 @@ function App() {
   if (import.meta.env.DEV) {
     if (params.get('canvas') === '1') {
       return <Suspense fallback={null}><NotebookCanvas /></Suspense>
+    }
+
+    // Записи аудита 15 сентября по всем предметам одним списком: по ним
+    // сверяется оформление листа без вызова модели.
+    if (params.get('sheets') === '1') {
+      return <Suspense fallback={null}><AuditSheets /></Suspense>
     }
 
     if (params.get('design-system') === '1') {

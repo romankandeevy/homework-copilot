@@ -465,20 +465,26 @@ describe('homework solver', () => {
     expect(solution.answer).toBe(providerSolution.answer)
   })
 
-  /* Нарушенное правило чинится повтором, а не разговором со второй моделью.
+  /* Нарушенное правило чинится точечно, а не переписыванием решения.
 
      Черновик без единицы измерения при ответе не проходит правило предмета
      `answer-units`. Это механический огрех: модель забыла подпись, а не
-     решила не ту задачу, - поэтому даём ровно один адресный повтор. */
-  it('чинит нарушенное правило одним повтором', async () => {
+     решила не ту задачу. До 15 сентября 2026 за ним шёл полный повтор -
+     модель заново выдавала всё решение по строгой схеме ради одной строки.
+     Теперь она возвращает только раздел answer, код подставляет его и
+     прогоняет проверку заново. */
+  it('чинит нарушенное правило заменой одного раздела', async () => {
     const dirtyDraft = { ...photoDraft, answer: '90' }
     let drafts = 0
+    let patches = 0
 
     const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
       const url = String(input)
       const body = typeof init?.body === 'string' ? init.body : ''
-      if (body.includes('homework_solution_review')) {
-        return providerResponse({ approved: true, issues: [], solution: photoDraft }, url)
+      if (body.includes('homework_solution_patch')) {
+        patches += 1
+        expect(body).toContain('В ответе нет единицы измерения')
+        return providerResponse({ patches: [{ field: 'answer', lines: [providerSolution.answer] }] }, url)
       }
       drafts += 1
       return providerResponse(dirtyDraft, url)
@@ -487,8 +493,30 @@ describe('homework solver', () => {
     const solution = await solveWithKie(photoTask, { apiKey: 'secret-test-key', fetchImpl: fetchMock })
 
     expect(drafts).toBe(1)
-    const repairCalls = fetchMock.mock.calls.filter(([, init]) => String(init?.body).includes('homework_solution_review'))
-    expect(repairCalls).toHaveLength(1)
+    expect(patches).toBe(1)
+    expect(fetchMock.mock.calls.some(([, init]) => String(init?.body).includes('homework_solution_review'))).toBe(false)
+    expect(solution.answer).toBe(providerSolution.answer)
+    expect(solution.steps).toEqual(photoDraft.steps.map((step: string) => step.replace(/^\d{1,2}\)\s+/u, '')))
+  })
+
+  /* Точечная починка не сняла замечание - остаётся один полный повтор. */
+  it('после неудачной точечной починки делает один полный повтор', async () => {
+    const dirtyDraft = { ...photoDraft, answer: '90' }
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
+      const url = String(input)
+      const body = typeof init?.body === 'string' ? init.body : ''
+      if (body.includes('homework_solution_patch')) return providerResponse({ patches: [{ field: 'answer', lines: ['90'] }] }, url)
+      if (body.includes('homework_solution_review')) return providerResponse({ approved: true, issues: [], solution: photoDraft }, url)
+      return providerResponse(dirtyDraft, url)
+    })
+
+    const solution = await solveWithKie(photoTask, { apiKey: 'secret-test-key', fetchImpl: fetchMock })
+
+    const purposes = fetchMock.mock.calls.map(([, init]) => {
+      const body = String(init?.body)
+      return body.includes('homework_solution_patch') ? 'patch' : body.includes('homework_solution_review') ? 'review' : 'draft'
+    })
+    expect(purposes).toEqual(['draft', 'patch', 'review'])
     expect(solution.answer).toBe(providerSolution.answer)
   })
 
@@ -504,8 +532,9 @@ describe('homework solver', () => {
     const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
       const url = String(input)
       const body = typeof init?.body === 'string' ? init.body : ''
-      if (body.includes('homework_solution_review')) {
-        return providerResponse({ approved: true, issues: [], solution: russianDraft }, url)
+      // Разбор - раздел записи: его точечная починка возвращает целиком.
+      if (body.includes('homework_solution_patch')) {
+        return providerResponse({ patches: [{ field: 'explanation', lines: russianDraft.explanation }] }, url)
       }
       drafts += 1
       return providerResponse(withoutExplanation, url)

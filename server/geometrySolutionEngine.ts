@@ -43,6 +43,7 @@ import { subjectFormatPrompt, subjectRuleQuestions, verifyRuleClaims, verifySubj
 import { conditionInjectionMarkers } from './conditionGuard.ts'
 import { chainSelfCrossing } from './diagramBuilder.ts'
 import { verifyGradeLevel } from './gradeRules.ts'
+import { orientDiagram } from './sceneOrientation.ts'
 import { verifyAnswerDerivation, verifyWorksheet, verifyWorksheetDerivation } from './worksheet.ts'
 import type { WorksheetLine } from './worksheet.ts'
 
@@ -181,8 +182,8 @@ const sceneSchema = {
         properties: {
           id: { type: 'string', description: 'Короткий уникальный идентификатор точки.' },
           label: { type: 'string', description: 'Подпись точки на чертеже.' },
-          x: { type: 'number', description: 'Координата в локальном поле чертежа 0..100; при axes.enabled - математическая координата.' },
-          y: { type: 'number', description: 'Координата в локальном поле чертежа 0..100; при axes.enabled - математическая координата, ось y вверх.' },
+          x: { type: 'number', description: 'Координата в локальном поле чертежа 0..100 слева направо; при axes.enabled - математическая координата.' },
+          y: { type: 'number', description: 'Координата в локальном поле чертежа 0..100 сверху вниз: 0 - верхний край, 100 - нижний, основание фигуры внизу. При axes.enabled - математическая координата, ось y вверх.' },
           visible: { type: 'boolean' },
         },
       },
@@ -632,6 +633,15 @@ const authorInstructions = [
   'Полувывода не бывает. Либо сошлись на известную теорему одной строкой - «∠A + ∠B + ∠C + ∠D = 360° (сумма углов четырёхугольника)», - либо выведи её полностью, введя всё, на что ссылаешься: «диагональ AC делит ABCD на △ABC и △ACD; сумма углов каждого 180°; значит 360°». Строка «∠1 + ∠2 + ∠3 = 180°» без введённых ∠1, ∠2, ∠3 в тетради бессмысленна.',
   'Числовое обозначение угла - ∠1, ∠2 - вводится на чертеже. Нет чертежа с такой пометкой - пиши углы буквами вершин.',
   'Не нумеруй строки steps и не начинай их с «1)», «2)», «Шаг 1»: номера проставляет тетрадь.',
+  // Аудит 15 сентября: информатика писала «Переводим число 45 в двоичную
+  // систему…», «Выполняем проверку обратным переводом…» отдельными
+  // строками, и тетрадь нумеровала их как действия.
+  'Строк-заголовков в steps не бывает: «Переводим число…», «Выполняем проверку…», «Найдём…» - не действие. Строка steps начинается с самой записи: числа, формулы, обозначения или ответа на пункт.',
+  'condition - только текст задания. Строки «Предмет: …», «Класс: …» и слово «Задача:» из запроса в него не переписывай.',
+  // Аудит 15 сентября: история и обществознание дублировали абзацы
+  // решения в answer, английский - перевод в скобках и ещё раз в answer.
+  'У развёрнутого ответа - истории, литературы, обществознания, биологии, английского, русского - answer либо пуст, либо одна короткая фраза-итог, которая не повторяет абзацы steps. Переписывать текст решения в answer нельзя.',
+  'Английский: строка с английским текстом, следующей строкой - перевод. Перевод в скобках после английского текста не пиши и в answer его не дублируй.',
   /* Задание из пунктов пишется по строке на пункт.
 
      8 сентября на проде задача 788 «зная, что a < b, сравните» из четырёх
@@ -695,6 +705,10 @@ const authorInstructions = [
   'Перед тем как заполнять scene, ответь себе: какая фигура на чертеже; какие точки её задают; какие из них лежат на одной прямой; где прямой угол; какие отрезки равны; что подписано на чертеже из условия.',
   'Раскладывай точки так, чтобы чертёж занимал всё поле 0..100 и был похож на школьный: фигура крупная, вершины не ближе 12 единиц друг к другу, подписи не наезжают на линии.',
   'Ставь фигуру прямо: основание горизонтально, ось симметрии вертикальна. Наклонённый на случайный угол чертёж в тетради не рисуют.',
+  // 15 сентября равнобедренный треугольник пришёл вершиной вниз: модель
+  // считала ось y математической. Поле сцены - экранное, y растёт вниз.
+  'Ось y поля сцены направлена вниз: y = 0 - верхний край, y = 100 - нижний. Основание кладётся вниз, то есть у его точек y больше, чем у вершины над ним: у равнобедренного △ABC с основанием AC точки A и C стоят на y ≈ 85, вершина B - на y ≈ 15.',
+  'У равнобедренного треугольника на чертеже отмечай равные боковые стороны штрихами (equal-segment) и равные углы при основании дугами (equal-angle); у прямоугольного - прямой угол значком right-angle.',
   'Числа из условия ставь подписями к отрезкам и углам чертежа, а не рядом с ним.',
   'Не используй Markdown, LaTeX, HTML, SVG, CSS и программный код.',
   // Отказ по этой причине встречался чаще всего вне геометрии: модель писала
@@ -795,6 +809,138 @@ const reviewerInstructions = [
   'Поставь analysis.kind=none, если размеченная запись заданию не нужна или собрана неверно и починить её нечем.',
   'Не раскрывай скрытые рассуждения. Верни только JSON по схеме.',
 ].join(' ')
+
+/* Точечная починка: заменить раздел, а не переписать решение.
+
+   До 15 сентября 2026 любое замечание проверки уходило в повтор, где
+   модель обязана была вернуть решение целиком по строгой схеме: условие,
+   разбор, шаги, ответ, черновик счёта, чертёж, самопроверка. Полторы-две
+   тысячи токенов ради одной строки без единицы измерения, то есть ещё
+   20-30 секунд - столько же, сколько сам черновик. Владелец: «можно просто
+   исправить одну строку модели и всё».
+
+   Теперь замечание по записи чинится маленьким вызовом: модель видит
+   разделы записи и замечания и возвращает только те разделы, которые
+   меняет. Код подставляет их в черновик и прогоняет всю проверку заново.
+   Полный повтор остался для того, что точечно не чинится: неверный счёт,
+   приём не по классу, чертёж, условие. */
+const patchFields = ['given', 'goal', 'explanation', 'steps', 'answer'] as const
+type PatchField = typeof patchFields[number]
+
+const patchSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['patches'],
+  properties: {
+    patches: {
+      type: 'array',
+      minItems: 0,
+      maxItems: 5,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['field', 'lines'],
+        properties: {
+          field: { type: 'string', enum: [...patchFields], description: 'Какой раздел записи заменяется.' },
+          lines: {
+            type: 'array',
+            minItems: 0,
+            maxItems: 24,
+            items: { type: 'string' },
+            description: 'Раздел целиком в новом виде: у steps, given и explanation - все строки по порядку, у goal и answer - одна строка.',
+          },
+        },
+      },
+    },
+  },
+} as const
+
+const patchInstructions = [
+  'Ты правишь готовое школьное решение точечно: меняешь только разделы, к которым есть замечания, и возвращаешь только их.',
+  'Раздел возвращается целиком в новом виде: steps - все строки решения по порядку, given - все строки «Дано», explanation - все строки разбора, goal - одна строка цели, answer - одна строка ответа.',
+  'Разделы без замечаний не возвращай. Условие, чертёж и черновик счёта не меняются: если замечание требует пересчитать задачу, верни пустой список patches.',
+  'Пиши так, как пишут в тетради от руки: дроби косой чертой, степени и индексы надстрочными и подстрочными знаками, без LaTeX, Markdown, стрелок ⇒ и нумерации строк. Слово «Ответ» не пиши, «Дано:» и «Найти:» тоже печатает лист.',
+  'Не раскрывай рассуждения. Верни только JSON по схеме.',
+].join(' ')
+
+/* Что точечно не чинится: счёт, приём не по классу, условие, чертёж,
+   выводы модели о задаче. Всё это - полный повтор. */
+const wholeRepairIssue = /черновик|нигде не выведен|не проходят: |приложенным заданием|разобран один|Условие отсутствует|В условии|Условие требует|Условие просит|чертеж|чертёж|сцен|точк|угол|углы|требуется получить|обязательные элементы|формат записи|не проверено самой моделью|collinear|parallel|perpendicular|midpoint|on-circle|equal-length|hidden|график|схем|прямая|прямой|polygon|polyline|segment|circle|line|ray|ссылка на отсутствующую|Тип задачи/iu
+
+export function patchableIssue(issue: string) {
+  return !wholeRepairIssue.test(issue)
+}
+
+function patchPrompt(draft: EngineDraft, issues: readonly string[]) {
+  return [
+    'Решение не прошло автоматическую проверку. Исправь ровно эти замечания, вернув только изменённые разделы:',
+    ...issues.map((issue) => `- ${issue}`),
+    'Текущая запись.',
+    `given: ${JSON.stringify(draft.given)}`,
+    `goal: ${JSON.stringify(`${draft.goal.title}: ${draft.goal.text}`)}`,
+    `explanation: ${JSON.stringify(draft.explanation)}`,
+    `steps: ${JSON.stringify(draft.steps)}`,
+    `answer: ${JSON.stringify(draft.answer)}`,
+  ].join('\n')
+}
+
+/* Подстановка разделов из точечной починки в черновик.
+
+   Каждый раздел проходит ту же чистку, что и в normalizeDraft: пределы
+   строки, нумерация, разметка. Пустой или негодный ответ - null: тогда
+   идёт полный повтор. */
+export function applyDraftPatch(draft: EngineDraft, raw: unknown, subject: string, condition: string): EngineDraft | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const patches = (raw as Record<string, unknown>).patches
+  if (!Array.isArray(patches)) return null
+  const limits = subjectProfile(subject, draft.taskType).notebook
+  let result = draft
+  let changed = false
+  for (const entry of patches) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue
+    const field = (entry as Record<string, unknown>).field
+    const linesValue = (entry as Record<string, unknown>).lines
+    if (!patchFields.includes(field as PatchField) || !Array.isArray(linesValue)) continue
+    const values = linesValue.filter((line): line is string => typeof line === 'string')
+    switch (field as PatchField) {
+      case 'steps': {
+        const steps = cleanSteps(values, limits)
+        if (steps.length === 0) continue
+        result = { ...result, steps }
+        break
+      }
+      case 'given':
+        result = {
+          ...result,
+          given: withoutSmuggledGiven(
+            values.map((line) => clampNotebookLine(normalizeNotebookNotation(line), limits.given)).filter(Boolean).slice(0, 4),
+            condition,
+          ),
+        }
+        break
+      case 'explanation':
+        result = { ...result, explanation: cleanExplanation(values, condition, result.steps, limits.explanation) }
+        break
+      case 'goal': {
+        const text = clampNotebookLine(
+          normalizeNotebookNotation(values[0] ?? '').replace(/^(?:найти|доказать|построить)\s*:?\s*/iu, ''),
+          limits.goal,
+        )
+        if (!text) continue
+        result = { ...result, goal: { ...result.goal, text } }
+        break
+      }
+      case 'answer':
+        result = {
+          ...result,
+          answer: clampNotebookLine(normalizeNotebookNotation(values[0] ?? '').replace(/^ответ\s*:\s*/iu, ''), limits.answer),
+        }
+        break
+    }
+    changed = true
+  }
+  return changed ? result : null
+}
 
 const incompleteAnswerMessage = 'Модель не дописала ответ до конца'
 
@@ -910,6 +1056,11 @@ export function normalizeNotebookNotation(value: unknown, maxLength = 5000) {
        это читаемо, а «10⁰,536» - нет. */
     .replace(/\^\{?(-?\d+|n)\}?(?![.,]\d)/gu, (_match, value: string) => toScript(value, superscriptDigits))
     .replace(/_\{?(\d+)\}?/gu, (_match, value: string) => toScript(value, subscriptDigits))
+    /* Площадь и периметр фигуры пишут со знаком фигуры, а не с
+       подчёркиванием: «S_ABC» из аудита 15 сентября восьмиклассник не
+       узнал - в его тетради это S△ABC. Четырёхугольник и больше - S(ABCD). */
+    .replace(/(?<![\p{L}\d])([SP])_\{?([A-Z]{3})\}?(?![A-Z])/gu, '$1△$2')
+    .replace(/(?<![\p{L}\d])([SP])_\{?([A-Z]{4,6})\}?(?![A-Z])/gu, '$1($2)')
     /* Дальше - то, что раньше отменяло решение целиком.
 
        6 сентября физика восьмого класса вернулась с «Решение не дошло:
@@ -1490,7 +1641,9 @@ function cleanSteps(value: unknown, limits: typeof tightNotebookLimits) {
   const seen = new Set<string>()
   const steps: string[] = []
   for (const entry of value) {
-    const line = clampNotebookLine(normalizeNotebookNotation(entry), Math.min(limits.step, limits.stepOnPage))
+    // Номера строк ставит лист. Свою нумерацию модели снимаем здесь, а не
+    // при отрисовке: иначе она уезжала в копию и в проверки записи.
+    const line = clampNotebookLine(normalizeNotebookNotation(entry).replace(/^\d{1,2}\)\s+/u, ''), Math.min(limits.step, limits.stepOnPage))
     const key = line.toLocaleLowerCase('ru-RU')
     if (!line || seen.has(key)) continue
     seen.add(key)
@@ -1560,6 +1713,14 @@ function normalizeCode(value: unknown, condition: string): HomeworkSolution['cod
   return { language: codeLanguages.has(language) ? language : '', text: body }
 }
 
+/* Эхо шапки промпта в условии: «Предмет: Обществознание. Класс: 8 класс.
+   Задача: …». Само задание начинается после него. */
+export function withoutPromptEcho(condition: string) {
+  return condition
+    .replace(/^\s*(?:предмет\s*:\s*[^.\n]{1,40}\.\s*)?(?:класс\s*:\s*[^.\n]{1,24}\.\s*)?(?:задач\p{L}{0,2}\s*:\s*)?/iu, '')
+    .trim()
+}
+
 function normalizeDraft(value: unknown, subject = '', condition = ''): EngineDraft {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new GeometrySolutionEngineError('Модель не вернула решение')
@@ -1578,12 +1739,18 @@ function normalizeDraft(value: unknown, subject = '', condition = ''): EngineDra
   const goalTitle = rawGoalTitle === 'Доказать' || rawGoalTitle === 'Построить' ? rawGoalTitle : 'Найти'
   const analysis = normalizeAnalysis(candidate.analysis)
   const steps = cleanSteps(candidate.steps, limits)
+  /* Условие - текст задания, а не эхо запроса.
+
+     Аудит 15 сентября: обществознание вернуло condition «Предмет:
+     Обществознание. Класс: 8 класс. Задача: Чем отличается…» - модель
+     переписала шапку промпта, и она ушла на страницу как условие. */
+  const readCondition = withoutPromptEcho(normalizeNotebookNotation(candidate.condition))
   // Условие задачи: из запроса, а у задачи с фото - то, что модель прочла.
-  const conditionText = condition || normalizeNotebookNotation(candidate.condition)
+  const conditionText = condition || readCondition
 
   const draft: EngineDraft = {
     ruleChecks: normalizeRuleChecks(candidate.ruleChecks),
-    condition: normalizeNotebookNotation(candidate.condition),
+    condition: readCondition,
     taskType,
     diagramRequired: candidate.diagramRequired === true,
     decisions: normalizeDecisionSummary(candidate.decisions),
@@ -1597,7 +1764,7 @@ function normalizeDraft(value: unknown, subject = '', condition = ''): EngineDra
         : [],
       // У задачи с фотографии условие приходит не в запросе, а с самого
       // снимка: берём то, что модель прочла.
-      condition || normalizeNotebookNotation(candidate.condition),
+      conditionText,
     ),
     goal: {
       title: goalTitle,
@@ -1608,13 +1775,15 @@ function normalizeDraft(value: unknown, subject = '', condition = ''): EngineDra
     },
     /* Объяснение не попадает на тетрадный лист: его верстает HTML над
        листом, поэтому пределы строки тетради к нему не применяются. */
-    explanation: cleanExplanation(candidate.explanation, condition || normalizeNotebookNotation(candidate.condition), steps, limits.explanation),
+    explanation: cleanExplanation(candidate.explanation, conditionText, steps, limits.explanation),
     steps,
     ...(normalizeCode(candidate.code, conditionText) ? { code: normalizeCode(candidate.code, conditionText) } : {}),
-    answer: clampNotebookLine(normalizeNotebookNotation(candidate.answer), limits.answer),
+    // Слово «Ответ» печатает лист: в answer лежит только значение.
+    answer: clampNotebookLine(normalizeNotebookNotation(candidate.answer).replace(/^ответ\s*:\s*/iu, ''), limits.answer),
     answerKey: normalizeNotebookNotation(candidate.answerKey, 60),
     worksheet: normalizeWorksheet(candidate.worksheet),
-    diagram: normalizeDiagram(candidate.diagram),
+    // Основание вниз, вершина вверх, значки равнобедренного - по условию.
+    diagram: orientDiagram(normalizeDiagram(candidate.diagram), conditionText),
     ...(analysis ? { analysis } : {}),
   }
   const withSteps = taskType === 'construction'
@@ -2894,7 +3063,9 @@ function toSolution(
     conditionNormalized: normalizeTaskCondition(request.condition ?? draft.condition),
     subject: resolveSubject(request.subject, draft.condition),
     textbookTitle: request.textbookTitle,
-    condition: draft.condition,
+    // Вписанное условие показываем таким, каким его прислал ученик; чтение
+    // модели нужно только у фото, где другого текста нет.
+    condition: request.condition?.trim() || draft.condition,
     given: draft.given,
     goal: draft.goal,
     ...(draft.explanation.length > 0 ? { explanation: draft.explanation } : {}),
@@ -3364,6 +3535,57 @@ export async function solveHomeworkWithReview(
     throw new GeometrySolutionEngineError(`Решение не прошло проверку${deterministicIssues.length > 0 ? `: ${deterministicIssues.slice(0, 3).join('; ')}` : ''}`)
   }
 
+  /* Точечная починка - первой.
+
+     Замечания только по записи - единица при ответе, обрывок в разборе,
+     строка не по тетради - чинятся заменой раздела: маленький вызов,
+     маленький ответ, вся проверка заново. Полный повтор ниже остаётся на
+     случай, когда точечная не сняла замечания или их нельзя чинить
+     точечно. */
+  let working = draft
+  let pending = deterministicIssues
+  let attempts = 2
+
+  if (pending.every(patchableIssue)) {
+    console.log(JSON.stringify({ level: 'info', event: 'homework_patch_called', subject: request.subject, model: workingModel, issues: pending.length }))
+    try {
+      const rawPatch = await callModelWithRetry(
+        options,
+        patchInstructions,
+        engineMessage(request, withOwner(patchPrompt(draft, rankRepairIssues(pending).slice(0, 6)))),
+        'homework_solution_patch',
+        patchSchema,
+        retryDeadline,
+        workingModel,
+        subjectModels,
+      )
+      const patched = applyDraftPatch(draft, rawPatch, request.subject, request.condition ?? draft.condition)
+      if (patched) {
+        const evaluated = evaluate(patched, workingModel)
+        options.onTrace?.({ stage: 'reviewer', candidate: patched, approved: evaluated.issues.length === 0, issues: [...evaluated.issues] })
+        if (evaluated.issues.length === 0) {
+          const solved = toSolution(patched, request, ownerId, true)
+          return {
+            ...solved,
+            verification: buildVerification(
+              draft,
+              deterministicIssues,
+              { approved: true, issues: [], solution: patched },
+              solved,
+              authorConditionMatched,
+            ),
+          }
+        }
+        // Правка сняла не всё: полный повтор один, и стартует он с правленого.
+        working = patched
+        pending = evaluated.issues
+        attempts = 1
+      }
+    } catch {
+      // Точечная починка не удалась - идём полным повтором.
+    }
+  }
+
   /* Чинить, а не обрывать.
 
      Починка была одна: не помогла - ученик читает «Решение не дошло» и
@@ -3376,11 +3598,10 @@ export async function solveHomeworkWithReview(
      Больше двух не делаем: каждый заход - вызов модели и полминуты
      ожидания, а на третий раз модель обычно повторяет то же самое.
      И не начинаем новый заход, если бюджет на повторы уже вышел. */
-  let pending = deterministicIssues
   let lastRepair: ReviewResult | null = null
   let lastIssues: string[] = []
 
-  for (let attempt = 1; attempt <= 2; attempt += 1) {
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
     if (attempt > 1 && Date.now() > retryDeadline) break
 
     const repairPrompt = [
@@ -3393,7 +3614,7 @@ export async function solveHomeworkWithReview(
       'опиши сцену через scene: точки с координатами, объекты и проверяемые constraints. Пустой scene недопустим.',
       'Объяснение перед решением (explanation) сохрани и при необходимости дополни, но не удаляй.',
       'Если замечание про черновик - пересчитай выражение сам и исправь ВСЕ числа, которые из него следуют: шаги, ответ и answerKey.',
-      `Версия для исправления: ${JSON.stringify(lastRepair?.solution ?? draft)}`,
+      `Версия для исправления: ${JSON.stringify(lastRepair?.solution ?? working)}`,
     ].join('\n')
 
     // eslint-disable-next-line no-await-in-loop

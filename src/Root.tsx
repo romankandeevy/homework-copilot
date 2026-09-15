@@ -19,7 +19,7 @@ const PromoStudio = import.meta.env.DEV ? lazy(() => import('./promo/PromoStudio
 export function Root() {
   const params = new URLSearchParams(window.location.search)
   const opensDevTool = import.meta.env.DEV
-    && (params.get('canvas') === '1' || params.get('design-system') === '1')
+    && (params.get('canvas') === '1' || params.get('design-system') === '1' || params.get('sheets') === '1')
 
   if (PromoStudio && params.get('promo') === '1') {
     return <Suspense fallback={null}><PromoStudio /></Suspense>

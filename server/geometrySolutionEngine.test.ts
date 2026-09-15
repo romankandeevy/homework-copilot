@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { homeworkSolutionEngineVersion } from '../src/lib/homeworkContract.ts'
 import type { HomeworkAnnotatedLine, HomeworkSolution, HomeworkWrittenAnalysis } from '../src/lib/homeworkContract.ts'
-import { analysisRepeatsSteps, answersAgree, clampNotebookLine, isCurrentReviewedSolution, normalizeNotebookNotation, resolveSubject, validateSolutionQuality } from './geometrySolutionEngine.ts'
+import { analysisRepeatsSteps, answersAgree, applyDraftPatch, clampNotebookLine, isCurrentReviewedSolution, normalizeNotebookNotation, patchableIssue, resolveSubject, validateSolutionQuality, withoutPromptEcho } from './geometrySolutionEngine.ts'
 
 const taskFiveSolution: HomeworkSolution = {
   engineVersion: homeworkSolutionEngineVersion,
@@ -856,5 +856,73 @@ describe('нотация точных предметов', () => {
 
   it('целую степень по-прежнему поднимает', () => {
     expect(normalizeNotebookNotation('S = a^2 + b^10')).toBe('S = a² + b¹⁰')
+  })
+})
+
+/* Аудит 15 сентября 2026: обществознание вернуло условием эхо шапки
+   промпта, геометрия - площадь с подчёркиванием «S_ABC». */
+describe('условие и запись после аудита 15 сентября', () => {
+  it('снимает эхо шапки промпта с условия', () => {
+    expect(withoutPromptEcho('Предмет: Обществознание. Класс: 8 класс. Задача: Чем отличается правоспособность от дееспособности?'))
+      .toBe('Чем отличается правоспособность от дееспособности?')
+    expect(withoutPromptEcho('Задача: Реши уравнение.')).toBe('Реши уравнение.')
+    expect(withoutPromptEcho('Турист прошёл 12 км.')).toBe('Турист прошёл 12 км.')
+  })
+
+  it('пишет площадь и периметр со знаком фигуры', () => {
+    expect(normalizeNotebookNotation('Найти: BH, S_ABC')).toBe('Найти: BH, S△ABC')
+    expect(normalizeNotebookNotation('P_{ABC} = 36 см, S_ABCD = 60 см²')).toBe('P△ABC = 36 см, S(ABCD) = 60 см²')
+    expect(normalizeNotebookNotation('v_ср = 4,4 км/ч')).toBe('v_ср = 4,4 км/ч')
+  })
+})
+
+/* Точечная починка: раздел заменяется, остальное решение остаётся. */
+describe('точечная починка', () => {
+  it('отличает замечание по записи от замечания по существу', () => {
+    expect(patchableIssue('В ответе нет единицы измерения')).toBe(true)
+    expect(patchableIssue('Разбор короче трёх мыслей: правило, признак задачи, типичная ошибка')).toBe(true)
+    expect(patchableIssue('Ответ повторяет условие вместо ответа на вопрос')).toBe(true)
+    expect(patchableIssue('Черновик, «путь»: выражение 2*3 даёт 6, а записано 7')).toBe(false)
+    expect(patchableIssue('В 8 класс производные, интегралы и пределы не проходят: решай иначе')).toBe(false)
+    expect(patchableIssue('Обязательный чертёж отсутствует')).toBe(false)
+    expect(patchableIssue('Условие кандидата не совпадает с приложенным заданием')).toBe(false)
+  })
+
+  it('подставляет только возвращённые разделы и чистит их как черновик', () => {
+    const draft = {
+      ruleChecks: [],
+      condition: 'Турист прошёл 12 км за 3 ч. Найдите скорость.',
+      taskType: 'calculation' as const,
+      diagramRequired: false,
+      decisions: { taskGoal: 'скорость', diagramRequired: false, diagramReason: 'не нужен', requiredElements: [], notebookFormat: 'только решение и ответ', selfChecks: ['единицы'] },
+      sourceVerified: true,
+      given: ['S = 12 км', 't = 3 ч'],
+      goal: { title: 'Найти' as const, text: 'v' },
+      explanation: ['Скорость - это путь за единицу времени, поэтому путь делят на время.', 'Признак задачи: даны путь и время, спрашивают скорость.', 'Частая ошибка - перепутать, что на что делить.'],
+      steps: ['12 : 3 = 4 (км/ч)'],
+      answer: '4',
+      answerKey: '4 км/ч',
+      worksheet: [],
+      diagram: { kind: 'none' as const, description: '', vertices: [] },
+    }
+    const patched = applyDraftPatch(draft, {
+      patches: [
+        { field: 'answer', lines: ['Ответ: 4 км/ч'] },
+        { field: 'steps', lines: ['1) 12 : 3 = 4 (км/ч) - скорость'] },
+      ],
+    }, 'Математика', draft.condition)
+    expect(patched?.answer).toBe('4 км/ч')
+    expect(patched?.steps).toEqual(['12 : 3 = 4 (км/ч) - скорость'])
+    expect(patched?.given).toEqual(draft.given)
+    expect(patched?.explanation).toEqual(draft.explanation)
+  })
+
+  it('пустой список правок - не починка', () => {
+    expect(applyDraftPatch({
+      ruleChecks: [], condition: 'x', taskType: 'mixed', diagramRequired: false,
+      decisions: { taskGoal: '', diagramRequired: false, diagramReason: '', requiredElements: [], notebookFormat: '', selfChecks: [] },
+      sourceVerified: true, given: [], goal: { title: 'Найти', text: 'x' }, explanation: [], steps: ['x = 1'], answer: '1', answerKey: '1', worksheet: [],
+      diagram: { kind: 'none', description: '', vertices: [] },
+    }, { patches: [] }, 'Алгебра', 'x')).toBeNull()
   })
 })

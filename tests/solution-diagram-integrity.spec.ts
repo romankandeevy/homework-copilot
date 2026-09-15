@@ -316,7 +316,7 @@ test('task 5 is a compact checked drawing on mobile, not a text wall', async ({ 
   expect(notebookText?.replace(/\s/g, '')).toContain('M,N∈AB;P,Q∈a;P,Q∉AB;R,S∉a.')
   await expect(page.getByText('Проверка решения')).toBeVisible()
   await expect(page.getByText('5/5')).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Итоговые ответы движка' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Как модель поняла задачу' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Самопроверка модели' })).toBeVisible()
   await expect(page.locator('.source-diagram-image')).toHaveCount(0)
   await expect(page.locator('.notebook-sheet')).toHaveCount(1)

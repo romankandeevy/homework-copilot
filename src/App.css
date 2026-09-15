@@ -1578,6 +1578,102 @@
    поверх них - вторая шкала на том же листе, и читать её невозможно. */
 .notebook-sheet-steps ol.is-lettered li::before { content: none; }
 
+/* Столбик без номеров: уравнение, неравенство, перевод между системами
+   счисления. Аудит 15 сентября: «ни одно уравнение нигде не решается по
+   действиям» - преобразования идут одно под другим, и цифры перед ними
+   читаются как действия, которых нет. */
+.notebook-sheet-steps ol.is-column li::before { content: none; }
+.notebook-sheet-steps li.is-table { counter-increment: none; }
+.notebook-sheet-steps li.is-table::before { content: none; }
+
+/* Таблица деления при переводе в другую систему счисления: число и
+   частные в первой строке, остатки под ними, клетки разделены линиями. */
+.notebook-table {
+  border-collapse: collapse;
+  margin: 0.15rem 0;
+  font-family: var(--font-mono);
+  font-size: 0.94em;
+}
+
+.notebook-table td {
+  min-width: 2.4em;
+  padding: 0 0.55em;
+  border: 1.5px solid var(--paper-ink);
+  text-align: center;
+  line-height: 1.7rem;
+}
+
+/* Дробь столбиком: числитель над знаменателем, черта между ними.
+   «(x² - 9)/(x - 3) = 0» в строку восьмиклассник прочитал как деление;
+   в тетради это дробь. */
+.notebook-fraction {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 0 0.2em;
+  vertical-align: middle;
+  line-height: 1.25;
+  text-align: center;
+}
+
+.notebook-fraction-top { padding: 0 0.25em 0.05em; border-bottom: 1.5px solid currentcolor; }
+.notebook-fraction-bottom { padding: 0.05em 0.25em 0; }
+
+/* Раскладка физики: «Дано» с «Найти» слева, столбик СИ рядом, решение
+   справа от вертикальной черты, «Ответ» под всем листом. */
+.notebook-sheet-columns {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: clamp(0.9rem, 2vw, 1.35rem) clamp(1.25rem, 3vw, 2rem);
+  align-items: start;
+}
+
+.notebook-sheet-known {
+  display: flex;
+  gap: clamp(0.9rem, 2vw, 1.35rem);
+  align-items: start;
+  padding-right: clamp(1rem, 2.5vw, 1.75rem);
+  border-right: 2px solid var(--paper-ink);
+}
+
+.notebook-sheet-known .notebook-sheet-given { padding-right: 0; }
+
+.notebook-sheet-si {
+  display: grid;
+  gap: 0.15rem;
+  padding-bottom: clamp(0.5rem, 1.2vw, 0.8rem);
+  border-bottom: 2px solid transparent;
+}
+
+.notebook-sheet-si p { font-family: var(--font-mono); font-size: 0.94em; letter-spacing: -0.01em; }
+
+.notebook-sheet-work { display: grid; gap: clamp(0.9rem, 2vw, 1.35rem); min-width: 0; }
+.notebook-sheet-work .notebook-sheet-diagram { justify-items: start; }
+.notebook-sheet-work .notebook-sheet-diagram svg { width: min(100%, 20rem); }
+
+@media (max-width: 720px) {
+  .notebook-sheet-columns { grid-template-columns: minmax(0, 1fr); }
+  .notebook-sheet-known {
+    padding-right: 0;
+    padding-bottom: clamp(0.5rem, 1.2vw, 0.8rem);
+    border-right: 0;
+    border-bottom: 2px solid var(--paper-ink);
+  }
+  .notebook-sheet-known .notebook-sheet-given,
+  .notebook-sheet-si { padding-bottom: 0; border-bottom: 0; }
+}
+
+/* Режим просмотра записей аудита: `?sheets=1` в разработке. */
+.sheets-mode {
+  display: grid;
+  gap: 2rem;
+  max-width: 64rem;
+  margin: 0 auto;
+  padding: 2rem 1rem 4rem;
+}
+
+.sheets-mode h2 { margin: 0; font-size: 1rem; color: var(--color-text-muted); }
+
 /* Продолжение пункта стоит под выражением, а не под буквой: как в
    тетради, где «а)» вынесена влево, а столбик идёт ровно под «6 + 2x > 1». */
 .notebook-sheet-steps ol.is-lettered li.is-continued { padding-left: 1.7em; }
@@ -2618,3 +2714,17 @@
 .solution-rating-comment button { justify-self: start; }
 .solution-rating-status { margin: 0; color: var(--color-success-strong); font-size: var(--text-small); }
 .solution-rating-status.is-error { color: color-mix(in oklch, var(--color-danger) 75%, var(--color-text)); }
+
+/* Разбор на листе - часть записи, а не карточка поверх неё: без рамки,
+   подложки и своего поля, тем же кеглем, что и строки решения. */
+.notebook-sheet-analysis .written-analysis {
+  --analysis-margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+}
+
+.notebook-sheet-analysis .written-analysis::before { content: none; }
+.notebook-sheet-analysis .written-analysis-title { font-family: inherit; font-size: inherit; font-weight: 700; color: inherit; }
