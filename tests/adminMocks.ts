@@ -195,9 +195,9 @@ export const rpcFixtures: Record<string, (aal: string, body: Record<string, unkn
     series: days(7).map((label, index) => ({ label, solved: 3 + index, failed: index % 2, revenue: index * 1000, llmCost: 120 + index * 10, registrations: index % 3, active: 2 + index, guests: 0 })),
     subjects: [{ subject: 'Физика', solved: 12, failed: 1 }, { subject: 'Алгебра', solved: 9, failed: 2 }],
     attention: { slaMinutes: 30, overdueTickets: [{ id: 'conversation-1', subject: 'Проблема с оплатой или балансом', email: 'alina@example.test', waitingMinutes: 45 }], fraudOpen: 1, errorSpike: { lastHour: 2, norm: 0.4, spike: false }, stuckJobs: 0, reconciliation: { stuckReservations: 3, stuckAmount: 1500, walletMismatches: 1 } },
-    current: { solved: 6, failed: 1, revenue: 20000, registrations: 2, llmCost: 240, active: 5, guests: 3, topUps: 2, payers: 2, firstPayers: 1, consumption: 1500 },
-    money: { allTimeRevenue: 45000, payersAllTime: 3, firstPaymentAt: '2026-09-01T10:00:00Z', walletLiability: 18500, walletsWithMoney: 3 },
-    previous: { solved: 4, failed: 0, revenue: 10000, registrations: 3, llmCost: 180, active: 4, guests: 1, topUps: 1, payers: 1, firstPayers: 1, consumption: 900 },
+    current: { solved: 6, failed: 1, revenue: 20000, grossRevenue: 20000, refunds: 0, fee: 780, tax: 800, manualTopUps: 5000, registrations: 2, llmCost: 240, active: 5, guests: 3, topUps: 2, payers: 2, firstPayers: 1, consumption: 1500 },
+    money: { allTimeRevenue: 45000, payersAllTime: 3, firstPaymentAt: '2026-09-01T10:00:00Z', walletLiability: 18500, walletsWithMoney: 3, manualAllTime: 20000, rates: { taxPercent: 4, feePercent: 3.9, deduction: false, effectiveTaxPercent: 4 } },
+    previous: { solved: 4, failed: 0, revenue: 10000, grossRevenue: 10000, refunds: 0, fee: 390, tax: 400, manualTopUps: 0, registrations: 3, llmCost: 180, active: 4, guests: 1, topUps: 1, payers: 1, firstPayers: 1, consumption: 900 },
     online: 3,
     gateway: { credits: 684.55, ok: true, status: 'ok', checkedAt: ago(2), avgCreditsPerTask: 0.41, tasksLast7Days: 44 },
     services: {
@@ -353,7 +353,22 @@ export const rpcFixtures: Record<string, (aal: string, body: Record<string, unkn
   admin_prompt_previews: () => [],
   admin_notifications_overview: () => ({
     rules: [{ event: 'payment_new', title: 'Новый платёж', telegram: true, email: false }, { event: 'ticket_new', title: 'Новый тикет', telegram: true, email: false }],
-    emails: [], dailySummaryHour: 9, recent: [], lastCron: { status: 'succeeded', startedAt: ago(0), message: '1 row' }, lastDelivery: null,
+    emails: [], dailySummaryHour: 9,
+    dailySummary: { hours: [9], days: [1, 2, 3, 4, 5, 6, 7], period: 'yesterday', blocks: ['revenue', 'llm_cost', 'registrations', 'active', 'solved', 'errors', 'fraud', 'support'] },
+    recent: [], lastCron: { status: 'succeeded', startedAt: ago(0), message: '1 row' }, lastDelivery: null,
+  }),
+  // ---- Сводка и очистка статистики (20260915210000_admin_real_stats_summary_purge.sql) ----
+  admin_daily_summary_preview: (_aal, body) => {
+    const config = (body.p_config ?? {}) as { blocks?: string[]; period?: string }
+    const lines = [config.period === 'today' ? 'Сводка за сегодня, 15.09.2026, к 09:00' : 'Сводка за 14.09.2026']
+    if (config.blocks?.includes('solved')) lines.push('Задач решено: 14, не решено: 1')
+    if (config.blocks?.includes('subjects')) lines.push('Предметы: Алгебра 3, Физика 2')
+    return { config, day: '2026-09-14', text: lines.join('\n') }
+  },
+  admin_daily_summary_send_now: () => ({ queued: true, day: '2026-09-14' }),
+  admin_stats_purge: (_aal, body) => ({
+    dryRun: body.p_dry_run !== false, from: body.p_from, to: body.p_to, onlyMine: body.p_only_mine === true,
+    counts: { solution_costs: 15, solution_logs: 15 }, total: 30,
   }),
   admin_audit_log_list: () => ({
     total: 1, page: 1, pageSize: 50,

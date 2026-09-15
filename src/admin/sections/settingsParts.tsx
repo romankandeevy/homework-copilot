@@ -190,7 +190,7 @@ export function DiffView({ lines }: { lines: readonly { type: 'same' | 'add' | '
 
 /* ---------- История изменений по сущности ---------- */
 
-export type HistoryScope = 'plans' | 'promo' | 'prompts' | 'subjects' | 'flags' | 'site' | 'admins'
+export type HistoryScope = 'plans' | 'promo' | 'prompts' | 'subjects' | 'flags' | 'site' | 'stats' | 'admins'
 
 // Событие, с которым открывается «весь журнал»: главное для раздела.
 const journalEvent: Record<HistoryScope, string> = {
@@ -200,6 +200,7 @@ const journalEvent: Record<HistoryScope, string> = {
   subjects: 'subjects_saved',
   flags: 'flag_saved',
   site: 'setting_saved',
+  stats: 'stats_purged',
   admins: 'admin_role_changed',
 }
 
@@ -216,6 +217,8 @@ const eventLabels: Record<string, string> = {
   prompt_previewed: 'Проверка промпта на задаче',
   subjects_saved: 'Изменены предметы',
   flag_saved: 'Изменён фиче-флаг',
+  stats_purged: 'Очищена статистика',
+  daily_summary_sent: 'Сводка отправлена вручную',
   setting_saved: 'Изменена настройка',
   admin_role_changed: 'Изменена роль',
 }
@@ -376,6 +379,10 @@ function historyEntity(item: HistoryItem, scope: HistoryScope) {
   if (scope === 'prompts') return subjectNames.get(str(payload.subjectId)) ?? str(payload.subjectId)
   if (scope === 'admins') return item.targetEmail ?? str(payload.email)
   if (scope === 'site' || scope === 'subjects') return ''
+  if (scope === 'stats') {
+    const total = Number(payload.total)
+    return Number.isFinite(total) && payload.total !== undefined ? `${str(payload.from)} - ${str(payload.to)}, записей: ${total}${payload.onlyMine === true ? ', только свои' : ''}` : ''
+  }
   return str(payload.key) || str(payload.code) || str(payload.planId) || (str(payload.prefix) ? `${str(payload.prefix)}-…` : '')
 }
 

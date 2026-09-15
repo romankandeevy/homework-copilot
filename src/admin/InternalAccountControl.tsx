@@ -1,7 +1,11 @@
-/* Служебный аккаунт: свой аккаунт владельца, тестовый, демо. Такой аккаунт
-   не считается учеником - ни в регистрациях и активности, ни в решениях,
-   выручке и деньгах на кошельках. Пометку хранит база
-   (private.internal_accounts), смена пишется в журнал действий. */
+/* Служебный аккаунт: свой аккаунт владельца, тестовый, демо.
+
+   До 15 сентября 2026 такая пометка вычёркивала аккаунт из всей
+   статистики. Владелец решил иначе: статистика - только реальные данные,
+   без исключений, и его собственные задачи считаются наравне со всеми.
+   Пометка осталась правом, а не фильтром: служебный аккаунт может
+   провести тестовый платёж Робокассы (база у превью и прода одна).
+   Пометку хранит база (private.internal_accounts), смена пишется в журнал. */
 
 import { UserMinus, UserPlus } from '@phosphor-icons/react'
 import { adminRpc, obj, str } from './api'
@@ -21,9 +25,9 @@ export default function InternalAccountControl({ userId }: { userId: string }) {
       () => adminRpc('admin_set_internal_account', {
         p_user_id: userId,
         p_internal: !internal,
-        p_reason: internal ? 'вернули в статистику' : 'служебный аккаунт',
+        p_reason: internal ? 'сняли пометку служебного' : 'служебный аккаунт',
       }),
-      internal ? 'Аккаунт снова считается учеником' : 'Аккаунт помечен служебным и не считается в статистике',
+      internal ? 'Пометка снята: тестовые платежи этому аккаунту закрыты' : 'Аккаунт помечен служебным: ему открыты тестовые платежи',
     )
     if (result !== undefined) status.reload()
   }
@@ -32,20 +36,20 @@ export default function InternalAccountControl({ userId }: { userId: string }) {
     <div className="adm-card-internal">
       {internal && (
         <Badge tone="info" title={[str(data.reason), str(data.markedBy) ? `пометил ${str(data.markedBy)}` : ''].filter(Boolean).join(', ')}>
-          Служебный аккаунт - не в статистике
+          Служебный аккаунт
         </Badge>
       )}
       <Button
         size="sm"
         variant="ghost"
         loading={pending === 'internal'}
-        icon={internal ? <UserPlus size={16} weight="bold" aria-hidden="true" /> : <UserMinus size={16} weight="bold" aria-hidden="true" />}
+        icon={internal ? <UserMinus size={16} weight="bold" aria-hidden="true" /> : <UserPlus size={16} weight="bold" aria-hidden="true" />}
         title={internal
-          ? 'Аккаунт снова будет считаться учеником: в регистрациях, активности, решениях, выручке и кошельках.'
-          : 'Свой, тестовый или демо-аккаунт: не считать его учеником в статистике. Расход на модели по нему останется в расходах.'}
+          ? 'Снять пометку: аккаунт больше не сможет проводить тестовые платежи Робокассы. В статистике он считается в любом случае.'
+          : 'Свой, тестовый или демо-аккаунт: разрешить ему тестовые платежи Робокассы. В статистике он считается в любом случае.'}
         onClick={() => void toggle()}
       >
-        {internal ? 'Вернуть в статистику' : 'Сделать служебным'}
+        {internal ? 'Снять пометку служебного' : 'Сделать служебным'}
       </Button>
     </div>
   )

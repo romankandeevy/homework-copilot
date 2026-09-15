@@ -377,3 +377,15 @@
   .set-tabs-scroll::after,
   .set-history { transition: none; }
 }
+
+/* Очистка статистики: что, за какой период, чьё; подсчёт до удаления. */
+.set-purge { display: grid; gap: var(--space-4); }
+.set-purge-label { color: var(--color-text-muted); font: var(--weight-semibold) var(--text-small)/1.3 var(--font-body); }
+.set-purge-scopes { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: var(--space-2) var(--space-4); margin: 0; padding: 0; border: 0; }
+.set-purge-scopes legend { margin-bottom: var(--space-2); padding: 0; }
+.set-purge-scope { display: grid; gap: 0.1rem; }
+.set-purge-scope small { padding-left: 1.75rem; color: var(--color-text-subtle); font-size: var(--text-small); }
+.set-purge-conditions { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-3) var(--space-5); }
+.set-purge-whose { display: grid; gap: var(--space-2); }
+.set-purge-total td { font-weight: var(--weight-semibold); }
+.set-purge-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }

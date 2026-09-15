@@ -21,6 +21,8 @@ import { solvableSubjects } from '../../lib/subjects'
 import { PromptPreview } from './PromptPreview'
 import { lineDiff } from './settingsDiff'
 import { Check, ConfirmModal, DiffView, SettingsEmpty, SettingsHistory, SettingsTabs, type HistoryScope } from './settingsParts'
+import { StatsTab } from './StatsTab'
+import { MoneyRatesEditor, parseMoneyRates } from './MoneyRatesEditor'
 import './settings.css'
 
 /* ---------- Данные ---------- */
@@ -75,7 +77,7 @@ function subjectLabel(id: string) {
 
 /* ---------- Раздел ---------- */
 
-type SetTab = 'plans' | 'prompts' | 'subjects' | 'flags' | 'site' | 'admins'
+type SetTab = 'plans' | 'prompts' | 'subjects' | 'flags' | 'site' | 'stats' | 'admins'
 
 /* «Лимиты и тарифы», а не «Тарифы» (14 сентября 2026): тарифов как товара
    у продукта нет, тариф задаёт дневной предел решений и ученику не виден. */
@@ -85,6 +87,7 @@ const allTabs: { value: SetTab; label: string }[] = [
   { value: 'subjects', label: 'Предметы' },
   { value: 'flags', label: 'Фиче-флаги' },
   { value: 'site', label: 'Сайт и пороги' },
+  { value: 'stats', label: 'Статистика' },
   { value: 'admins', label: 'Администраторы' },
 ]
 
@@ -104,7 +107,8 @@ export default function SettingsSection() {
 function SettingsContent() {
   const { access } = useAdmin()
   const [query, setQuery] = useQueryState({ set_tab: 'plans' })
-  const tabs = allTabs.filter((tab) => tab.value !== 'admins' || access.permissions.admins)
+  // Очистка статистики - только владельцу, как и назначение ролей.
+  const tabs = allTabs.filter((tab) => (tab.value !== 'admins' || access.permissions.admins) && (tab.value !== 'stats' || access.permissions.delete))
   const tab = tabs.find((item) => item.value === query.set_tab)?.value ?? 'plans'
   const { data, error, reload } = useAsync(() => adminRpc('admin_settings_overview'), [])
   const overview = useMemo(() => parseOverview(data), [data])
@@ -118,6 +122,7 @@ function SettingsContent() {
 
   let body: React.ReactNode
   if (tab === 'admins') body = <AdminsTab onChanged={noteChange} />
+  else if (tab === 'stats') body = <StatsTab onChanged={noteChange} />
   else if (tab === 'prompts') body = <PromptsTab subjects={overview.subjects} onChanged={changed} refreshKey={changes} />
   else if (error) body = <Panel><ErrorState message={error} onRetry={reload} /></Panel>
   else if (!data) body = <Panel><LoadingState /></Panel>
@@ -925,6 +930,7 @@ function SiteTab({ settings, onChanged }: { settings: Row; onChanged: () => void
   return (
     <div className="set-stack">
       <BannerEditor key={JSON.stringify(banner)} initial={banner} onSaved={onChanged} />
+      <MoneyRatesEditor key={JSON.stringify(settings.money_rates ?? null)} initial={parseMoneyRates(settings.money_rates)} onSaved={onChanged} />
       <Panel
         title="Поддержка и алерты по ошибкам"
         description="Проверка порогов ошибок идёт раз в минуту вместе с рассылкой уведомлений."

@@ -154,28 +154,66 @@ export function ErrorState({ message, onRetry }: { message: string; onRetry?: ()
 
 /* ---------- Загрузка данных ---------- */
 
-export function useAsync<T>(loader: () => Promise<T>, deps: readonly unknown[]) {
+/* Данные раздела обновляются сами - не реже раза в 5 минут.
+
+   Аудит 15 сентября 2026: владелец хотел, чтобы вся админка обновлялась
+   без кнопки, а дашборд вместо этого раз в минуту перезагружался целиком
+   и мигал скелетоном. Теперь у каждого useAsync тихое обновление: только
+   пока вкладка видна, без индикатора загрузки, а при сбое остаются
+   прежние данные. reload() - по-прежнему громкий, для смены фильтра и
+   после действия. refreshMs: null выключает самообновление. */
+export const adminRefreshMs = 5 * 60_000
+
+export function useAsync<T>(loader: () => Promise<T>, deps: readonly unknown[], { refreshMs = adminRefreshMs }: { refreshMs?: number | null } = {}) {
   const [data, setData] = useState<T | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [version, setVersion] = useState(0)
+  const [updatedAt, setUpdatedAt] = useState<number | null>(null)
   const loaderRef = useRef(loader)
   loaderRef.current = loader
+  const requestRef = useRef(0)
 
   useEffect(() => {
     let active = true
+    const id = ++requestRef.current
     setLoading(true)
     setError('')
     loaderRef.current()
-      .then((result) => { if (active) setData(result) })
-      .catch((failure: unknown) => { if (active) setError(failure instanceof Error ? failure.message : 'Не получилось загрузить данные.') })
-      .finally(() => { if (active) setLoading(false) })
+      .then((result) => { if (active && id === requestRef.current) { setData(result); setUpdatedAt(Date.now()) } })
+      .catch((failure: unknown) => { if (active && id === requestRef.current) setError(failure instanceof Error ? failure.message : 'Не получилось загрузить данные.') })
+      .finally(() => { if (active && id === requestRef.current) setLoading(false) })
     return () => { active = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...deps, version])
 
+  const refresh = useCallback(() => {
+    const id = ++requestRef.current
+    loaderRef.current()
+      .then((result) => { if (id === requestRef.current) { setData(result); setUpdatedAt(Date.now()); setError('') } })
+      // Тихое обновление не рушит экран: прежние данные остаются.
+      .catch(() => undefined)
+  }, [])
+
+  useEffect(() => {
+    if (!refreshMs) return
+    const timer = window.setInterval(() => { if (document.visibilityState === 'visible') refresh() }, refreshMs)
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return
+      setUpdatedAt((current) => {
+        if (current !== null && Date.now() - current >= refreshMs) refresh()
+        return current
+      })
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [refreshMs, refresh])
+
   const reload = useCallback(() => setVersion((current) => current + 1), [])
-  return { data, error, loading, reload, setData }
+  return { data, error, loading, reload, refresh, updatedAt, setData }
 }
 
 /* ---------- Состояние в адресе ---------- */

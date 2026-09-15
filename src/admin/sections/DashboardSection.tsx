@@ -25,6 +25,8 @@ import type { Row } from '../api'
 import type { AdminSection } from '../context'
 import { useAdmin } from '../context'
 import { Button, EmptyState, ErrorState, PageHeader, Panel, Segmented, useAsync, useQueryState } from '../ui'
+import { effectiveTaxPercent, parseMoneyRates } from './MoneyRatesEditor'
+import type { MoneyRates } from './MoneyRatesEditor'
 import './dashboard.css'
 
 type Period = 'day' | 'week' | 'month' | 'year'
@@ -281,10 +283,20 @@ function MoneyHero({ period, current, previous, money, labels, fullLabels, reven
   costSeries: number[]
 }) {
   const words = periodWords[period]
+  /* Три суммы, которые владелец просил видеть рядом (15 сентября 2026):
+     сколько пришло, сколько уходит государству и Робокассе, сколько
+     остаётся чистыми после расхода на модели. Налог и комиссию считает
+     база по ставкам из настроек. */
   const revenue = num(current.revenue)
   const llmCost = num(current.llmCost)
-  const profit = revenue - llmCost
-  const previousProfit = num(previous.revenue) - num(previous.llmCost)
+  const fee = num(current.fee)
+  const tax = num(current.tax)
+  const deductions = fee + tax
+  const net = revenue - deductions - llmCost
+  const previousNet = num(previous.revenue) - num(previous.fee) - num(previous.tax) - num(previous.llmCost)
+  const rates = parseMoneyRates(money.rates)
+  const manual = num(current.manualTopUps)
+  const percent = (value: number) => `${String(value).replace('.', ',')} %`
   const topUps = num(current.topUps)
   const allTime = num(money.allTimeRevenue)
   const nobodyPaid = num(money.payersAllTime) === 0
@@ -293,9 +305,9 @@ function MoneyHero({ period, current, previous, money, labels, fullLabels, reven
     <section className="dash-hero" aria-labelledby="dash-hero-title">
       <div className="dash-hero-main">
         <header className="dash-kpi-head">
-          <h2 id="dash-hero-title">Заработано {words.current}</h2>
+          <h2 id="dash-hero-title">Пришло {words.current}</h2>
           <InfoTip id="dash-hero-tip">
-            Деньги, которые пришли от учеников: подтверждённые пополнения кошелька минус возвраты. Проверочные пополнения аккаунтов админов не считаются.
+            Настоящие деньги от учеников: оплаты через Робокассу минус возвраты пополнений. Ручные зачисления и тестовые платежи сюда не входят - это не выручка.
           </InfoTip>
         </header>
         <strong className={`dash-hero-value${revenue > 0 ? ' is-ok' : ''}`}>{formatKopecks(revenue)}</strong>
@@ -304,9 +316,12 @@ function MoneyHero({ period, current, previous, money, labels, fullLabels, reven
           За всё время: <b>{formatKopecks(allTime)}</b>
           {!nobodyPaid && <>, платили <b>{formatNumber(num(money.payersAllTime))}</b> учеников с {formatDate(str(money.firstPaymentAt))}</>}
         </p>
+        {manual > 0 && (
+          <p className="dash-hero-total">Зачислено вручную {words.current}: <b>{formatKopecks(manual)}</b> - не выручка, денег через Робокассу не приходило</p>
+        )}
         {nobodyPaid && (
           <p className="dash-hero-note">
-            Оплат от учеников ещё не было. Платёжного провайдера нет: пополнение подтверждается вручную в карточке ученика, и только оно попадает сюда.
+            Оплат через Робокассу ещё не было. Ручные зачисления и бонусы - не выручка: с них не платится налог и они не считаются заработком.
           </p>
         )}
       </div>
@@ -320,22 +335,27 @@ function MoneyHero({ period, current, previous, money, labels, fullLabels, reven
           stacked={false}
           format={compactRubles}
           series={[
-            { key: 'revenue', name: 'Заработано', tone: 'ok', values: revenueSeries },
+            { key: 'revenue', name: 'Пришло', tone: 'ok', values: revenueSeries },
             { key: 'llmCost', name: 'Расход на модели', tone: 'bad', values: costSeries },
           ]}
         />
       </div>
 
       <dl className="dash-hero-stats">
-        <div className={profit < 0 ? 'is-bad' : profit > 0 ? 'is-ok' : ''}>
-          <dt>Прибыль <InfoTip id="tip-profit">Заработано минус себестоимость у шлюза моделей: решения задач, включая неудачные, и ответы ИИ-чата. Налоги и комиссии здесь не вычтены.</InfoTip></dt>
-          <dd>{formatKopecks(profit)}</dd>
-          <small>{words.previous}: {formatKopecks(previousProfit)}</small>
-        </div>
         <div className={llmCost > 0 ? 'is-bad' : ''}>
           <dt>Расход на модели</dt>
           <dd>{llmCost > 0 ? '−' : ''}{formatKopecks(llmCost)}</dd>
           <small>{words.previous}: {formatKopecks(num(previous.llmCost))}</small>
+        </div>
+        <div className={deductions > 0 ? 'is-warn' : ''}>
+          <dt>Налог и комиссия <InfoTip id="tip-tax">Налог НПД {percent(effectiveTaxPercent(rates))} с того, что пришло после возвратов, и комиссия Робокассы {percent(rates.feePercent)} с каждого платежа. Ставки меняются в «Настройки → Сайт и пороги».</InfoTip></dt>
+          <dd>{deductions > 0 ? '−' : ''}{formatKopecks(deductions)}</dd>
+          <small>налог <span className="dash-nowrap">{formatKopecks(tax)}</span>, комиссия <span className="dash-nowrap">{formatKopecks(fee)}</span></small>
+        </div>
+        <div className={net < 0 ? 'is-bad' : net > 0 ? 'is-ok' : ''}>
+          <dt>Чистыми <InfoTip id="tip-profit">Пришло минус налог, комиссия Робокассы и расход на модели: решения задач, включая неудачные, и ответы ИИ-чата.</InfoTip></dt>
+          <dd>{formatKopecks(net)}</dd>
+          <small>{words.previous}: {formatKopecks(previousNet)}</small>
         </div>
         <div>
           <dt>Платили учеников</dt>
@@ -372,7 +392,7 @@ function feedIcon(kind: string, ok: boolean) {
   return <Lifebuoy size={18} weight="bold" aria-hidden="true" />
 }
 
-function FeedRow({ item, onOpenUser, onOpenSection }: { item: Row; onOpenUser: (id: string) => void; onOpenSection: (section: AdminSection, params?: Record<string, string>) => void }) {
+function FeedRow({ item, rates, onOpenUser, onOpenSection }: { item: Row; rates: MoneyRates; onOpenUser: (id: string) => void; onOpenSection: (section: AdminSection, params?: Record<string, string>) => void }) {
   const kind = str(item.kind)
   const ok = item.ok === true
   const who = str(item.name) || str(item.email) || (kind === 'error' ? 'Система' : 'Гость')
@@ -383,8 +403,24 @@ function FeedRow({ item, onOpenUser, onOpenSection }: { item: Row; onOpenUser: (
   let tone = ''
   if (kind === 'solution') {
     text = <><b>{who}</b> {ok ? 'получил решение' : 'не получил решение'}{subject ? <>, {subject}</> : null}</>
+    /* Маржа задачи: цена минус налог, комиссия и расход на модели.
+       Владелец 15 сентября видел у своей задачи «себест. 0,5 ₽» и не
+       видел, сколько она принесла. У гостя денег нет - первое решение
+       бесплатно. */
+    const cost = numOrNull(item.cost)
+    const price = numOrNull(item.amount)
+    const margin = price !== null && userId
+      ? Math.round(price * (1 - (effectiveTaxPercent(rates) + rates.feePercent) / 100)) - (cost ?? 0)
+      : null
     meta = ok
-      ? <>{numOrNull(item.seconds) !== null ? `${formatNumber(Math.round(num(item.seconds)))} с, ` : ''}себест. {numOrNull(item.cost) !== null ? formatKopecks(num(item.cost)) : '-'}</>
+      ? (
+        <>
+          {numOrNull(item.seconds) !== null ? `${formatNumber(Math.round(num(item.seconds)))} с, ` : ''}
+          {price !== null && userId ? <>цена {formatKopecks(price)}, </> : !userId ? 'гость бесплатно, ' : null}
+          себест. {cost !== null ? formatKopecks(cost) : '-'}
+          {margin !== null && <span className={margin >= 0 ? 'dash-plus' : 'dash-minus'} title="Цена задачи минус налог, комиссия Робокассы и расход на модели. Если задача оплачена бонусом или ручным зачислением, настоящих денег за неё не пришло.">, маржа {formatKopecks(margin)}</span>}
+        </>
+      )
       : 'деньги вернулись'
     tone = ok ? 'is-ok' : 'is-bad'
   } else if (kind === 'payment') {
@@ -423,7 +459,7 @@ function FeedRow({ item, onOpenUser, onOpenSection }: { item: Row; onOpenUser: (
   )
 }
 
-function Feed({ onOpenUser, onOpenSection, pulse }: { onOpenUser: (id: string) => void; onOpenSection: (section: AdminSection, params?: Record<string, string>) => void; pulse: number }) {
+function Feed({ onOpenUser, onOpenSection, pulse, rates }: { onOpenUser: (id: string) => void; onOpenSection: (section: AdminSection, params?: Record<string, string>) => void; pulse: number; rates: MoneyRates }) {
   const [kind, setKind] = useState<(typeof feedKinds)[number]['value']>('all')
   const [search, setSearch] = useState('')
   const [query, setQuery] = useState('')
@@ -466,7 +502,7 @@ function Feed({ onOpenUser, onOpenSection, pulse }: { onOpenUser: (id: string) =
         <>
           <ol className="dash-feed" aria-busy={feed.loading || undefined}>
             {items.map((item) => (
-              <FeedRow key={`${str(item.kind)}-${str(item.at)}-${str(item.userId)}-${str(item.text).slice(0, 20)}`} item={item} onOpenUser={onOpenUser} onOpenSection={onOpenSection} />
+              <FeedRow key={`${str(item.kind)}-${str(item.at)}-${str(item.userId)}-${str(item.text).slice(0, 20)}`} item={item} rates={rates} onOpenUser={onOpenUser} onOpenSection={onOpenSection} />
             ))}
           </ol>
           {data.hasMore === true && (
@@ -498,21 +534,19 @@ export default function DashboardSection() {
   const metric = query.d_metric === 'users' ? 'users' : 'tasks'
   const words = periodWords[period]
 
-  const dash = useAsync(() => adminRpc('admin_dashboard_period', { p_period: period }), [period])
-  const reload = dash.reload
-
-  useEffect(() => {
-    const timer = window.setInterval(() => { if (document.visibilityState === 'visible') reload() }, 60_000)
-    return () => window.clearInterval(timer)
-  }, [reload])
+  /* Цифры обновляются раз в минуту тихо, без скелетона: до 15 сентября
+     каждое обновление перерисовывало дашборд пустыми плашками. Сами
+     агрегаты база пересчитывает раз в 5 минут. */
+  const dash = useAsync(() => adminRpc('admin_dashboard_period', { p_period: period }), [period], { refreshMs: 60_000 })
+  const refresh = dash.refresh
 
   const lastPulse = useRef(signals.pulse)
   useEffect(() => {
     if (signals.pulse === lastPulse.current) return
     lastPulse.current = signals.pulse
-    const timer = window.setTimeout(reload, 1200)
+    const timer = window.setTimeout(refresh, 1200)
     return () => window.clearTimeout(timer)
-  }, [signals.pulse, reload])
+  }, [signals.pulse, refresh])
 
   const data = obj(dash.data)
   const current = obj(data.current)
@@ -594,7 +628,7 @@ export default function DashboardSection() {
     ] as Row[]
     downloadCsv(`homework-copilot-dashboard-${period}-${todayMsk()}`, lines, [
       { header: 'Период', value: (row) => str(row.label) },
-      { header: 'Заработано, ₽', value: (row) => toRubles(num(row.revenue)) },
+      { header: 'Пришло, ₽', value: (row) => toRubles(num(row.revenue)) },
       { header: 'Расход на модели, ₽', value: (row) => toRubles(num(row.llmCost)) },
       { header: 'Прибыль после моделей, ₽', value: (row) => toRubles(num(row.revenue) - num(row.llmCost)) },
       { header: 'Отработано, ₽', value: (row) => (row.consumption === undefined ? '' : toRubles(num(row.consumption))) },
@@ -618,14 +652,14 @@ export default function DashboardSection() {
             onChange={(value) => setQuery({ d_period: value }, { replace: true })}
             options={[{ value: 'day', label: 'День' }, { value: 'week', label: 'Неделя' }, { value: 'month', label: 'Месяц' }, { value: 'year', label: 'Год' }]}
           />
-          <Button size="sm" onClick={reload} loading={dash.loading} icon={<ArrowClockwise size={16} weight="bold" aria-hidden="true" />} aria-label="Обновить" />
+          <Button size="sm" onClick={dash.reload} loading={dash.loading} icon={<ArrowClockwise size={16} weight="bold" aria-hidden="true" />} aria-label="Обновить" />
           <Button size="sm" variant="primary" disabled={!dash.data} onClick={exportReport} icon={<DownloadSimple size={16} weight="bold" aria-hidden="true" />}>Скачать отчёт</Button>
         </>
       )}
     />
   )
 
-  if (dash.error && !dash.data) return <>{header}<ErrorState message={dash.error} onRetry={reload} /></>
+  if (dash.error && !dash.data) return <>{header}<ErrorState message={dash.error} onRetry={dash.reload} /></>
 
   const loading = !dash.data
 
@@ -767,14 +801,6 @@ export default function DashboardSection() {
             ]}
           />
         )}
-        {/* 15 сентября владелец решил четырнадцать задач и не нашёл их на
-            графике: служебные аккаунты, включая его собственный, здесь не
-            считаются (решение 12 сентября). Без подписи это читается как
-            поломка. */}
-        <p className="dash-note">
-          Задачи и ученики служебных аккаунтов, включая администраторов, не считаются.
-          Все решения, включая свои, - в разделе «База решений».
-        </p>
       </Panel>
 
       <div className="adm-grid-2 dash-pair">
@@ -824,7 +850,7 @@ export default function DashboardSection() {
         </Panel>
       </div>
 
-      <Feed onOpenUser={openUser} onOpenSection={(section, params) => openSection(section, params)} pulse={signals.pulse} />
+      <Feed onOpenUser={openUser} onOpenSection={(section, params) => openSection(section, params)} pulse={signals.pulse} rates={parseMoneyRates(money.rates)} />
     </>
   )
 }

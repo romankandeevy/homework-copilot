@@ -2,13 +2,37 @@
    ответа, чертежи и жалобы, длина ответа, предел частоты. */
 
 import type { Json } from '../../lib/database.types'
-import { adminRpc, formatNumber, formatPercent, num, numOrNull, obj, rows, shiftDate, str, todayMsk } from '../api'
-import { Badge, DataTable, DateRangePicker, EmptyState, ErrorState, HorizontalBars, Panel, Stat, StatGrid, useQueryState } from '../ui'
+import { useState } from 'react'
+import { solvableSubjects } from '../../lib/subjects'
+import { adminRpc, arr, formatNumber, formatPercent, num, numOrNull, obj, rows, shiftDate, str, todayMsk } from '../api'
+import { Badge, Button, DataTable, DateRangePicker, EmptyState, ErrorState, HorizontalBars, Panel, Stat, StatGrid, useAction, useAsync, useQueryState } from '../ui'
 import type { Column, Tone } from '../ui'
 import { HeaderHint, LiveStatus } from './monitoringShared'
+import { Check } from './settingsParts'
+import './settings.css'
 import { useLiveQuery } from './useLiveQuery'
 
-const PRIORITY_SUBJECTS = ['Химия', 'Литература', 'Английский язык', 'История']
+/* Предметы в фокусе.
+
+   До 15 сентября 2026 это был зашитый список - химия, литература,
+   английский, история, - и поменять его было нельзя. Владелец открыл
+   вкладку и спросил, почему в фокусе редкие и стабильные предметы. Теперь
+   их выбирает владелец (ключ quality_focus_subjects), а пока не выбрал -
+   автоматически: сначала предметы с проблемами за период, иначе самые
+   частые. */
+const FOCUS_SIZE = 4
+const HELPFUL_BAD = 70
+
+function autoFocus(subjects: readonly SubjectQuality[]) {
+  const troubled = subjects
+    .filter((row) => row.total > 0 && (row.failedShare >= FAILED_BAD || row.truncatedShare >= TRUNCATED_BAD || (row.helpfulShare !== null && row.helpfulShare < HELPFUL_BAD)))
+    .sort((a, b) => (b.failedShare + b.truncatedShare) - (a.failedShare + a.truncatedShare) || b.total - a.total)
+  const frequent = subjects.filter((row) => row.total > 0 && !troubled.includes(row)).sort((a, b) => b.total - a.total)
+  return {
+    subjects: [...troubled, ...frequent].slice(0, FOCUS_SIZE).map((row) => row.subject),
+    reason: troubled.length > 0 ? 'автоматически: где больше проблем' : 'автоматически: самые частые',
+  }
+}
 /* Доля сбоев от 10 % и обрезанных ответов от 5 % - красным в таблице. */
 const FAILED_BAD = 10
 const TRUNCATED_BAD = 5
@@ -63,6 +87,26 @@ export function QualityTab() {
   const diagramTotal = num(diagrams.total)
   const solvedTotal = subjects.reduce((sum, row) => sum + row.total, 0)
 
+  const focusSetting = useAsync(() => adminRpc<Json>('admin_settings_overview'), [])
+  const savedFocus = arr(obj(obj(focusSetting.data).settings).quality_focus_subjects).filter((entry): entry is string => typeof entry === 'string')
+  const manualFocus = savedFocus.length > 0
+  const automatic = autoFocus(subjects)
+  const focus = manualFocus ? savedFocus : automatic.subjects
+  const [editingFocus, setEditingFocus] = useState(false)
+  const [draftFocus, setDraftFocus] = useState<string[]>([])
+  const { pending, run } = useAction()
+
+  const saveFocus = async (next: string[]) => {
+    const result = await run(
+      'focus',
+      () => adminRpc('admin_setting_save', { p_key: 'quality_focus_subjects', p_value: next }),
+      next.length > 0 ? 'Предметы в фокусе сохранены.' : 'Предметы в фокусе снова выбираются автоматически.',
+    )
+    if (result === undefined) return
+    setEditingFocus(false)
+    focusSetting.reload()
+  }
+
   const columns: Column<SubjectQuality>[] = [
     {
       key: 'subject',
@@ -70,7 +114,7 @@ export function QualityTab() {
       render: (row) => (
         <span className="mon-subject">
           {row.subject}
-          {PRIORITY_SUBJECTS.includes(row.subject) && <Badge tone="accent">в фокусе</Badge>}
+          {focus.includes(row.subject) && <Badge tone="accent">в фокусе</Badge>}
         </span>
       ),
     },
@@ -123,9 +167,45 @@ export function QualityTab() {
         ) : (
           <div className="mon-stack-gap">
             <section aria-label="Предметы в фокусе">
-              <h3 className="mon-subhead">Предметы в фокусе</h3>
+              <div className="mon-focus-head">
+                <h3 className="mon-subhead">
+                  Предметы в фокусе
+                  <Badge tone={manualFocus ? 'accent' : 'neutral'}>{manualFocus ? 'выбраны вручную' : automatic.reason}</Badge>
+                </h3>
+                {!editingFocus && (
+                  <Button size="sm" variant="ghost" onClick={() => { setDraftFocus(focus); setEditingFocus(true) }}>Выбрать предметы</Button>
+                )}
+              </div>
+              {editingFocus && (
+                <div className="mon-focus-editor">
+                  <div className="mon-focus-options" role="group" aria-label="Выбор предметов в фокусе">
+                    {solvableSubjects.map((subject) => (
+                      <Check
+                        key={subject.id}
+                        label={subject.name}
+                        checked={draftFocus.includes(subject.name)}
+                        onChange={(checked) => setDraftFocus((current) => (checked ? [...current, subject.name] : current.filter((name) => name !== subject.name)))}
+                      />
+                    ))}
+                  </div>
+                  <div className="mon-focus-actions">
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      loading={pending === 'focus'}
+                      disabled={draftFocus.length === 0}
+                      onClick={() => void saveFocus(solvableSubjects.map((subject) => subject.name).filter((name) => draftFocus.includes(name)))}
+                    >
+                      Сохранить
+                    </Button>
+                    {manualFocus && <Button size="sm" onClick={() => void saveFocus([])}>Выбирать автоматически</Button>}
+                    <Button size="sm" variant="ghost" onClick={() => setEditingFocus(false)}>Отмена</Button>
+                  </div>
+                </div>
+              )}
+              {focus.length === 0 && <p className="mon-note">Задач за период нет - фокус появится с первыми задачами.</p>}
               <StatGrid>
-                {PRIORITY_SUBJECTS.map((subject) => {
+                {focus.map((subject) => {
                   const row = subjects.find((item) => item.subject === subject)
                   if (!row || row.total === 0) return <Stat key={subject} label={subject} value="-" hint="задач за период не было" />
                   const tone: Tone | undefined = row.failedShare >= FAILED_BAD || row.truncatedShare >= TRUNCATED_BAD ? 'danger' : undefined
@@ -151,7 +231,7 @@ export function QualityTab() {
                 rowKey={(row) => row.subject}
                 loading={quality.loading}
                 empty="За период задач не было."
-                rowClassName={(row) => (PRIORITY_SUBJECTS.includes(row.subject) ? 'mon-priority-row' : '')}
+                rowClassName={(row) => (focus.includes(row.subject) ? 'mon-priority-row' : '')}
               />
             )}
           </div>

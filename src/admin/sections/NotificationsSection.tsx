@@ -12,6 +12,7 @@ import {
 import { useAdmin } from '../context'
 import BrowserNotificationsPanel from './BrowserNotificationsPanel'
 import './notifications.css'
+import { DailySummaryEditor, parseSummaryConfig } from './DailySummaryEditor'
 
 type Rule = { event: string; title: string; telegram: boolean; email: boolean }
 
@@ -124,6 +125,7 @@ function NotificationsContent() {
   const groups = useMemo(() => groupNotices(recent), [recent])
   const emails = arr(overview.emails).filter((entry): entry is string => typeof entry === 'string')
   const summaryHour = num(overview.dailySummaryHour, 9)
+  const summaryConfig = parseSummaryConfig(overview.dailySummary, summaryHour)
   const lastCron = obj(overview.lastCron)
   const lastDelivery = strOrNull(overview.lastDelivery)
 
@@ -266,10 +268,8 @@ function NotificationsContent() {
         />
       </Panel>
 
-      <div className="adm-grid-2">
-        <EmailsEditor key={emails.join(',')} initial={emails} onSaved={reload} />
-        <SummaryHourEditor key={summaryHour} initial={summaryHour} onSaved={reload} />
-      </div>
+      <EmailsEditor key={emails.join(',')} initial={emails} onSaved={reload} />
+      <DailySummaryEditor key={JSON.stringify(summaryConfig)} initial={summaryConfig} onSaved={reload} />
 
       <BrowserNotificationsPanel />
 
@@ -436,30 +436,6 @@ function EmailsEditor({ initial, onSaved }: { initial: string[]; onSaved: () => 
         {dirty && <Button variant="ghost" onClick={() => setList(initial)}>Отменить</Button>}
         <Button variant="primary" disabled={!dirty} loading={pending === 'emails'} onClick={() => void save()}>Сохранить адреса</Button>
       </div>
-    </Panel>
-  )
-}
-
-function SummaryHourEditor({ initial, onSaved }: { initial: number; onSaved: () => void }) {
-  const { pending, run } = useAction()
-  const [value, setValue] = useState(String(initial))
-  const hour = Number(value)
-  const valid = /^\d{1,2}$/.test(value.trim()) && hour >= 0 && hour <= 23
-
-  const save = async () => {
-    if (!valid) return
-    const result = await run('hour', () => adminRpc('admin_setting_save', { p_key: 'daily_summary_hour', p_value: hour }), 'Час сводки сохранён.')
-    if (result !== undefined) onSaved()
-  }
-
-  return (
-    <Panel title="Дневная сводка" description="Итоги вчерашнего дня: выручка, регистрации, решения, расход на LLM, ошибки, флаги фрода и обращения.">
-      <form className="ntf-inline" onSubmit={(event) => { event.preventDefault(); void save() }}>
-        <Field label="Час отправки по Москве" hint={valid ? `Сводка уйдёт в начале ${hour}:00 МСК.` : 'Целое число от 0 до 23.'}>
-          <input type="number" min={0} max={23} step={1} inputMode="numeric" value={value} onChange={(event) => setValue(event.target.value)} />
-        </Field>
-        <Button type="submit" variant="primary" disabled={!valid || hour === initial} loading={pending === 'hour'}>Сохранить</Button>
-      </form>
     </Panel>
   )
 }

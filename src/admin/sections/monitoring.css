@@ -530,3 +530,10 @@ th.is-right .mon-tip { right: 0; left: auto; }
   .mon-event-card { padding: var(--space-3); }
   .mon-tip { max-width: 13rem; }
 }
+
+/* Предметы в фокусе: выбирает владелец, пока не выбрал - автоматически. */
+.mon-focus-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-3); margin-bottom: var(--space-2); }
+.mon-focus-head .mon-subhead { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: 0; }
+.mon-focus-editor { display: grid; gap: var(--space-3); margin-bottom: var(--space-3); padding: var(--space-3) var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-control); }
+.mon-focus-options { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: var(--space-1) var(--space-3); }
+.mon-focus-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }

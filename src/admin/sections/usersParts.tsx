@@ -22,19 +22,19 @@ export function UsersStats({ data, loading }: { data: Row | null; loading: boole
   const online = data ? num(data.online) : 0
   return (
     <dl className="adm-users-stats" aria-label="Пользователи в цифрах" aria-busy={(loading && !data) || undefined}>
-      <div title="Все аккаунты, кроме администраторов.">
+      <div title="Все аккаунты, включая администраторов и служебные: с 15 сентября 2026 статистика без исключений.">
         <dt>Учеников</dt>
         <dd><strong>{value('students')}</strong></dd>
       </div>
-      <div title="Зарегистрировались за последние 7 суток, без администраторов.">
+      <div title="Зарегистрировались за последние 7 суток. Считаются все аккаунты, включая администраторов.">
         <dt>Новых за 7 дней</dt>
         <dd><strong>{value('new7d')}</strong></dd>
       </div>
-      <div title="Сделали хотя бы одно подтверждённое пополнение. Сумма - пополнения за всё время за вычетом возвратов, без администраторов.">
+      <div title="Оплатили через Робокассу хотя бы раз. Сумма - оплаты за всё время за вычетом возвратов; ручные зачисления и тестовые платежи не считаются.">
         <dt>Платили</dt>
         <dd><strong>{value('payers')}</strong>{data && <small>на {formatKopecks(num(data.paidKopecks))}</small>}</dd>
       </div>
-      <div title={`Были активны за последние ${ONLINE_MINUTES} минут, без администраторов.`}>
+      <div title={`Были активны за последние ${ONLINE_MINUTES} минут. С 15 сентября 2026 считаются все аккаунты, включая администраторов.`}>
         <dt>Онлайн сейчас</dt>
         <dd><i className={`adm-users-dot${online > 0 ? ' is-online' : ''}`} aria-hidden="true" /><strong>{value('online')}</strong></dd>
       </div>
@@ -497,8 +497,8 @@ export function StatusPills({ row }: { row: Row }) {
         </Pill>
       )}
       {!banned && flags === 0 && <Pill tone="success" title="Не заблокирован, открытых флагов антифрода нет.">Активен</Pill>}
-      {bool(row.isStaff) && <Pill tone="info" title="Аккаунт администратора. В цифрах над таблицей не считается.">Админ</Pill>}
-      {bool(row.isInternal) && <Pill tone="info" title="Служебный аккаунт: свой, тестовый или демо. В статистике не считается.">Служебный</Pill>}
+      {bool(row.isStaff) && <Pill tone="info" title="Аккаунт администратора. С 15 сентября 2026 в цифрах над таблицей считается, как все.">Админ</Pill>}
+      {bool(row.isInternal) && <Pill tone="info" title="Служебный аккаунт: свой, тестовый или демо. Может проводить тестовые платежи; в статистике считается, как все.">Служебный</Pill>}
     </div>
   )
 }
@@ -511,7 +511,7 @@ export function StatusLegend() {
         <li><Pill tone="success">Активен</Pill><span>Не заблокирован, открытых флагов антифрода нет.</span></li>
         <li><Pill tone="danger">Забанен</Pill><span>Заблокирован администратором - бессрочно или до даты. Причина - в карточке.</span></li>
         <li><Pill tone="warning">Проверка антифрода</Pill><span>Правило антифрода отметило аккаунт, флаг ещё не разобран. Красная пилюля - высокий риск. Разбор - в разделе «Антифрод».</span></li>
-        <li><Pill tone="info">Админ</Pill><span>Аккаунт из списка администраторов. В цифрах над таблицей не считается.</span></li>
+        <li><Pill tone="info">Админ</Pill><span>Аккаунт из списка администраторов. В цифрах над таблицей считается, как все.</span></li>
         <li>
           <span className="adm-users-seen is-online"><i className="adm-users-dot is-online" aria-hidden="true" />онлайн</span>
           <span>Был активен в последние {ONLINE_MINUTES} минут. Серая точка - дольше. Активность пишется с {ACTIVITY_SINCE}, раньше поле было пустым у всех.</span>
