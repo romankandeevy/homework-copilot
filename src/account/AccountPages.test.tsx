@@ -245,4 +245,32 @@ describe('BalancePage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Применить' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Промокод только для новых аккаунтов')
   })
+
+  /* С миграции 20260915130000 база отвечает на неверный код строкой
+     { ok: false, error }, а не ошибкой: иначе откатывалась запись о попытке
+     и лимит перебора не работал. Отказ строкой - та же красная ошибка. */
+  it('treats an { ok: false } answer as a refusal, not as a credit', async () => {
+    mocks.rpc.mockImplementation(async (name: string) => (name === 'redeem_promo_code'
+      ? { data: { ok: false, error: 'promo code not found' }, error: null }
+      : { data: null, error: null }))
+    renderBalance()
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Промокод' }), { target: { value: 'START20' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Применить' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Такого промокода нет')
+    expect(screen.queryByText(/Начислено/)).not.toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Промокод' })).toHaveValue('START20')
+  })
+
+  it('still credits on an { ok: true } answer', async () => {
+    mocks.rpc.mockImplementation(async (name: string) => (name === 'redeem_promo_code'
+      ? { data: { ok: true, kind: 'balance', amount: 2000, balance: 4000 }, error: null }
+      : { data: null, error: null }))
+    renderBalance()
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Промокод' }), { target: { value: 'START20' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Применить' }))
+    expect(await screen.findByText('Начислено 20 ₽')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
 })

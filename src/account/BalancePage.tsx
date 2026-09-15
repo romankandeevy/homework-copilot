@@ -141,11 +141,15 @@ function PromoCard({ onReloadAccount }: { onReloadAccount: () => Promise<void> }
     setError('')
     const { data, error: redeemError } = await supabase.rpc('redeem_promo_code', { p_code: code.trim() })
     setSending(false)
-    if (redeemError) {
-      setError(promoErrorMessage(redeemError.message))
+    const result = data && typeof data === 'object' && !Array.isArray(data) ? data as Record<string, unknown> : {}
+    /* С 15 сентября 2026 (миграция 20260915130000) база отвечает на неверный
+       код строкой `{ ok: false, error }`, а не ошибкой: ошибка откатывала
+       запись о попытке, и лимит «10 попыток в час» не работал вовсе. Ответ
+       ошибкой тоже понимаем: сайт выкатывается раньше миграции. */
+    if (redeemError || result.ok === false) {
+      setError(promoErrorMessage(redeemError?.message ?? String(result.error ?? '')))
       return
     }
-    const result = data && typeof data === 'object' && !Array.isArray(data) ? data as Record<string, unknown> : {}
     setCode('')
     setMessage(result.kind === 'plan'
       ? `Подключён тариф «${String(result.planTitle ?? '')}» на ${String(result.planDays ?? '')} дн.`
