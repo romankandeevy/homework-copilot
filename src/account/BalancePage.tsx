@@ -49,6 +49,7 @@ function promoErrorMessage(message: string) {
   if (message.includes('promo code not started')) return 'Промокод ещё не начал действовать'
   if (message.includes('promo code already used')) return 'Этот промокод уже использован на твоём аккаунте'
   if (message.includes('promo code exhausted')) return 'Промокод закончился'
+  if (message.includes('promo code for new accounts only')) return 'Промокод только для новых аккаунтов'
   if (message.includes('promo attempts exceeded')) return 'Слишком много попыток. Попробуй через час'
   if (message.includes('account is blocked')) return 'Аккаунт заблокирован'
   return 'Не получилось применить промокод'
@@ -109,14 +110,28 @@ function TopUpCard({ config }: { config: PaymentConfig }) {
   )
 }
 
+/* Ссылка из админки `/balance?promo=КОД` (14 сентября 2026) приносит код
+   уже вписанным: остаётся нажать «Применить». Параметр потом уходит из
+   адреса, как `?subject=` на главной, - перезагрузка код не навязывает. */
+function promoFromAddress() {
+  return (new URLSearchParams(window.location.search).get('promo') ?? '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 32)
+}
+
 /* Промокод - отдельный блок, а не приписка к тарифу: тариф и промокод -
    разные вещи. Промокод начисляет деньги или, если так его завела админка,
    подключает тариф на срок. Текст успеха говорит, что именно произошло. */
 function PromoCard({ onReloadAccount }: { onReloadAccount: () => Promise<void> }) {
-  const [code, setCode] = useState('')
+  const [code, setCode] = useState(promoFromAddress)
   const [sending, setSending] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    if (!url.searchParams.has('promo')) return
+    url.searchParams.delete('promo')
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
+  }, [])
 
   const redeem = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()

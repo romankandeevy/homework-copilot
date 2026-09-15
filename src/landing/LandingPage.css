@@ -505,6 +505,14 @@
   color: var(--color-brand-accent);
 }
 
+/* Хвост строки не прячется под поддержкой (14 сентября 2026). На 320×640
+   список стоит у нижнего края первого экрана, и круглая кнопка поддержки
+   садилась на «…со второй задачи». Справа оставлено место под неё: строка
+   переносится раньше, чем дойдёт до кнопки. */
+@media (max-width: 560px) {
+  .hero-facts { padding-right: 3rem; }
+}
+
 /* Числа под первым экраном: раньше между кнопками и следующей секцией был
    пустой экран.
 
@@ -1344,6 +1352,14 @@
   .landing-primary-action,
   .landing-secondary-action { white-space: normal; text-align: center; }
   .price-card .landing-primary-action { justify-self: stretch; }
+}
+
+/* Имя целиком (14 сентября 2026). На 320 «Homework Copilot» просит 178
+   пикселей, а получало 168 и резалось в «Homework Copi…». Боковые поля шапки
+   держат колонку секций, поэтому место берём из зазоров. */
+@media (max-width: 360px) {
+  .landing-header { gap: var(--space-2); }
+  .landing-header-actions { gap: var(--space-1); }
 }
 
 @media (prefers-reduced-motion: reduce) {

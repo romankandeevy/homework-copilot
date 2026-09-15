@@ -6,15 +6,55 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { ArrowSquareOut } from '@phosphor-icons/react'
 import { adminRpc, formatDateTime, isRecord, num, obj, rows, str, strOrNull, type Row } from '../api'
-import { Button, ErrorState, Panel, Tabs, useAsync } from '../ui'
+import { Button, ErrorState, Modal, Panel, Tabs, useAsync } from '../ui'
 import { useAdmin } from '../context'
 import { solvableSubjects } from '../../lib/subjects'
 
+/* ---------- Флажок и подтверждение ---------- */
+
+/* Общие для «Настроек» и «Промокодов»: промокоды с 14 сентября 2026 -
+   свой раздел, а формы у них одного устройства. */
+export function Check({ label, checked, onChange, disabled }: { label: string; checked: boolean; onChange: (value: boolean) => void; disabled?: boolean }) {
+  return (
+    <label className={`set-check${disabled ? ' is-disabled' : ''}`}>
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
+      <span>{label}</span>
+    </label>
+  )
+}
+
+export function ConfirmModal({ title, children, confirmLabel, danger, loading, disabled, onConfirm, onClose }: {
+  title: string
+  children: ReactNode
+  confirmLabel: string
+  danger?: boolean
+  loading?: boolean
+  disabled?: boolean
+  onConfirm: () => void
+  onClose: () => void
+}) {
+  return (
+    <Modal
+      open
+      title={title}
+      onClose={onClose}
+      footer={(
+        <>
+          <Button onClick={onClose}>Отмена</Button>
+          <Button variant={danger ? 'danger' : 'primary'} loading={loading} disabled={disabled} onClick={onConfirm}>{confirmLabel}</Button>
+        </>
+      )}
+    >
+      {children}
+    </Modal>
+  )
+}
+
 /* ---------- Вкладки ---------- */
 
-/* Семь подвкладок в одну строку не помещаются. Уже 720 пикселей - список
-   вместо вкладок. Шире - полоса вкладок прокручивается, а край, за которым
-   есть ещё вкладки, гаснет в фон: видно, что полоса не кончилась. */
+/* Шесть подвкладок в одну строку помещаются не везде. Уже 720 пикселей -
+   список вместо вкладок. Шире - полоса вкладок прокручивается, а край, за
+   которым есть ещё вкладки, гаснет в фон: видно, что полоса не кончилась. */
 export function SettingsTabs<T extends string>({ value, tabs, onChange, label }: {
   value: T
   tabs: { value: T; label: string }[]
@@ -168,6 +208,8 @@ const eventLabels: Record<string, string> = {
   plan_deleted: 'Удалён тариф',
   plan_disabled: 'Тариф выключен',
   promo_saved: 'Сохранён промокод',
+  promo_generated: 'Создан пакет промокодов',
+  promo_deleted: 'Удалён промокод',
   prompt_saved: 'Новая версия промпта',
   prompt_rolled_back: 'Промпт откачен',
   prompt_disabled: 'Промпт выключен',
@@ -198,6 +240,7 @@ const fieldNames: Record<string, string> = {
   expires_at: 'окончание',
   max_uses: 'лимит использований',
   note: 'заметка',
+  new_users_days: 'только новым, дн.',
 }
 
 // Служебные поля меняются при каждом сохранении и заслоняют суть.
@@ -302,6 +345,12 @@ function historySummary(item: HistoryItem): string[] {
       return [`версия ${shortValue(before.version)} → ${shortValue(after.version)}`]
     case 'prompt_disabled':
       return [`выключена версия ${shortValue(before.version)}`]
+    case 'promo_generated': {
+      const prefix = str(payload.prefix)
+      return [`кодов: ${num(payload.count)}`, prefix ? `префикс ${prefix}` : 'без префикса']
+    }
+    case 'promo_deleted':
+      return ['удалён, им ни разу не пользовались']
     case 'plan_disabled':
       return ['выключен, действующие выдачи отозваны']
     case 'plan_deleted':
@@ -327,7 +376,7 @@ function historyEntity(item: HistoryItem, scope: HistoryScope) {
   if (scope === 'prompts') return subjectNames.get(str(payload.subjectId)) ?? str(payload.subjectId)
   if (scope === 'admins') return item.targetEmail ?? str(payload.email)
   if (scope === 'site' || scope === 'subjects') return ''
-  return str(payload.key) || str(payload.code) || str(payload.planId)
+  return str(payload.key) || str(payload.code) || str(payload.planId) || (str(payload.prefix) ? `${str(payload.prefix)}-…` : '')
 }
 
 export function SettingsHistory({ scope, entityKey = null, refreshKey = 0, title = 'История изменений', limit = 6 }: {

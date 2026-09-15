@@ -38,6 +38,7 @@ export type AdminSection =
   | 'support'
   | 'monitoring'
   | 'finance'
+  | 'promo'
   | 'library'
   | 'settings'
   | 'notifications'

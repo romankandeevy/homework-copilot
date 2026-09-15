@@ -1,9 +1,22 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { Readable } from 'node:stream'
 import { describe, expect, it, vi } from 'vitest'
 import { checkOrderWithRobokassa, handlePaymentRequest, handleResultNotice } from './payments.ts'
 import type { CloseOrder, ConfirmOrder } from './payments.ts'
-import { resultSignature } from './robokassa.ts'
+import { buildPaymentUrl, paymentReceipt, resultSignature } from './robokassa.ts'
 import type { RobokassaConfig } from './robokassa.ts'
+
+/* Supabase подменён только для заведения заказа: вход отдаёт аккаунт с
+   почтой из `account`, база - заказ 100001. Остальные тесты файла к
+   Supabase не ходят. */
+const account = vi.hoisted(() => ({ email: 'student@example.com' as string | undefined }))
+
+vi.mock('@supabase/supabase-js', () => ({
+  createClient: () => ({
+    auth: { getUser: async () => ({ data: { user: { id: 'user-1', email: account.email } }, error: null }) },
+    rpc: async () => ({ data: { invId: 100001 }, error: null }),
+  }),
+}))
 
 const config: RobokassaConfig = {
   merchantLogin: 'homework-copilot',
@@ -11,6 +24,7 @@ const config: RobokassaConfig = {
   live: { password1: 'live-one', password2: 'live-two' },
   test: { password1: 'test-one', password2: 'test-two' },
   testMode: false,
+  receipts: false,
 }
 
 function notice(password2 = 'live-two') {
@@ -125,5 +139,40 @@ describe('payment endpoint', () => {
     await handlePaymentRequest(request, response, { robokassa: config })
     expect(response.statusCode).toBe(405)
     expect(headers.get('allow')).toBe('POST, OPTIONS')
+  })
+})
+
+describe('payment order', () => {
+  async function createLink(robokassa: RobokassaConfig) {
+    const request = Object.assign(Readable.from([JSON.stringify({ action: 'create', amountKopecks: 15000 })]), {
+      method: 'POST',
+      headers: { origin: 'https://www.homeworkcopilot.ru', 'content-type': 'application/json', authorization: 'Bearer session' },
+    }) as unknown as IncomingMessage
+    const { response, end } = mockResponse()
+    await handlePaymentRequest(request, response, { supabaseUrl: 'https://db.test', supabasePublishableKey: 'publishable', serviceRoleKey: 'service', robokassa })
+    expect(response.statusCode).toBe(200)
+    return (JSON.parse(String(end.mock.calls[0]?.[0])) as { url: string }).url
+  }
+
+  it('keeps the old link without receipts, though the account has an email', async () => {
+    account.email = 'student@example.com'
+    const link = await createLink(config)
+    expect(link).toBe(buildPaymentUrl(config, { invId: 100001, amountKopecks: 15000, isTest: false }))
+    expect(link).not.toContain('Email=')
+    expect(link).not.toContain('Receipt=')
+  })
+
+  it('sends the receipt and the account email with receipts on', async () => {
+    account.email = 'student@example.com'
+    const url = new URL(await createLink({ ...config, receipts: true }))
+    expect(url.searchParams.get('Receipt')).toBe(paymentReceipt(15000))
+    expect(url.searchParams.get('Email')).toBe('student@example.com')
+  })
+
+  it('sends the receipt without Email for an account made by phone', async () => {
+    account.email = undefined
+    const url = new URL(await createLink({ ...config, receipts: true }))
+    expect(url.searchParams.get('Receipt')).toBe(paymentReceipt(15000))
+    expect(url.searchParams.has('Email')).toBe(false)
   })
 })

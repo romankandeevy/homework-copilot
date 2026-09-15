@@ -274,7 +274,9 @@ async function paymentConfig(options: PaymentServerOptions, service: ServiceClie
   return { enabled, testMode: Boolean(config?.testMode), minKopecks: minTopUpKopecks, maxKopecks: maxTopUpKopecks }
 }
 
-async function createOrder(options: PaymentServerOptions, service: ServiceClient, userId: string, body: Record<string, unknown>) {
+/* Почта аккаунта нужна только чеку: при `ROBOKASSA_RECEIPTS=1` Робокасса
+   шлёт на неё чек НПД. Без чеков `buildPaymentUrl` её не берёт. */
+async function createOrder(options: PaymentServerOptions, service: ServiceClient, userId: string, email: string | undefined, body: Record<string, unknown>) {
   const config = options.robokassa
   if (!config) throw new PaymentApiError(503, 'Оплата временно недоступна')
   const amount = checkTopUpKopecks(Number(body.amountKopecks))
@@ -284,8 +286,8 @@ async function createOrder(options: PaymentServerOptions, service: ServiceClient
   const order = record(data)
   const invId = Number(order.invId)
   if (!Number.isSafeInteger(invId)) throw new PaymentApiError(500, 'Не получилось создать платёж. Попробуй ещё раз')
-  log('robokassa_order_created', { invId, amount: amount.kopecks, isTest: config.testMode })
-  return { url: buildPaymentUrl(config, { invId, amountKopecks: amount.kopecks, isTest: config.testMode }), invId, amountKopecks: amount.kopecks, testMode: config.testMode }
+  log('robokassa_order_created', { invId, amount: amount.kopecks, isTest: config.testMode, receipt: config.receipts })
+  return { url: buildPaymentUrl(config, { invId, amountKopecks: amount.kopecks, isTest: config.testMode, email }), invId, amountKopecks: amount.kopecks, testMode: config.testMode }
 }
 
 async function readOrderStatus(service: ServiceClient, userId: string, invId: number) {
@@ -358,7 +360,7 @@ export async function handlePaymentRequest(request: IncomingMessage, response: S
     const service = serviceClient(options)
 
     if (action === 'config') sendJson(response, 200, await paymentConfig(options, service, user.id))
-    else if (action === 'create') sendJson(response, 200, await createOrder(options, service, user.id, body))
+    else if (action === 'create') sendJson(response, 200, await createOrder(options, service, user.id, user.email, body))
     else if (action === 'status') sendJson(response, 200, await orderStatus(options, service, user.id, body))
     else throw new PaymentApiError(400, 'Неизвестное действие')
   } catch (error) {

@@ -40,16 +40,24 @@
   .solution-card:hover { transform: translateY(-1px); }
 }
 
-/* Голова: предмет, пометки о содержимом, время. */
+/* Голова: предмет, пометки о содержимом, время.
+
+   14 сентября 2026: на телефоне предмет резался в «ГЕОМЕТР…» рядом с
+   пометкой «чертёж» и «сегодня, 21:37». По предмету карточку ищут глазами,
+   поэтому он не сжимается, а время, если места не хватило, уходит второй
+   строкой. */
 .solution-card-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2);
+  gap: 0.25rem var(--space-2);
   min-width: 0;
   padding: 0.8rem var(--space-4) 0;
 }
 
 .solution-card-subject {
+  flex: none;
+  max-width: 100%;
   overflow: hidden;
   color: var(--color-accent);
   font-family: var(--font-mono);

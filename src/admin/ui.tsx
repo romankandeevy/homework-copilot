@@ -525,6 +525,16 @@ export function DateRangePicker({ value, onChange }: { value: DateRangeValue; on
    закрывало всю стопку разом. */
 const dialogStack: symbol[] = []
 
+/* Прокрутка страницы выключена, пока открыто хоть одно окно, и включается,
+   когда не осталось ни одного. До 14 сентября 2026 каждое окно запоминало
+   `body.style.overflow` при открытии и возвращало его при закрытии. Окно
+   поверх окна запоминало уже выставленное первым `hidden`, и когда карточка
+   и подтверждение в ней закрывались разом, последним возвращалось именно
+   `hidden`: владелец не мог листать админку до перезагрузки. */
+function syncScrollLock() {
+  document.body.style.overflow = dialogStack.length > 0 ? 'hidden' : ''
+}
+
 export function useDialogFocus(open: boolean, onClose: () => void) {
   const ref = useRef<HTMLDivElement | null>(null)
   const onCloseRef = useRef(onClose)
@@ -557,13 +567,12 @@ export function useDialogFocus(open: boolean, onClose: () => void) {
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
     }
     document.addEventListener('keydown', onKey)
-    const overflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
+    syncScrollLock()
     return () => {
       const index = dialogStack.indexOf(id)
       if (index >= 0) dialogStack.splice(index, 1)
       document.removeEventListener('keydown', onKey)
-      document.body.style.overflow = overflow
+      syncScrollLock()
       previous?.focus()
     }
   }, [open])

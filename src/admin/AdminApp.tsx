@@ -22,6 +22,7 @@ import {
   ShieldWarning,
   SignOut,
   Sun,
+  Ticket,
   UsersThree,
 } from '@phosphor-icons/react'
 import { supabase } from '../lib/supabase'
@@ -37,6 +38,7 @@ const FraudSection = lazy(() => import('./sections/FraudSection'))
 const SupportSection = lazy(() => import('./sections/SupportSection'))
 const MonitoringSection = lazy(() => import('./sections/MonitoringSection'))
 const FinanceSection = lazy(() => import('./sections/FinanceSection'))
+const PromoSection = lazy(() => import('./sections/PromoSection'))
 const SettingsSection = lazy(() => import('./sections/SettingsSection'))
 const NotificationsSection = lazy(() => import('./sections/NotificationsSection'))
 const AuditSection = lazy(() => import('./sections/AuditSection'))
@@ -63,26 +65,32 @@ type NavItem = {
   count?: (signals: AdminSignals) => { value: number; alert: boolean } | null
 }
 
+/* Меню по смыслу, а не по очереди появления разделов (14 сентября 2026):
+   ученики, деньги, контент, система. Промокоды - рядом с финансами:
+   владелец ищет их там, где деньги, а не среди фиче-флагов «Настроек»,
+   где они жили вкладкой. Смотреть и менять их могут admin и owner - как
+   настройки и как требует admin_promo_save в базе. */
 const navItems: NavItem[] = [
   { id: 'dashboard', label: 'Дашборд', group: 'Обзор', icon: <ChartLineUp size={18} weight="duotone" aria-hidden="true" />, allowed: () => true },
-  { id: 'users', label: 'Пользователи', group: 'Люди', icon: <UsersThree size={18} weight="duotone" aria-hidden="true" />, allowed: (p) => p.users },
+  { id: 'users', label: 'Пользователи', group: 'Ученики', icon: <UsersThree size={18} weight="duotone" aria-hidden="true" />, allowed: (p) => p.users },
   {
-    id: 'support', label: 'Поддержка', group: 'Люди', icon: <Lifebuoy size={18} weight="duotone" aria-hidden="true" />, allowed: (p) => p.support,
+    id: 'support', label: 'Поддержка', group: 'Ученики', icon: <Lifebuoy size={18} weight="duotone" aria-hidden="true" />, allowed: (p) => p.support,
     count: (s) => (s.pendingTickets ? { value: s.pendingTickets, alert: s.overdueTickets > 0 } : null),
   },
   {
-    id: 'fraud', label: 'Антифрод', group: 'Люди', icon: <ShieldWarning size={18} weight="duotone" aria-hidden="true" />, allowed: (p) => p.moderate,
+    id: 'fraud', label: 'Антифрод', group: 'Ученики', icon: <ShieldWarning size={18} weight="duotone" aria-hidden="true" />, allowed: (p) => p.moderate,
     count: (s) => (s.openFlags ? { value: s.openFlags, alert: false } : null),
   },
+  { id: 'finance', label: 'Финансы', group: 'Деньги', icon: <CurrencyRub size={18} weight="duotone" aria-hidden="true" />, allowed: (p) => p.money },
+  { id: 'promo', label: 'Промокоды', group: 'Деньги', icon: <Ticket size={18} weight="duotone" aria-hidden="true" />, allowed: (p) => p.settings },
+  { id: 'library', label: 'База решений', group: 'Контент', icon: <BookOpenText size={18} weight="duotone" aria-hidden="true" />, allowed: (p) => p.moderate },
   {
-    id: 'monitoring', label: 'Мониторинг', group: 'Сервис', icon: <Pulse size={18} weight="duotone" aria-hidden="true" />, allowed: (p) => p.settings,
+    id: 'monitoring', label: 'Мониторинг', group: 'Система', icon: <Pulse size={18} weight="duotone" aria-hidden="true" />, allowed: (p) => p.settings,
     count: (s) => (s.openErrors ? { value: s.openErrors, alert: true } : null),
   },
-  { id: 'finance', label: 'Финансы', group: 'Сервис', icon: <CurrencyRub size={18} weight="duotone" aria-hidden="true" />, allowed: (p) => p.money },
-  { id: 'library', label: 'База решений', group: 'Сервис', icon: <BookOpenText size={18} weight="duotone" aria-hidden="true" />, allowed: (p) => p.moderate },
-  { id: 'settings', label: 'Настройки', group: 'Управление', icon: <GearSix size={18} weight="duotone" aria-hidden="true" />, allowed: (p) => p.settings },
-  { id: 'notifications', label: 'Уведомления', group: 'Управление', icon: <BellRinging size={18} weight="duotone" aria-hidden="true" />, allowed: (p) => p.settings },
-  { id: 'audit', label: 'Журнал действий', group: 'Управление', icon: <ClipboardText size={18} weight="duotone" aria-hidden="true" />, allowed: () => true },
+  { id: 'notifications', label: 'Уведомления', group: 'Система', icon: <BellRinging size={18} weight="duotone" aria-hidden="true" />, allowed: (p) => p.settings },
+  { id: 'settings', label: 'Настройки', group: 'Система', icon: <GearSix size={18} weight="duotone" aria-hidden="true" />, allowed: (p) => p.settings },
+  { id: 'audit', label: 'Журнал действий', group: 'Система', icon: <ClipboardText size={18} weight="duotone" aria-hidden="true" />, allowed: () => true },
 ]
 
 const roleLabels: Record<AdminRole, string> = { owner: 'Владелец', admin: 'Администратор', support: 'Поддержка' }
@@ -115,7 +123,20 @@ function parsePermissions(value: unknown): AdminPermissions {
   }
 }
 
+/* Промокоды были вкладкой «Настроек» до 14 сентября 2026, и ссылки вида
+   /admin?section=settings&set_tab=promo уже разошлись. Такой адрес
+   переписывается на свой раздел без новой записи в истории. */
+function redirectLegacySection() {
+  const params = new URLSearchParams(window.location.search)
+  if (params.get('section') !== 'settings' || (params.get('set_tab') !== 'promo' && params.get('tab') !== 'promo')) return
+  params.set('section', 'promo')
+  params.delete('set_tab')
+  params.delete('tab')
+  window.history.replaceState(window.history.state, '', `${window.location.pathname}?${params.toString()}${window.location.hash}`)
+}
+
 function currentSection(): AdminSection {
+  redirectLegacySection()
   const value = new URLSearchParams(window.location.search).get('section')
   return navItems.some((item) => item.id === value) ? value as AdminSection : 'dashboard'
 }
@@ -570,6 +591,7 @@ function AdminShell({ access, theme, onToggleTheme, onSignOut }: { access: Admin
                 {activeSection === 'support' && <SupportSection />}
                 {activeSection === 'monitoring' && <MonitoringSection />}
                 {activeSection === 'finance' && <FinanceSection />}
+                {activeSection === 'promo' && <PromoSection />}
                 {activeSection === 'library' && <SolutionsSection />}
                 {activeSection === 'settings' && <SettingsSection />}
                 {activeSection === 'notifications' && <NotificationsSection />}

@@ -575,7 +575,9 @@ function ProfileButton({ user, account, active = false, onClick, compact = false
   const className = `profile-button${compact ? ' is-compact' : ''}`
   const content = (
     <>
-      <span><UserCircle size={21} weight="duotone" aria-hidden="true" /></span>
+      {/* Линейный, как значки разделов рядом (14 сентября 2026): двухцветный
+          на тёмной плашке остался последним «мультяшным» в шапке. */}
+      <span><UserCircle size={20} weight="regular" aria-hidden="true" /></span>
       {!compact && <span><strong>{name}</strong><small>{subtitle}</small></span>}
       {!compact && <CaretRight size={14} weight="bold" aria-hidden="true" />}
     </>

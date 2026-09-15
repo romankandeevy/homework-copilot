@@ -313,6 +313,25 @@ export const rpcFixtures: Record<string, (aal: string, body: Record<string, unkn
     settings: { site_banner: { enabled: false, text: '', tone: 'info', link: '' }, support_sla_minutes: 30 },
   }),
   admin_promo_list: () => [],
+  // ---- Промокоды (20260914220000_admin_promo_tools.sql) ----
+  // Активации есть только у PLUS50: одна почтой, одна входом по телефону.
+  admin_promo_redemptions: (_aal, body) => {
+    const items = body.p_code === 'PLUS50'
+      ? [
+        { id: 'redemption-1', userId: studentId, email: student.email, phone: null, fullName: student.fullName, redeemedAt: ago(60), creditedKopecks: 5000, paidAfter: true },
+        { id: 'redemption-2', userId: moreStudents[0].id, email: null, phone: '79991234567', fullName: null, redeemedAt: ago(300), creditedKopecks: 5000, paidAfter: false },
+      ]
+      : []
+    return { code: String(body.p_code ?? ''), total: items.length, page: Number(body.p_page) || 1, pageSize: Number(body.p_page_size) || 50, items }
+  },
+  admin_promo_generate: (_aal, body) => {
+    const batch = (body.p_batch ?? {}) as Record<string, unknown>
+    const prefix = typeof batch.prefix === 'string' ? batch.prefix : ''
+    const suffixes = ['7F3K9Q', 'H4M2PX', 'R8T6WZ']
+    const codes = Array.from({ length: Math.min(Number(batch.count) || 0, 500) }, (_, index) => `${prefix ? `${prefix}-` : ''}${suffixes[index] ?? `X${String(index).padStart(5, '0')}`}`)
+    return { prefix, count: codes.length, codes, settings: batch }
+  },
+  admin_promo_delete: (_aal, body) => ({ deleted: true, code: body.p_code }),
   // ---- Настройки v2 (20260912098000_admin_settings_v2.sql) ----
   admin_settings_history: (_aal, body) => (body.p_scope === 'flags' || body.p_scope === 'plans'
     ? {

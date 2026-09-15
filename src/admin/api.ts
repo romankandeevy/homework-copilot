@@ -47,6 +47,13 @@ const knownErrors: [RegExp, string][] = [
   [/at least one subject/i, 'Хотя бы один предмет должен остаться включённым.'],
   [/promo_codes_format/i, 'Код - от 3 до 32 символов: латиница, цифры, _ и -.'],
   [/promo_codes_shape/i, 'Для начисления нужна сумма от 1 копейки до 10 000 ₽, для тарифа - тариф и срок в днях.'],
+  [/promo_codes_new_users_days/i, '«Только новым аккаунтам» - от 1 до 365 дней или пусто.'],
+  [/promo code not found/i, 'Промокод не найден - обнови страницу.'],
+  [/promo code already redeemed/i, 'Кодом уже пользовались: удалить его нельзя, можно только выключить.'],
+  [/promo batch count/i, 'Кодов в пакете - от 1 до 500.'],
+  [/promo prefix/i, 'Префикс - до 20 символов: латиница, цифры, _ и -.'],
+  [/promo batch generation failed/i, 'Не получилось подобрать свободные коды. Попробуй другой префикс.'],
+  [/could not find the function public\.admin_promo_/i, 'Нужно применить миграцию 20260914220000.'],
   [/plans_id_format/i, 'Идентификатор тарифа - латиница, цифры, _ и -, от 2 до 40 символов.'],
   [/plans_title_length/i, 'Название тарифа - от 1 до 80 символов.'],
   [/note must contain/i, 'Заметка - от 1 до 2000 символов.'],
@@ -254,4 +261,20 @@ export function rublesInputToKopecks(value: string): number | null {
   const normalized = value.replace(/\s/g, '').replace(',', '.')
   if (!/^-?\d+(\.\d{1,2})?$/.test(normalized)) return null
   return Math.round(Number(normalized) * 100)
+}
+
+export function kopecksToInput(kopecks: number) {
+  return kopecks % 100 === 0 ? String(kopecks / 100) : (kopecks / 100).toFixed(2).replace('.', ',')
+}
+
+export function intOrNull(value: string) {
+  const trimmed = value.trim()
+  return /^\d+$/.test(trimmed) ? Number(trimmed) : null
+}
+
+/* PostgREST не нашёл функцию (PGRST202): фронт выкатили раньше миграции.
+   Это не поломка, а «ещё не применено» - раздел говорит об этом спокойно
+   (14 сентября 2026, промокоды). */
+export function isMissingRpc(failure: unknown) {
+  return failure instanceof AdminRequestError && failure.code === 'PGRST202'
 }

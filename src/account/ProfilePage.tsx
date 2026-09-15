@@ -180,8 +180,8 @@ function ProfileContent({ user, account, notice, theme, onToggleTheme, onReloadA
         <section className="account-page-section" aria-labelledby="profile-theme-title">
           <header><h2 id="profile-theme-title">Тема</h2><p>Настрой вид приложения на этом устройстве.</p></header>
           <div className="account-theme-options">
-            <button type="button" className={theme === 'light' ? 'is-selected' : ''} aria-pressed={theme === 'light'} onClick={() => { if (theme !== 'light') onToggleTheme() }}><Sun size={20} weight="duotone" aria-hidden="true" /> Светлая</button>
-            <button type="button" className={theme === 'dark' ? 'is-selected' : ''} aria-pressed={theme === 'dark'} onClick={() => { if (theme !== 'dark') onToggleTheme() }}><Moon size={20} weight="duotone" aria-hidden="true" /> Тёмная</button>
+            <button type="button" className={theme === 'light' ? 'is-selected' : ''} aria-pressed={theme === 'light'} onClick={() => { if (theme !== 'light') onToggleTheme() }}><Sun size={20} weight="regular" aria-hidden="true" /> Светлая</button>
+            <button type="button" className={theme === 'dark' ? 'is-selected' : ''} aria-pressed={theme === 'dark'} onClick={() => { if (theme !== 'dark') onToggleTheme() }}><Moon size={20} weight="regular" aria-hidden="true" /> Тёмная</button>
           </div>
         </section>
       </div>

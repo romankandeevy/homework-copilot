@@ -1,23 +1,26 @@
-/* Настройки без деплоя: тарифы, промокоды, промпты решателя, предметы,
+/* Настройки без деплоя: лимиты и тарифы, промпты решателя, предметы,
    фиче-флаги, баннер и пороги, администраторы. Всё читается приложением
    и решателем из базы на лету. Под каждой подвкладкой - история изменений
-   этой сущности из журнала действий. */
+   этой сущности из журнала действий.
+
+   Промокоды с 14 сентября 2026 - свой раздел меню (PromoSection.tsx), а
+   старая ссылка на вкладку ведёт туда (AdminApp.tsx). */
 
 import { useMemo, useState } from 'react'
 import { ArrowDown, ArrowSquareOut, ArrowUp, MagnifyingGlass, PencilSimple, Plus, Trash } from '@phosphor-icons/react'
 import {
-  adminRpc, arr, bool, formatDateTime, formatKopecks, formatNumber, num, numOrNull, obj, rows,
+  adminRpc, arr, bool, formatDateTime, formatKopecks, formatNumber, intOrNull, kopecksToInput, num, numOrNull, obj, rows,
   rublesInputToKopecks, str, strOrNull, type Row,
 } from '../api'
 import {
-  Badge, Button, DataTable, Drawer, EmptyState, ErrorState, Field, LoadingState, Modal, PageHeader, Panel,
-  Segmented, useAction, useAsync, useQueryState, type Column, type Tone,
+  Badge, Button, DataTable, Drawer, EmptyState, ErrorState, Field, LoadingState, PageHeader, Panel,
+  Segmented, useAction, useAsync, useQueryState, type Column,
 } from '../ui'
 import { useAdmin } from '../context'
 import { solvableSubjects } from '../../lib/subjects'
 import { PromptPreview } from './PromptPreview'
 import { lineDiff } from './settingsDiff'
-import { DiffView, SettingsEmpty, SettingsHistory, SettingsTabs, type HistoryScope } from './settingsParts'
+import { Check, ConfirmModal, DiffView, SettingsEmpty, SettingsHistory, SettingsTabs, type HistoryScope } from './settingsParts'
 import './settings.css'
 
 /* ---------- Данные ---------- */
@@ -70,58 +73,14 @@ function subjectLabel(id: string) {
   return subjectNames.get(id) ?? id
 }
 
-function kopecksToInput(kopecks: number) {
-  return kopecks % 100 === 0 ? String(kopecks / 100) : (kopecks / 100).toFixed(2).replace('.', ',')
-}
-
-function intOrNull(value: string) {
-  const trimmed = value.trim()
-  return /^\d+$/.test(trimmed) ? Number(trimmed) : null
-}
-
-function Check({ label, checked, onChange, disabled }: { label: string; checked: boolean; onChange: (value: boolean) => void; disabled?: boolean }) {
-  return (
-    <label className={`set-check${disabled ? ' is-disabled' : ''}`}>
-      <input type="checkbox" checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
-      <span>{label}</span>
-    </label>
-  )
-}
-
-function ConfirmModal({ title, children, confirmLabel, danger, loading, disabled, onConfirm, onClose }: {
-  title: string
-  children: React.ReactNode
-  confirmLabel: string
-  danger?: boolean
-  loading?: boolean
-  disabled?: boolean
-  onConfirm: () => void
-  onClose: () => void
-}) {
-  return (
-    <Modal
-      open
-      title={title}
-      onClose={onClose}
-      footer={(
-        <>
-          <Button onClick={onClose}>Отмена</Button>
-          <Button variant={danger ? 'danger' : 'primary'} loading={loading} disabled={disabled} onClick={onConfirm}>{confirmLabel}</Button>
-        </>
-      )}
-    >
-      {children}
-    </Modal>
-  )
-}
-
 /* ---------- Раздел ---------- */
 
-type SetTab = 'plans' | 'promo' | 'prompts' | 'subjects' | 'flags' | 'site' | 'admins'
+type SetTab = 'plans' | 'prompts' | 'subjects' | 'flags' | 'site' | 'admins'
 
+/* «Лимиты и тарифы», а не «Тарифы» (14 сентября 2026): тарифов как товара
+   у продукта нет, тариф задаёт дневной предел решений и ученику не виден. */
 const allTabs: { value: SetTab; label: string }[] = [
-  { value: 'plans', label: 'Тарифы' },
-  { value: 'promo', label: 'Промокоды' },
+  { value: 'plans', label: 'Лимиты и тарифы' },
   { value: 'prompts', label: 'Промпты решателя' },
   { value: 'subjects', label: 'Предметы' },
   { value: 'flags', label: 'Фиче-флаги' },
@@ -163,7 +122,6 @@ function SettingsContent() {
   else if (error) body = <Panel><ErrorState message={error} onRetry={reload} /></Panel>
   else if (!data) body = <Panel><LoadingState /></Panel>
   else if (tab === 'plans') body = <PlansTab plans={overview.plans} onChanged={changed} />
-  else if (tab === 'promo') body = <PromoTab plans={overview.plans} flags={overview.flags} onChanged={noteChange} />
   else if (tab === 'subjects') body = <SubjectsTab key={JSON.stringify(overview.subjects)} subjects={overview.subjects} onChanged={changed} />
   else if (tab === 'flags') body = <FlagsTab flags={overview.flags} onChanged={changed} />
   else body = <SiteTab settings={overview.settings} onChanged={changed} />
@@ -254,22 +212,25 @@ function PlansTab({ plans, onChanged }: { plans: Plan[]; onChanged: () => void }
 
   return (
     <Panel
-      title="Тарифы"
-      description="Цена решения задаётся в коде (от 4 ₽, зависит от размера задачи), тариф её не меняет: он задаёт дневной предел решений и состав услуги."
+      title="Лимиты и тарифы"
+      description="Тариф задаёт дневной предел решений. Цену решения он не меняет: она задаётся в коде (от 4 ₽, зависит от размера задачи)."
       actions={onlyDefault ? undefined : createButton('Новый тариф')}
     >
+      {/* До 14 сентября 2026 здесь было «Платёжного провайдера пока нет -
+          тарифы работают без оплаты». Оплата с тех пор есть, а тарифа ученик
+          больше не видит: текст говорит, чем тариф служит на самом деле. */}
       <div className="set-status" role="note">
-        <Badge tone="warning">без оплаты</Badge>
+        <Badge tone="info">ученик не видит</Badge>
         <p>
-          Платёжного провайдера пока нет - тарифы работают без оплаты. Тариф выдаётся вручную в карточке ученика («Выдать тариф») или промокодом; цена в тарифе справочная и ни с кого не списывается.
+          Тариф задаёт дневной предел решений. Выдаётся вручную в карточке ученика («Выдать тариф») или промокодом. Ученику как тариф не показывается: на странице баланса только сумма и цена решения. Цена в тарифе справочная и ни с кого не списывается.
         </p>
       </div>
       {plans.length > 0 && <DataTable columns={columns} rows={plans} rowKey={(plan) => plan.id} empty="Тарифов нет." />}
       {onlyDefault && (
         <SettingsEmpty art="plans" title={defaultPlan ? 'Других тарифов пока нет' : 'Тарифов пока нет'} actions={createButton('Создать тариф')}>
           {defaultPlan
-            ? `Сейчас у всех учеников тариф «${defaultPlan.title}»${defaultPlan.dailySolveLimit !== null ? `: до ${formatNumber(defaultPlan.dailySolveLimit)} решений в сутки` : ''}. Отдельный тариф нужен, чтобы дать части учеников другой дневной предел или состав услуги. Цену решения тариф не меняет.`
-            : 'Тариф задаёт дневной предел решений и состав услуги. Цену решения он не меняет.'}
+            ? `Сейчас у всех учеников тариф «${defaultPlan.title}»${defaultPlan.dailySolveLimit !== null ? `: до ${formatNumber(defaultPlan.dailySolveLimit)} решений в сутки` : ''}. Отдельный тариф нужен, чтобы дать части учеников другой дневной предел решений. Цену решения тариф не меняет.`
+            : 'Тариф задаёт дневной предел решений. Цену решения он не меняет.'}
         </SettingsEmpty>
       )}
       {editing && (
@@ -364,7 +325,7 @@ function PlanForm({ plan, existingIds, onClose, onSaved }: { plan: Plan | null; 
           <Field label="Название">
             <input value={title} maxLength={80} onChange={(event) => setTitle(event.target.value)} />
           </Field>
-          <Field label="Цена, ₽" hint="Справочная, пока без списания.">
+          <Field label="Цена, ₽" hint="Справочная: ни с кого не списывается.">
             <input inputMode="decimal" value={price} onChange={(event) => setPrice(event.target.value)} />
           </Field>
           <Field label="Срок, дней">
@@ -380,7 +341,7 @@ function PlanForm({ plan, existingIds, onClose, onSaved }: { plan: Plan | null; 
         <Field label="Описание" hint="До 500 символов.">
           <textarea value={description} maxLength={500} onChange={(event) => setDescription(event.target.value)} />
         </Field>
-        <Field label="Что входит" hint="По одному пункту в строке. Ученик видит их в кабинете.">
+        <Field label="Что входит" hint="По одному пункту в строке. Заметка для администраторов: ученику тариф не показывается.">
           <textarea value={features} onChange={(event) => setFeatures(event.target.value)} />
         </Field>
         <Check label="Включён" checked={isDefault || active} disabled={isDefault} onChange={setActive} />
@@ -390,394 +351,6 @@ function PlanForm({ plan, existingIds, onClose, onSaved }: { plan: Plan | null; 
             ? 'Это тариф по умолчанию: он всегда включён. Снять отметку можно, только назначив основным другой тариф.'
             : 'Тариф по умолчанию действует у всех, кому не выдан другой. Он может быть только один.'}
         </p>
-        {problem && <p className="set-form-error" role="alert">{problem}</p>}
-        <div className="adm-form-actions">
-          <Button onClick={onClose}>Отмена</Button>
-          <Button type="submit" variant="primary" disabled={Boolean(problem)} loading={pending === 'save'}>Сохранить</Button>
-        </div>
-      </form>
-    </Drawer>
-  )
-}
-
-/* ---------- Промокоды ---------- */
-
-type Promo = {
-  code: string
-  kind: 'balance' | 'plan'
-  amountKopecks: number | null
-  planId: string | null
-  planDays: number | null
-  startsAt: string | null
-  expiresAt: string | null
-  maxUses: number | null
-  active: boolean
-  note: string | null
-  createdAt: string | null
-  uses: number
-  lastUsedAt: string | null
-  creditedKopecks: number
-  paidAfter: number
-  recent: { email: string; redeemedAt: string }[]
-}
-
-function parsePromo(row: Row): Promo {
-  return {
-    code: str(row.code),
-    kind: str(row.kind) === 'plan' ? 'plan' : 'balance',
-    amountKopecks: numOrNull(row.amountKopecks),
-    planId: strOrNull(row.planId),
-    planDays: numOrNull(row.planDays),
-    startsAt: strOrNull(row.startsAt),
-    expiresAt: strOrNull(row.expiresAt),
-    maxUses: numOrNull(row.maxUses),
-    active: bool(row.active),
-    note: strOrNull(row.note),
-    createdAt: strOrNull(row.createdAt),
-    uses: num(row.uses),
-    lastUsedAt: strOrNull(row.lastUsedAt),
-    creditedKopecks: num(row.creditedKopecks),
-    paidAfter: num(row.paidAfter),
-    recent: rows(row.recent).map((item) => ({ email: str(item.email), redeemedAt: str(item.redeemedAt) })),
-  }
-}
-
-function promoPayload(promo: Pick<Promo, 'code' | 'kind' | 'amountKopecks' | 'planId' | 'planDays' | 'startsAt' | 'expiresAt' | 'maxUses' | 'active' | 'note'>) {
-  return {
-    code: promo.code,
-    kind: promo.kind,
-    amountKopecks: promo.kind === 'balance' ? promo.amountKopecks : null,
-    planId: promo.kind === 'plan' ? promo.planId : null,
-    planDays: promo.kind === 'plan' ? promo.planDays : null,
-    startsAt: promo.startsAt,
-    expiresAt: promo.expiresAt,
-    maxUses: promo.maxUses,
-    active: promo.active,
-    note: promo.note ?? '',
-  }
-}
-
-function promoState(promo: Promo): { label: string; tone: Tone } {
-  const now = Date.now()
-  if (!promo.active) return { label: 'выключен', tone: 'neutral' }
-  if (promo.expiresAt && new Date(promo.expiresAt).getTime() <= now) return { label: 'истёк', tone: 'warning' }
-  if (promo.startsAt && new Date(promo.startsAt).getTime() > now) return { label: 'ещё не начался', tone: 'info' }
-  if (promo.maxUses !== null && promo.uses >= promo.maxUses) return { label: 'исчерпан', tone: 'warning' }
-  return { label: 'действует', tone: 'success' }
-}
-
-function promoWhat(promo: Promo, plans: Plan[]) {
-  if (promo.kind === 'balance') return `+${formatKopecks(promo.amountKopecks ?? 0)} на баланс`
-  const title = plans.find((plan) => plan.id === promo.planId)?.title ?? promo.planId ?? 'тариф'
-  return `«${title}» на ${formatNumber(promo.planDays ?? 0)} дн.`
-}
-
-function promoPeriod(promo: Promo) {
-  if (!promo.startsAt && !promo.expiresAt) return 'бессрочно'
-  return `${promo.startsAt ? `с ${formatDateTime(promo.startsAt)}` : ''}${promo.startsAt && promo.expiresAt ? ' ' : ''}${promo.expiresAt ? `до ${formatDateTime(promo.expiresAt)}` : ''}`
-}
-
-// Поле datetime-local живёт в поясе браузера, база хранит момент времени.
-function toLocalInput(iso: string | null) {
-  if (!iso) return ''
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return ''
-  const pad = (value: number) => String(value).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
-}
-
-function fromLocalInput(value: string) {
-  if (!value) return null
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? null : date.toISOString()
-}
-
-/* Шаблоны - только то, что умеет admin_promo_save: деньги на баланс или
-   тариф на срок. Тариф по умолчанию в шаблоны не идёт: он и так у всех. */
-type PromoTemplate = { id: string; label: string; kind: 'balance' | 'plan'; amount: string; planId: string; days: string; code: string }
-
-function promoTemplates(plans: Plan[]): PromoTemplate[] {
-  const list: PromoTemplate[] = [
-    { id: 'plus50', label: '+50 ₽ на баланс', kind: 'balance', amount: '50', planId: '', days: '', code: 'PLUS50' },
-    { id: 'plus100', label: '+100 ₽ на баланс', kind: 'balance', amount: '100', planId: '', days: '', code: 'PLUS100' },
-  ]
-  for (const plan of plans) {
-    if (!plan.active || plan.isDefault) continue
-    list.push({
-      id: `plan:${plan.id}`,
-      label: `«${plan.title}» на 7 дней`,
-      kind: 'plan',
-      amount: '',
-      planId: plan.id,
-      days: '7',
-      code: `${plan.id.toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 25)}-7D`,
-    })
-  }
-  return list
-}
-
-function freeCode(base: string, taken: string[]) {
-  if (!taken.includes(base)) return base
-  for (let index = 2; index < 100; index += 1) {
-    const candidate = `${base}-${index}`
-    if (!taken.includes(candidate)) return candidate
-  }
-  return base
-}
-
-function PromoTab({ plans, flags, onChanged }: { plans: Plan[]; flags: Flag[]; onChanged: () => void }) {
-  const { pending, run } = useAction()
-  const { data, error, loading, reload } = useAsync(() => adminRpc('admin_promo_list'), [])
-  const promos = useMemo(() => rows(data).map(parsePromo), [data])
-  const [editing, setEditing] = useState<Promo | 'new' | null>(null)
-  const [detailCode, setDetailCode] = useState<string | null>(null)
-  const detail = promos.find((promo) => promo.code === detailCode) ?? null
-  const empty = !error && data !== null && promos.length === 0
-  const promoFlag = flags.find((flag) => flag.key === 'promo_codes') ?? null
-  const fieldHidden = promoFlag !== null && (!promoFlag.enabled || promoFlag.rolloutPercent === 0)
-  const fieldPartial = promoFlag !== null && promoFlag.enabled && promoFlag.rolloutPercent > 0 && promoFlag.rolloutPercent < 100
-
-  const refresh = () => {
-    reload()
-    onChanged()
-  }
-
-  const toggle = async (promo: Promo) => {
-    const result = await run(`toggle:${promo.code}`, () => adminRpc('admin_promo_save', { p_promo: promoPayload({ ...promo, active: !promo.active }) }), promo.active ? `Код ${promo.code} выключен.` : `Код ${promo.code} включён.`)
-    if (result !== undefined) refresh()
-  }
-
-  const columns: Column<Promo>[] = [
-    { key: 'code', header: 'Код', render: (promo) => <span className="adm-cell-main"><strong className="adm-mono">{promo.code}</strong>{promo.note && <small>{promo.note}</small>}</span> },
-    { key: 'what', header: 'Что даёт', render: (promo) => promoWhat(promo, plans) },
-    { key: 'period', header: 'Срок', mobile: false, render: (promo) => <span className="adm-nowrap">{promoPeriod(promo)}</span> },
-    { key: 'uses', header: 'Использований', align: 'right', render: (promo) => `${formatNumber(promo.uses)}${promo.maxUses !== null ? ` / ${formatNumber(promo.maxUses)}` : ''}` },
-    { key: 'last', header: 'Последнее', mobile: false, render: (promo) => (promo.lastUsedAt ? <span className="adm-nowrap">{formatDateTime(promo.lastUsedAt)}</span> : <span className="adm-muted">-</span>) },
-    { key: 'credited', header: 'Начислено', align: 'right', mobile: false, render: (promo) => <span className="adm-mono">{formatKopecks(promo.creditedKopecks)}</span> },
-    { key: 'paid', header: 'Оплатили после', align: 'right', mobile: false, render: (promo) => formatNumber(promo.paidAfter) },
-    { key: 'state', header: 'Статус', render: (promo) => { const state = promoState(promo); return <Badge tone={state.tone}>{state.label}</Badge> } },
-    {
-      key: 'actions',
-      header: '',
-      align: 'right',
-      render: (promo) => (
-        <span className="set-row-actions">
-          <Button size="sm" loading={pending === `toggle:${promo.code}`} onClick={() => void toggle(promo)}>{promo.active ? 'Выключить' : 'Включить'}</Button>
-          <Button size="sm" icon={<PencilSimple size={14} weight="bold" aria-hidden="true" />} aria-label={`Изменить ${promo.code}`} onClick={() => setEditing(promo)} />
-        </span>
-      ),
-    },
-  ]
-
-  const createButton = (label: string) => (
-    <Button variant="primary" icon={<Plus size={16} weight="bold" aria-hidden="true" />} onClick={() => setEditing('new')}>{label}</Button>
-  )
-
-  return (
-    <Panel
-      title="Промокоды"
-      description="Код даёт деньги на баланс или тариф на срок. Один ученик погашает код один раз."
-      actions={empty ? undefined : createButton('Новый код')}
-    >
-      {fieldHidden && (
-        <p className="set-note is-warning" style={{ marginBottom: 'var(--space-3)' }}>
-          Поле ввода кода у учеников сейчас скрыто: флаг promo_codes выключен. Созданный код никто не сможет ввести, пока флаг не включат.
-        </p>
-      )}
-      {fieldPartial && (
-        <p className="set-note is-warning" style={{ marginBottom: 'var(--space-3)' }}>
-          Поле ввода кода видят не все: флаг promo_codes раскатан на {promoFlag?.rolloutPercent} %.
-        </p>
-      )}
-      {error && <ErrorState message={error} onRetry={reload} />}
-      {!error && !empty && (
-        <>
-          <p className="set-note" style={{ marginBottom: 'var(--space-3)' }}>
-            Ученик вводит код в окне аккаунта, во вкладке «Баланс». Поле ввода можно скрыть флагом promo_codes.
-          </p>
-          <DataTable columns={columns} rows={promos} rowKey={(promo) => promo.code} loading={loading} empty="Промокодов нет." onRowClick={(promo) => setDetailCode(promo.code)} />
-        </>
-      )}
-      {empty && (
-        <SettingsEmpty art="promo" title="Промокодов пока нет" actions={createButton('Создать промокод')}>
-          Код даёт ученику деньги на баланс или тариф на срок. Ученик вводит его в окне аккаунта, во вкладке «Баланс»; один ученик погашает код один раз. В форме есть шаблоны: +50 ₽, +100 ₽ и тариф на 7 дней.
-        </SettingsEmpty>
-      )}
-      {detail && (
-        <Drawer open title={`Код ${detail.code}`} subtitle={promoWhat(detail, plans)} onClose={() => setDetailCode(null)}>
-          <dl className="adm-kv">
-            <dt>Статус</dt><dd><Badge tone={promoState(detail).tone}>{promoState(detail).label}</Badge></dd>
-            <dt>Срок</dt><dd>{promoPeriod(detail)}</dd>
-            <dt>Использований</dt><dd>{formatNumber(detail.uses)}{detail.maxUses !== null ? ` из ${formatNumber(detail.maxUses)}` : ', без ограничения'}</dd>
-            <dt>Последнее</dt><dd>{detail.lastUsedAt ? formatDateTime(detail.lastUsedAt) : 'не использовался'}</dd>
-            <dt>Начислено</dt><dd>{formatKopecks(detail.creditedKopecks)}</dd>
-            <dt>Оплатили после</dt><dd>{formatNumber(detail.paidAfter)} чел.</dd>
-            <dt>Создан</dt><dd>{formatDateTime(detail.createdAt)}</dd>
-            {detail.note && <><dt>Заметка</dt><dd>{detail.note}</dd></>}
-          </dl>
-          <Panel title="Последние погасившие">
-            {detail.recent.length === 0
-              ? <EmptyState>Код ещё никто не погасил.</EmptyState>
-              : (
-                <ul className="adm-list">
-                  {detail.recent.map((item) => <li key={`${item.email}:${item.redeemedAt}`}>{item.email} · {formatDateTime(item.redeemedAt)}</li>)}
-                </ul>
-              )}
-          </Panel>
-          <div className="adm-form-actions">
-            <Button onClick={() => { setEditing(detail); setDetailCode(null) }}>Изменить</Button>
-          </div>
-        </Drawer>
-      )}
-      {editing && (
-        <PromoForm
-          promo={editing === 'new' ? null : editing}
-          plans={plans}
-          existingCodes={promos.map((promo) => promo.code)}
-          onClose={() => setEditing(null)}
-          onSaved={() => {
-            setEditing(null)
-            refresh()
-          }}
-        />
-      )}
-    </Panel>
-  )
-}
-
-function PromoForm({ promo, plans, existingCodes, onClose, onSaved }: { promo: Promo | null; plans: Plan[]; existingCodes: string[]; onClose: () => void; onSaved: () => void }) {
-  const { pending, run } = useAction()
-  const activePlans = plans.filter((plan) => plan.active || plan.id === promo?.planId)
-  const templates = useMemo(() => promoTemplates(plans), [plans])
-  const [code, setCode] = useState(promo?.code ?? '')
-  const [suggestedCode, setSuggestedCode] = useState('')
-  const [kind, setKind] = useState<'balance' | 'plan'>(promo?.kind ?? 'balance')
-  const [amount, setAmount] = useState(promo?.amountKopecks ? kopecksToInput(promo.amountKopecks) : '')
-  const [planId, setPlanId] = useState(promo?.planId ?? activePlans[0]?.id ?? '')
-  const [planDays, setPlanDays] = useState(promo?.planDays ? String(promo.planDays) : '30')
-  const [startsAt, setStartsAt] = useState(toLocalInput(promo?.startsAt ?? null))
-  const [expiresAt, setExpiresAt] = useState(toLocalInput(promo?.expiresAt ?? null))
-  const [maxUses, setMaxUses] = useState(promo?.maxUses ? String(promo.maxUses) : '')
-  const [active, setActive] = useState(promo?.active ?? true)
-  const [note, setNote] = useState(promo?.note ?? '')
-
-  const normalized = code.trim().toUpperCase()
-  const amountKopecks = rublesInputToKopecks(amount)
-  const days = intOrNull(planDays)
-  const uses = maxUses.trim() === '' ? null : intOrNull(maxUses)
-  const startsIso = fromLocalInput(startsAt)
-  const expiresIso = fromLocalInput(expiresAt)
-  const hasPlanTemplates = templates.some((item) => item.kind === 'plan')
-
-  const templateMatches = (item: PromoTemplate) => item.kind === kind
-    && (item.kind === 'balance' ? amount.trim() === item.amount : planId === item.planId && planDays.trim() === item.days)
-
-  // Шаблон заполняет тип и сумму или тариф и предлагает свободный код, если
-  // своего кода ещё не набрали.
-  const applyTemplate = (item: PromoTemplate) => {
-    setKind(item.kind)
-    if (item.kind === 'balance') setAmount(item.amount)
-    else {
-      setPlanId(item.planId)
-      setPlanDays(item.days)
-    }
-    if (!code.trim() || code === suggestedCode) {
-      const next = freeCode(item.code, existingCodes)
-      setCode(next)
-      setSuggestedCode(next)
-    }
-  }
-
-  const problem = !/^[A-Z0-9_-]{3,32}$/.test(normalized)
-    ? 'Код - от 3 до 32 символов: латиница, цифры, _ и -.'
-    : !promo && existingCodes.includes(normalized)
-      ? 'Такой код уже есть - открой его на изменение.'
-      : kind === 'balance' && (amountKopecks === null || amountKopecks < 1 || amountKopecks > 1_000_000)
-        ? 'Сумма начисления - от 0,01 до 10 000 ₽.'
-        : kind === 'plan' && !planId
-          ? 'Выбери тариф.'
-          : kind === 'plan' && (days === null || days < 1 || days > 3650)
-            ? 'Срок тарифа - от 1 до 3650 дней.'
-            : maxUses.trim() !== '' && (uses === null || uses < 1 || uses > 1_000_000)
-              ? 'Лимит использований - от 1 до 1 000 000 или пусто.'
-              : startsIso && expiresIso && startsIso >= expiresIso ? 'Окончание должно быть позже начала.' : ''
-
-  const save = async () => {
-    if (problem) return
-    const payload = promoPayload({
-      code: normalized,
-      kind,
-      amountKopecks,
-      planId,
-      planDays: days,
-      startsAt: startsIso,
-      expiresAt: expiresIso,
-      maxUses: uses,
-      active,
-      note: note.trim(),
-    })
-    const result = await run('save', () => adminRpc('admin_promo_save', { p_promo: payload }), `Код ${normalized} сохранён.`)
-    if (result !== undefined) onSaved()
-  }
-
-  return (
-    <Drawer open title={promo ? `Код ${promo.code}` : 'Новый промокод'} onClose={onClose}>
-      <form className="set-form" onSubmit={(event) => { event.preventDefault(); void save() }}>
-        {!promo && (
-          <div className="set-templates">
-            <span className="adm-field-label">Шаблоны</span>
-            <div className="set-templates-row" role="group" aria-label="Шаблоны промокода">
-              {templates.map((item) => (
-                <Button key={item.id} size="sm" aria-pressed={templateMatches(item)} onClick={() => applyTemplate(item)}>{item.label}</Button>
-              ))}
-            </div>
-            <small className="adm-field-hint">
-              {hasPlanTemplates
-                ? 'Шаблон заполняет тип, сумму или тариф и предлагает свободный код. Остальное - как обычно.'
-                : 'Шаблон «тариф на 7 дней» появится, когда будет включённый тариф, кроме тарифа по умолчанию.'}
-            </small>
-          </div>
-        )}
-        <Field label="Код" hint={promo ? 'После создания не меняется.' : 'Заглавная латиница, цифры, _ и -.'}>
-          <input value={code} disabled={Boolean(promo)} maxLength={32} onChange={(event) => setCode(event.target.value.toUpperCase())} autoComplete="off" className="adm-mono" data-initial-focus />
-        </Field>
-        <div className="adm-field">
-          <span className="adm-field-label">Что даёт</span>
-          <Segmented label="Тип промокода" value={kind} options={[{ value: 'balance', label: 'Деньги на баланс' }, { value: 'plan', label: 'Тариф' }]} onChange={setKind} />
-        </div>
-        {kind === 'balance'
-          ? (
-            <Field label="Сумма, ₽" hint="До 10 000 ₽.">
-              <input inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} />
-            </Field>
-          )
-          : (
-            <div className="adm-form-grid">
-              <Field label="Тариф">
-                <select value={planId} onChange={(event) => setPlanId(event.target.value)}>
-                  {activePlans.map((plan) => <option key={plan.id} value={plan.id}>{plan.title}</option>)}
-                </select>
-              </Field>
-              <Field label="На сколько дней">
-                <input type="number" min={1} max={3650} value={planDays} onChange={(event) => setPlanDays(event.target.value)} />
-              </Field>
-            </div>
-          )}
-        <div className="adm-form-grid">
-          <Field label="Начало" hint="Пусто - сразу. Время по поясу браузера.">
-            <input type="datetime-local" value={startsAt} onChange={(event) => setStartsAt(event.target.value)} />
-          </Field>
-          <Field label="Окончание" hint="Пусто - бессрочно.">
-            <input type="datetime-local" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} />
-          </Field>
-          <Field label="Всего использований" hint="Пусто - без ограничения.">
-            <input type="number" min={1} value={maxUses} onChange={(event) => setMaxUses(event.target.value)} />
-          </Field>
-        </div>
-        <Field label="Заметка" hint="Для себя: откуда код, для кого. До 200 символов.">
-          <input value={note} maxLength={200} onChange={(event) => setNote(event.target.value)} />
-        </Field>
-        <Check label="Включён" checked={active} onChange={setActive} />
         {problem && <p className="set-form-error" role="alert">{problem}</p>}
         <div className="adm-form-actions">
           <Button onClick={onClose}>Отмена</Button>

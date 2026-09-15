@@ -255,6 +255,56 @@
 .set-templates-row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .set-templates-row .adm-button[aria-pressed='true'] { background: var(--ink-1000); color: var(--paper-000); }
 
+/* Промокоды - свой раздел с 14 сентября 2026 (PromoSection.tsx): те же
+   панели и поля, что у настроек, плюс строка инструментов списка, ссылка
+   с кодом и выданный пакет кодов. */
+.set-promo-tools { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-3); margin-bottom: var(--space-4); }
+.set-promo-tools > .adm-field { flex: 1 1 16rem; }
+.set-promo-tools > .set-promo-sort { flex: 0 1 14rem; }
+.set-promo-tools > .set-promo-states { flex: 1 1 100%; }
+.set-promo-what { display: grid; gap: 0.15rem; }
+.set-promo-what small { color: var(--color-text-subtle); font-size: 0.75rem; }
+.set-promo-link { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-2) var(--space-3); }
+.set-promo-link > .adm-field { flex: 1 1 18rem; min-width: 0; }
+.set-promo-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.set-promo-migration strong { color: var(--color-strong); font-weight: var(--weight-semibold); }
+
+.set-promo-codes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: var(--space-1) var(--space-3);
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-surface);
+  background: var(--color-surface-sunken);
+  color: var(--color-strong);
+  font: var(--type-mono);
+  list-style: none;
+  overflow-wrap: anywhere;
+}
+
+/* Почта или телефон в списке активаций открывают карточку ученика: вид
+   тот же, что у ссылок журнала действий (audit.css). */
+.set-link {
+  display: inline;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--color-brand-accent);
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklch, currentColor 35%, transparent);
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+  transition: text-decoration-color var(--dur-fast) var(--ease-standard);
+}
+
+.set-link:hover { text-decoration-color: currentColor; }
+
 /* Тарифы: название с описанием не сжимается до слога - узкая таблица
    прокручивается внутри своей обёртки. */
 .set-col-plan { min-width: 14rem; }

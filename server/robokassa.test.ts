@@ -7,6 +7,7 @@ import {
   opStateUrl,
   parseOpState,
   parseOutSumKopecks,
+  paymentReceipt,
   resultSignature,
   robokassaConfigFromEnv,
   verifyResultNotice,
@@ -21,7 +22,10 @@ const config: RobokassaConfig = {
   live: { password1: 'live-one', password2: 'live-two' },
   test: { password1: 'test-one', password2: 'test-two' },
   testMode: false,
+  receipts: false,
 }
+
+const withReceipts: RobokassaConfig = { ...config, receipts: true }
 
 describe('robokassa config', () => {
   it('turns payments off when the passwords of the active mode are missing', () => {
@@ -38,7 +42,15 @@ describe('robokassa config', () => {
       ROBOKASSA_TEST_PASSWORD2: 'b',
       ROBOKASSA_HASH: 'crc32',
     })
-    expect(parsed).toMatchObject({ merchantLogin: 'shop', testMode: true, hash: 'md5', live: null })
+    expect(parsed).toMatchObject({ merchantLogin: 'shop', testMode: true, hash: 'md5', live: null, receipts: false })
+  })
+
+  it('turns receipts on only with ROBOKASSA_RECEIPTS=1', () => {
+    const env = { ROBOKASSA_MERCHANT_LOGIN: 'shop', ROBOKASSA_PASSWORD1: 'a', ROBOKASSA_PASSWORD2: 'b' }
+    expect(robokassaConfigFromEnv(env)?.receipts).toBe(false)
+    expect(robokassaConfigFromEnv({ ...env, ROBOKASSA_RECEIPTS: '0' })?.receipts).toBe(false)
+    expect(robokassaConfigFromEnv({ ...env, ROBOKASSA_RECEIPTS: 'true' })?.receipts).toBe(false)
+    expect(robokassaConfigFromEnv({ ...env, ROBOKASSA_RECEIPTS: '1' })?.receipts).toBe(true)
   })
 })
 
@@ -72,6 +84,84 @@ describe('robokassa payment link', () => {
     expect(url.searchParams.get('SignatureValue')).toBe(md5('homework-copilot:50.00:100002:test-one'))
     expect(url.searchParams.get('IsTest')).toBe('1')
   })
+
+  /* Ссылки сняты с кода до чеков (14 сентября 2026). Без
+     ROBOKASSA_RECEIPTS=1 они обязаны остаться прежними знак в знак, и почта
+     аккаунта в них не попадает. */
+  it('keeps the link byte for byte without receipts, even when the account has an email', () => {
+    expect(buildPaymentUrl(config, { invId: 100001, amountKopecks: 15000, isTest: false, email: 'student@example.com' })).toBe(
+      'https://auth.robokassa.ru/Merchant/Index.aspx?MerchantLogin=homework-copilot&OutSum=150.00&InvId=100001'
+      + '&Description=%D0%9F%D0%BE%D0%BF%D0%BE%D0%BB%D0%BD%D0%B5%D0%BD%D0%B8%D0%B5+%D0%B1%D0%B0%D0%BB%D0%B0%D0%BD%D1%81%D0%B0+Homework+Copilot'
+      + '&SignatureValue=361e556b638743e97fecaf06c78b152f&Culture=ru&Encoding=utf-8',
+    )
+    expect(buildPaymentUrl(config, { invId: 100002, amountKopecks: 5000, isTest: true })).toBe(
+      'https://auth.robokassa.ru/Merchant/Index.aspx?MerchantLogin=homework-copilot&OutSum=50.00&InvId=100002'
+      + '&Description=%D0%9F%D0%BE%D0%BF%D0%BE%D0%BB%D0%BD%D0%B5%D0%BD%D0%B8%D0%B5+%D0%B1%D0%B0%D0%BB%D0%B0%D0%BD%D1%81%D0%B0+Homework+Copilot'
+      + '&SignatureValue=bcc38609cbac39608f3822c9a3595b6c&Culture=ru&Encoding=utf-8&IsTest=1',
+    )
+  })
+})
+
+describe('robokassa receipt', () => {
+  const receiptJson = '{"items":[{"name":"Пополнение баланса Homework Copilot","quantity":1,"sum":150,'
+    + '"payment_method":"advance","payment_object":"payment","tax":"none"}]}'
+  const sumOf = (kopecks: number) => (JSON.parse(decodeURIComponent(paymentReceipt(kopecks))) as { items: { sum: number }[] }).items[0]?.sum
+
+  it('builds one position for the whole order as minified JSON encoded for a URL', () => {
+    expect(paymentReceipt(15000)).toBe(encodeURIComponent(receiptJson))
+    expect(decodeURIComponent(paymentReceipt(15000))).toBe(receiptJson)
+  })
+
+  it('encodes Cyrillic as UTF-8 bytes, spaces as %20 and nothing raw', () => {
+    const receipt = paymentReceipt(15000)
+    expect(receipt).toContain(
+      '%22name%22%3A%22%D0%9F%D0%BE%D0%BF%D0%BE%D0%BB%D0%BD%D0%B5%D0%BD%D0%B8%D0%B5%20%D0%B1%D0%B0%D0%BB%D0%B0%D0%BD%D1%81%D0%B0%20Homework%20Copilot%22',
+    )
+    expect(receipt).not.toMatch(/[а-яё{}":,+ ]/iu)
+  })
+
+  it('writes the sum in rubles with kopecks, equal to OutSum', () => {
+    expect(sumOf(15000)).toBe(150)
+    expect(sumOf(15050)).toBe(150.5)
+    expect(sumOf(1999)).toBe(19.99)
+    expect(decodeURIComponent(paymentReceipt(1999))).toContain('"sum":19.99,')
+    expect(decodeURIComponent(paymentReceipt(1_500_000))).toContain('"sum":15000,')
+    for (const kopecks of [5000, 1999, 15050, 1_500_000]) expect(sumOf(kopecks)).toBe(Number(formatOutSum(kopecks)))
+  })
+})
+
+describe('robokassa payment link with a receipt', () => {
+  const order = { invId: 100001, amountKopecks: 15000, isTest: false, email: 'student@example.com' }
+
+  it('passes Receipt and signs MerchantLogin:OutSum:InvId:Receipt:Password1 with the encoded value', () => {
+    const link = buildPaymentUrl(withReceipts, order)
+    const url = new URL(link)
+    const receipt = paymentReceipt(15000)
+    expect(url.searchParams.get('Receipt')).toBe(receipt)
+    expect(url.searchParams.get('SignatureValue')).toBe(md5(`homework-copilot:150.00:100001:${receipt}:live-one`))
+    expect(url.searchParams.get('OutSum')).toBe('150.00')
+    expect(url.searchParams.get('Description')).toBe('Пополнение баланса Homework Copilot')
+    // В самой ссылке значение закодировано ещё раз, как в примере документации.
+    expect(link).toContain('&Receipt=%257B%2522items%2522%253A%255B%257B%2522name%2522%253A%2522%25D0%259F%25D0%25BE')
+  })
+
+  it('sends the account email for the receipt outside the signature', () => {
+    const withEmail = new URL(buildPaymentUrl(withReceipts, order))
+    const withoutEmail = new URL(buildPaymentUrl(withReceipts, { ...order, email: undefined }))
+    expect(withEmail.searchParams.get('Email')).toBe('student@example.com')
+    expect(withoutEmail.searchParams.has('Email')).toBe(false)
+    expect(withEmail.searchParams.get('SignatureValue')).toBe(withoutEmail.searchParams.get('SignatureValue'))
+    expect(new URL(buildPaymentUrl(withReceipts, { ...order, email: 'not an email' })).searchParams.has('Email')).toBe(false)
+  })
+
+  it('signs a test order with the test pair and a sum with kopecks', () => {
+    const url = new URL(buildPaymentUrl(withReceipts, { invId: 100002, amountKopecks: 15050, isTest: true }))
+    const receipt = paymentReceipt(15050)
+    expect(url.searchParams.get('OutSum')).toBe('150.50')
+    expect(decodeURIComponent(receipt)).toContain('"sum":150.5,')
+    expect(url.searchParams.get('SignatureValue')).toBe(md5(`homework-copilot:150.50:100002:${receipt}:test-one`))
+    expect(url.searchParams.get('IsTest')).toBe('1')
+  })
 })
 
 describe('robokassa result notice', () => {
@@ -84,6 +174,12 @@ describe('robokassa result notice', () => {
   it('accepts a live notice signed with password 2, in either letter case', () => {
     const check = verifyResultNotice(config, notice('live-two', { PaymentMethod: 'BankCard' }))
     expect(check).toEqual({ ok: true, notice: { invId: 100001, amountKopecks: 15000, isTest: false, payload: { OutSum: '150.000000', InvId: '100001', PaymentMethod: 'BankCard' } } })
+  })
+
+  it('checks the notice the same way when receipts are on', () => {
+    const params = notice('live-two', { EMail: 'student@example.com' })
+    expect(verifyResultNotice(withReceipts, params)).toEqual(verifyResultNotice(config, params))
+    expect(verifyResultNotice(withReceipts, params).ok).toBe(true)
   })
 
   it('tells a test notice by the pair that signed it', () => {

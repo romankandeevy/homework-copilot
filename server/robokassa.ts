@@ -5,8 +5,9 @@ import { createHash, timingSafeEqual } from 'node:crypto'
    функции, поэтому проверяется юнит-тестами.
 
    Подписи (алгоритм задаётся в кабинете магазина, по умолчанию MD5):
-   - ссылка на оплату   MerchantLogin:OutSum:InvId:Пароль1
-   - уведомление Result  OutSum:InvId:Пароль2[:shp_…]
+   - ссылка на оплату   MerchantLogin:OutSum:InvId:Пароль1,
+                        с чеком MerchantLogin:OutSum:InvId:Receipt:Пароль1
+   - уведомление Result  OutSum:InvId:Пароль2[:shp_…] - с чеком так же
    - статус OpStateExt   MerchantLogin:InvoiceID:Пароль2
    Параметры shp_ дописываются после пароля по алфавиту, как key=value.
    Мы их не шлём, но если в кабинете их добавят - подпись не разойдётся.
@@ -27,6 +28,10 @@ export type RobokassaConfig = {
      тестовый заказ может завести только служебный аккаунт (это проверяет
      `create_payment_order`). */
   testMode: boolean
+  /* Чек НПД формирует Робокасса (Робочеки СМЗ): в ссылку уходят Receipt и
+     почта аккаунта. Только при `ROBOKASSA_RECEIPTS=1`; иначе ссылка и
+     подпись те же, что без чеков, знак в знак. */
+  receipts: boolean
 }
 
 export const robokassaPaymentUrl = 'https://auth.robokassa.ru/Merchant/Index.aspx'
@@ -55,7 +60,8 @@ export function robokassaConfigFromEnv(env: Record<string, string | undefined>):
   const testMode = ['1', 'true', 'yes'].includes(text(env.ROBOKASSA_TEST_MODE).toLowerCase())
   if (testMode ? !test : !live) return null
   const requested = text(env.ROBOKASSA_HASH).toLowerCase() as RobokassaHash
-  return { merchantLogin, hash: hashes.has(requested) ? requested : 'md5', live, test, testMode }
+  const receipts = text(env.ROBOKASSA_RECEIPTS) === '1'
+  return { merchantLogin, hash: hashes.has(requested) ? requested : 'md5', live, test, testMode, receipts }
 }
 
 function digest(hash: RobokassaHash, value: string) {
@@ -92,8 +98,11 @@ function shpSuffix(params: URLSearchParams) {
     .join('')
 }
 
-export function paymentSignature(config: RobokassaConfig, keys: RobokassaPasswords, outSum: string, invId: number) {
-  return digest(config.hash, `${config.merchantLogin}:${outSum}:${invId}:${keys.password1}`)
+/* С чеком значение Receipt встаёт между InvId и паролем в том виде, в каком
+   уходит параметром, - уже URL-кодированным (docs.robokassa.ru/ru/fiscalization). */
+export function paymentSignature(config: RobokassaConfig, keys: RobokassaPasswords, outSum: string, invId: number, receipt: string | null = null) {
+  const base = receipt === null ? `${config.merchantLogin}:${outSum}:${invId}` : `${config.merchantLogin}:${outSum}:${invId}:${receipt}`
+  return digest(config.hash, `${base}:${keys.password1}`)
 }
 
 export function resultSignature(hash: RobokassaHash, outSum: string, invId: string, password2: string, params = new URLSearchParams()) {
@@ -106,19 +115,60 @@ export function opStateSignature(config: RobokassaConfig, keys: RobokassaPasswor
 
 export const paymentDescription = 'Пополнение баланса Homework Copilot'
 
-export function buildPaymentUrl(config: RobokassaConfig, order: { invId: number; amountKopecks: number; isTest: boolean }) {
+/* Чек для Робочеков СМЗ: одна позиция на всю сумму заказа. Пополнение -
+   аванс за решения, которые ещё не выбраны, поэтому способ расчёта
+   `advance`, предмет - `payment` («платёж (аванс, задаток…)»); НДС у
+   самозанятого нет - `none`. `sno` не передаём: НПД в её списке нет, и
+   Робокасса берёт систему из кабинета. Сумма - рубли числом до двух знаков
+   из той же строки, что OutSum: сумма позиций обязана совпасть с суммой
+   операции. Значение параметра - JSON без пробелов, закодированный в URL;
+   ровно эта строка входит в подпись, а в ссылке кодируется ещё раз
+   (`Receipt=%257B%2522items…`, как в примере docs.robokassa.ru). */
+export function paymentReceipt(amountKopecks: number) {
+  const receipt = {
+    items: [{
+      name: paymentDescription,
+      quantity: 1,
+      sum: Number(formatOutSum(amountKopecks)),
+      payment_method: 'advance',
+      payment_object: 'payment',
+      tax: 'none',
+    }],
+  }
+  return encodeURIComponent(JSON.stringify(receipt))
+}
+
+/* Почта покупателя для чека (параметр Email, в подпись не входит). Нет
+   почты - у аккаунта по телефону её нет - или она не похожа на адрес: не
+   передаём вовсе. */
+function receiptEmail(value: string | null | undefined) {
+  const email = text(value ?? undefined)
+  return email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(email) ? email : null
+}
+
+export type PaymentOrder = { invId: number; amountKopecks: number; isTest: boolean; email?: string | null }
+
+/* Без чеков ссылка и подпись те же, что были до них, знак в знак, и почта
+   в ссылку не идёт: это закреплено тестом. */
+export function buildPaymentUrl(config: RobokassaConfig, order: PaymentOrder) {
   const keys = order.isTest ? config.test : config.live
   if (!keys) throw new Error(order.isTest ? 'robokassa test passwords are not configured' : 'robokassa passwords are not configured')
   const outSum = formatOutSum(order.amountKopecks)
+  const receipt = config.receipts ? paymentReceipt(order.amountKopecks) : null
   const params = new URLSearchParams({
     MerchantLogin: config.merchantLogin,
     OutSum: outSum,
     InvId: String(order.invId),
     Description: paymentDescription,
-    SignatureValue: paymentSignature(config, keys, outSum, order.invId),
+    SignatureValue: paymentSignature(config, keys, outSum, order.invId, receipt),
     Culture: 'ru',
     Encoding: 'utf-8',
   })
+  if (receipt !== null) {
+    params.set('Receipt', receipt)
+    const email = receiptEmail(order.email)
+    if (email) params.set('Email', email)
+  }
   if (order.isTest) params.set('IsTest', '1')
   return `${robokassaPaymentUrl}?${params.toString()}`
 }

@@ -954,6 +954,17 @@
   .schedule-ocr-review footer button { width: 100%; }
 }
 
+/* Полоса под плавающую поддержку (14 сентября 2026). На телефоне кнопка -
+   круг в 3rem у правого края, и при прокрутке под ней по очереди проходили
+   корзина урока и конец времени каждой строки. Угол освобождает доска, а
+   не кнопка уходит (AGENTS.md, «Иерархия первого экрана»): правые 3rem
+   строк урока пустые, под кнопкой не остаётся ни одного поля. Шире 560
+   кнопка с подписью, и такая полоса съела бы строку - там не трогаем. */
+@media (max-width: 560px) {
+  .schedule-mobile-time,
+  .schedule-mobile-lesson .schedule-cell-editor { padding-right: 3rem; }
+}
+
 @media (min-width: 560px) and (max-width: 980px) and (max-height: 500px) {
   .schedule-page { gap: var(--space-4); margin-top: var(--space-3); }
 

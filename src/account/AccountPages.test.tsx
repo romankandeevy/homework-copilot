@@ -222,4 +222,27 @@ describe('BalancePage', () => {
     renderBalance({ account: accountWith(2) })
     expect(screen.queryByRole('button', { name: 'Показать ещё' })).not.toBeInTheDocument()
   })
+
+  // Ссылка «Скопировать ссылку» из админки: /balance?promo=КОД.
+  it('fills the promo code from the link and drops it from the address', () => {
+    window.history.replaceState({}, '', '/balance?promo=school-7f3k9q&from=admin')
+    try {
+      renderBalance()
+      expect(screen.getByRole('textbox', { name: 'Промокод' })).toHaveValue('SCHOOL-7F3K9Q')
+      expect(window.location.search).toBe('?from=admin')
+    } finally {
+      window.history.replaceState({}, '', '/')
+    }
+  })
+
+  it('explains that a code is only for new accounts', async () => {
+    mocks.rpc.mockImplementation(async (name: string) => (name === 'redeem_promo_code'
+      ? { data: null, error: { message: 'promo code for new accounts only' } }
+      : { data: null, error: null }))
+    renderBalance()
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Промокод' }), { target: { value: 'NEWBIE' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Применить' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Промокод только для новых аккаунтов')
+  })
 })

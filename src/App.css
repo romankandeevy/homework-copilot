@@ -1969,6 +1969,10 @@
     padding-left: max(var(--space-2), env(safe-area-inset-left));
   }
   .navigation-item { padding-inline: 0; letter-spacing: -0.01em; }
+  /* 14 сентября 2026 на 320 всё равно выходило «Расписан…»: колонка 76
+     пикселей, а слово с загруженным Onest - на пару пикселей шире. Колонка
+     не уже своей подписи, остальные делят остаток - разница незаметна. */
+  .product-navigation { grid-template-columns: repeat(4, minmax(min-content, 1fr)); }
   /* На самых маленьких экранах приветствие уступает место кнопке:
      72 пикселя вежливости не стоят того, чтобы «Решить» ушло за сгиб. */
   .page-header { display: none; }
