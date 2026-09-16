@@ -83,6 +83,12 @@ function statusText(row: Row) {
   return 'активен'
 }
 
+/* Один отмеченный аккаунт подтверждается его почтой или номером, как из
+   карточки: слово «УДАЛИТЬ» сервер для одного аккаунта не примет. */
+function singleDeleteExpected(row: Row) {
+  return str(row.email) || str(row.phone)
+}
+
 function displayName(row: Row) {
   return str(row.fullName).trim() || str(row.email) || formatPhoneForDisplay(row.phone) || 'Без имени'
 }
@@ -499,7 +505,14 @@ export default function UsersSection() {
         <BalanceDialog mode="credit" count={selected.size} pending={pending === 'bulk'} onClose={closeDialog} onSubmit={(amount, reason) => void submitBulk('credit', { amount, reason })} />
       )}
       {dialog?.kind === 'bulk' && dialog.action === 'delete' && (
-        <DeleteUserDialog count={selected.size} expected={deleteConfirmWord} pending={pending === 'bulk'} onClose={closeDialog} onSubmit={(confirm, reason) => void submitBulk('delete', { confirm, reason })} />
+        <DeleteUserDialog
+          count={selected.size}
+          expected={selected.size === 1 ? singleDeleteExpected([...selectedRows.values()][0]) : deleteConfirmWord}
+          target={selected.size === 1 ? displayName([...selectedRows.values()][0]) : undefined}
+          pending={pending === 'bulk'}
+          onClose={closeDialog}
+          onSubmit={(confirm, reason) => void submitBulk('delete', { confirm, reason })}
+        />
       )}
     </div>
   )

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   buildPaymentUrl,
   classifyOpState,
@@ -34,15 +34,28 @@ describe('robokassa config', () => {
     expect(robokassaConfigFromEnv({ ROBOKASSA_MERCHANT_LOGIN: 'shop', ROBOKASSA_TEST_MODE: '1', ROBOKASSA_PASSWORD1: 'a', ROBOKASSA_PASSWORD2: 'b' })).toBeNull()
   })
 
-  it('reads the test mode and falls back to md5 for an unknown hash', () => {
+  it('reads the test mode and uses md5 when no hash is set', () => {
     const parsed = robokassaConfigFromEnv({
       ROBOKASSA_MERCHANT_LOGIN: 'shop',
       ROBOKASSA_TEST_MODE: 'true',
       ROBOKASSA_TEST_PASSWORD1: 'a',
       ROBOKASSA_TEST_PASSWORD2: 'b',
-      ROBOKASSA_HASH: 'crc32',
     })
     expect(parsed).toMatchObject({ merchantLogin: 'shop', testMode: true, hash: 'md5', live: null, receipts: false })
+    expect(robokassaConfigFromEnv({ ROBOKASSA_MERCHANT_LOGIN: 'shop', ROBOKASSA_PASSWORD1: 'a', ROBOKASSA_PASSWORD2: 'b', ROBOKASSA_HASH: 'SHA256' })?.hash).toBe('sha256')
+  })
+
+  it('turns payments off and logs loudly for an unknown hash instead of signing with md5', () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const parsed = robokassaConfigFromEnv({
+      ROBOKASSA_MERCHANT_LOGIN: 'shop',
+      ROBOKASSA_PASSWORD1: 'a',
+      ROBOKASSA_PASSWORD2: 'b',
+      ROBOKASSA_HASH: 'sha-256',
+    })
+    expect(parsed).toBeNull()
+    expect(String(logged.mock.calls[0]?.[0])).toContain('robokassa_hash_unknown')
+    logged.mockRestore()
   })
 
   it('turns receipts on only with ROBOKASSA_RECEIPTS=1', () => {

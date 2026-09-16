@@ -728,6 +728,10 @@ export type Database = {
         Args: never
         Returns: { deleted: boolean; solutions: number }
       }
+      my_account_deletion_check: {
+        Args: never
+        Returns: { balanceKopecks: number; refundableKopecks: number; paymentPending: boolean }
+      }
       list_chat_models: {
         Args: never
         Returns: {
@@ -1133,6 +1137,9 @@ export type Database = {
       payment_orders_due: { Args: { p_limit?: number }; Returns: Json }
       close_payment_order: { Args: { p_inv_id: number; p_status: string }; Returns: boolean }
       payment_user_is_staff: { Args: { p_user_id: string }; Returns: boolean }
+      report_payment_incident: { Args: { p_detail?: string | null; p_inv_id?: number | null; p_kind: string }; Returns: undefined }
+      mark_admin_cron_ok: { Args: never; Returns: undefined }
+      account_has_payment_in_flight: { Args: { p_user_id: string }; Returns: boolean }
       complete_admin_notifications: { Args: { p_results: Json }; Returns: undefined }
       record_health_check: {
         Args: { p_detail?: string | null; p_latency_ms?: number | null; p_ok: boolean; p_service: string; p_status: string }

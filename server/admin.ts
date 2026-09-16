@@ -57,9 +57,17 @@ export class AdminApiError extends Error {
 const allowedOrigins = new Set([
   'https://www.homeworkcopilot.ru',
   'https://homeworkcopilot.ru',
+])
+
+// Локальная разработка - только вне боевого окружения Vercel.
+const developmentOrigins = new Set([
   'http://localhost:5173',
   'http://127.0.0.1:5173',
 ])
+
+export function isAllowedAdminOrigin(origin: string, vercelEnv = process.env.VERCEL_ENV) {
+  return allowedOrigins.has(origin) || (vercelEnv !== 'production' && developmentOrigins.has(origin))
+}
 
 const productionOrigin = 'https://www.homeworkcopilot.ru'
 const vercelOrigin = 'https://homework-copilot-taupe.vercel.app'
@@ -74,7 +82,7 @@ function sendJson(response: ServerResponse, status: number, payload: unknown) {
 
 function allowBrowser(request: IncomingMessage, response: ServerResponse) {
   const origin = request.headers.origin
-  if (!origin || !allowedOrigins.has(origin)) return false
+  if (!origin || !isAllowedAdminOrigin(origin)) return false
   response.setHeader('Access-Control-Allow-Origin', origin)
   response.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
   response.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
@@ -235,9 +243,12 @@ async function resetPassword(options: AdminServerOptions, admin: AdminContext, b
    бы без владельца. Если база потом откажет, файлы уже удалены, а аккаунт
    цел - это лучше обратного, когда аккаунта нет, а файлы висят.
 
-   Один аккаунт подтверждается его почтой или номером, как вписал владелец.
+   Один аккаунт подтверждается только его почтой или номером, как вписал
+   владелец: слово «УДАЛИТЬ» для одного аккаунта не принимается, иначе
+   сверка в базе была бы формальной - сервер сам подставляет ей почту.
    Несколько - словом «УДАЛИТЬ»; тогда почту для базы берём с сервера. */
 const deleteConfirmWord = 'УДАЛИТЬ'
+const paymentInFlightMessage = 'У аккаунта платёж в пути: заказ пополнения моложе суток ждёт оплаты. Удали аккаунт позже'
 const deleteBatchLimit = 50
 
 function deleteConfirmation(email: string, phone: string) {
@@ -282,8 +293,8 @@ async function deleteUsers(options: AdminServerOptions, admin: AdminContext, bod
   if (userIds.length === 0) throw new AdminApiError(400, 'Не выбраны пользователи')
   if (userIds.length > deleteBatchLimit) throw new AdminApiError(400, `За раз - не больше ${deleteBatchLimit} аккаунтов`)
   const typed = typeof body.confirm === 'string' ? body.confirm.trim() : ''
-  const byWord = typed === deleteConfirmWord
-  if (!byWord && userIds.length > 1) throw new AdminApiError(400, `Для нескольких аккаунтов впиши «${deleteConfirmWord}»`)
+  const byWord = userIds.length > 1
+  if (byWord && typed !== deleteConfirmWord) throw new AdminApiError(400, `Для нескольких аккаунтов впиши «${deleteConfirmWord}»`)
   const reason = typeof body.reason === 'string' ? body.reason.trim().slice(0, 300) : ''
 
   let done = 0
@@ -298,6 +309,10 @@ async function deleteUsers(options: AdminServerOptions, admin: AdminContext, bod
       // eslint-disable-next-line no-await-in-loop
       if (await isAdminAccount(options, user.id)) throw new AdminApiError(403, 'Аккаунт администратора не удаляется - сначала сними роль')
       if (!byWord && !deleteConfirmMatches(typed, email, phone)) throw new AdminApiError(400, 'Подтверждение не совпало с почтой или номером аккаунта')
+      // Платёж в пути база не даст удалить - узнаём об этом до того, как стёрты файлы.
+      // eslint-disable-next-line no-await-in-loop
+      const { data: paymentInFlight } = await serviceClient(options).rpc('account_has_payment_in_flight', { p_user_id: user.id })
+      if (paymentInFlight === true) throw new AdminApiError(409, paymentInFlightMessage)
       // eslint-disable-next-line no-await-in-loop
       await removeChatAttachments(options, user.id)
       // eslint-disable-next-line no-await-in-loop
@@ -306,7 +321,9 @@ async function deleteUsers(options: AdminServerOptions, admin: AdminContext, bod
         p_confirm: deleteConfirmation(email, phone),
         p_reason: reason || null,
       })
-      if (error) throw new AdminApiError(502, error.message)
+      if (error) {
+        throw new AdminApiError(502, error.message.includes('payment order pending') ? paymentInFlightMessage : error.message)
+      }
       done += 1
     } catch (error) {
       failed.push({ userId, error: error instanceof Error ? error.message : 'не получилось' })
@@ -419,6 +436,10 @@ function timeout(ms: number) {
   return AbortSignal.timeout(ms)
 }
 
+function logHealthRecordFailure(service: string, message: string) {
+  console.error(JSON.stringify({ event: 'admin_health_record_failed', service, message }))
+}
+
 export async function runHealthChecks(options: AdminServerOptions): Promise<HealthResult[]> {
   const checks: Promise<HealthResult>[] = [
     probe(options, 'kie', async (fetchImpl) => {
@@ -511,13 +532,18 @@ export async function runHealthChecks(options: AdminServerOptions): Promise<Heal
   const results = await Promise.all(checks)
   const service = telemetryClient(options)
   if (service) {
+    /* Запись не прошла - проверка всё равно отдаётся админке, но молча это
+       не проходит: без записи мониторинг показывает прошлое состояние, а
+       тревога о падении не ставится. */
     await Promise.all(results.map((result) => service.rpc('record_health_check', {
       p_service: result.service,
       p_ok: result.ok,
       p_status: result.status,
       p_latency_ms: result.latencyMs,
       p_detail: result.detail,
-    }).then(() => undefined, () => undefined)))
+    }).then(({ error }) => {
+      if (error) logHealthRecordFailure(result.service, error.message)
+    }, (error: unknown) => logHealthRecordFailure(result.service, error instanceof Error ? error.message : 'unknown'))))
   }
   return results
 }
@@ -588,9 +614,20 @@ export async function deliverNotifications(options: AdminServerOptions, notifica
   return results
 }
 
+/* Токен выписывает dispatch_admin_cron: `encode(gen_random_bytes(24), 'hex')` -
+   ровно 48 строчных шестнадцатеричных знаков. Всё прочее отсекается до
+   похода в базу: адрес публичный, и мусорный запрос не должен стоить
+   вызова claim_admin_cron. */
+const cronTokenPattern = /^[0-9a-f]{48}$/
+
+export function isCronTokenShape(token: unknown): token is string {
+  return typeof token === 'string' && cronTokenPattern.test(token)
+}
+
 async function runCron(options: AdminServerOptions, body: Record<string, unknown>) {
+  if (!isCronTokenShape(body.token)) throw new AdminApiError(401, 'Токен cron не принят')
   const service = serviceClient(options)
-  const { data, error } = await service.rpc('claim_admin_cron', { p_token: typeof body.token === 'string' ? body.token : '' })
+  const { data, error } = await service.rpc('claim_admin_cron', { p_token: body.token })
   if (error || !data || typeof data !== 'object' || Array.isArray(data)) throw new AdminApiError(401, 'Токен cron не принят')
   const claim = data as { emails?: unknown; notifications?: unknown }
   const emails = Array.isArray(claim.emails) ? claim.emails.filter((entry): entry is string => typeof entry === 'string' && entry.includes('@')) : []
@@ -626,6 +663,11 @@ async function runCron(options: AdminServerOptions, body: Record<string, unknown
   } catch (reconcileError) {
     console.log(JSON.stringify({ event: 'robokassa_reconcile_unavailable', message: reconcileError instanceof Error ? reconcileError.message : 'unknown' }))
   }
+
+  /* Отметка «cron дошёл»: её устаревание проверяет сама база (задание
+     refresh-daily-metrics) и тревожит, если Vercel перестал отвечать. */
+  const { error: markError } = await service.rpc('mark_admin_cron_ok')
+  if (markError) console.error(JSON.stringify({ event: 'admin_cron_mark_failed', message: markError.message }))
   return { delivered: results.length, health: health.length, payments }
 }
 

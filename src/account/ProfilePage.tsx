@@ -5,7 +5,9 @@ import { ArrowSquareOut, CheckCircle, Moon, SignOut, Sun, Trash } from '@phospho
 import type { AccountData } from '../lib/supabase'
 import { supabase } from '../lib/supabase'
 import { applicationPath } from '../lib/appPath'
-import { deleteMyAccount } from '../lib/accountDeletion'
+import { checkAccountDeletion, deleteMyAccount, paymentPendingError } from '../lib/accountDeletion'
+import type { AccountDeletionCheck } from '../lib/accountDeletion'
+import { formatKopecks } from '../lib/currency'
 import { formatPhoneForDisplay } from '../lib/phone'
 import GradeSelect from './GradeSelect'
 import { AccountGuest, AccountPageHeader } from './AccountPageHeader'
@@ -60,7 +62,18 @@ function ProfileContent({ user, account, notice, theme, onToggleTheme, onReloadA
   const [error, setError] = useState('')
   const [deletionOpen, setDeletionOpen] = useState(false)
   const [deletionWord, setDeletionWord] = useState('')
+  const [deletionCheck, setDeletionCheck] = useState<AccountDeletionCheck | null>(null)
   const staff = useStaffAccess(user.id)
+
+  // Перед подтверждением: есть ли на балансе внесённые деньги и платёж в пути.
+  useEffect(() => {
+    if (!deletionOpen || !supabase) return
+    let active = true
+    void checkAccountDeletion(supabase).then((check) => {
+      if (active) setDeletionCheck(check)
+    })
+    return () => { active = false }
+  }, [deletionOpen])
 
   useEffect(() => {
     setFullName(account?.profile.full_name ?? '')
@@ -117,7 +130,9 @@ function ProfileContent({ user, account, notice, theme, onToggleTheme, onReloadA
       const message = deletionError instanceof Error ? deletionError.message : ''
       setError(message.includes('admin account')
         ? 'Аккаунт владельца из приложения не удаляется'
-        : 'Не получилось удалить аккаунт. Попробуй ещё раз или напиши в поддержку')
+        : message.includes(paymentPendingError)
+          ? 'Платёж ещё обрабатывается. Удалить аккаунт можно, когда он завершится'
+          : 'Не получилось удалить аккаунт. Попробуй ещё раз или напиши в поддержку')
       setLoading(false)
       setDeletionOpen(false)
     }
@@ -212,6 +227,15 @@ function ProfileContent({ user, account, notice, theme, onToggleTheme, onReloadA
             Уйдут профиль, баланс и его история, решения задач, диалоги чата с фотографиями,
             расписание и обращения в поддержку. Восстановить это нельзя, и вернуть баланс — тоже.
           </p>
+          {deletionCheck && deletionCheck.refundableKopecks > 0 && (
+            <p role="note">
+              На балансе {formatKopecks(deletionCheck.balanceKopecks)}, из них {formatKopecks(deletionCheck.refundableKopecks)} - внесённые деньги.
+              {' '}Удаление аккаунта их не вернёт: сначала запроси возврат остатка в <a href="/support">поддержке</a>.
+            </p>
+          )}
+          {deletionCheck?.paymentPending && (
+            <p role="alert">Платёж ещё обрабатывается. Удалить аккаунт можно, когда он завершится.</p>
+          )}
           <label>
             <span>Впиши «удалить», чтобы подтвердить</span>
             <input
@@ -224,7 +248,7 @@ function ProfileContent({ user, account, notice, theme, onToggleTheme, onReloadA
           </label>
           <div className="account-delete-actions">
             <button type="button" onClick={() => { setDeletionOpen(false); setDeletionWord('') }} disabled={loading}>Отмена</button>
-            <button type="submit" className="is-danger" disabled={loading || deletionWord.trim().toLocaleLowerCase('ru') !== 'удалить'}>
+            <button type="submit" className="is-danger" disabled={loading || deletionCheck?.paymentPending === true || deletionWord.trim().toLocaleLowerCase('ru') !== 'удалить'}>
               {loading ? 'Удаляем…' : 'Удалить аккаунт'}
             </button>
           </div>
