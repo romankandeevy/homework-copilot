@@ -225,6 +225,40 @@
   text-decoration-color: currentColor;
 }
 
+/* Оглавление оферты. Строка оглавления - обычная ссылка документа, но в
+   рост пальца: по ней целятся на телефоне. На широком экране две колонки. */
+.legal-sections .legal-toc {
+  margin-bottom: var(--space-8);
+  padding-bottom: var(--space-6);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.legal-toc ol {
+  margin: 0;
+  padding-left: 1.75rem;
+  color: var(--color-text-subtle);
+  font-size: var(--text-ui);
+  font-variant-numeric: tabular-nums;
+  columns: 2 16rem;
+  column-gap: var(--space-8);
+}
+
+.legal-toc li {
+  break-inside: avoid;
+}
+
+.legal-sections .legal-toc a {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  line-height: 1.3;
+  text-decoration-color: transparent;
+}
+
+.legal-sections .legal-toc a:hover {
+  text-decoration-color: currentColor;
+}
+
 .legal-storage-clear {
   display: inline-flex;
   min-height: 2.75rem;

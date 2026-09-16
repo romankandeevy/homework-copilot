@@ -25,6 +25,7 @@ import {
   Ticket,
   UsersThree,
 } from '@phosphor-icons/react'
+import { applySeoMetadata, getSeoMetadata } from '../lib/siteMetadata'
 import { supabase } from '../lib/supabase'
 import { adminRpc, bool, isRecord, num, obj, rows, str } from './api'
 import { AdminContext } from './context'
@@ -624,6 +625,9 @@ export default function AdminApp() {
     const previousTheme = root.dataset.theme
     const previousScheme = root.style.colorScheme
     const previousTitle = document.title
+    /* Без этого вкладка админки получала `index, follow` и canonical на
+       корень от витрины (аудит 16 сентября 2026, Г9). */
+    applySeoMetadata(getSeoMetadata('/admin'))
     document.title = 'Админка - Homework Copilot'
     return () => {
       if (previousTheme) root.dataset.theme = previousTheme

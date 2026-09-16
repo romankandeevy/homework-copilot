@@ -206,15 +206,15 @@ describe('Homework Copilot task flow', () => {
     expect(request).toMatchObject({ subject: 'Химия', grade: '8 класс' })
   })
 
-  it('keeps unreleased CDZ content behind a coming-soon route', () => {
-    window.history.replaceState({}, '', '/cdz')
+  /* Раздел ЦДЗ удалён 16 сентября 2026. Его адреса уже разошлись и не
+     должны давать 404: они открывают рабочую страницу. */
+  it.each(['/cdz', '/tasks', '/textbooks'])('ведёт адрес удалённого раздела %s на /app', (path) => {
+    window.history.replaceState({}, '', path)
     render(<App />)
 
-    expect(screen.getByRole('heading', { name: 'Раздел пока закрыт' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Задача № 2 · 5 ₽' })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Вернуться на главную' }))
     expect(window.location.pathname).toBe('/app')
     expect(screen.getByRole('heading', { name: 'Решить задачу' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Раздел пока закрыт' })).not.toBeInTheDocument()
   })
 
   // Витрина и приложение — разные адреса. `/` встречает нового посетителя,

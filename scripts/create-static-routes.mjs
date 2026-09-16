@@ -20,8 +20,9 @@ const outputDirectory = resolve('dist')
 /* Прежние адреса. Ссылки на них уже разошлись, поэтому страницы остаются,
    но каноническим объявляют новый адрес — его же вернёт `getSeoMetadata`.
    Прежние адреса документов (и `/agreement` среди них) разложены ниже
-   отдельно: там не копия приложения, а мгновенный переход. */
-const legacyPaths = ['/main', '/base', '/tasks', '/textbooks']
+   отдельно: там не копия приложения, а мгновенный переход. `/cdz`, `/tasks`
+   и `/textbooks` - адреса удалённого раздела ЦДЗ, канонический у них `/app`. */
+const legacyPaths = ['/main', '/base', '/tasks', '/textbooks', '/cdz']
 
 const routes = [...Object.keys(metadataByPath), ...legacyPaths]
   .filter((path) => path !== '/')

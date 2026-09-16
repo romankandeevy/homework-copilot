@@ -212,8 +212,8 @@ try {
     await page.getByRole('button', { name: /Баланс 20 ₽/ }).click()
     await page.getByRole('heading', { name: 'Пригласи друга' }).waitFor()
     // Награда приходит за подтверждённую почту приглашённого, а не за его пополнение.
-    await page.getByText('Как только он зарегистрируется по твоей ссылке и подтвердит почту').waitFor()
-    await page.getByText('+5 ₽ придут, как только подтвердишь почту').waitFor()
+    await page.getByText('Как только он зарегистрируется по твоей ссылке и подтвердит почту или номер телефона').waitFor()
+    await page.getByText('+5 ₽ придут, как только подтвердишь почту или номер телефона').waitFor()
     const referralTerms = await page.locator('.account-referral-card header').innerText()
     if (!referralTerms.includes('+10 ₽') || !referralTerms.includes('+5 ₽')) failures.push(`wallet-${viewport.width}: reward amounts are missing (${referralTerms})`)
 

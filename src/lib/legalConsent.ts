@@ -3,7 +3,7 @@ import type { Database } from './database.types'
 
 /* Дата действующей редакции. В базе она живёт в `private.current_legal_version()`
    и проставляется сервером — здесь копия только для показа на странице. */
-export const legalDocumentVersion = '2026-09-14'
+export const legalDocumentVersion = '2026-09-16'
 const pendingAcceptanceKey = 'homework-copilot:legal-acceptance-pending'
 
 /* Чем человек вошёл, когда принимал документы. Тот же список проверяет база

@@ -18,6 +18,15 @@ describe('site metadata', () => {
     expect(getSeoMetadata('/agreement').path).toBe('/docs/terms')
   })
 
+  /* Аудит 16 сентября 2026: `/app` и `/solutions` без скриптов пусты и из
+     карты сайта убраны, адреса удалённого раздела ЦДЗ ведут на `/app`. */
+  it('closes the empty app routes and sends the removed CDZ addresses to /app', () => {
+    expect(getSeoMetadata('/app').robots).toBe('noindex, follow')
+    expect(getSeoMetadata('/solutions').robots).toBe('noindex, nofollow')
+    expect(['/cdz', '/tasks', '/textbooks'].map((path) => getSeoMetadata(path).path)).toEqual(['/app', '/app', '/app'])
+    expect(getSeoMetadata('/admin').robots).toBe('noindex, nofollow')
+  })
+
   /* С 14 сентября 2026 документы живут под /docs/. Прежние адреса уже в
      письмах и отметках согласия: они обязаны открывать тот же документ и
      объявлять каноническим новый адрес. */

@@ -14,31 +14,29 @@ export type SeoMetadata = {
    Раньше он был записан дважды - здесь и в scripts/create-static-routes.mjs, -
    и копии разошлись: статика звала «найти условие по номеру в учебнике» из
    удалённого раздела и открывала ЦДЗ поисковикам, пока клиент закрывал его
-   noindex. */
+   noindex. Раздел ЦДЗ удалён 16 сентября 2026: его адреса ведут на `/app`. */
 export const metadataByPath: Record<string, SeoMetadata> = {
   '/': {
     title: 'Homework Copilot - решение задачи по фото с разбором',
-    description: 'Сфотографируй задачу или впиши условие. Получишь готовую запись для тетради: дано, ход решения, чертёж и ответ. 14 предметов с 5 по 11 класс.',
+    description: 'Сфотографируй задачу или впиши условие. Получишь готовую запись для тетради: дано, ход решения, чертёж и ответ. 14 предметов, 5-11 класс и университет.',
     path: '/',
     robots: 'index, follow',
   },
+  /* `/app` и `/solutions` закрыты от поиска с 16 сентября 2026. Они стояли в
+     карте сайта с `index, follow`, а готового HTML у них нет (отрисовывать
+     там нечего без скриптов и входа): поисковик получал пустой
+     `<div id="root">`. В поиск ходит витрина, с неё ведут все действия. */
   '/app': {
     title: 'Решить задачу - Homework Copilot',
     description: 'Рабочая страница Homework Copilot: условие текстом или фотографией, готовое решение и история задач.',
     path: '/app',
-    robots: 'index, follow',
+    robots: 'noindex, follow',
   },
   '/solutions': {
     title: 'Решения задач - Homework Copilot',
     description: 'Личная история решённых задач: открыть любую снова можно бесплатно.',
     path: '/solutions',
-    robots: 'index, follow',
-  },
-  '/cdz': {
-    title: 'ЦДЗ пока закрыт - Homework Copilot',
-    description: 'Раздел ЦДЗ ещё не запущен и откроется после полной проверки.',
-    path: '/cdz',
-    robots: 'noindex, follow',
+    robots: 'noindex, nofollow',
   },
   '/schedule': {
     title: 'Расписание - Homework Copilot',
@@ -145,7 +143,9 @@ function normalizePath(pathname: string) {
   const path = pathname.replace(/\/+$/, '') || '/'
   if (path === '/main') return '/app'
   if (path === '/base') return '/solutions'
-  if (path === '/tasks' || path === '/textbooks') return '/cdz'
+  /* Адреса удалённого раздела ЦДЗ (16 сентября 2026) уже разошлись: ведут
+     в рабочую страницу, а не в 404. */
+  if (path === '/tasks' || path === '/textbooks' || path === '/cdz') return '/app'
   if (Object.hasOwn(legacyDocumentPaths, path)) return legacyDocumentPaths[path]
   return path
 }

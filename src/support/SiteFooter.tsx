@@ -1,4 +1,5 @@
 import { currentApplicationPath } from '../lib/appPath'
+import { contactEmail, contactPhone, contactPhoneHref, sellerFullName, sellerInnClause } from '../lib/seller'
 import './SiteFooter.css'
 
 type FooterLink = { href: string; label: string }
@@ -83,6 +84,16 @@ export function SiteFooter({ onOpenSupport }: { onOpenSupport?: () => void }) {
       <div className="site-footer-meta">
         <span>© 2026 Homework Copilot</span>
         <span className="site-footer-disclaimer">Решения помогают разобраться, а не заменяют работу над задачей.</span>
+        {/* Продавец - в подвале каждой страницы, а не только на
+            /docs/contacts: модерация Робокассы требует «Самозанятый ФИО,
+            ИНН» и не скрытые почту и телефон прямо в подвале (аудит 16
+            сентября 2026, А2). Константы - `src/lib/seller.ts`, те же, что
+            в документах. */}
+        <p className="site-footer-seller">
+          <span>Самозанятый {sellerFullName}{sellerInnClause}</span>{' '}
+          <span><span className="site-footer-seller-dot" aria-hidden="true">· </span><a href={`mailto:${contactEmail}`}>{contactEmail}</a></span>{' '}
+          <span><span className="site-footer-seller-dot" aria-hidden="true">· </span><a href={contactPhoneHref}>{contactPhone}</a></span>
+        </p>
       </div>
     </footer>
   )

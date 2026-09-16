@@ -37,7 +37,7 @@ for (const viewport of [
     await expect(page.getByRole('heading', { name: 'Политика обработки персональных данных' })).toBeVisible()
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', 'https://www.homeworkcopilot.ru/docs/privacy')
     await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'index, follow')
-    await page.getByRole('button', { name: /Понятно/ }).click()
+    await page.getByRole('button', { name: 'Закрыть уведомление' }).click()
     const footer = page.locator('.site-footer')
     await expect(footer.getByRole('link', { name: 'Пользовательское соглашение' })).toHaveAttribute('href', '/docs/terms')
     await expect(footer.getByRole('link', { name: 'Cookie и хранилище' })).toHaveAttribute('href', '/docs/cookies')

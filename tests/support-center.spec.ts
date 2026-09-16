@@ -10,7 +10,7 @@ test.describe('центр поддержки', () => {
     await page.setViewportSize({ width: 1440, height: 960 })
     await page.goto('/app')
     // Уведомление о хранении данных при первом заходе лежит в том же углу.
-    await page.getByRole('button', { name: /Понятно/ }).click()
+    await page.getByRole('button', { name: 'Закрыть уведомление' }).click()
     // С 14 сентября плавающая кнопка стоит на каждой странице, включая
     // главную, а подвал приложения - тот же полный, что на витрине.
     await expect(page.locator('.site-footer').getByRole('button', { name: 'Написать в поддержку' })).toBeVisible()

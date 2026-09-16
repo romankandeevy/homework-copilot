@@ -24,7 +24,6 @@ import {
   Moon,
   Notebook,
   SpinnerGap,
-  Stack,
   Sun,
   UserCircle,
   WarningCircle,
@@ -244,15 +243,14 @@ function scrollRouteToTop(container: HTMLElement | null) {
 const applicationRoutes = [
   { label: 'Главная', path: '/app', icon: House },
   { label: 'Решения', path: '/solutions', icon: Notebook },
-  { label: 'ЦДЗ', path: '/cdz', icon: Stack },
   { label: 'ИИ-чат', path: '/chat', icon: ChatsCircle },
   { label: 'Расписание', path: '/schedule', icon: CalendarDots },
 ] as const
 
-// В основном меню только то, что уже работает. «ЦДЗ» пока закрыт: пункт
-// занимал место, забирал клик и ничего не отдавал. Маршрут остаётся рабочим
-// и доступен из подвала, поэтому мёртвых ссылок не появляется.
-const navigation = applicationRoutes.filter(({ label }) => label !== 'ЦДЗ')
+// В основном меню только то, что уже работает. Раздел «ЦДЗ» удалён 16
+// сентября 2026 вместе с заглушкой «Раздел пока закрыт»: ссылок на него не
+// было нигде, а его адреса (`/cdz`, `/tasks`, `/textbooks`) открывают главную.
+const navigation = applicationRoutes
 
 /* Профиль и баланс - такие же адреса, как разделы (14 сентября 2026): их
    открывают по ссылке, сохраняют, листают назад и вперёд. В меню разделов
@@ -273,7 +271,7 @@ function isAccountRoute(label: NavigationLabel): label is AccountRouteLabel {
 
 function currentNavigationRoute(pathname = window.location.pathname): { label: NavigationLabel; solution: SolutionState | null } {
   const path = currentApplicationPath(pathname)
-  if (path === '/textbooks' || path === '/tasks') return { label: 'ЦДЗ', solution: null }
+  if (path === '/textbooks' || path === '/tasks' || path === '/cdz') return { label: 'Главная', solution: null }
   if (path === '/base') return { label: 'Решения', solution: null }
   // `/main` — прежний адрес рабочей главной. Ссылки на него уже разошлись,
   // поэтому он продолжает открывать приложение и лишь переписывается на `/app`.
@@ -319,7 +317,7 @@ function isKnownApplicationPath(pathname: string) {
 
 function normalizeNavigationPath(pathname: string) {
   const path = currentApplicationPath(pathname)
-  if (path === '/textbooks' || path === '/tasks') return '/cdz'
+  if (path === '/textbooks' || path === '/tasks' || path === '/cdz') return '/app'
   if (path === '/base') return '/solutions'
   // `/` теперь публичная витрина, рабочая главная живёт на `/app`.
   return path === '/' || path === '/main' ? '/app' : path
@@ -831,25 +829,6 @@ function PageHeader({ account }: { account: AccountData | null }) {
         <span>{dateLabel}</span>
       </div>
     </header>
-  )
-}
-
-function CdzComingSoon({ onGoHome }: { onGoHome: () => void }) {
-  return (
-    <section className="cdz-coming-soon" aria-labelledby="cdz-coming-soon-title">
-      <div className="cdz-coming-soon-symbol" aria-hidden="true">
-        <Stack size={72} weight="duotone" />
-        <strong>ЦДЗ</strong>
-      </div>
-      <div className="cdz-coming-soon-copy">
-        <h1 id="cdz-coming-soon-title">Раздел пока закрыт</h1>
-        <p>ЦДЗ ещё не запущено. Откроем раздел только после полной подготовки и проверки.</p>
-        <button className="route-primary-action" type="button" onClick={onGoHome}>
-          <House size={18} weight="duotone" aria-hidden="true" />
-          Вернуться на главную
-        </button>
-      </div>
-    </section>
   )
 }
 
@@ -2414,7 +2393,7 @@ function HomePage() {
             scheduleEnabled
               ? <Suspense fallback={<div className="route-loading" role="status">Загружаем расписание…</div>}><SchedulePage userId={user?.id ?? null} grade={account?.profile.grade ?? null} /></Suspense>
               : <FeatureOffNotice title="Расписание временно выключено" onGoHome={() => navigate('Главная')} />
-          ) : activeNavigation === 'Решения' ? (
+          ) : (
             <SolutionsPage
               signedIn={Boolean(user)}
               items={personalSolutions}
@@ -2423,8 +2402,6 @@ function HomePage() {
               onOpenSolution={openSolution}
               onStartTask={() => navigate('Главная')}
             />
-          ) : (
-            <CdzComingSoon onGoHome={() => navigate('Главная')} />
           )}
         </div>
         {/* Подвал тот же, что на витрине и в документах: 14 сентября

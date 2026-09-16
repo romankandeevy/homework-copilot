@@ -1,3 +1,10 @@
+/* Карточка для превью ссылки в мессенджерах и соцсетях (`public/og-card.png`).
+
+   Заголовок - тот же, что `h1` витрины: «Сфоткал. Понял. Сдал.». До 16
+   сентября 2026 здесь стояло «Сфоткал. Списал.» - ровно то, из-за чего
+   платёжные системы отказывают сервисам домашних заданий, и именно эту
+   картинку видит модератор в превью ссылки (AGENTS.md, «Сфоткал и понял»).
+   Только дефис, как во всех текстах витрины. */
 import { mkdir } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { chromium } from '@playwright/test'
@@ -26,7 +33,7 @@ try {
       .meta i { width: 10px; height: 10px; border-radius: 50%; background: #496dff; }
     </style></head><body><main>
       <div class="brand"><span class="mark">H<b>C</b></span><span>Homework Copilot</span></div>
-      <div class="copy"><h1>Сфоткал. Списал.</h1><p>Решение задачи с фото или текста: дано, ход решения, чертёж и ответ — готовой записью для тетради.</p></div>
+      <div class="copy"><h1>Сфоткал. Понял. Сдал.</h1><p>Решение задачи с фото или текста: дано, ход решения, чертёж и ответ - готовой записью для тетради.</p></div>
       <div class="meta"><i></i><span>homeworkcopilot.ru</span></div>
     </main></body></html>`)
   await page.screenshot({ path: outputPath, type: 'png' })

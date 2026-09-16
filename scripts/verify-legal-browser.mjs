@@ -62,7 +62,7 @@ try {
     if (robots !== 'index, follow') failures.push(`${viewport.width}px: wrong robots ${robots}`)
     if (overflow > 0) failures.push(`${viewport.width}px: horizontal overflow ${overflow}px`)
 
-    const noticeButton = page.getByRole('button', { name: /Понятно/ })
+    const noticeButton = page.getByRole('button', { name: 'Закрыть уведомление' })
     await page.screenshot({ path: resolve(outputDirectory, `notice-${viewport.width}.png`) })
     await noticeButton.focus()
     if (!await noticeButton.evaluate((element) => element === document.activeElement)) failures.push(`${viewport.width}px: notice button is not focusable`)
