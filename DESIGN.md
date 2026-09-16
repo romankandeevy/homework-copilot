@@ -1,242 +1,82 @@
----
-name: Homework Copilot
-description: Textbook-first copying flow with instant shared answers and notebook-ready solutions.
-colors:
-  canvas: "oklch(98.5% 0 0)"
-  surface: "oklch(100% 0 0)"
-  surface-raised: "oklch(97.5% 0 0)"
-  surface-sunken: "oklch(95% 0 0)"
-  border: "oklch(83% 0 0)"
-  border-strong: "oklch(57% 0 0)"
-  text-subtle: "oklch(48% 0 0)"
-  text-muted: "oklch(38% 0 0)"
-  text: "oklch(22% 0 0)"
-  strong: "oklch(16% 0 0)"
-  on-strong: "oklch(99% 0 0)"
-  accent-soft: "oklch(94% 0.025 260)"
-  accent: "oklch(55% 0.19 260)"
-  accent-surface: "oklch(100% 0 0)"
-  dark-accent-surface: "oklch(18.5% 0 0)"
-  accent-hover: "oklch(49% 0.19 260)"
-  disabled-on-accent: "oklch(92% 0 0)"
-  disabled-on-accent-border: "oklch(79% 0 0)"
-  on-accent: "oklch(99% 0 0)"
-  brand-accent: "oklch(52% 0.18 260)"
-  info: "oklch(59% 0.15 245)"
-  success: "oklch(58% 0.13 154)"
-  success-strong: "oklch(43% 0.12 154)"
-  warning: "oklch(70% 0.15 78)"
-  danger: "oklch(59% 0.19 29)"
-typography:
-  display:
-    fontFamily: "Unbounded Variable, Arial Black, sans-serif"
-    fontSize: "clamp(2.7rem, 4.8vw, 5.5rem)"
-    fontWeight: 400
-    lineHeight: 0.99
-    letterSpacing: "0"
-  heading:
-    fontFamily: "Unbounded Variable, Arial Black, sans-serif"
-    fontSize: "1.5rem"
-    fontWeight: 400
-    lineHeight: 1.12
-    letterSpacing: "0"
-  body:
-    fontFamily: "Onest, Segoe UI, sans-serif"
-    fontSize: "1rem"
-    fontWeight: 400
-    lineHeight: 1.6
-  label:
-    fontFamily: "Onest, Segoe UI, sans-serif"
-    fontSize: "0.8125rem"
-    fontWeight: 620
-    lineHeight: 1.45
-  mono-label:
-    fontFamily: "JetBrains Mono Variable, Consolas, monospace"
-    fontSize: "0.6875rem"
-    fontWeight: 620
-    lineHeight: 1.45
-    letterSpacing: "0"
-rounded:
-  xs: "0.25rem"
-  control: "0.5rem"
-  surface: "0.75rem"
-  panel: "1rem"
-  pill: "999px"
-spacing:
-  1: "0.25rem"
-  2: "0.5rem"
-  3: "0.75rem"
-  4: "1rem"
-  5: "1.25rem"
-  6: "1.5rem"
-  8: "2rem"
-  10: "2.5rem"
-  12: "3rem"
-  16: "4rem"
-  20: "5rem"
-  24: "6rem"
-components:
-  button-primary:
-    backgroundColor: "{colors.strong}"
-    textColor: "{colors.on-strong}"
-    typography: "{typography.label}"
-    rounded: "{rounded.control}"
-    padding: "0 {spacing.4}"
-    height: "2.75rem"
-  task-action:
-    backgroundColor: "{colors.accent}"
-    textColor: "{colors.on-accent}"
-    typography: "{typography.label}"
-    rounded: "{rounded.control}"
-    padding: "0 {spacing.6}"
-    height: "4.5rem"
-  textbook-field:
-    backgroundColor: "{colors.surface-raised}"
-    textColor: "{colors.text}"
-    rounded: "{rounded.surface}"
-    padding: "{spacing.4} {spacing.5}"
-    height: "6.25rem"
-  navigation-active:
-    backgroundColor: "{colors.accent}"
-    textColor: "{colors.on-accent}"
-    typography: "{typography.label}"
-    rounded: "{rounded.surface}"
----
+# Дизайн
 
-# Design System: Homework Copilot
+Визуальный язык Homework Copilot - по тому, что реально лежит в `src/`.
+Значения живут в `src/tokens.css`, здесь - что они значат и чего с ними не
+делать. Разошлось с кодом - прав код, этот файл правится в том же заходе.
+Истории решений и замеры - в `AGENTS.md`.
 
-## Overview
+## Характер
 
-**Creative North Star: "The Guided Margin"**
+Чистый тетрадный лист и графитовая разметка: нейтральная бумага, один
+кобальтовый сигнал, без декоративного шума панелей. Главный довод продукта -
+готовая запись в тетради, и интерфейс не спорит с ней за внимание.
 
-Homework Copilot feels like a precise route drawn through a clean school notebook: neutral paper, monochrome graphite structure, one cobalt signal, and no ornamental dashboard noise. The system is dense enough to make the next action obvious, but never busy enough to compete with the task the student came to copy.
+## Токены (`src/tokens.css`)
 
-The primary journey is textbook-first. An exact book and a task number form one search key: if the shared solution base already contains that pair, the answer opens immediately; otherwise the same surface starts a new notebook-ready solution. Shared catalogue and personal history stay visibly separate because they answer different questions.
+- **Цвета** - `--color-*` в OKLCH, светлая и тёмная тема
+  (`:root[data-theme='dark']`) с одинаковой иерархией ролей. Нейтральные:
+  `canvas`, `surface`, `surface-raised`, `surface-sunken`, `border`,
+  `border-strong`, `text-subtle`, `text-muted`, `text`, `strong`. Сигнал -
+  `accent` (кобальт, оттенок 260) и `accent-soft`. Состояния - `info`,
+  `success`, `warning`, `danger` и их `*-soft`: только когда сообщают
+  настоящее состояние.
+- **Шрифты** - `--font-display` Unbounded Variable, `--font-body` Onest,
+  `--font-mono` JetBrains Mono Variable. Файлы шрифтов свои, подключены в
+  `tokens.css`.
+- **Кегли** - `--text-*`, нижняя ступень `--text-small` = 13 px:
+  `--text-caption` и `--text-micro` ссылаются на неё. Мельче не бывает.
+- **Насыщенность** - `--weight-*`; дисплейный шрифт всегда 400
+  (`--weight-display`).
+- **Отступы** - `--space-1`...`--space-24`, шаг 4 px.
+- **Радиусы** - `--radius-xs`, `control`, `surface`, `panel`, `pill`.
+- **Тени** - `--shadow-control`, `--shadow-raised`, `--shadow-overlay`.
+- **Движение** - `--motion-*` (70-640 мс) и `--ease-*`; уважать
+  `prefers-reduced-motion`.
+- **Размеры** - `--size-control` 2,75 rem (44 px), `--content-width` 88 rem,
+  `--focus-ring` - кольцо фокуса кобальтом.
 
-**Key Characteristics:**
+## Правила
 
-- Neutral Graphite Mono canvas with crisp, bordered working surfaces.
-- One cobalt signal for the primary route, active location, and decisive state.
-- Editorial display type at weight 400, compact interface copy, and monospace metadata.
-- Route lines, nodes, and measured motion that explain location rather than decorate it.
-- Direct duotone subject icons without gray tiles or ornamental backplates.
+- **Один сигнал.** Кобальт - маршрут, активное место и решающее действие
+  («Решить»). Не фон, не украшение, не галочка у каждой ссылки.
+- **Голос 400.** Дисплейный шрифт только весом 400: иерархия - размером,
+  местом и контрастом, а не жирностью.
+- **Плоско, пока не поднято.** Списки и группы плоские; тень есть только у
+  того, что поднято или лежит поверх (меню, окна). Подвал - нижнее поле
+  страницы, отделённое линией, а не парящая карточка.
+- **Значки без плашек.** Значки предметов - двухцветные (phosphor duotone)
+  прямо в композиции, без серых подложек. Значки разделов и темы -
+  линейные (phosphor regular, 20 px).
+- **Пальцем, а не мышью.** Кнопки, ссылки и поля на телефоне и при
+  `pointer: coarse` - не ниже 44 px; рост добирается отступом.
+- **Без прокрутки вбок** на ширинах от 320 px.
+- **Только дефис** в русском тексте (`npm run check:unicode` для витрины).
 
-## Colors
+## Тетрадный лист
 
-The palette combines neutral paper and untinted graphite with one restrained cobalt signal; semantic colors appear only when they communicate a real state.
+Решение оформлено тетрадной страницей: бумага, клетка, красное поле, та же
+гарнитура Onest, что у всего продукта. Лист один на все предметы
+(`src/notebook/NotebookSheet.tsx`), вид записи выбирает предмет: по
+действиям, столбиком, «Дано» с СИ для физики и химии, развёрнутый ответ для
+гуманитарных. Геометрия - утверждённая вёрстка `GeometryNotebookLayoutV1`
+с фиксированной системой координат SVG: данные задачи несут только смысл,
+не раскладку. Эталон и контракт - «Geometry notebook contract» в
+`AGENTS.md`, снимки тетради не обновлять без согласования. Все предметы
+разом без вызова модели - `http://localhost:5173/?sheets=1`.
 
-### Primary
+## Раскладка приложения
 
-- **Cobalt Ink:** points to the primary copying action, active navigation, selected book, and progress.
-- **Graphite Surface:** large Home panels remain neutral in both themes; interactive cobalt is reserved for navigation, focus, and the primary action.
-- **Deep Graphite:** carries decisive controls and the strongest text hierarchy.
+- Шапка со знаком и балансом, под ней разделы: «Главная», «Решения»,
+  «ИИ-чат», «Расписание» (`src/App.tsx`, пункт «ЦДЗ» пока скрыт).
+- До 980 px разделы - фиксированная нижняя панель во всю ширину с учётом
+  `safe-area-inset-bottom`; шапка сжимается в одну строку, чтобы кнопка
+  «Решить» оставалась над сгибом.
+- Плавающая поддержка - всегда в правом нижнем углу; под лентой приложения
+  для неё оставлен запас `--launcher-reserve`.
+- Профиль и баланс - страницы, а не окно; смена раздела начинается сверху.
 
-### Neutral
+## Витрина
 
-- **Chalk Canvas:** the page field shared by both product routes and the design-system playground.
-- **Paper Surface:** the default content plane.
-- **Raised Paper:** interactive fields and overlays that sit above the page.
-- **Soft Recess:** hover rows and quiet grouped areas.
-- **Graphite Borders:** separate regions without turning every block into a card.
-
-### Named Rules
-
-**The One Signal Rule.** Cobalt marks the route or the decision; it is never an ambient background effect.
-
-**The No Gray Icon Tile Rule.** Subject and content icons sit directly in the composition. A filled icon container is reserved for navigation state or a control with a real hit target.
-
-## Typography
-
-**Display Font:** Unbounded Variable with Arial Black fallback
-
-**Body Font:** Onest with Segoe UI fallback
-**Label/Mono Font:** JetBrains Mono Variable with Consolas fallback
-
-**Character:** Unbounded gives the product a recognizable editorial voice without feeling childish. Onest keeps dense controls calm, while JetBrains Mono makes task numbers, dates, balance, and compact labels easy to scan.
-
-### Hierarchy
-
-- **Display:** weight 400, tightly tracked, compact leading; used for the greeting and primary action statement.
-- **Heading:** weight 400 in the same family; used for section and state titles.
-- **Body:** regular Onest with relaxed reading leading; used for explanation and supporting copy.
-- **Label:** semibold Onest; used for actions, navigation, and list titles.
-- **Mono label:** semibold JetBrains Mono with natural spacing and uppercase treatment; used for task identifiers and field labels.
-
-### Named Rules
-
-**The 400 Voice Rule.** Every display heading stays at weight 400. Hierarchy comes from scale, placement, and contrast, not extra boldness.
-
-## Layout
-
-Desktop uses a sticky 14rem sidebar and a centered content canvas capped at 88rem. Home starts with one dominant copying surface, then splits into a wider work/history column and a narrower saved-books/base column. The spacing system follows a 4px rhythm and reserves larger jumps for section boundaries.
-
-At 1180px the secondary column compacts; below 980px the sidebar becomes a fixed five-item bottom navigation and Home becomes one column. Below 640px, fields and actions stack, secondary metadata compresses, and the primary action keeps full width. The document must remain usable from 320px without horizontal overflow.
-
-The exact textbook is visible before the task-number field. The picker expands inline from that field rather than interrupting the task with a modal. Saved books provide shortcuts, but subject, class, title, authors, and edition remain one exact identity.
-
-## Elevation & Depth
-
-The system is flat by default and uses a hybrid of tonal layers, borders, and two restrained shadows. Raised controls use the low shadow; dropdowns and dialogs use the overlay shadow. Hover movement is one pixel, and pressed feedback compresses rather than bounces.
-
-### Named Rules
-
-**The Flat Until Lifted Rule.** Lists and groups stay flat at rest. Shadow appears only when a surface is interactively raised or actually overlays another plane.
-
-## Shapes
-
-Corners are gently geometric: compact marks use the smallest radius, controls use a half-rem radius, fields and rows use a three-quarter-rem radius, and only major panels reach one rem. Pills are reserved for continuous tracks and true capsule controls. Borders remain one pixel unless focus or a deliberate selected state requires stronger emphasis.
-
-The sidebar route stays on one measured icon grid. Only the active icon shifts toward content while the label remains fixed; the route bends by the same distance and the seam marker stays level with the icon center. The line never overlaps a label.
-
-## Components
-
-### Primary Copying Surface
-
-The neutral graphite panel is the visual and functional start of Home. It contains the exact textbook selector, task-number field, base-match feedback, and one adaptive cobalt action: **«Открыть готовое»** for an existing shared solution or **«Списать»** for a new request. The action and result copy update together, never independently.
-
-### Textbook Picker
-
-The closed field shows subject, class, book title, and authors. Opening it reveals search and saved books with direct 32px duotone subject icons. Selection closes the picker, updates the task context, and preserves keyboard behavior including Escape.
-
-### Task Number Field
-
-The number uses the monospace face and accepts identifiers such as `2` or `18`. The whole input-and-action group receives the focus ring. Error copy stays adjacent and explicit; empty input disables submission.
-
-### Navigation
-
-The five destinations remain, in order: **Главная** (`/main`), **Мои решения** (`/solutions`), **База решений** (`/base`), **Учебники** (`/textbooks`), **Расписание** (`/schedule`). Each route can be opened directly, refreshed, and restored with browser history. Desktop uses the routed sidebar and a single theme control at bottom-left. Mobile uses the same order in bottom navigation. Active state combines cobalt, movement, label contrast, and `aria-current`.
-
-### Shared Base and Personal History
-
-**База решений** means every ready solution available to all users and promises instant opening. **Мои решения** means only solutions this student opened or requested. They never share a heading, count, or ambiguous list treatment.
-
-### Schedule
-
-The schedule uses one day at a time to keep time, subject, and room fields comfortably editable at every viewport. Compact day tabs expose the whole week: six by default, five when the student removes Saturday with the neutral toolbar control (the choice is stored with the schedule). Lesson times are labelled, always-visible 24-hour fields shared by every day. Photo import opens a centered OCR review dialog; recognized rows remain editable both before and after confirmation.
-
-### Status and Result
-
-Processing is passive system work, not a user-controlled stepper. A ready shared match uses a concise success state and direct open action. A new task uses restrained progress motion and an approximate five-minute expectation without fabricated precision.
-
-### Geometry Notebook Output
-
-Geometry output remains owned by `GeometryNotebookLayoutV1` and its approved fixed SVG layout. Product surfaces may pass semantic task content only; they never restyle or reflow the notebook page.
-
-## Do's and Don'ts
-
-### Do:
-
-- **Do** require an exact textbook before a task number and show that context in the first action surface.
-- **Do** check the shared base before starting new work and make instant availability explicit.
-- **Do** keep saved textbooks, personal history, and the shared base semantically distinct.
-- **Do** use direct two-tone 32px subject icons and preserve visible keyboard focus.
-- **Do** keep light and dark themes structurally identical, with the same role hierarchy.
-
-### Don't:
-
-- **Don't** add gray icon backplates, decorative pills, glass effects, glow, gradient text, or generic dashboard cards.
-- **Don't** infer a textbook from a task number alone or merge editions into one identity.
-- **Don't** turn processing stages into tabs, controls, or work the student must manage.
-- **Don't** add streaks, completion scores, gamification, or homework-productivity metrics.
-- **Don't** show a MЭШ connection state or request school-platform cookies.
-- **Don't** modify the approved geometry notebook layout while changing product UI.
+Первый экран - текст и фон из CSS, без видео и тяжёлой графики: заголовок
+«Сфоткал. Понял. Сдал.», одно обещание, кнопка. Тетрадная запись на витрине
+не мельче 14 px. Цена наружу - «от 4 ₽» с оговоркой.

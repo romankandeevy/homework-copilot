@@ -25,7 +25,6 @@
 import { createServer } from 'node:http'
 import { readFile, writeFile } from 'node:fs/promises'
 import { extname, join, resolve } from 'node:path'
-import { chromium } from '@playwright/test'
 import { legalDocumentKinds } from '../src/lib/siteMetadata.ts'
 
 const outputDirectory = resolve('dist')
@@ -134,8 +133,12 @@ if (process.env.VERCEL) {
   process.exit(0)
 }
 
-/* Везде остальное отсутствие браузера - ошибка сборки, а не повод отдать
+/* Playwright загружается только здесь, после проверки Vercel: пропуск шага
+   не должен зависеть от того, есть ли пакет и его браузер в сборочном образе.
+
+   Везде остальное отсутствие браузера - ошибка сборки, а не повод отдать
    пустые страницы: ровно эту поломку скрипт и чинит. */
+const { chromium } = await import('@playwright/test')
 const { server, port } = await startServer()
 
 let browser

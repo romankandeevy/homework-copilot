@@ -1399,7 +1399,6 @@ function HomePage() {
         // У вошедшего ученика считается баланс, а не гостевая метка.
         forgetGuestSolution()
         setGuestFreeSolutionUsed(false)
-        sessionStorage.removeItem('homework-copilot:google-auth-pending')
         sessionStorage.removeItem('homework-copilot:verification-email')
         sessionStorage.removeItem('homework-copilot:verification-kind')
         sessionStorage.removeItem('homework-copilot:verification-sent-at')
@@ -1631,7 +1630,6 @@ function HomePage() {
   useEffect(() => {
     if (!accountOpen || !user || passwordRecovery) return
     setAccountOpen(false)
-    sessionStorage.removeItem('homework-copilot:google-auth-pending')
     const cleanUrl = new URL(window.location.href)
     cleanUrl.searchParams.delete('auth')
     window.history.replaceState(window.history.state, '', `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`)
@@ -1665,7 +1663,6 @@ function HomePage() {
     setAccountOpen(false)
     setAccountNotice('')
     setPasswordRecovery(false)
-    sessionStorage.removeItem('homework-copilot:google-auth-pending')
     const cleanUrl = new URL(window.location.href)
     cleanUrl.searchParams.delete('auth')
     window.history.replaceState({}, '', `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`)

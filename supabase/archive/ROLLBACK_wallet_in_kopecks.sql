@@ -4,7 +4,7 @@
 --
 -- ВНЕ ОБЫЧНОЙ НУМЕРАЦИИ: файл не имеет префикса-версии и не подхватывается
 -- `supabase db push`. Применяется только вручную и осознанно:
---   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/ROLLBACK_wallet_in_kopecks.sql
+--   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/archive/ROLLBACK_wallet_in_kopecks.sql
 --
 -- ГЛАВНОЕ ОГРАНИЧЕНИЕ. Откат возможен, только пока ВСЕ денежные величины
 -- кратны 100 копейкам. Как только ИИ-чат спишет первую сумму с копейками

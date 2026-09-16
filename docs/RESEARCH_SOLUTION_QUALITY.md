@@ -1,7 +1,7 @@
 # Как поднять надёжность и качество решений геометрии 7–9
 
 **Дата: 30 августа 2026.** Исследование по коду `server/geometrySolutionEngine.ts` (1219 строк),
-`docs/KIE_MODEL_MATRIX.md` и внешним источникам. Код не менялся.
+`docs/archive/KIE_MODEL_MATRIX.md` и внешним источникам. Код не менялся.
 
 Итог в одном абзаце — в разделе 4. Что можно сделать за день — в разделе 7.
 
@@ -23,7 +23,7 @@
 ### 0.1. Ошибки KIE приходят с HTTP 200 — движок их не видит
 
 `callModel` проверяет только `response.ok` (`:613`) и потом `parseJson(providerContent(payload))`.
-Но по твоей же матрице (раздел 6 `KIE_MODEL_MATRIX.md`) шлюз отдаёт
+Но по твоей же матрице (раздел 6 `docs/archive/KIE_MODEL_MATRIX.md`) шлюз отдаёт
 `{"code":524,"msg":"2 times retry fail"}` **с HTTP 200**. Дальше `providerContent` возвращает
 `undefined` (нет `choices`), `parseJson` бросает `«Модель вернула некорректный JSON»` — и это
 попадает в `transientModelFailures`, то есть лечится ретраем. Отсюда и наблюдение
@@ -368,7 +368,7 @@ $0.33/1M **[изм.]**. Картинка тарифицируется плоск
 
 ## 6. Модели: кого куда ставить
 
-По `docs/KIE_MODEL_MATRIX.md` доступны Gemini (OpenAI-совместимый путь), GPT-5.x (через
+По `docs/archive/KIE_MODEL_MATRIX.md` доступны Gemini (OpenAI-совместимый путь), GPT-5.x (через
 `/codex/v1/responses`) и Grok; Claude не работает (HTTP 500 на всех slug).
 
 | Этап | Модель | Почему |
@@ -496,4 +496,4 @@ $0.33/1M **[изм.]**. Картинка тарифицируется плоск
 - [Wolfram|Alpha API pricing](https://products.wolframalpha.com/api/pricing)
 - [Vercel Functions Limits](https://vercel.com/docs/functions/limitations) · [Fluid compute defaults](https://vercel.com/changelog/higher-defaults-and-limits-for-vercel-functions-running-fluid-compute)
 - [Vellum: Google Gemini 3 Benchmarks](https://www.vellum.ai/blog/google-gemini-3-benchmarks) · [VentureBeat: Gemini 3](https://venturebeat.com/ai/google-unveils-gemini-3-claiming-the-lead-in-math-science-multimodal-and) · [llm-stats: Gemini 3 Pro vs GPT-5.6 Sol](https://llm-stats.com/models/compare/gemini-3-pro-preview-vs-gpt-5.6-sol)
-- Внутренние: `docs/KIE_MODEL_MATRIX.md`, `server/geometrySolutionEngine.ts`, `server/chatProviders.ts`, `server/homeworkSolver.ts`, `vercel.json`
+- Внутренние: `docs/archive/KIE_MODEL_MATRIX.md`, `server/geometrySolutionEngine.ts`, `server/chatProviders.ts`, `server/homeworkSolver.ts`, `vercel.json`
