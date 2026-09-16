@@ -66,6 +66,35 @@ describe('заявленное в ruleChecks сверяется с запись�
   })
 })
 
+/* Формула буквами: след правила ищется по правой части равенства.
+
+   16 сентября физика с фотографии не дошла до ученика - след требовал
+   букву сразу после «=», а «T = 1/ν» начинается с единицы. */
+describe('физика: формула буквами до подстановки', () => {
+  const physics = (steps: string[], answer: string) => solution({
+    subject: 'Физика',
+    textbookId: 'physics',
+    condition: 'Частота колебаний 0,5 Гц. Найдите период.',
+    steps,
+    answer,
+  })
+  const claim = [{ rule: 'formula-before-numbers', passed: true }]
+
+  it('правая часть с единицей в числителе - формула', () => {
+    expect(verifyRuleClaims(physics(['T = 1/ν', 'T = 1/0,5 Гц = 2 с'], 'T = 2 с'), claim)).toEqual([])
+  })
+
+  it('правая часть с числовым множителем - тоже формула', () => {
+    expect(verifyRuleClaims(physics(['a = 2s/t²', 'a = 2 · 100 м/(10 с)² = 2 м/с²'], 'a = 2 м/с²'), claim)).toEqual([])
+  })
+
+  it('одна подстановка чисел - следа формулы нет', () => {
+    const issues = verifyRuleClaims(physics(['Q = 4200 · 2 · 30 = 252 000 Дж'], 'Q = 252 кДж'), claim)
+    expect(issues).toHaveLength(1)
+    expect(issues[0]).toContain('formula-before-numbers')
+  })
+})
+
 describe('порядок замечаний в повторе', () => {
   it('приём не по классу идёт первым, остальные в прежнем порядке', () => {
     const ranked = rankRepairIssues([

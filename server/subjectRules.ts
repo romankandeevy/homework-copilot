@@ -26,18 +26,27 @@ export type SubjectRule = {
   /** Проверка кодом. Возвращает замечание или null. Нет проверки — правило только в промпте. */
   verify?: (solution: HomeworkSolution) => string | null
   /** След выполненного правила в записи. Нужен правилам без verify: по нему сверяется ответ модели в ruleChecks. */
-  evidence?: RegExp
+  evidence?: RegExp | ((solution: HomeworkSolution) => boolean)
 }
 
+/* Приставка кратности - часть единицы: «252 кДж», «3 кН», «20 мА».
+   Без неё «Q = 252 кДж» считался ответом без единицы измерения. Приставки
+   разрешены только там, где школа их пишет: у граммов, метров и секунд
+   свои сокращения уже перечислены ниже, а «кл» единицей быть не должно. */
+const prefixedUnits = '(?:мк|[кмМГнд])?(?:Дж|Вт|Ом|Па|Гц|Н|В|А)'
 /* Число с единицей измерения.
 
    Границу слова `\b` в конце ставить нельзя: словом она считает только
    латиницу с цифрами, и после кириллического «км» никакой границы нет —
    выражение молча переставало находить «12 км». Вместо неё запрет на
    продолжение буквой, чтобы «м» не срабатывало внутри «минут». */
-const unitPattern = /\d[\d\s.,]*\s*(?:км\/ч|м\/с|г\/моль|моль|мин|сут|руб|мм|мл|мг|км|кг|дм|см|°C|Дж|Вт|Ом|Па|м|г|т|л|с|ч|Н|В|А|°|%|₽)(?![а-яёa-z])/iu
+const unitNames = `км\\/ч|м\\/с|г\\/моль|моль|мин|сут|руб|мм|мл|мг|км|кг|дм|см|°C|${prefixedUnits}|м|г|т|л|с|ч|°|%|₽`
+const unitPattern = new RegExp(`\\d[\\d\\s.,]*\\s*(?:${unitNames})(?![а-яёa-z])`, 'iu')
 // То же выражение для перебора всех величин условия, а не первой попавшейся.
 const numberWithUnitPattern = new RegExp(unitPattern.source, 'giu')
+/* Единица без числа перед ней: «Дж/(кг·°C)» в подстановке, «кДж» в ответе.
+   Нужна там, где букву величины надо отличить от буквы единицы измерения. */
+const bareUnitPattern = new RegExp(`(?<![\\p{L}])(?:${unitNames})(?![\\p{L}])`, 'giu')
 const numberPattern = /\d/u
 
 function text(solution: HomeworkSolution) {
@@ -128,11 +137,35 @@ const latinPointLabels: SubjectRule = {
   },
 }
 
+/* Формула буквами - это правая часть равенства, где остались буквы величин.
+
+   16 сентября физика с фотографии не дошла до ученика: след правила искал
+   букву или скобку сразу после «=», а формула «T = 1/ν» начинается с
+   единицы, «a = 2s/t²» - с двойки. Запись была верной, а правило считало
+   её подстановкой чисел и отменяло решение целиком.
+
+   Считаем так: убираем из правой части величины с единицами, голые
+   единицы и цифры. Осталась буква - это формула («1/ν» → «ν»), не
+   осталось ничего - это подстановка («(20 м/с - 0)/10 с»). */
+function symbolicSide(side: string) {
+  const withoutValues = side
+    .replace(numberWithUnitPattern, ' ')
+    .replace(/[\d.,]/gu, ' ')
+    .replace(bareUnitPattern, ' ')
+  return /\p{L}/u.test(withoutValues)
+}
+
+function hasSymbolicFormula(solution: HomeworkSolution) {
+  return [...solution.steps, solution.answer].some((line) => (
+    line.split(/[=<>≤≥]/u).slice(1).some(symbolicSide)
+  ))
+}
+
 const formulaBeforeNumbers: SubjectRule = {
   id: 'formula-before-numbers',
   question: 'Формула записана буквами до подстановки чисел?',
   applies: (solution) => solution.taskType === 'calculation',
-  evidence: /\p{L}\s*=\s*[\p{L}(√]/u,
+  evidence: hasSymbolicFormula,
 }
 
 /* Обозначение вводится раньше, чем используется.
@@ -681,15 +714,25 @@ export function verifySubjectRules(solution: HomeworkSolution): string[] {
    «ОДЗ выписана» в ruleChecks, не написав о ней ни строки. Где у правила
    есть явный след в записи, заявленное «выполнено» без этого следа -
    такое же нарушение, как прямая ошибка. */
+export const ruleClaimIssuePrefix = 'Правило «'
+
+/** Замечание о заявленном, но не видном в записи правиле - только это. */
+export function isRuleClaimIssue(issue: string) {
+  return issue.startsWith(ruleClaimIssuePrefix) && issue.includes('в записи этого не видно')
+}
+
 export function verifyRuleClaims(
   solution: HomeworkSolution,
   checks: readonly { rule: string; passed: boolean }[],
 ): string[] {
   const claimed = new Set(checks.filter((check) => check.passed).map((check) => check.rule.trim()))
   const written = `${solution.steps.join(' ')} ${solution.answer}`.toLocaleLowerCase('ru-RU').replaceAll('ё', 'е')
+  const traced = (rule: SubjectRule) => (
+    typeof rule.evidence === 'function' ? rule.evidence(solution) : rule.evidence?.test(written) === true
+  )
   return subjectRules(solution.subject)
     .filter((rule) => rule.evidence && !rule.verify && claimed.has(rule.id))
     .filter((rule) => !rule.applies || rule.applies(solution))
-    .filter((rule) => !rule.evidence?.test(written))
-    .map((rule) => `Правило «${rule.id}» отмечено выполненным, но в записи этого не видно: ${rule.question}`)
+    .filter((rule) => !traced(rule))
+    .map((rule) => `${ruleClaimIssuePrefix}${rule.id}» отмечено выполненным, но в записи этого не видно: ${rule.question}`)
 }

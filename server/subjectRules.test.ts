@@ -74,6 +74,24 @@ describe('правила предмета', () => {
     expect(verifySubjectRules(length)).toContain('В ответе нет единицы измерения')
   })
 
+  /* Приставка кратности - часть единицы. 16 сентября физика восьмого
+     класса пошла в починку с «В ответе нет единицы измерения» при ответе
+     «Q = 252 кДж»: в списке единиц были джоули, а килоджоулей не было. */
+  it('узнаёт единицу с приставкой кратности', () => {
+    const heat = solution({
+      textbookId: 'physics',
+      subject: 'Физика',
+      condition: 'Какое количество теплоты нужно, чтобы нагреть 2 кг воды на 30 °C?',
+      goal: { title: 'Найти', text: 'Q' },
+      steps: ['Q = cmΔt', 'Q = 4200 · 2 · 30 = 252 000 Дж'],
+      answer: 'Q = 252 кДж',
+    })
+
+    expect(verifySubjectRules(heat)).not.toContain('В ответе нет единицы измерения')
+    expect(verifySubjectRules({ ...heat, answer: 'F = 3 кН' })).not.toContain('В ответе нет единицы измерения')
+    expect(verifySubjectRules({ ...heat, answer: '252' })).toContain('В ответе нет единицы измерения')
+  })
+
   it('ловит ответ-отговорку вместо числа', () => {
     const issues = verifySubjectRules(solution({ answer: 'смотри решение' }))
     expect(issues).toContain('В ответе нет найденного числа')

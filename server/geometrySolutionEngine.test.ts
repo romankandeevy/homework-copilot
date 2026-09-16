@@ -917,6 +917,21 @@ describe('точечная починка', () => {
     expect(patched?.explanation).toEqual(draft.explanation)
   })
 
+  it('пустой ответ из правки не затирает прежний', () => {
+    const draft = {
+      ruleChecks: [], condition: 'Турист прошёл 12 км за 3 ч. Найдите скорость.', taskType: 'calculation' as const, diagramRequired: false,
+      decisions: { taskGoal: 'скорость', diagramRequired: false, diagramReason: 'не нужен', requiredElements: [], notebookFormat: '', selfChecks: ['единицы'] },
+      sourceVerified: true, given: ['S = 12 км'], goal: { title: 'Найти' as const, text: 'v' }, explanation: [],
+      steps: ['12 : 3 = 4 (км/ч)'], answer: '4 км/ч', answerKey: '4 км/ч', worksheet: [],
+      diagram: { kind: 'none' as const, description: '', vertices: [] },
+    }
+    const patched = applyDraftPatch(draft, {
+      patches: [{ field: 'answer', lines: [] }, { field: 'steps', lines: ['12 : 3 = 4 (км/ч) - скорость'] }],
+    }, 'Математика', draft.condition)
+    expect(patched?.answer).toBe('4 км/ч')
+    expect(patched?.steps).toEqual(['12 : 3 = 4 (км/ч) - скорость'])
+  })
+
   it('пустой список правок - не починка', () => {
     expect(applyDraftPatch({
       ruleChecks: [], condition: 'x', taskType: 'mixed', diagramRequired: false,

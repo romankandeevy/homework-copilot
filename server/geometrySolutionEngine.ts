@@ -39,7 +39,7 @@ import {
   defaultHomeworkModels,
   homeworkModelsForSubject,
 } from './homeworkModels.ts'
-import { subjectFormatPrompt, subjectRuleQuestions, verifyRuleClaims, verifySubjectRules } from './subjectRules.ts'
+import { isRuleClaimIssue, subjectFormatPrompt, subjectRuleQuestions, verifyRuleClaims, verifySubjectRules } from './subjectRules.ts'
 import { conditionInjectionMarkers } from './conditionGuard.ts'
 import { chainSelfCrossing } from './diagramBuilder.ts'
 import { verifyGradeLevel } from './gradeRules.ts'
@@ -930,12 +930,13 @@ export function applyDraftPatch(draft: EngineDraft, raw: unknown, subject: strin
         result = { ...result, goal: { ...result.goal, text } }
         break
       }
-      case 'answer':
-        result = {
-          ...result,
-          answer: clampNotebookLine(normalizeNotebookNotation(values[0] ?? '').replace(/^ответ\s*:\s*/iu, ''), limits.answer),
-        }
+      case 'answer': {
+        // Пустой ответ - не правка, а потеря: раздел остаётся прежним.
+        const answer = clampNotebookLine(normalizeNotebookNotation(values[0] ?? '').replace(/^ответ\s*:\s*/iu, ''), limits.answer)
+        if (!answer) continue
+        result = { ...result, answer }
         break
+      }
     }
     changed = true
   }
@@ -3531,7 +3532,34 @@ export async function solveHomeworkWithReview(
     }
   }
 
+  /* Заявленное правило без следа в записи - не повод остаться без решения.
+
+     16 сентября физика с фотографии вернулась ученику как «решение не
+     дошло»: счёт верный, приём по классу, единицы на месте, а замечание
+     осталось одно - модель отметила «формула буквами» там, где код этого
+     следа в записи не увидел. Правило без `verify` мы проверяем только по
+     виду записи, и последнего слова у такой проверки быть не может: она
+     зовёт починку, но решение отменяют замечания по существу. */
+  const hardIssues = (issues: readonly string[]) => issues.filter((issue) => !isRuleClaimIssue(issue))
+  const shipWith = (candidate: EngineDraft, issues: readonly string[]) => {
+    const solved = toSolution(candidate, request, ownerId, true)
+    options.onTrace?.({ stage: 'reviewer', candidate, approved: true, issues: [...issues] })
+    return {
+      ...solved,
+      verification: buildVerification(
+        draft,
+        deterministicIssues,
+        { approved: true, issues: [...issues], solution: candidate },
+        solved,
+        authorConditionMatched,
+      ),
+    }
+  }
+
   if (!repairable) {
+    if (!conditionMismatch && hardIssues(deterministicIssues).length === 0) {
+      return shipWith(draft, deterministicIssues)
+    }
     throw new GeometrySolutionEngineError(`Решение не прошло проверку${deterministicIssues.length > 0 ? `: ${deterministicIssues.slice(0, 3).join('; ')}` : ''}`)
   }
 
@@ -3544,7 +3572,6 @@ export async function solveHomeworkWithReview(
      точечно. */
   let working = draft
   let pending = deterministicIssues
-  let attempts = 2
 
   if (pending.every(patchableIssue)) {
     console.log(JSON.stringify({ level: 'info', event: 'homework_patch_called', subject: request.subject, model: workingModel, issues: pending.length }))
@@ -3576,10 +3603,20 @@ export async function solveHomeworkWithReview(
             ),
           }
         }
-        // Правка сняла не всё: полный повтор один, и стартует он с правленого.
+        /* Осталась только заявка на правило без следа в записи - на это
+           полный повтор не зовём: правка уже была, а по существу записи
+           замечаний нет. */
+        if (hardIssues(evaluated.issues).length === 0) {
+          return shipWith(patched, evaluated.issues)
+        }
+        /* Правка сняла не всё - дальше полный повтор, и стартует он с
+           правленого. Заход у повтора при этом не отнимается: 16 сентября
+           физика упала после «автор - точечная починка - один повтор», а
+           до точечной починки повторов было два. Маленький вызов не должен
+           стоить ученику решения - его цена в бюджете времени, и бюджет
+           ниже это и стережёт. */
         working = patched
         pending = evaluated.issues
-        attempts = 1
       }
     } catch {
       // Точечная починка не удалась - идём полным повтором.
@@ -3601,7 +3638,7 @@ export async function solveHomeworkWithReview(
   let lastRepair: ReviewResult | null = null
   let lastIssues: string[] = []
 
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
     if (attempt > 1 && Date.now() > retryDeadline) break
 
     const repairPrompt = [
@@ -3665,6 +3702,22 @@ export async function solveHomeworkWithReview(
       return {
         ...repairedSolution,
         verification: buildVerification(draft, deterministicIssues, repaired, repairedSolution, repairedConditionMatched),
+      }
+    }
+
+    /* Осталась только заявка на правило без следа - отдаём решение с этим
+       замечанием в панели проверки. Второй заход на него не тратим: модель
+       уже услышала правило и записала как записала. */
+    if (repaired.approved && repairedConditionMatched && hardIssues(repairedIssues).length === 0) {
+      return {
+        ...repairedSolution,
+        verification: buildVerification(
+          draft,
+          deterministicIssues,
+          { ...repaired, issues: [...repaired.issues, ...repairedIssues] },
+          repairedSolution,
+          repairedConditionMatched,
+        ),
       }
     }
 
