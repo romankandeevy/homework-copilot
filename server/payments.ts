@@ -3,16 +3,18 @@ import { createClient } from '@supabase/supabase-js'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database, Json } from '../src/lib/database.types.ts'
 import { checkTopUpKopecks, maxTopUpKopecks, minTopUpKopecks } from '../src/lib/topUpLimits.ts'
-import { buildPaymentUrl, classifyOpState, opStateUrl, parseOpState, verifyResultNotice } from './robokassa.ts'
+import { buildPaymentUrl, classifyOpState, formatOutSum, opStateUrl, parseOpState, verifyResultNotice } from './robokassa.ts'
 import type { OpStateVerdict, RobokassaConfig } from './robokassa.ts'
 
 /* Оплата: заказ, уведомление Result, проверка статуса.
 
    Сюда приходят два разных собеседника по одному адресу `/api/payment`:
    - браузер ученика - JSON с `action` и токеном сессии;
-   - Робокасса - форма `application/x-www-form-urlencoded` с InvId и
-     подписью, без токена. Ей отвечаем `OK{InvId}` простым текстом, иначе
-     она будет слать уведомление снова.
+   - Робокасса - уведомление Result с InvId и подписью, без токена: POST с
+     формой `application/x-www-form-urlencoded` или GET с теми же полями в
+     строке запроса - метод выбирается в кабинете, и принимаем оба. Ей
+     отвечаем `OK{InvId}` простым текстом, иначе она будет слать
+     уведомление снова.
 
    Деньги зачисляет только база (`confirm_payment_order`) и только после
    проверки подписи здесь. Вебхуку одному не верим: если уведомление не
@@ -33,6 +35,17 @@ const allowedBrowserOrigins = new Set([
   'https://homeworkcopilot.ru',
 ])
 
+/* Превью Vercel этого проекта: AGENTS велит проходить тестовый платёж
+   сначала на Preview, а без CORS форма пополнения там не появится. Только
+   вне боевого окружения - на проде (`VERCEL_ENV=production`) чужой
+   `homework-copilot-что-угодно.vercel.app` права не получает. */
+const previewOrigin = /^https:\/\/homework-copilot-[a-z0-9-]+\.vercel\.app$/u
+
+export function isAllowedPaymentOrigin(origin: string, vercelEnv = process.env.VERCEL_ENV) {
+  if (allowedBrowserOrigins.has(origin)) return true
+  return vercelEnv !== 'production' && previewOrigin.test(origin)
+}
+
 const maxBodyBytes = 16 * 1024
 // Незаплаченный заказ живёт трое суток, потом сверка закрывает его.
 const orderLifetimeMs = 3 * 24 * 60 * 60 * 1000
@@ -52,6 +65,10 @@ type ServiceClient = SupabaseClient<Database>
 type ConfirmArgs = { invId: number; amountKopecks: number; isTest: boolean; via: 'result' | 'reconcile' | 'status'; payload: Record<string, string> }
 export type ConfirmOrder = (args: ConfirmArgs) => Promise<void>
 export type CloseOrder = (invId: number, status: 'cancelled' | 'expired') => Promise<void>
+/* Случай, который владелец должен разобрать руками: деньги могли прийти, а
+   зачисления нет. Уходит в очередь уведомлений админки (Telegram и почта). */
+export type PaymentIncident = { kind: 'result_mismatch' | 'result_rejected' | 'reconcile_failed'; invId: number | null; detail: string }
+export type ReportIncident = (incident: PaymentIncident) => Promise<void>
 
 function log(event: string, details: Record<string, unknown>) {
   console.log(JSON.stringify({ event, ...details }))
@@ -73,7 +90,7 @@ function sendText(response: ServerResponse, status: number, body: string) {
 
 function allowBrowser(request: IncomingMessage, response: ServerResponse) {
   const origin = request.headers.origin
-  if (!origin || !allowedBrowserOrigins.has(origin)) return false
+  if (!origin || !isAllowedPaymentOrigin(origin)) return false
   response.setHeader('Access-Control-Allow-Origin', origin)
   response.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
   response.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
@@ -152,15 +169,58 @@ export function closeWith(service: ServiceClient): CloseOrder {
   }
 }
 
+/* Журнал Vercel на Hobby живёт час, поэтому денежный случай уходит ещё и
+   владельцу. Адрес Result публичный, и неверную подпись может прислать кто
+   угодно: такие отказы - не чаще раза в десять минут на экземпляр функции,
+   а база сверх того гасит повтор в течение часа. Сбой постановки
+   уведомления не меняет ответ Робокассе. */
+const rejectedReportIntervalMs = 10 * 60 * 1000
+let lastRejectedReportAt = 0
+
+export function reportWith(service: ServiceClient): ReportIncident {
+  return async ({ kind, invId, detail }) => {
+    if (kind === 'result_rejected') {
+      if (Date.now() - lastRejectedReportAt < rejectedReportIntervalMs) return
+      lastRejectedReportAt = Date.now()
+    }
+    const { error } = await service.rpc('report_payment_incident', { p_kind: kind, p_inv_id: invId, p_detail: detail.slice(0, 300) })
+    if (error) throw new Error(error.message)
+  }
+}
+
+async function reportSafely(report: ReportIncident | undefined, incident: PaymentIncident) {
+  if (!report) return
+  try {
+    await report(incident)
+  } catch (error) {
+    console.error(JSON.stringify({ event: 'payment_incident_report_failed', kind: incident.kind, invId: incident.invId, message: error instanceof Error ? error.message : 'unknown' }))
+  }
+}
+
 /* Отказы базы, которые повтором не лечатся: заказа нет, сумма или режим не
    те. Робокассе на них отвечаем 400 - повторять незачем, - а сам случай
-   громко пишем в журнал: деньги могли уйти, и разбирать его руками. */
+   громко пишем в журнал и владельцу: деньги могли уйти, и разбирать его
+   руками. */
 const permanentRejections = ['payment order not found', 'payment amount mismatch', 'payment mode mismatch', 'provider reference conflict']
 
-export async function handleResultNotice(config: RobokassaConfig, body: string, confirm: ConfirmOrder): Promise<{ status: number; body: string }> {
-  const check = verifyResultNotice(config, new URLSearchParams(body))
+/* Отказ подписи, о котором стоит знать владельцу: поля на месте, а подпись
+   или сумма не сошлись - так выглядит настоящий платёж при неверном пароле
+   2 или алгоритме. Запрос без полей - просто шум. */
+const reportedRejections = new Set(['bad signature', 'bad OutSum'])
+
+export async function handleResultNotice(
+  config: RobokassaConfig,
+  body: string | URLSearchParams,
+  confirm: ConfirmOrder,
+  report?: ReportIncident,
+): Promise<{ status: number; body: string }> {
+  const params = typeof body === 'string' ? new URLSearchParams(body) : body
+  const check = verifyResultNotice(config, params)
   if (!check.ok) {
-    log('robokassa_result_rejected', { reason: check.reason })
+    const rawInvId = Number(params.get('InvId'))
+    const invId = Number.isSafeInteger(rawInvId) && rawInvId > 0 ? rawInvId : null
+    log('robokassa_result_rejected', { reason: check.reason, invId })
+    if (reportedRejections.has(check.reason)) await reportSafely(report, { kind: 'result_rejected', invId, detail: check.reason })
     return { status: 400, body: 'bad sign' }
   }
   const { notice } = check
@@ -170,6 +230,9 @@ export async function handleResultNotice(config: RobokassaConfig, body: string, 
     const message = error instanceof Error ? error.message : 'unknown'
     const permanent = permanentRejections.some((rejection) => message.includes(rejection))
     log(permanent ? 'robokassa_result_mismatch' : 'robokassa_result_failed', { invId: notice.invId, amount: notice.amountKopecks, isTest: notice.isTest, message })
+    if (permanent) {
+      await reportSafely(report, { kind: 'result_mismatch', invId: notice.invId, detail: `${message}, сумма ${formatOutSum(notice.amountKopecks)}${notice.isTest ? ', тест' : ''}` })
+    }
     return permanent ? { status: 400, body: 'rejected' } : { status: 500, body: 'retry' }
   }
   log('robokassa_result_confirmed', { invId: notice.invId, amount: notice.amountKopecks, isTest: notice.isTest })
@@ -179,32 +242,50 @@ export async function handleResultNotice(config: RobokassaConfig, body: string, 
 export type OrderToCheck = { invId: number; amount: number; isTest: boolean; createdAt: string }
 
 /* Спросить Робокассу о заказе и довести его до конца: оплачен - зачислить,
-   отменён - закрыть, трое суток без оплаты - закрыть сроком. */
+   отменён - закрыть, трое суток без оплаты - закрыть сроком.
+
+   Зачисляется сумма заказа, а не `OutSum` из ответа: в блоке Info может
+   оказаться сумма за вычетом комиссии, база ответила бы `payment amount
+   mismatch`, и заказ висел бы в «обрабатывается» вечно - ровно на том пути,
+   который должен спасать при потерянном Result. Код 100 по подписанному
+   запросу говорит, что оплачен именно этот InvId; сумма из ответа только
+   пишется в журнал и в `provider_payload`.
+
+   Срок трое суток закрывает любой неоплаченный вердикт, включая `error`
+   (неверная подпись, другой алгоритм, сеть): иначе такой заказ опрашивался
+   бы раз в час вечно. Поздний Result всё равно зачислится. */
 export async function checkOrderWithRobokassa(
   config: RobokassaConfig,
   order: OrderToCheck,
-  deps: { fetchImpl: typeof fetch; confirm: ConfirmOrder; close: CloseOrder; via: 'reconcile' | 'status'; now?: number },
+  deps: { fetchImpl: typeof fetch; confirm: ConfirmOrder; close: CloseOrder; via: 'reconcile' | 'status'; now?: number; report?: ReportIncident },
 ): Promise<OpStateVerdict | 'expired'> {
   const url = opStateUrl(config, order.invId, order.isTest)
-  if (!url) return 'error'
   let verdict: OpStateVerdict = 'error'
   let outSumKopecks: number | null = null
-  try {
-    const response = await deps.fetchImpl(url, { signal: AbortSignal.timeout(opStateTimeoutMs) })
-    const state = parseOpState(await response.text())
-    verdict = classifyOpState(state)
-    outSumKopecks = state?.outSumKopecks ?? null
-  } catch {
-    verdict = 'error'
+  let failure = url ? '' : 'нет паролей для режима заказа'
+  if (url) {
+    try {
+      const response = await deps.fetchImpl(url, { signal: AbortSignal.timeout(opStateTimeoutMs) })
+      const state = parseOpState(await response.text())
+      verdict = classifyOpState(state)
+      outSumKopecks = state?.outSumKopecks ?? null
+      if (verdict === 'error') failure = state ? `код ответа ${state.resultCode}` : `нечитаемый ответ, HTTP ${response.status}`
+    } catch (error) {
+      verdict = 'error'
+      failure = error instanceof Error ? error.message.slice(0, 200) : 'нет ответа'
+    }
   }
 
   if (verdict === 'paid') {
+    if (outSumKopecks !== null && outSumKopecks !== order.amount) {
+      log('robokassa_opstate_sum_differs', { invId: order.invId, amount: order.amount, outSum: outSumKopecks, isTest: order.isTest })
+    }
     await deps.confirm({
       invId: order.invId,
-      amountKopecks: outSumKopecks ?? order.amount,
+      amountKopecks: order.amount,
       isTest: order.isTest,
       via: deps.via,
-      payload: { OpState: '100' },
+      payload: outSumKopecks === null ? { OpState: '100' } : { OpState: '100', OutSum: formatOutSum(outSumKopecks) },
     })
     return 'paid'
   }
@@ -213,8 +294,11 @@ export async function checkOrderWithRobokassa(
     return 'cancelled'
   }
   const age = (deps.now ?? Date.now()) - Date.parse(order.createdAt)
-  if ((verdict === 'pending' || verdict === 'not_found') && age > orderLifetimeMs) {
+  if (age > orderLifetimeMs) {
     await deps.close(order.invId, 'expired')
+    log('robokassa_reconcile_failed', { invId: order.invId, verdict, reason: failure || verdict, closed: 'expired', isTest: order.isTest })
+    // Не дошёл до оплаты - обычное дело. Трое суток без ответа Робокассы - нет.
+    if (verdict === 'error') await reportSafely(deps.report, { kind: 'reconcile_failed', invId: order.invId, detail: failure || 'ошибка' })
     return 'expired'
   }
   return verdict
@@ -237,7 +321,7 @@ export async function reconcilePaymentOrders(service: ServiceClient, config: Rob
   const { data, error } = await service.rpc('payment_orders_due', { p_limit: 20 })
   if (error) throw new Error(error.message)
   const orders = (Array.isArray(data) ? data : []).map(parseOrder).filter((order): order is OrderToCheck => order !== null)
-  const deps = { fetchImpl, confirm: confirmWith(service), close: closeWith(service), via: 'reconcile' as const }
+  const deps = { fetchImpl, confirm: confirmWith(service), close: closeWith(service), via: 'reconcile' as const, report: reportWith(service) }
   for (const order of orders) {
     summary.checked += 1
     try {
@@ -314,12 +398,23 @@ async function orderStatus(options: PaymentServerOptions, service: ServiceClient
           confirm: confirmWith(service),
           close: closeWith(service),
           via: 'status',
+          report: reportWith(service),
         }).catch((error: unknown) => log('robokassa_status_check_failed', { invId, message: error instanceof Error ? error.message : 'unknown' }))
         order = await readOrderStatus(service, userId, invId) ?? order
       }
     }
   }
   return { invId, status: String(order.status), amountKopecks: Number(order.amount), testMode: order.isTest === true }
+}
+
+async function answerResultNotice(response: ServerResponse, options: PaymentServerOptions, params: URLSearchParams) {
+  if (!options.robokassa) {
+    sendText(response, 503, 'not configured')
+    return
+  }
+  const service = serviceClient(options)
+  const result = await handleResultNotice(options.robokassa, params, confirmWith(service), reportWith(service))
+  sendText(response, result.status, result.body)
 }
 
 export async function handlePaymentRequest(request: IncomingMessage, response: ServerResponse, options: PaymentServerOptions) {
@@ -329,23 +424,24 @@ export async function handlePaymentRequest(request: IncomingMessage, response: S
     response.end()
     return
   }
-  if (request.method !== 'POST') {
-    response.setHeader('Allow', 'POST, OPTIONS')
-    sendJson(response, 405, { error: 'Допустим только POST' })
+  if (request.method !== 'POST' && request.method !== 'GET') {
+    response.setHeader('Allow', 'GET, POST, OPTIONS')
+    sendJson(response, 405, { error: 'Допустимы только GET и POST' })
     return
   }
 
   try {
+    // GET бывает только у Result: браузер ученика ходит POST с JSON.
+    if (request.method === 'GET') {
+      await answerResultNotice(response, options, new URL(request.url ?? '/', 'http://localhost').searchParams)
+      return
+    }
+
     const raw = await readRaw(request)
     const contentType = String(request.headers['content-type'] ?? '').toLowerCase()
 
     if (contentType.includes('application/x-www-form-urlencoded')) {
-      if (!options.robokassa) {
-        sendText(response, 503, 'not configured')
-        return
-      }
-      const result = await handleResultNotice(options.robokassa, raw, confirmWith(serviceClient(options)))
-      sendText(response, result.status, result.body)
+      await answerResultNotice(response, options, new URLSearchParams(raw))
       return
     }
 

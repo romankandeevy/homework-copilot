@@ -51,7 +51,13 @@ function passwords(first: string | undefined, second: string | undefined): Robok
 }
 
 /* Нет логина или пароля того режима, в котором заводятся заказы, - оплаты
-   нет вовсе: форма в кошельке не показывается, а сервер отвечает 503. */
+   нет вовсе: форма в кошельке не показывается, а сервер отвечает 503.
+
+   Алгоритм подписи: пустой `ROBOKASSA_HASH` - MD5, как по умолчанию в
+   кабинете. Незнакомое значение (опечатка вроде `sha-256`) раньше молча
+   становилось MD5: ссылка уходила с подписью не тем алгоритмом, Робокасса
+   отвечала ошибкой 29, а уведомления отклонялись как поддельные. Теперь
+   оплата выключается целиком, а в журнале Vercel - `robokassa_hash_unknown`. */
 export function robokassaConfigFromEnv(env: Record<string, string | undefined>): RobokassaConfig | null {
   const merchantLogin = text(env.ROBOKASSA_MERCHANT_LOGIN)
   if (!merchantLogin) return null
@@ -59,9 +65,13 @@ export function robokassaConfigFromEnv(env: Record<string, string | undefined>):
   const test = passwords(env.ROBOKASSA_TEST_PASSWORD1, env.ROBOKASSA_TEST_PASSWORD2)
   const testMode = ['1', 'true', 'yes'].includes(text(env.ROBOKASSA_TEST_MODE).toLowerCase())
   if (testMode ? !test : !live) return null
-  const requested = text(env.ROBOKASSA_HASH).toLowerCase() as RobokassaHash
+  const requested = text(env.ROBOKASSA_HASH).toLowerCase()
+  if (requested && !hashes.has(requested as RobokassaHash)) {
+    console.error(JSON.stringify({ event: 'robokassa_hash_unknown', hash: requested.slice(0, 20), allowed: [...hashes] }))
+    return null
+  }
   const receipts = text(env.ROBOKASSA_RECEIPTS) === '1'
-  return { merchantLogin, hash: hashes.has(requested) ? requested : 'md5', live, test, testMode, receipts }
+  return { merchantLogin, hash: (requested || 'md5') as RobokassaHash, live, test, testMode, receipts }
 }
 
 function digest(hash: RobokassaHash, value: string) {
