@@ -123,6 +123,21 @@ describe('ProfilePage', () => {
     expect(admin).toHaveAttribute('rel', 'noopener')
   })
 
+  // Удаление не возвращает внесённые деньги: об этом говорится до подтверждения.
+  it('warns about paid money on the balance and a payment in flight before deletion', async () => {
+    mocks.rpc.mockImplementation(async (name: string) => (name === 'my_account_deletion_check'
+      ? { data: { balanceKopecks: 90000, refundableKopecks: 50000, paymentPending: true }, error: null }
+      : { data: { isAdmin: false }, error: null }))
+    renderProfile()
+    fireEvent.click(screen.getByRole('button', { name: /Удалить аккаунт/ }))
+
+    expect(await screen.findByText(/из них 500 ₽ - внесённые деньги/)).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('Платёж ещё обрабатывается')
+    fireEvent.change(screen.getByPlaceholderText('удалить'), { target: { value: 'удалить' } })
+    const form = screen.getByRole('form', { name: 'Удаление аккаунта' })
+    expect(within(form).getByRole('button', { name: 'Удалить аккаунт' })).toBeDisabled()
+  })
+
   it('switches to the balance by router and leaves modified clicks to the browser', () => {
     const navigate = vi.fn()
     renderProfile({ onNavigate: navigate })

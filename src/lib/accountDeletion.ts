@@ -35,10 +35,38 @@ async function listAttachmentPaths(client: SupabaseClient<Database>, userId: str
 
 export type AccountDeletionResult = { deleted: boolean; attachments: number }
 
+/* Что сказать до подтверждения. Удаление не возвращает внесённые деньги:
+   их возвращают по заявке (оферта, раздел 12), и об этом надо сказать до
+   кнопки, а не после. Платёж в пути база не даст удалить вовсе.
+   Проверка не ответила (сеть, миграция ещё не применена) - null: окно
+   удаления работает как раньше, а отказ всё равно придёт от базы. */
+export type AccountDeletionCheck = { balanceKopecks: number; refundableKopecks: number; paymentPending: boolean }
+
+export const paymentPendingError = 'payment order pending'
+
+export async function checkAccountDeletion(client: SupabaseClient<Database>): Promise<AccountDeletionCheck | null> {
+  try {
+    const { data, error } = await client.rpc('my_account_deletion_check')
+    if (error || !data || typeof data !== 'object') return null
+    const payload = data as Partial<AccountDeletionCheck>
+    return {
+      balanceKopecks: Number(payload.balanceKopecks) || 0,
+      refundableKopecks: Number(payload.refundableKopecks) || 0,
+      paymentPending: payload.paymentPending === true,
+    }
+  } catch {
+    return null
+  }
+}
+
 export async function deleteMyAccount(
   client: SupabaseClient<Database>,
   userId: string,
 ): Promise<AccountDeletionResult> {
+  // Платёж в пути: база откажет, и файлы чата стирать раньше времени нельзя.
+  const check = await checkAccountDeletion(client)
+  if (check?.paymentPending) throw new Error(paymentPendingError)
+
   let attachments: string[] = []
   try {
     attachments = await listAttachmentPaths(client, userId)
