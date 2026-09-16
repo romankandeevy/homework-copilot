@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 
 test.describe('GeometryNotebookLayoutV1 visual regression', () => {
   test('approved full logical canvas', async ({ page }) => {

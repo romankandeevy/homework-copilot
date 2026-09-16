@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 
 const storageKey = 'homework-copilot:generated-solutions-v1'
 const edition = '14-е издание, Просвещение, 2023'
