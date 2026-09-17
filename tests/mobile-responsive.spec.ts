@@ -174,6 +174,11 @@ test.describe('адаптация под телефон', () => {
      проверка этого не видела. */
   for (const viewport of phoneViewports) {
     test(`витрина не переполняется на ${viewport.width}px`, async ({ page }) => {
+      // Первый заход в файле часто попадает на холодный dev-сервер: витрина
+      // тянет чанк приложения через сотни несобранных модулей (CLAUDE.md,
+      // «первая загрузка страницы в dev медленная»). Запас по времени - не
+      // ослабление проверки, а место для этой одноразовой компиляции.
+      test.setTimeout(60_000)
       await page.setViewportSize(viewport)
       await page.goto('/')
 
@@ -266,6 +271,9 @@ test.describe('адаптация под телефон', () => {
   })
 
   test('уменьшенное движение отключает анимацию диалога', async ({ page }) => {
+    // Тот же холодный старт, что у витрины выше: `/app` тянет ту же
+    // оболочку приложения впервые за прогон.
+    test.setTimeout(60_000)
     await page.emulateMedia({ reducedMotion: 'reduce' })
     await page.setViewportSize({ width: 390, height: 844 })
     await page.goto('/app')
@@ -409,6 +417,8 @@ test.describe('адаптация под телефон', () => {
   })
 
   test('расписание показывает один выбранный день на телефоне и в альбомной ориентации', async ({ page }) => {
+    // Тот же холодный старт, что у витрины выше, помноженный на два заезда.
+    test.setTimeout(60_000)
     for (const viewport of [{ width: 320, height: 812 }, { width: 667, height: 375 }]) {
       await page.setViewportSize(viewport)
       await page.goto('/app')
