@@ -32,5 +32,18 @@ export default defineConfig({
     command: `node node_modules/vite/bin/vite.js --host 127.0.0.1 --port ${port} --strictPort`,
     url: baseURL,
     reuseExistingServer: !process.env.CI,
+    /* Подставная база - та же, что в .github/workflows/ci.yml. Без адреса и
+       ключа клиент Supabase не создаётся: витрина работает, а `/admin`
+       показывает «База не подключена», и весь admin-* валится на входе.
+       В рабочей копии агента нет .env.local, поэтому значения нужны здесь,
+       а не только в CI. Такого проекта не существует (в адресе проекта
+       Supabase не бывает дефиса), ответы подменяют tests/fixtures.ts и
+       tests/adminMocks.ts, домен *.supabase.co проходит
+       Content-Security-Policy из index.html. Переменная окружения, если
+       задана, сильнее: process.env у Vite важнее .env-файлов. */
+    env: {
+      VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL || 'https://e2e-offline.supabase.co',
+      VITE_SUPABASE_PUBLISHABLE_KEY: process.env.VITE_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_e2e',
+    },
   },
 })

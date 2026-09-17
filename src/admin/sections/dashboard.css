@@ -563,6 +563,11 @@
   .dash-rank-bar { display: none; }
   .dash-feed-item > button { grid-template-columns: auto minmax(0, 1fr); row-gap: 0.2rem; }
   .dash-feed-text { white-space: normal; }
+  /* Строка под событием переносится: на телефоне «41 с, цена 5 ₽,
+     себест. 0,38 ₽, маржа 4,23 ₽» не помещается в 390 px, а неразрывной
+     уводила всю страницу вправо. Суммы внутри неё не рвутся -
+     .dash-nowrap в DashboardSection. */
+  .dash-feed-meta { white-space: normal; }
   .dash-feed-meta,
   .dash-feed-time { grid-column: 2; min-width: 0; text-align: left; }
   .dash-search { width: 100%; }

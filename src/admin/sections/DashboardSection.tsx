@@ -412,13 +412,17 @@ function FeedRow({ item, rates, onOpenUser, onOpenSection }: { item: Row; rates:
     const margin = price !== null && userId
       ? Math.round(price * (1 - (effectiveTaxPercent(rates) + rates.feePercent) / 100)) - (cost ?? 0)
       : null
+    /* Части строки не рвутся внутри себя, а переносятся целиком: на 390 px
+       «41 с, цена 5 ₽, себест. 0,38 ₽, маржа 4,23 ₽» шире экрана, и одной
+       неразрывной строкой она уводила страницу вправо. Перенос по словам
+       разбил бы сумму и «₽». */
     meta = ok
       ? (
         <>
-          {numOrNull(item.seconds) !== null ? `${formatNumber(Math.round(num(item.seconds)))} с, ` : ''}
-          {price !== null && userId ? <>цена {formatKopecks(price)}, </> : !userId ? 'гость бесплатно, ' : null}
-          себест. {cost !== null ? formatKopecks(cost) : '-'}
-          {margin !== null && <span className={margin >= 0 ? 'dash-plus' : 'dash-minus'} title="Цена задачи минус налог, комиссия Робокассы и расход на модели. Если задача оплачена бонусом или ручным зачислением, настоящих денег за неё не пришло.">, маржа {formatKopecks(margin)}</span>}
+          {numOrNull(item.seconds) !== null ? <><span className="dash-nowrap">{formatNumber(Math.round(num(item.seconds)))} с</span>, </> : ''}
+          {price !== null && userId ? <><span className="dash-nowrap">цена {formatKopecks(price)}</span>, </> : !userId ? 'гость бесплатно, ' : null}
+          <span className="dash-nowrap">себест. {cost !== null ? formatKopecks(cost) : '-'}</span>
+          {margin !== null && <>, <span className={`dash-nowrap ${margin >= 0 ? 'dash-plus' : 'dash-minus'}`} title="Цена задачи минус налог, комиссия Робокассы и расход на модели. Если задача оплачена бонусом или ручным зачислением, настоящих денег за неё не пришло.">маржа {formatKopecks(margin)}</span></>}
         </>
       )
       : 'деньги вернулись'

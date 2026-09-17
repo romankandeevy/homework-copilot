@@ -299,11 +299,17 @@ export const rpcFixtures: Record<string, (aal: string, body: Record<string, unkn
     queue: { queued: 0, running: 1, stuck: 0, staleQueued: 0, failedLastHour: 1, doneLastHour: 6, chatReserved: 0, items: [] },
     cron: [{ job: 'admin-cron', schedule: '* * * * *', active: true, lastRun: { status: 'succeeded', startedAt: ago(0), message: '1 row' } }],
   }),
+  /* Лента платежей. С 16 сентября 2026 (миграция
+     20260916100000_payment_records_survive_account_deletion.sql) пополнение
+     и возврат переживают удаление аккаунта: `userId` пустой, а вместо почты
+     база подставляет подпись «аккаунт удалён». Такая строка здесь есть,
+     иначе проверка не увидела бы ленту после удаления. */
   admin_finance_payments: () => ({
-    total: 2, page: 1, pageSize: 50, from: days(30)[0], to: days(30)[29],
+    total: 3, page: 1, pageSize: 50, from: days(30)[0], to: days(30)[29],
     items: [
       { id: 'topup-1', type: 'top_up', userId: studentId, email: student.email, amount: 10000, status: 'succeeded', method: 'ручное подтверждение', reference: 'bank-0001', reason: null, refunded: 0, createdAt: '2026-09-05T10:00:00Z' },
       { id: 'rejection-1', type: 'rejection', userId: moreStudents[0].id, email: moreStudents[0].email, amount: 0, status: 'failed', method: 'solve', reference: 'req-1', reason: 'Не хватило баланса', refunded: 0, createdAt: ago(600) },
+      { id: 'refund-1', type: 'refund', userId: null, email: 'аккаунт удалён', amount: 10000, status: 'refund', method: 'возврат', reference: 'bank-0002', reason: 'Возврат по заявке, аккаунт удалён', refunded: 10000, createdAt: ago(900) },
     ],
   }),
   admin_settings_overview: () => ({

@@ -46,6 +46,12 @@ test.describe('финансы', () => {
     const failed = page.locator('.adm-badge:visible', { hasText: 'Отказ оплаты' }).first()
     await expect(failed.locator('svg.fin-status-icon.is-bad')).toHaveCount(1)
 
+    /* Платёжные записи переживают удаление аккаунта: возврат остаётся в
+       ленте, но карточки уже нет - вместо ссылки подпись из базы. */
+    const deleted = page.locator('tr', { hasText: 'аккаунт удалён' }).first()
+    await expect(deleted.locator('.fin-amount-neg')).toContainText('100 ₽')
+    await expect(deleted.getByRole('button')).toHaveCount(0)
+
     const download = page.waitForEvent('download')
     await page.getByRole('button', { name: 'Экспортировать CSV' }).click()
     expect((await download).suggestedFilename()).toMatch(/^payments-.+\.csv$/)
