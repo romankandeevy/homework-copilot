@@ -12,6 +12,7 @@ import { findVerifiedTextbookTask, geometryTextbookIdentity, normalizeTaskCondit
 import {
   defaultHomeworkModel,
   GeometrySolutionEngineError,
+  isBlockingIssue,
   isCurrentReviewedSolution,
   providerUnavailableMessage,
   solveHomeworkWithReview,
@@ -137,7 +138,10 @@ export async function solveWithKie(
       createdAt: new Date().toISOString(),
       ...(ownerId ? { ownerId } : {}),
     }
-    if (validateSolutionQuality(solution).length === 0) return solution
+    /* Замечание к записи (16 сентября, разбор решателя) не повод идти к
+       модели за тем, что уже есть: эталон из каталога отдаём, если нет
+       блокирующих замечаний. */
+    if (validateSolutionQuality(solution).filter(isBlockingIssue).length === 0) return solution
   }
 
   if (!options.apiKey) {
