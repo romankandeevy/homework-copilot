@@ -347,33 +347,85 @@ const schoolConstants = new Set([
   '273', '760', '1013',
 ])
 
+/* Числа записи.
+
+   «300 000» - одно число, а не «300» и «000»: 16 сентября разбор прода
+   показал, что 300000 из черновика не находилось в условии, где оно
+   записано с пробелом, и верное решение уходило в полный повтор. */
 function numbersIn(text: string): string[] {
-  return (text.match(/\d+(?:[.,]\d+)?/gu) ?? []).map((entry) => entry.replace(',', '.'))
+  return (text.match(/\d{1,3}(?:[ \u00a0\u202f]\d{3})+(?:[.,]\d+)?(?!\d)|\d+(?:[.,]\d+)?/gu) ?? [])
+    .map((entry) => entry.replace(/[ \u00a0\u202f]/gu, '').replace(',', '.'))
+}
+
+/* В выражении черновика запятая внутри C(n,k) и A(n,k) - разделитель, а
+   не десятичная дробь: «C(20,3)» - это 20 и 3, а не 20,3. */
+function expressionNumbers(expression: string): string[] {
+  return numbersIn(expression.replace(/([CA])\(\s*(\d+)\s*,\s*(\d+)\s*\)/gu, '$1($2; $3)'))
+}
+
+/* Справочные величины, которые не выводят.
+
+   Разбор прода 16 сентября: 60 секунд в минуте, 3600 в часе, 24 часа в
+   сутках, молярные массы 27 и 16 требовали «вывода», и за каждым таким
+   замечанием шёл полный повтор. Но 24, 60 и 64 в комбинаторике - это 4!,
+   5!/2 и 2⁶, и там их выписывать правильно. Поэтому время разрешено, только
+   если в задаче есть время, а молярные массы - только если есть моли. */
+const timeConstants = [60, 24, 3600, 1440, 86400]
+const molarMasses = [
+  1, 4, 7, 12, 14, 16, 19, 23, 24, 27, 28, 31, 32, 35.5, 39, 40, 52, 55, 56, 59, 64, 65, 80, 108, 127, 137, 207,
+  17, 18, 22.4, 36.5, 44, 46, 58.5, 63, 74, 78, 84, 98, 100, 106, 111, 142, 160, 170, 171, 233,
+]
+const timeMention = /мин|час|сут|сек|км\/ч|м\/с|(?<!\p{L})[чс](?!\p{L})/iu
+const moleMention = /моль|молярн|M\s*\(/u
+
+// Кратные приставки и перевод времени между записью решения и ответом.
+const unitFactors = [10, 100, 1000, 1_000_000, 60, 3600]
+
+function sameNumber(left: number, right: number) {
+  return Math.abs(left - right) <= Math.max(Math.abs(left), Math.abs(right), 1) * 1e-9
+}
+
+/* Число, названное результатом на листе: правая часть равенства.
+
+   «M(Al) = 27 г/моль», «n = 36» - число введено строкой и ученику видно.
+   Число слева от «=» или внутри произведения - нет: «36 · 120 = 4320» не
+   объясняет, откуда 36, и ровно так 6 сентября прошёл неверный ответ. */
+function stepResults(steps: readonly string[]) {
+  return steps.flatMap((line) => line.split('=').slice(1).map((side) => numbersIn(side)[0]).filter(Boolean))
 }
 
 export function verifyWorksheetDerivation(
   lines: readonly WorksheetLine[],
   condition: string,
+  given: readonly string[] = [],
+  steps: readonly string[] = [],
 ): string[] {
   if (lines.length === 0) return []
-  const known = new Set<string>(numbersIn(condition))
+  const known: number[] = [
+    ...numbersIn(condition),
+    ...given.flatMap((line) => numbersIn(line)),
+    ...stepResults(steps),
+  ].map(Number)
   for (const line of lines) {
     const value = parseWorksheetValue(line.value)
-    if (value !== null) known.add(String(value))
-    for (const number of numbersIn(line.value)) known.add(number)
+    if (value !== null) known.push(value)
+    for (const number of numbersIn(line.value)) known.push(Number(number))
   }
+  const context = [condition, ...given, ...steps].join(' ')
+  if (timeMention.test(context)) known.push(...timeConstants)
+  if (moleMention.test(context)) known.push(...molarMasses)
 
   const issues: string[] = []
   for (const line of lines) {
-    for (const number of numbersIn(line.expression)) {
+    for (const number of expressionNumbers(line.expression)) {
       const size = Number(number)
       if (!Number.isFinite(size) || size < traceableFrom) continue
       if (schoolConstants.has(number)) continue
-      if (known.has(number) || known.has(String(size))) continue
+      if (known.some((value) => sameNumber(value, size))) continue
       issues.push(`Черновик, «${line.label}»: число ${number} взято ниоткуда - выпиши строкой, как оно получено`)
     }
   }
-  return issues.slice(0, 4)
+  return [...new Set(issues)].slice(0, 4)
 }
 
 /* Проверка черновика. Возвращает замечания в том же виде, что и остальные
@@ -469,7 +521,13 @@ export function verifyAnswerDerivation(
     if (Number.isInteger(size) && size < traceableFrom) continue
 
     // Доля и проценты - одно и то же число в двух записях.
-    const wanted = percent ? [size, size / 100, size * 100] : [size]
+    /* И кратная единица: «252 000 Дж» на листе и «252 кДж» в ответе, «1,5 т»
+       и «1500 кг», «0,5 ч» и «30 мин». Пока «252 000» читалось двумя числами,
+       это совпадало случайно - по куску «252». */
+    const wanted = [
+      ...(percent ? [size, size / 100, size * 100] : [size]),
+      ...unitFactors.flatMap((factor) => [size * factor, size / factor]),
+    ]
     const found = known.some((value) => wanted.some((target) => {
       const scale = Math.max(Math.abs(target), value, 1)
       return Math.abs(value - Math.abs(target)) <= scale * 1e-2

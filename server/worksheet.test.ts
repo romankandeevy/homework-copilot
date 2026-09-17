@@ -110,6 +110,68 @@ describe('происхождение чисел', () => {
   it('пустой черновик проверять нечего', () => {
     expect(verifyWorksheetDerivation([], condition)).toEqual([])
   })
+
+  /* Разбор прода 16 сентября: «взято ниоткуда» было ложным почти всегда и
+     каждый раз стоило полного повтора. */
+  it('читает «300 000» одним числом и сравнивает числа по значению', () => {
+    expect(verifyWorksheetDerivation([
+      { label: 'работа', expression: '300000*2', value: '600000' },
+    ], 'Сила совершает работу 300 000 Дж дважды.')).toEqual([])
+    expect(verifyWorksheetDerivation([
+      { label: 'доля', expression: '3/15', value: '0.2' },
+      { label: 'масса', expression: '15*20', value: '300' },
+    ], 'Смесь массой 15,0 г и 20,0 г воды.')).toEqual([])
+  })
+
+  it('считает известными числа «Дано» и результаты строк решения', () => {
+    expect(verifyWorksheetDerivation(
+      [{ label: 'количество алюминия', expression: '5.4/27', value: '0.2' }],
+      'Сколько моль алюминия в 5,4 г?',
+      ['m(Al) = 5,4 г'],
+      [],
+    )).toEqual([])
+    expect(verifyWorksheetDerivation(
+      [{ label: 'объём', expression: '0.5*44.8', value: '22.4' }],
+      'Найдите объём газа.',
+      ['V₀ = 44,8 л'],
+      [],
+    )).toEqual([])
+    expect(verifyWorksheetDerivation(
+      [{ label: 'итого', expression: '36*120', value: '4320' }],
+      condition,
+      [],
+      ['Наборов цифр без нуля: n = 36', 'Перестановок: 5! = 120'],
+    )).toEqual([])
+  })
+
+  it('разрешает минуты, часы и молярные массы только там, где о них речь', () => {
+    expect(verifyWorksheetDerivation(
+      [{ label: 'время в секундах', expression: '15*60', value: '900' }],
+      'Поезд шёл 15 мин. Сколько секунд он был в пути?',
+    )).toEqual([])
+    expect(verifyWorksheetDerivation(
+      [{ label: 'скорость', expression: '72*1000/3600', value: '20' }],
+      'Скорость 72 км/ч. Выразите в м/с.',
+    )).toEqual([])
+    expect(verifyWorksheetDerivation(
+      [{ label: 'количество', expression: '5.4/27', value: '0.2' }],
+      'Найдите количество вещества алюминия (моль) массой 5,4 г.',
+    )).toEqual([])
+    // В комбинаторике 24 и 60 - это 4! и 5!/2, и их по-прежнему выписывают.
+    expect(verifyWorksheetDerivation([
+      { label: 'числа', expression: '24*60', value: '1440' },
+    ], condition)).toHaveLength(2)
+  })
+
+  it('не принимает число из левой части равенства за выведенное', () => {
+    // «36 · 120 = 4320» на листе не объясняет, откуда 36.
+    expect(verifyWorksheetDerivation(
+      [{ label: 'числа с нулём на конце', expression: '36*120', value: '4320' }],
+      condition,
+      [],
+      ['36 · 120 = 4320'],
+    )).toHaveLength(2)
+  })
 })
 
 /* Ответ появляется на глазах у ученика, а не готовым.
@@ -163,6 +225,12 @@ describe('происхождение ответа', () => {
       [],
       [],
     )).toEqual([])
+  })
+
+  it('принимает ответ в кратной единице', () => {
+    expect(verifyAnswerDerivation('Q = 252 кДж', [], 'Нагреть 2 кг воды на 30 °C.', [], ['Q = 4200 · 2 · 30 = 252 000 Дж'])).toEqual([])
+    // А число, которого нет ни в какой записи, по-прежнему не выведено.
+    expect(verifyAnswerDerivation('Q = 270 кДж', [], 'Нагреть 2 кг воды на 30 °C.', [], ['Q = 4200 · 2 · 30 = 252 000 Дж'])).toHaveLength(1)
   })
 
   it('не придирается к счётному ответу до дюжины', () => {

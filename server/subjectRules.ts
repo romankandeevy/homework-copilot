@@ -287,6 +287,11 @@ const symbolIntroduced: SubjectRule = {
       for (const match of line.matchAll(/(?<![\p{L}\d])([a-zA-Zа-яёА-ЯЁ])\s*\(/gu)) {
         const name = match[1]
         if (knownFunctionNames.has(name)) continue
+        /* Заглавная буква с числами в скобках - точка с координатами, а не
+           функция: «B(4; 0)». 17 сентября геометрия восьмого класса с фото
+           ушла в отказ с «Обозначение B(...) использовано, но нигде не
+           введено» - точку в тетради так и пишут. */
+        if (/\p{Lu}/u.test(name) && /^\s*\(\s*-?[\d.,]+\s*[;,]\s*-?[\d.,]+/u.test(line.slice(match.index + match[0].length - 1))) continue
         if (!used.has(name)) used.set(name, index)
       }
     })

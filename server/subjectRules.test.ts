@@ -200,6 +200,29 @@ describe('лист самодостаточен', () => {
     expect(issues.some((issue) => issue.includes('использовано, но нигде не введено'))).toBe(false)
   })
 
+  /* 17 сентября геометрия восьмого класса с фото получила отказ, в том числе
+     за «Обозначение B(...) использовано, но нигде не введено»: B(4; 0) - это
+     точка с координатами, а не функция. */
+  it('не принимает точку с координатами за функцию', () => {
+    const issues = verifySubjectRules(solution({
+      subject: 'Геометрия',
+      textbookId: 'geometry',
+      taskType: 'calculation',
+      condition: 'Найдите длину отрезка AB, если A(1; 2), B(4; 6).',
+      steps: ['AB = √((4 - 1)² + (6 - 2)²)', 'B(4; 0,5) - другая запись не нужна', 'AB = √(9 + 16) = 5'],
+      answer: 'AB = 5',
+    }))
+    expect(issues.some((issue) => issue.includes('использовано, но нигде не введено'))).toBe(false)
+    // А функция без определения по-прежнему ловится.
+    expect(verifySubjectRules(solution({
+      subject: 'Алгебра',
+      textbookId: 'algebra',
+      taskType: 'calculation',
+      steps: ['g(1) = -a < 0'],
+      answer: 'a > 0',
+    })).some((issue) => issue.includes('g(...)'))).toBe(true)
+  })
+
   it('ловит комбинаторику из одной формулы без слов', () => {
     // 7 сентября: весь лист - «A(8,4) = 8 · 7 · 6 · 5 = 1680». Откуда 8 и 4,
     // на листе не сказано, всё рассуждение осталось в разборе.
