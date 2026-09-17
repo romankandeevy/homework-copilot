@@ -4,6 +4,19 @@ const storageKey = 'homework-copilot:generated-solutions-v1'
 const edition = '14-е издание, Просвещение, 2023'
 const sourceUrl = '/textbooks/geometry-7-9-atanasyan.pdf'
 
+/* Дата решения считается от «сейчас», а не стоит в коде.
+
+   Решение гостя лежит в браузере неделю - столько же, сколько его хранит
+   база (`guestSolutionLifetimeMs` в src/lib/homeworkSolution.ts, аудит 16
+   сентября, В11). У записей здесь нет `ownerId`, то есть это решения гостя,
+   и с фиксированной датой они однажды стали старше недели: очередь
+   выбрасывала их при чтении localStorage, и все четыре проверки видели
+   «Решение не открылось» вместо листа. Проверяем оформление записи, а не
+   срок хранения, поэтому дата всегда свежая. */
+function freshCreatedAt() {
+  return new Date(Date.now() - 60 * 60 * 1000).toISOString()
+}
+
 function solution(task: string, condition: string) {
   const isTask50 = task === '50'
   const isTask4 = task === '4'
@@ -107,7 +120,7 @@ function solution(task: string, condition: string) {
     sourceVerified: true,
     taskType: isTask50 ? 'calculation' : 'mixed',
     quality: { diagramRequired: true, reviewPassed: true, symbolicShare: 0.8 },
-    createdAt: '2026-08-26T12:00:00.000Z',
+    createdAt: freshCreatedAt(),
   }
 }
 
