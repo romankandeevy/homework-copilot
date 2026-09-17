@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { homeworkSolutionEngineVersion } from '../src/lib/homeworkContract.ts'
 import type { HomeworkAnnotatedLine, HomeworkSolution, HomeworkWrittenAnalysis } from '../src/lib/homeworkContract.ts'
-import { analysisRepeatsSteps, answersAgree, applyDraftPatch, clampNotebookLine, isCurrentReviewedSolution, normalizeNotebookNotation, patchableIssue, resolveSubject, validateSolutionQuality, withoutPromptEcho } from './geometrySolutionEngine.ts'
+import { analysisRepeatsSteps, answersAgree, applyDraftPatch, clampNotebookLine, conditionEchoMatches, isCurrentReviewedSolution, normalizeNotebookNotation, patchableIssue, resolveSubject, validateSolutionQuality, withoutPromptEcho } from './geometrySolutionEngine.ts'
 
 const taskFiveSolution: HomeworkSolution = {
   engineVersion: homeworkSolutionEngineVersion,
@@ -939,5 +939,182 @@ describe('точечная починка', () => {
       sourceVerified: true, given: [], goal: { title: 'Найти', text: 'x' }, explanation: [], steps: ['x = 1'], answer: '1', answerKey: '1', worksheet: [],
       diagram: { kind: 'none', description: '', vertices: [] },
     }, { patches: [] }, 'Алгебра', 'x')).toBeNull()
+  })
+})
+
+/* Аудит 16 сентября, раздел Б: отказы, которые ученик не может исправить.
+
+   Каждое замечание ниже раньше вело к точечной починке, полному повтору и
+   отказу - два-четыре платных вызова модели за то, чего модель поменять не
+   может: слова ученика в условии, английское слово с «const» внутри, тему
+   истории в разборе, ввод переменной в текстовой задаче. */
+describe('лишние отказы по аудиту 16 сентября', () => {
+  const inequality: HomeworkSolution = {
+    ...taskFiveSolution,
+    textbookId: 'algebra',
+    subject: 'Алгебра',
+    source: 'text',
+    task: 'Неравенство',
+    condition: 'Какие из чисел множества {1; 2; 3} являются решениями неравенства 2x - 3 > 0?',
+    given: [],
+    goal: { title: 'Найти', text: 'решения неравенства из множества {1; 2; 3}' },
+    explanation: [
+      'Число - решение неравенства, если после подстановки получается верное числовое неравенство.',
+      'Удобнее сначала решить неравенство в общем виде, а потом отобрать числа из множества.',
+      'Частая ошибка - забыть, что при строгом знаке граница в ответ не входит.',
+    ],
+    steps: ['2x - 3 > 0', '2x > 3 |:2', 'x > 1,5'],
+    answer: '2; 3',
+    diagram: { kind: 'none', description: '', vertices: [] },
+    taskType: 'calculation',
+    quality: { diagramRequired: false, reviewPassed: true, symbolicShare: 1 },
+  }
+  const conditionIssues = (issues: string[]) => issues.filter((issue) => issue.startsWith('В условии'))
+
+  it('не проверяет на мусор распознавания условие, вписанное учеником', () => {
+    expect(conditionIssues(validateSolutionQuality(inequality))).toEqual([])
+    expect(conditionIssues(validateSolutionQuality({
+      ...inequality,
+      subject: 'Английский язык',
+      textbookId: 'english',
+      taskType: 'mixed',
+      condition: 'Translate: <b>The ticket costs $10</b>, and {the price} is fixed.',
+    }))).toEqual([])
+  })
+
+  it('у фото пропускает множество в скобках, но ловит обломки разметки', () => {
+    const photo = { ...inequality, source: 'photo' as const }
+    expect(conditionIssues(validateSolutionQuality(photo))).toEqual([])
+    expect(validateSolutionQuality({ ...photo, condition: 'Решите неравенство 2x - 3 > 0 } и отметьте @ решения' }))
+      .toContain('В условии остались признаки ошибки распознавания')
+    expect(validateSolutionQuality({ ...photo, condition: 'Решите неравенство \\dfrac{2x}{3} > 0 на прямой' }))
+      .toContain('В условии осталась техническая разметка')
+  })
+
+  it('не принимает «constitution» за const и не ищет значки в развёрнутом ответе', () => {
+    const english: HomeworkSolution = {
+      ...inequality,
+      textbookId: 'english',
+      subject: 'Английский язык',
+      taskType: 'mixed',
+      condition: 'Прочитайте текст о британской конституции и ответьте на вопрос: why is the British constitution called unwritten?',
+      goal: { title: 'Найти', text: 'Ответ на вопрос о британской конституции' },
+      explanation: [
+        'Конституция бывает писаной - одним документом - и неписаной, из законов, прецедентов и обычаев.',
+        'Опирайся на то, что в Великобритании нет единого документа с названием «конституция».',
+      ],
+      steps: ['The British constitution is called unwritten because it is not a single document: it is made of statutes, court decisions and conventions that constantly develop.'],
+      answer: 'Because it is not written down as one document.',
+    }
+    expect(validateSolutionQuality(english).some((issue) => issue.includes('const'))).toBe(false)
+    // «= const» в тетрадной записи по-прежнему ловится.
+    expect(validateSolutionQuality({ ...inequality, steps: ['2x - 3 > 0', 'k = const'] })
+      .some((issue) => issue.includes('не пишут «const»'))).toBe(true)
+    // А «construction» в тетрадной записи - слово, а не значок.
+    expect(validateSolutionQuality({ ...inequality, steps: ['2x - 3 > 0', 'x > 1,5 (construction)'] })
+      .some((issue) => issue.includes('const'))).toBe(false)
+  })
+
+  /* История: первая строка разбора по промпту говорит, о чём речь, третья -
+     на какие факты опереться. Это лексика условия и абзацев ответа, и
+     трёхграммное сходство срезало такие строки как пересказ. */
+  const history = {
+    ruleChecks: [],
+    condition: 'Назовите причины отмены крепостного права в России.',
+    taskType: 'mixed' as const,
+    diagramRequired: false,
+    decisions: { taskGoal: 'причины', diagramRequired: false, diagramReason: 'не нужен', requiredElements: [], notebookFormat: 'разбор', selfChecks: ['факты'] },
+    sourceVerified: true,
+    given: [],
+    goal: { title: 'Найти' as const, text: 'Причины отмены крепостного права' },
+    explanation: [],
+    steps: [
+      'Первая причина - поражение России в Крымской войне: оно показало отставание экономики и армии от европейских стран.',
+      'Вторая причина - крестьянские восстания: крепостное право вызывало недовольство, и власть боялась большого бунта.',
+      'Третья причина - крепостное право мешало развитию промышленности: не хватало свободных рабочих рук.',
+    ],
+    answer: '',
+    answerKey: '',
+    worksheet: [],
+    diagram: { kind: 'none' as const, description: '', vertices: [] },
+  }
+  const historyExplanation = [
+    // Сходство с условием 0,69 и с первым абзацем ответа 0,70: прежние
+    // пороги 0,6 и 0,55 срезали обе строки, и от разбора оставалось две.
+    'Речь о причинах отмены крепостного права в России в 1861 году.',
+    'Крепостное право - зависимость крестьян от помещика: крестьянин не мог уйти с земли и работал на барина.',
+    'Опирайся на поражение в Крымской войне: оно показало отставание экономики и армии.',
+    'Часто путают причины отмены с её итогами: выкупные платежи - это итог, а не причина.',
+  ]
+  const historySolution: HomeworkSolution = {
+    ...inequality,
+    textbookId: 'history',
+    subject: 'История',
+    taskType: 'mixed',
+    condition: history.condition,
+    goal: history.goal,
+    explanation: historyExplanation,
+    steps: history.steps,
+    answer: '',
+  }
+
+  it('не срезает разбор истории до «меньше трёх мыслей»', () => {
+    const patched = applyDraftPatch(history, { patches: [{ field: 'explanation', lines: historyExplanation }] }, 'История', history.condition)
+    expect(patched?.explanation).toEqual(historyExplanation)
+    expect(validateSolutionQuality(historySolution).filter((issue) => issue.includes('Разбор'))).toEqual([])
+    // Двух законченных мыслей развёрнутому ответу хватает.
+    expect(validateSolutionQuality({ ...historySolution, explanation: historyExplanation.slice(1, 3) })
+      .filter((issue) => issue.includes('Разбор'))).toEqual([])
+    // А дословная копия абзаца ответа - всё ещё пересказ.
+    expect(validateSolutionQuality({ ...historySolution, explanation: [...historyExplanation, history.steps[0]] }))
+      .toContain('Разбор пересказывает шаги решения вместо объяснения темы')
+  })
+
+  it('у задачи со счётом разбор по-прежнему не короче трёх мыслей и не пересказ', () => {
+    expect(validateSolutionQuality({ ...inequality, explanation: inequality.explanation?.slice(0, 2) }))
+      .toContain('Разбор короче трёх мыслей: правило, признак задачи, типичная ошибка')
+    const copy = applyDraftPatch(
+      { ...history, condition: inequality.condition, taskType: 'calculation', steps: inequality.steps, answer: '2; 3' },
+      { patches: [{ field: 'explanation', lines: ['Какие из чисел множества {1; 2; 3} являются решениями неравенства?', ...(inequality.explanation ?? [])] }] },
+      'Алгебра',
+      inequality.condition,
+    )
+    expect(copy?.explanation).toEqual(inequality.explanation)
+  })
+
+  it('не считает ввод переменной в текстовой задаче словесным абзацем', () => {
+    const boat: HomeworkSolution = {
+      ...inequality,
+      condition: 'Лодка прошла 16 км по течению и 12 км против течения, затратив на весь путь 3 ч. Скорость течения 2 км/ч. Найдите скорость лодки в стоячей воде.',
+      goal: { title: 'Найти', text: 'скорость лодки в стоячей воде' },
+      steps: [
+        'Пусть x км/ч - скорость лодки в стоячей воде, тогда (x + 2) км/ч - скорость по течению, а (x - 2) км/ч - против течения',
+        'Составим уравнение по времени в пути: 16/(x + 2) + 12/(x - 2) = 3',
+        '16(x - 2) + 12(x + 2) = 3(x² - 4)',
+        '3x² - 28x - 4 = 0',
+        'x₁ = 28/3 + 2√52/3 ≈ 14, x₂ < 0',
+      ],
+      answer: '14 км/ч',
+    }
+    const issues = validateSolutionQuality(boat)
+    expect(issues).not.toContain('Есть словесный абзац вместо школьной записи')
+    expect(issues).not.toContain('Слишком много слов и слишком мало математических обозначений')
+    // Абзац без ввода переменной по-прежнему не проходит.
+    expect(validateSolutionQuality({
+      ...boat,
+      steps: ['Скорость лодки по течению больше скорости против течения на удвоенную скорость течения реки, и это надо учесть в расчёте времени', ...boat.steps.slice(1)],
+    })).toContain('Есть словесный абзац вместо школьной записи')
+  })
+
+  it('сверяет эхо условия только у фото', () => {
+    const base = {
+      textbookId: 'algebra', task: 't', subject: 'Алгебра', grade: '8 класс', textbookTitle: '', authors: '', edition: '',
+      condition: 'Какие из чисел множества {1; 2; 3} являются решениями неравенства 2x - 3 > 0?', idempotencyKey: 'k',
+    }
+    expect(conditionEchoMatches({ ...base, source: 'text' }, 'Решите уравнение x² = 4')).toBe(true)
+    expect(conditionEchoMatches({ ...base, source: 'number' }, 'Решите уравнение x² = 4')).toBe(true)
+    expect(conditionEchoMatches({ ...base, source: 'photo' }, 'Решите уравнение x² = 4')).toBe(false)
+    expect(conditionEchoMatches({ ...base, source: 'photo' }, base.condition)).toBe(true)
+    expect(conditionEchoMatches({ ...base, source: 'photo', condition: undefined }, 'Решите уравнение x² = 4')).toBe(true)
   })
 })

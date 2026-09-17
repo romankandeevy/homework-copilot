@@ -39,7 +39,7 @@ import {
   defaultHomeworkModels,
   homeworkModelsForSubject,
 } from './homeworkModels.ts'
-import { isRuleClaimIssue, subjectFormatPrompt, subjectRuleQuestions, verifyRuleClaims, verifySubjectRules } from './subjectRules.ts'
+import { isRuleClaimIssue, subjectFormatPrompt, subjectRuleQuestions, verifyRuleAdmissions, verifyRuleClaims, verifySubjectRules } from './subjectRules.ts'
 import { conditionInjectionMarkers } from './conditionGuard.ts'
 import { chainSelfCrossing } from './diagramBuilder.ts'
 import { verifyGradeLevel } from './gradeRules.ts'
@@ -919,7 +919,7 @@ export function applyDraftPatch(draft: EngineDraft, raw: unknown, subject: strin
         }
         break
       case 'explanation':
-        result = { ...result, explanation: cleanExplanation(values, condition, result.steps, limits.explanation) }
+        result = { ...result, explanation: cleanExplanation(values, condition, result.steps, subjectProfile(subject, draft.taskType)) }
         break
       case 'goal': {
         const text = clampNotebookLine(
@@ -1659,13 +1659,15 @@ function cleanSteps(value: unknown, limits: typeof tightNotebookLimits) {
    отклоняла целиком - «объяснение из обрывков», «разбор пересказывает
    условие». Лишнюю строку код убирает сам; модель зовут, только если
    после чистки мыслей осталось меньше трёх - это уже про смысл. */
-function cleanExplanation(value: unknown, condition: string, steps: readonly string[], limit: number) {
+function cleanExplanation(value: unknown, condition: string, steps: readonly string[], profile: ReturnType<typeof subjectProfile>) {
   if (!Array.isArray(value)) return []
+  const limit = profile.notebook.explanation
+  const copy = explanationProfile(profile.form)
   return value
     .map((entry) => clampNotebookLine(normalizeNotebookNotation(entry, limit * 2), limit))
     .filter((entry) => entry.length >= 24)
-    .filter((entry) => conditionSimilarity(entry, condition) < 0.6)
-    .filter((entry) => !steps.some((step) => conditionSimilarity(entry, step) >= 0.55))
+    .filter((entry) => conditionSimilarity(entry, condition) < copy.conditionCopy)
+    .filter((entry) => !steps.some((step) => conditionSimilarity(entry, step) >= copy.stepCopy))
     .slice(0, 8)
 }
 
@@ -1735,7 +1737,8 @@ function normalizeDraft(value: unknown, subject = '', condition = ''): EngineDra
      обществознанию остаётся тетрадной записью, развёрнутый ответ по тому же
      предмету пишется абзацами. Тип приносит сама модель, поэтому профиль
      берём здесь, а не до вызова. */
-  const limits = subjectProfile(subject, taskType).notebook
+  const profile = subjectProfile(subject, taskType)
+  const limits = profile.notebook
   const rawGoalTitle = text(goal.title, 20)
   const goalTitle = rawGoalTitle === 'Доказать' || rawGoalTitle === 'Построить' ? rawGoalTitle : 'Найти'
   const analysis = normalizeAnalysis(candidate.analysis)
@@ -1776,7 +1779,7 @@ function normalizeDraft(value: unknown, subject = '', condition = ''): EngineDra
     },
     /* Объяснение не попадает на тетрадный лист: его верстает HTML над
        листом, поэтому пределы строки тетради к нему не применяются. */
-    explanation: cleanExplanation(candidate.explanation, conditionText, steps, limits.explanation),
+    explanation: cleanExplanation(candidate.explanation, conditionText, steps, profile),
     steps,
     ...(normalizeCode(candidate.code, conditionText) ? { code: normalizeCode(candidate.code, conditionText) } : {}),
     // Слово «Ответ» печатает лист: в answer лежит только значение.
@@ -2242,8 +2245,15 @@ function symbolicShare(linesValue: readonly string[]) {
   return Math.max(0, Math.min(1, (value.length - wordCharacters) / value.length))
 }
 
-function suspiciousCondition(condition: string) {
-  return /[@{}]|\b(?:HATE|Ha|HA|3[aа][mм]кнут\p{L}*)\b|\bВи\b|точк\p{L}*[^.;]{0,25}№/iu.test(condition)
+/* Мусор распознавания в прочитанном с фото условии.
+
+   Фигурные скобки множества «{1; 2; 3}» и блока кода - запись, а не мусор:
+   мусором остаётся одиночная скобка. «HA», «Ha», «HATE» - латиница на месте
+   кириллического «НА» из старого распознавания; в английском это слова. */
+function suspiciousCondition(condition: string, subject = '') {
+  const withoutGroups = condition.replace(/\{[^{}\\]*\}/gu, '')
+  if (/[@{}]|\b3[aа][mм]кнут\p{L}*\b|\bВи\b|точк\p{L}*[^.;]{0,25}№/iu.test(withoutGroups)) return true
+  return !/англ/iu.test(subject) && /\b(?:HATE|Ha|HA)\b/iu.test(condition)
 }
 
 /* Задача про график.
@@ -2658,13 +2668,34 @@ export function resolveSubject(requested: string, condition: string) {
   return algebraMarkers.test(condition) && /\bx\b/u.test(condition) ? 'Алгебра' : requested
 }
 
+/* Строка, где вводится переменная или составляется уравнение. */
+const variableIntroduction = /(?<!\p{L})(?:пусть|обозначим|примем\s+за|тогда|составим|составляем|получим\s+уравнени|получаем\s+уравнени|по\s+условию)(?!\p{L})/iu
+
+/* Разбор: сколько мыслей и что считать пересказом.
+
+   Сходство меряется трёхграммами, то есть общей лексикой. У записи
+   формулами разбор говорит другими словами, чем условие и шаги, и порог
+   0,6 ловит именно пересказ. У развёрнутого ответа - истории, литературы,
+   обществознания - промпт сам просит первой строкой сказать, о чём речь
+   («когда, кто, что произошло»), а третьей - на какие факты опереться:
+   это та же лексика, что в условии и в абзацах ответа. Аудит 16 сентября:
+   такие строки срезались как пересказ, разбор становился короче трёх мыслей,
+   и на каждой задаче истории шёл лишний вызов точечной починки. Пересказом
+   у развёрнутого ответа считается почти дословная копия, а мыслей хватает
+   двух - столько же требует правило explanation-explains. */
+function explanationProfile(form: 'notebook' | 'essay') {
+  return form === 'essay'
+    ? { minimum: 2, conditionCopy: 0.85, stepCopy: 0.85 }
+    : { minimum: 3, conditionCopy: 0.6, stepCopy: 0.55 }
+}
+
 function subjectProfile(subject: string, taskType: HomeworkTaskType = 'mixed') {
   const normalized = subject.toLocaleLowerCase('ru-RU')
   if (normalized.includes('геометр')) {
-    return { minimumSymbolicShare: 1, maxWordsPerStep: 8, allowsDiagram: true, form: 'notebook' as const, notebook: tightNotebookLimits }
+    return { minimumSymbolicShare: 1, maxWordsPerStep: 8, allowsDiagram: true, form: 'notebook' as const, notebook: tightNotebookLimits, wordProblemIntro: false }
   }
   if (normalized.includes('алгебр') || normalized.includes('математ')) {
-    return { minimumSymbolicShare: 0.85, maxWordsPerStep: 10, allowsDiagram: true, form: 'notebook' as const, notebook: roomyNotebookLimits }
+    return { minimumSymbolicShare: 0.85, maxWordsPerStep: 10, allowsDiagram: true, form: 'notebook' as const, notebook: roomyNotebookLimits, wordProblemIntro: true }
   }
   /* Физика и химия пишутся формулой, но не одними значками.
 
@@ -2679,10 +2710,10 @@ function subjectProfile(subject: string, taskType: HomeworkTaskType = 'mixed') {
      Планка снижена до уровня, который отсекает пересказ абзацами, но не
      требует превращать физику в исчисление. */
   if (normalized.includes('физик')) {
-    return { minimumSymbolicShare: 0.35, maxWordsPerStep: 20, allowsDiagram: true, form: 'notebook' as const, notebook: roomyNotebookLimits }
+    return { minimumSymbolicShare: 0.35, maxWordsPerStep: 20, allowsDiagram: true, form: 'notebook' as const, notebook: roomyNotebookLimits, wordProblemIntro: false }
   }
   if (normalized.includes('хими')) {
-    return { minimumSymbolicShare: 0.3, maxWordsPerStep: 20, allowsDiagram: false, form: 'notebook' as const, notebook: roomyNotebookLimits }
+    return { minimumSymbolicShare: 0.3, maxWordsPerStep: 20, allowsDiagram: false, form: 'notebook' as const, notebook: roomyNotebookLimits, wordProblemIntro: false }
   }
   // Остальные предметы: формальной записи может не быть вовсе.
   // Гуманитарные предметы: формальной записи может не быть вовсе, поэтому
@@ -2693,7 +2724,7 @@ function subjectProfile(subject: string, taskType: HomeworkTaskType = 'mixed') {
   // берём из контракта: по ней же страница решает, нумеровать шаги или
   // ставить абзацы, и расходиться этим двоим нельзя.
   if (homeworkSolutionForm(subject, taskType) === 'notebook') {
-    return { minimumSymbolicShare: 0, maxWordsPerStep: 24, allowsDiagram: false, form: 'notebook' as const, notebook: roomyNotebookLimits }
+    return { minimumSymbolicShare: 0, maxWordsPerStep: 24, allowsDiagram: false, form: 'notebook' as const, notebook: roomyNotebookLimits, wordProblemIntro: false }
   }
   /* Порог слов на строку здесь неприменим, а не «помягче».
 
@@ -2701,7 +2732,7 @@ function subjectProfile(subject: string, taskType: HomeworkTaskType = 'mixed') {
      абзац вместо школьной записи»: разбор предложения по членам не влезал в
      двадцать четыре слова. Доля математических обозначений для гуманитарных
      уже обнулена - словесный порог остался конечным по недосмотру. */
-  return { minimumSymbolicShare: 0, maxWordsPerStep: Number.POSITIVE_INFINITY, allowsDiagram: false, form: 'essay' as const, notebook: essayNotebookLimits }
+  return { minimumSymbolicShare: 0, maxWordsPerStep: Number.POSITIVE_INFINITY, allowsDiagram: false, form: 'essay' as const, notebook: essayNotebookLimits, wordProblemIntro: false }
 }
 
 export function validateSolutionQuality(solution: HomeworkSolution) {
@@ -2718,7 +2749,12 @@ export function validateSolutionQuality(solution: HomeworkSolution) {
   /* Объяснение обязательно. Без него на листе остаётся голая запись, то
      есть готовое списывание, - а продаём мы разбор. */
   const explanation = solution.explanation ?? []
-  if (explanation.length < 3) issues.push('Разбор короче трёх мыслей: правило, признак задачи, типичная ошибка')
+  const explanationRules = explanationProfile(profile.form)
+  if (explanation.length < explanationRules.minimum) {
+    issues.push(explanationRules.minimum >= 3
+      ? 'Разбор короче трёх мыслей: правило, признак задачи, типичная ошибка'
+      : 'Разбор короче двух мыслей: о чём речь и на что опереться')
+  }
   if (explanation.some((line) => line.length < 24)) issues.push('Объяснение состоит из обрывков, а не из законченных мыслей')
   /* Разбор не пересказывает ни условие, ни решение.
 
@@ -2732,13 +2768,24 @@ export function validateSolutionQuality(solution: HomeworkSolution) {
 
      Сравниваем по существу, а не по буквам: тем же трёхграммным
      сходством, которым сверяется условие. */
-  const retold = explanation.filter((line) => conditionSimilarity(line, solution.condition) >= 0.6)
+  const retold = explanation.filter((line) => conditionSimilarity(line, solution.condition) >= explanationRules.conditionCopy)
   if (retold.length > 0) issues.push('Разбор пересказывает условие вместо объяснения темы')
-  const repeatedStep = explanation.filter((line) => steps.some((step) => conditionSimilarity(line, step) >= 0.55))
+  const repeatedStep = explanation.filter((line) => steps.some((step) => conditionSimilarity(line, step) >= explanationRules.stepCopy))
   if (repeatedStep.length > 0) issues.push('Разбор пересказывает шаги решения вместо объяснения темы')
   if (solution.condition.length < 8) issues.push('Условие отсутствует или слишком короткое')
-  if (suspiciousCondition(solution.condition)) issues.push('В условии остались признаки ошибки распознавания')
-  if (/\$|\\[A-Za-z]+|```|\*\*|<\/?[a-z][a-z0-9]*\s*\/?>/iu.test(solution.condition)) issues.push('В условии осталась техническая разметка')
+  /* Чтение условия проверяется только у фото.
+
+     Аудит 16 сентября: вписанное условие приходит из запроса, модель его не
+     меняет, и на страницу идёт оно же. «Множество {1; 2; 3}» в алгебре,
+     «$10» в английском, «<тег>» в информатике - это слова ученика, а не
+     ошибка распознавания. Замечание «В условии» чинится только полным
+     повтором, который условие запроса не трогает, - гарантированный отказ
+     после двух-трёх платных вызовов. У фото условие прочитала модель, и
+     там мусор распознавания - наша забота. */
+  if (solution.source === 'photo') {
+    if (suspiciousCondition(solution.condition, solution.subject)) issues.push('В условии остались признаки ошибки распознавания')
+    if (/\$|\\[A-Za-z]+|```|\*\*|<\/?[a-z][a-z0-9]*\s*\/?>/iu.test(solution.condition)) issues.push('В условии осталась техническая разметка')
+  }
   const limits = profile.notebook
   if (solution.given.length > 4 || solution.given.some((line) => line.length > limits.given)) issues.push('Раздел «Дано» слишком длинный')
   if (!solution.goal.text || solution.goal.text.length > limits.goal) issues.push('Цель задачи не оформлена кратко')
@@ -2789,9 +2836,15 @@ export function validateSolutionQuality(solution: HomeworkSolution) {
      возвращается к привычной ей математической скорописи. Постоянную
      величину в школе называют постоянной словом, а «∀», «∃» и «:=»
      в тетради не пишут вовсе. */
-  const foreignNotation = [...solution.given, ...steps, solution.answer]
-    .join(' ')
-    .match(/const|∀|∃|:=|Q\.?E\.?D/iu)
+  /* «const» - слово, а не кусок слова: аудит 16 сентября, английский с
+     «constitution», «constantly», «construction» уходил в отказ - убрать
+     слово из текста задания модель не может. Развёрнутый ответ абзацами
+     формулами не пишут, и значки там не ищем вовсе. */
+  const foreignNotation = profile.form === 'essay'
+    ? null
+    : [...solution.given, ...steps, solution.answer]
+      .join(' ')
+      .match(/(?<![a-z])const(?![a-z])|∀|∃|:=|(?<![a-z])Q\.?E\.?D(?![a-z])/iu)
   if (foreignNotation) {
     issues.push(`В школьной записи не пишут «${foreignNotation[0]}»: скажи это словом - «постоянно», «для любого», «значит»`)
   }
@@ -2864,13 +2917,26 @@ export function validateSolutionQuality(solution: HomeworkSolution) {
       .filter((degrees) => degrees >= 180)
     if (found.length > 0) issues.push(`У выпуклой фигуры не бывает угла ${found[0]}°`)
   }
-  if (steps.some((line) => (line.match(/[а-яё]{2,}/giu)?.length ?? 0) > profile.maxWordsPerStep)) {
+  /* Текстовая задача алгебры начинается словами.
+
+     Аудит 16 сентября: «Пусть x км/ч - скорость лодки в стоячей воде, тогда
+     (x + 3) км/ч - скорость по течению» - это школьная запись текстовой
+     задачи, а не словесный абзац. Десять слов на строку и доля обозначений
+     0,85 такую строку не пропускали, и верное решение шло в починку, где
+     модель выжимала из ввода переменной символы. Строки, где вводится
+     переменная или составляется уравнение, меряются пределом в двадцать
+     четыре слова и в долю обозначений не входят; остальные - как прежде. */
+  const introducesVariables = (line: string) => profile.wordProblemIntro && variableIntroduction.test(line)
+  const wordLimit = (line: string) => (introducesVariables(line) ? Math.max(profile.maxWordsPerStep, 24) : profile.maxWordsPerStep)
+  if (steps.some((line) => (line.match(/[а-яё]{2,}/giu)?.length ?? 0) > wordLimit(line))) {
     issues.push('Есть словесный абзац вместо школьной записи')
   }
 
   const baseShare = taskType === 'construction' ? 0.72 : taskType === 'proof' ? 0.42 : taskType === 'calculation' ? 0.55 : 0.5
   const minimumShare = baseShare * profile.minimumSymbolicShare
-  if (share < minimumShare) issues.push('Слишком много слов и слишком мало математических обозначений')
+  const formalSteps = steps.filter((line) => !introducesVariables(line))
+  const measuredShare = formalSteps.length === steps.length ? share : symbolicShare(formalSteps)
+  if (formalSteps.length > 0 && measuredShare < minimumShare) issues.push('Слишком много слов и слишком мало математических обозначений')
   if (taskType === 'construction') {
     if (solution.goal.title !== 'Построить') issues.push('Задача на построение должна иметь цель «Построить»')
     if (steps.length > 2 || russianWords > 4) issues.push('Построительная задача перегружена текстом')
@@ -3311,6 +3377,24 @@ async function callModelWithRetry(
   throw lastError
 }
 
+/* Эхо условия сверяется только у фото.
+
+   У вписанного условия и задачи по номеру текст приходит в запросе, на
+   страницу идёт он же (toSolution), а модель его не меняет. Расхождение её
+   пересказа с этим текстом - запятые, степени, обрезанный хвост - ничего не
+   говорит о решении, но отменяло его без повтора. У фото условие прочитала
+   сама модель, и там сверка с приложенным текстом осмысленна. */
+export function conditionEchoMatches(request: SolveHomeworkRequest, condition: string) {
+  if (request.source !== 'photo' || !request.condition) return true
+  return conditionSimilarity(request.condition, condition) >= 0.55
+}
+
+export function sourceUnreadableMessage(request: Pick<SolveHomeworkRequest, 'source'>) {
+  return request.source === 'photo'
+    ? 'Не получилось прочитать задачу на фотографии. Сфотографируй её ближе, ровно и при хорошем свете, чтобы всё условие было в кадре и без бликов'
+    : 'В условии не хватает данных, чтобы решить задачу. Проверь, что задача вписана целиком, со всеми числами и вопросом'
+}
+
 /* Что чинить первым.
 
    Замечаний в повтор уходит не больше шести, и приём не по классу тонул
@@ -3360,10 +3444,9 @@ export async function solveHomeworkWithReview(
       // И обратное: «выполнено» в ruleChecks при записи, где этого нет.
       ...verifyRuleClaims(asSolution, candidate.ruleChecks),
       // Модель сама отметила нарушенное правило и всё равно отдала решение.
-      // Спорить с ней не нужно: это признание, а не мнение.
-      ...candidate.ruleChecks
-        .filter((check) => !check.passed)
-        .map((check) => `Правило предмета не выполнено: ${check.rule}`),
+      // Спорить с ней не нужно: это признание, а не мнение, - но только по
+      // правилу, которое мы и сами проверяем кодом.
+      ...verifyRuleAdmissions(asSolution, candidate.ruleChecks),
       /* Счёт проверяет калькулятор, а не модель: 6 сентября обе модели
          уронили один множитель в переборе случаев и не заметили этого ни
          при самопроверке, ни при обратной подстановке. */
@@ -3378,9 +3461,9 @@ export async function solveHomeworkWithReview(
         : []),
       /* Приём по классу. 7 сентября стереометрия за 11 класс решилась
          векторным произведением: верно и несдаваемо. */
-      ...verifyGradeLevel(asSolution, request.grade),
+      ...verifyGradeLevel(asSolution, request.grade, asSolution.subject),
     ]
-    if (request.condition && conditionSimilarity(request.condition, candidate.condition) < 0.55) {
+    if (!conditionEchoMatches(request, candidate.condition)) {
       issues.push('Условие кандидата не совпадает с приложенным заданием')
     }
     return { candidate, issues, model }
@@ -3417,8 +3500,7 @@ export async function solveHomeworkWithReview(
   // звать его же второй раз — гарантированно потерять решение, которое есть.
   const workingModel = best.model
   const deterministicIssues = [...best.issues]
-  const authorConditionMatched = !request.condition
-    || conditionSimilarity(request.condition, draft.condition) >= 0.55
+  const authorConditionMatched = conditionEchoMatches(request, draft.condition)
 
   options.onTrace?.({
     stage: 'author',
@@ -3426,6 +3508,18 @@ export async function solveHomeworkWithReview(
     approved: deterministicIssues.length === 0,
     issues: [...deterministicIssues],
   })
+
+  /* Модель не смогла прочитать задание - отказ сразу.
+
+     Аудит 16 сентября: sourceVerified=false уходил в точечную починку,
+     которая этот признак не меняет, потом в полный повтор - три платных
+     вызова за нечитаемое фото и тот же отказ в конце. Переснять фото может
+     только ученик, поэтому говорим ему это сразу. Деньги возвращаются тем
+     же путём, что и при любом отказе проверки. */
+  if (!draft.sourceVerified) {
+    console.log(JSON.stringify({ level: 'info', event: 'homework_source_unreadable', subject: request.subject, source: request.source }))
+    throw new GeometrySolutionEngineError(sourceUnreadableMessage(request))
+  }
 
   /* Проход прошёл все проверки — отдаём как есть.
 
@@ -3682,8 +3776,7 @@ export async function solveHomeworkWithReview(
       ...verifySubjectRules(repairedSolution),
       ...verifyRuleClaims(repairedSolution, repaired.solution.ruleChecks),
     ]
-    const repairedConditionMatched = !request.condition
-      || conditionSimilarity(request.condition, repairedSolution.condition) >= 0.55
+    const repairedConditionMatched = conditionEchoMatches(request, repaired.solution.condition)
     if (!repairedConditionMatched) {
       repairedIssues.push('Условие решения не совпадает с приложенным заданием')
     }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { solveHomeworkWithReview } from './geometrySolutionEngine.ts'
+import { solveHomeworkWithReview, sourceUnreadableMessage } from './geometrySolutionEngine.ts'
 import type { SolveHomeworkRequest } from '../src/lib/homeworkContract.ts'
 
 /* Заявленное правило без следа в записи не отменяет решение.
@@ -62,7 +62,7 @@ const responsesPayload = (body: unknown) => ({
   credits_consumed: 0.01,
 })
 
-function stubProvider() {
+function stubProvider(authorDraft: typeof draft = draft) {
   const stages: string[] = []
   const fetchImpl = (async (input: unknown, init?: RequestInit) => {
     const url = String(input)
@@ -73,8 +73,8 @@ function stubProvider() {
     stages.push(stage)
     // Модель настаивает на своей записи: правка возвращает те же строки.
     const answer = stage === 'patch'
-      ? { patches: [{ field: 'steps', lines: draft.steps }] }
-      : stage === 'review' ? { approved: true, issues: [], solution: draft } : draft
+      ? { patches: [{ field: 'steps', lines: authorDraft.steps }] }
+      : stage === 'review' ? { approved: true, issues: [], solution: authorDraft } : authorDraft
     return new Response(JSON.stringify(url.includes('/codex/') ? responsesPayload(answer) : geminiPayload(answer)), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
@@ -94,5 +94,42 @@ describe('заявка на правило без следа в записи', (
     expect(solution.answer).toContain('252')
     // И само замечание видно в панели проверки, а не потеряно.
     expect(solution.verification?.reviewerIssues.join(' ')).toContain('formula-before-numbers')
+  })
+})
+
+/* Аудит 16 сентября: лишние вызовы по мелочи. */
+describe('отказ и выдача без лишних вызовов', () => {
+  const clean = {
+    ...draft,
+    ruleChecks: [{ rule: 'formula-before-numbers', passed: true, evidence: 'Q = cmΔt' }],
+    steps: ['Q = cmΔt', 'Q = 4200 · 2 · 30 = 252 000 Дж'],
+  }
+
+  it('нечитаемое фото - отказ после первого же вызова и понятный текст', async () => {
+    const { stages, fetchImpl } = stubProvider({ ...clean, sourceVerified: false })
+    const photo: SolveHomeworkRequest = {
+      ...request,
+      source: 'photo',
+      condition: undefined,
+      imageDataUrl: 'data:image/png;base64,cGhvdG8=',
+    }
+
+    await expect(solveHomeworkWithReview(photo, { apiKey: 'test-key', fetchImpl }))
+      .rejects.toThrow(sourceUnreadableMessage(photo))
+    // Раньше: черновик, точечная починка, которая признак не меняет, и полный повтор.
+    expect(stages).toEqual(['draft'])
+    expect(sourceUnreadableMessage(photo)).toContain('фотографии')
+  })
+
+  it('признание по правилу без проверки кодом не зовёт починку', async () => {
+    const { stages, fetchImpl } = stubProvider({
+      ...clean,
+      ruleChecks: [...clean.ruleChecks, { rule: 'answer-plausible', passed: false, evidence: 'Не уверена в порядке величины' }],
+    })
+
+    const solution = await solveHomeworkWithReview(request, { apiKey: 'test-key', fetchImpl })
+
+    expect(stages).toEqual(['draft'])
+    expect(solution.answer).toContain('252')
   })
 })

@@ -80,6 +80,64 @@ function mentions(value: string, pattern: RegExp) {
   return pattern.test(value.toLocaleLowerCase('ru-RU').replaceAll('ё', 'е'))
 }
 
+/* Одно и то же число в разной записи.
+
+   Аудит 16 сентября: правило «Дано собирает все числа условия» искало
+   число буквально. «20 000 Дж» в условии и «Q = 20000 Дж» в «Дано»,
+   «1.5 т» и «m = 1,5 т», «54 км/ч» и «v = 15 м/с» после перевода в СИ -
+   всё это считалось потерянной величиной, хотя перевод в СИ правило само
+   и требует. Сравниваем значения: запятая и точка, пробелы в тысячах,
+   множитель «· 10³» и перевод единиц - кратные приставки, минуты, часы и
+   километры в час. */
+const superscriptToDigit: Record<string, string> = {
+  '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9', '⁻': '-',
+}
+const quantityNumber = /(-?\d{1,3}(?:[\s\u00a0]\d{3})+(?![\d.,])|-?\d+(?:[.,]\d+)?)(?:\s*[·×*]\s*10(?:\^\(?(-?\d+)\)?|([⁻⁰¹²³⁴⁵⁶⁷⁸⁹]+)))?/gu
+
+export function numbersIn(value: string): number[] {
+  return [...value.matchAll(quantityNumber)].map((match) => {
+    const mantissa = Number(match[1].replace(/[\s\u00a0]/gu, '').replace(',', '.'))
+    const power = match[2] ?? (match[3] ? [...match[3]].map((char) => superscriptToDigit[char] ?? '').join('') : '')
+    return power ? mantissa * 10 ** Number(power) : mantissa
+  }).filter((number) => Number.isFinite(number))
+}
+
+// Перевод единиц - кратные приставки, минуты, часы, сутки и км/ч в м/с.
+const unitConversions = [1, 3.6, 60, 3600, 86400]
+  .flatMap((factor) => [factor, 1 / factor])
+  .flatMap((factor) => Array.from({ length: 19 }, (_, index) => factor * 10 ** (index - 9)))
+
+function convertedQuantity(left: number, right: number) {
+  if (left === 0 || right === 0) return false
+  // Кельвины - сдвиг, а не множитель: 27 °C и 300 K.
+  if (Math.abs(Math.abs(left - right) - 273.15) <= 0.15) return true
+  const ratio = right / left
+  return unitConversions.some((factor) => Math.abs(ratio / factor - 1) < 1e-3)
+}
+
+/* Какие величины условия не нашлись среди чисел «Дано».
+
+   Каждое число «Дано» закрывает одну величину: сначала точные совпадения,
+   потом переводы. Иначе «2 кг» закрыло бы и «20 °C» - двадцать в десять
+   раз больше двух, и потерянная температура прошла бы как перевод.
+   Одно и то же значение, названное в условии дважды, в «Дано» пишут один
+   раз - поэтому значения условия берутся без повторов. */
+export function missingQuantities(conditionValues: readonly number[], givenValues: readonly number[]) {
+  const free = [...givenValues]
+  const take = (index: number) => {
+    free.splice(index, 1)
+    return true
+  }
+  const unmatched = [...new Set(conditionValues)].filter((value) => {
+    const exact = free.indexOf(value)
+    return exact >= 0 ? !take(exact) : true
+  })
+  return unmatched.filter((value) => {
+    const converted = free.findIndex((candidate) => convertedQuantity(value, candidate))
+    return converted >= 0 ? !take(converted) : true
+  })
+}
+
 // Задача с числовым ответом обязана вернуть число. «Ответ: смотри решение»
 // или «Ответ: найдено» — то, ради чего ученик и приходил, отсутствует.
 const numericAnswer: SubjectRule = {
@@ -101,13 +159,48 @@ const countableNouns = 'сторон|вершин|углов|точек|прям
   + '|чисел|цифр|способов|решений|корней|элементов|делителей|букв|слов|слагаемых|множителей'
 const countingQuestion = new RegExp(`(?:скольк\\p{L}*|количеств\\p{L}*|число)\\s+(?:${countableNouns})`, 'iu')
 
+/* Безразмерная искомая величина единицы не имеет.
+
+   Аудит 16 сентября: «найдите cos A» с ответом «cos A = 0,6» уходило в
+   починку как «ответ без единицы измерения» - в условии стояли сантиметры,
+   и правило требовало их же от косинуса. Единицы у косинуса нет, модель её
+   не придумает, и за этим шла точечная правка, полный повтор и отказ.
+   То же с отношением, коэффициентом подобия, вероятностью, «во сколько
+   раз» и количеством предметов.
+
+   Смотрим туда, где назван вопрос: цель («cos A - ?»), левая часть ответа
+   («cos A = 0,6») и последнее предложение условия с «найдите», а не всё
+   условие: «cos A = 0,8, AB = 10 см. Найдите BC» спрашивает длину. */
+const dimensionlessQuantity = new RegExp([
+  '(?<!\\p{L})(?:sin|cos|tg|ctg|tan|cot)(?!\\p{L})',
+  'синус|косинус|тангенс|котангенс',
+  '(?<!по\\s+)отношени|вероятност|сколько\\s+раз',
+  'коэффициент(?!\\p{L}*\\s+ж[её]сткост)',
+  'показател\\p{L}*\\s+преломлени',
+  'количеств\\p{L}*\\s+(?!теплот|веществ|электричеств|движени)',
+].join('|'), 'iu')
+const questionStart = /(?<!\p{L})(?:найд|вычисл|определ|чему\s+равн|во\s+сколько|сколько)/giu
+
+function askedQuestion(condition: string) {
+  const starts = [...condition.matchAll(questionStart)]
+  const last = starts.at(-1)
+  return last ? condition.slice(last.index) : ''
+}
+
+function asksDimensionless(solution: HomeworkSolution) {
+  const answerSubject = solution.answer.split('=')[0] ?? ''
+  return [solution.goal.text, solution.answer.includes('=') ? answerSubject : '', askedQuestion(solution.condition)]
+    .some((part) => dimensionlessQuantity.test(part))
+}
+
 // Единицы измерения теряются чаще всего, и работа за это снижается.
 const answerUnits: SubjectRule = {
   id: 'answer-units',
   question: 'Единица измерения стоит при ответе, если она есть в условии?',
   applies: (solution) => solution.taskType === 'calculation'
     && unitPattern.test(solution.condition)
-    && !mentions(`${solution.condition} ${solution.goal.text}`, countingQuestion),
+    && !mentions(`${solution.condition} ${solution.goal.text}`, countingQuestion)
+    && !asksDimensionless(solution),
   verify: (solution) => (unitPattern.test(solution.answer) ? null : 'В ответе нет единицы измерения'),
 }
 
@@ -481,15 +574,13 @@ const rulesBySubject: Record<string, readonly SubjectRule[]> = {
        у доски не сможет сказать, откуда взялось 10. */
     verify: (solution) => {
       if (solution.given.length === 0) return 'Раздел «Дано» пуст'
-      const given = solution.given.join(' ')
-      const missing = [...solution.condition.matchAll(numberWithUnitPattern)]
-        .map((match) => match[0].trim())
-        .filter((value) => {
-          const number = value.match(/\d+(?:[.,]\d+)?/u)?.[0]
-          return number ? !given.includes(number) : false
-        })
-      return missing.length > 0
-        ? `В «Дано» нет величины ${missing[0]} из условия: выпиши все заданные числа`
+      const quantities = [...solution.condition.matchAll(numberWithUnitPattern)]
+        .map((match) => ({ text: match[0].trim(), value: numbersIn(match[0])[0] }))
+        .filter((quantity): quantity is { text: string; value: number } => quantity.value !== undefined)
+      const missing = missingQuantities(quantities.map((quantity) => quantity.value), numbersIn(solution.given.join('; ')))
+      const lost = quantities.find((quantity) => missing.includes(quantity.value))
+      return lost
+        ? `В «Дано» нет величины ${lost.text} из условия: выпиши все заданные числа`
         : null
     },
   }, {
@@ -706,6 +797,26 @@ export function verifySubjectRules(solution: HomeworkSolution): string[] {
   }
 
   return [...new Set(issues)]
+}
+
+/* Признание модели «правило не выполнено».
+
+   Модель сама отметила нарушенное правило и всё равно отдала решение - это
+   признание, а не мнение, и спорить с ним не нужно. Но только там, где
+   правило мы и сами проверяем: у правила без verify - «корни проверены»,
+   «термины названы» - признание не проверить, а отвергать решение за то,
+   чего мы сами не умеем проверить, нельзя (AGENTS.md). Аудит 16 сентября:
+   такое признание отменяло решение вопреки этому правилу. */
+export function verifyRuleAdmissions(
+  solution: HomeworkSolution,
+  checks: readonly { rule: string; passed: boolean }[],
+): string[] {
+  const verified = new Map(subjectRules(solution.subject)
+    .filter((rule) => rule.verify && (!rule.applies || rule.applies(solution)))
+    .map((rule) => [rule.id, rule]))
+  return [...new Set(checks
+    .filter((check) => !check.passed && verified.has(check.rule.trim()))
+    .map((check) => `Правило предмета не выполнено: ${check.rule.trim()}`))]
 }
 
 /* Сверка ответа модели на вопросы правил с самой записью.

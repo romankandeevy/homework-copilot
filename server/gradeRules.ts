@@ -1,4 +1,5 @@
 import type { HomeworkSolution } from '../src/lib/homeworkContract.ts'
+import { findSubjectById, findSubjectByName } from '../src/lib/subjects.ts'
 
 /* Приём решения ограничен ступенью обучения.
 
@@ -39,7 +40,8 @@ export function stageFromGrade(grade: string): Stage {
 type StageRule = {
   /** Со ступени, где приём уже проходят, правило снимается. */
   allowedFrom: Stage
-  pattern: RegExp
+  /** Текст записи в нижнем регистре, «ё» заменена на «е». */
+  found: (text: string) => boolean
   /** Как называется приём в замечании. */
   name: string
   /** Чем его заменить в школьной записи. */
@@ -54,38 +56,74 @@ const stageOrder: Record<Stage, number> = {
   unknown: 0,
 }
 
+/* Координаты в пространстве - по слову, а не по одной тройке чисел.
+
+   Аудит 16 сентября: «египетский треугольник (3; 4; 5)» в геометрии
+   восьмого класса читался как точка в пространстве, и верное решение
+   уходило в полный повтор, который это «починить» не может. Тройка чисел
+   в скобках - это и стороны треугольника, и пифагорова тройка, и набор
+   ответов. Точкой пространства она становится там, где рядом сказано
+   «координаты». */
+const spaceTriple = /\(\s*-?\d+(?:[.,]\d+)?\s*;\s*-?\d+(?:[.,]\d+)?\s*;\s*-?\d+(?:[.,]\d+)?\s*\)/gu
+const coordinatesNearby = 60
+
+function spaceCoordinates(text: string) {
+  if (/координат\p{L}*\s+в\s+пространств/u.test(text)) return true
+  return [...text.matchAll(spaceTriple)].some((match) => {
+    const start = Math.max(0, match.index - coordinatesNearby)
+    const end = match.index + match[0].length + coordinatesNearby
+    return text.slice(start, end).includes('координат')
+  })
+}
+
 const rules: readonly StageRule[] = [
   {
     allowedFrom: 'university',
-    pattern: /векторн\p{L}*\s+произведени|смешанн\p{L}*\s+произведени|\[\s*[A-Za-z][\p{L}\d₀-₉]*\s*×/u,
+    found: (text) => /векторн\p{L}*\s+произведени|смешанн\p{L}*\s+произведени|\[\s*[A-Za-z][\p{L}\d₀-₉]*\s*×/u.test(text),
     name: 'векторное и смешанное произведение',
     instead: 'найди расстояние через уравнение плоскости или построй общий перпендикуляр',
   },
   {
     allowedFrom: 'university',
-    pattern: /определител\p{L}*\s+матриц|матриц\p{L}*\s+перехода|собственн\p{L}*\s+значени|комплексн\p{L}*\s+числ/u,
+    found: (text) => /определител\p{L}*\s+матриц|матриц\p{L}*\s+перехода|собственн\p{L}*\s+значени|комплексн\p{L}*\s+числ/u.test(text),
     name: 'матрицы, определители и комплексные числа',
     instead: 'решай школьными средствами своего класса',
   },
   {
     allowedFrom: 'senior',
-    pattern: /производн\p{L}*|интеграл\p{L}*|предел\s+функци|лопитал/u,
+    found: (text) => /производн\p{L}*|интеграл\p{L}*|предел\s+функци|лопитал/u.test(text),
     name: 'производные, интегралы и пределы',
     instead: 'в этом классе то же самое делают через свойства функции и преобразования',
   },
   {
     allowedFrom: 'senior',
-    pattern: /координат\p{L}*\s+в\s+пространств|\(\s*-?\d+\s*;\s*-?\d+\s*;\s*-?\d+\s*\)/u,
+    found: spaceCoordinates,
     name: 'координаты в пространстве',
     instead: 'до десятого класса стереометрию считают по планиметрическим сечениям',
   },
 ]
 
+/* Правила класса - только у предметов со счётом.
+
+   Аудит 16 сентября: образец «производн…» ловил биологию восьмого класса
+   («производные кожи»), химию девятого («производные углеводородов») и
+   русский седьмого («производное слово»). Замечание о приёме не по классу
+   чинится только полным повтором, а повтор слово из темы не уберёт - ученик
+   получал отказ после трёх платных вызовов. Производная, интеграл и
+   векторное произведение как приём бывают только там, где считают. */
+const gradeRuleSubjects = new Set(['mathematics', 'algebra', 'geometry', 'physics', 'informatics', 'astronomy'])
+
+function gradeRulesApply(subject: string) {
+  const known = findSubjectByName(subject) ?? findSubjectById(subject.trim())
+  return known ? gradeRuleSubjects.has(known.id) : false
+}
+
 /* Замечания о приёме не по классу.
 
    Возвращаются в том же виде, что и остальные проверки решателя: пусто -
    всё в порядке, иначе строка уходит в адресную починку. */
-export function verifyGradeLevel(solution: HomeworkSolution, grade: string): string[] {
+export function verifyGradeLevel(solution: HomeworkSolution, grade: string, subject: string): string[] {
+  if (!gradeRulesApply(subject)) return []
   const stage = stageFromGrade(grade)
   if (stage === 'unknown' || stage === 'university') return []
 
@@ -97,7 +135,7 @@ export function verifyGradeLevel(solution: HomeworkSolution, grade: string): str
   const issues: string[] = []
   for (const rule of rules) {
     if (stageOrder[stage] >= stageOrder[rule.allowedFrom]) continue
-    if (!rule.pattern.test(text)) continue
+    if (!rule.found(text)) continue
     issues.push(`В ${grade.trim()} ${rule.name} не проходят: ${rule.instead}`)
   }
   return issues.slice(0, 2)
