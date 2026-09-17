@@ -301,8 +301,12 @@ max_frequency = "60s"
 # Send SMS Hook: Supabase Auth сам зовёт функцию на Vercel из Франкфурта,
 # прокси не нужен. Подпись - Standard Webhooks, секрет `v1,whsec_...` тот же,
 # что в Vercel `SEND_SMS_HOOK_SECRET` (server/smsHook.ts, api/sms-hook.ts).
+# Здесь выключен: CLI проверяет секрет при каждом запуске (`db query`,
+# `functions deploy`) и без локальной переменной падает. На проде хук
+# включён в Dashboard; перед `supabase config push` задать переменную и
+# поставить true.
 [auth.hook.send_sms]
-enabled = true
+enabled = false
 uri = "https://homework-copilot-taupe.vercel.app/api/sms-hook"
 secrets = "env(SEND_SMS_HOOK_SECRET)"
 
