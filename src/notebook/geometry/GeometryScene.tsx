@@ -393,7 +393,9 @@ function RightAngleMark({ points, label }: { points: readonly Point[]; label: st
   </>
 }
 
-function EqualSegmentMark({ points, label }: { points: readonly Point[]; label: string }) {
+type LabelPlace = { x: number; y: number; anchor: 'start' | 'middle' | 'end' }
+
+function EqualSegmentMark({ points, label, place }: { points: readonly Point[]; label: string; place: LabelPlace | null }) {
   const pairs = points.length >= 4 ? [[points[0], points[1]], [points[2], points[3]]] : [[points[0], points[1]]]
   const paths = pairs.flatMap(([start, end]) => {
     if (!start || !end) return []
@@ -406,7 +408,8 @@ function EqualSegmentMark({ points, label }: { points: readonly Point[]; label: 
   const labelPoint = points.length > 0 ? average(points) : null
   return <>
     {keyed(paths, (path) => path).map(({ key, item: path }) => <path className="diagram-mark" d={path} key={key} />)}
-    {label && labelPoint && <text className="diagram-angle-label" x={labelPoint.x + sceneLayout.labelOffsetX} y={labelPoint.y + sceneLayout.labelOffsetY}>{label}</text>}
+    {label && place && <text className="diagram-angle-label" textAnchor={place.anchor} x={place.x} y={place.y}>{label}</text>}
+    {label && !place && labelPoint && <text className="diagram-angle-label" x={labelPoint.x + sceneLayout.labelOffsetX} y={labelPoint.y + sceneLayout.labelOffsetY}>{label}</text>}
   </>
 }
 
@@ -422,13 +425,14 @@ function parallelChevron(start: Point, end: Point) {
   return `M ${center.x - direction.x * sceneLayout.parallelMarkHalf + normal.x * sceneLayout.parallelMarkHalf} ${center.y - direction.y * sceneLayout.parallelMarkHalf + normal.y * sceneLayout.parallelMarkHalf} L ${center.x} ${center.y} L ${center.x + direction.x * sceneLayout.parallelMarkHalf + normal.x * sceneLayout.parallelMarkHalf} ${center.y + direction.y * sceneLayout.parallelMarkHalf + normal.y * sceneLayout.parallelMarkHalf}`
 }
 
-function ParallelMark({ points, label }: { points: readonly Point[]; label: string }) {
+function ParallelMark({ points, label, place }: { points: readonly Point[]; label: string; place: LabelPlace | null }) {
   const pairs = points.length >= 4 ? [[points[0], points[1]], [points[2], points[3]]] : [[points[0], points[1]]]
   const paths = pairs.map(([start, end]) => start && end ? parallelChevron(start, end) : '').filter(Boolean)
   const labelPoint = points.length > 0 ? average(points) : null
   return <>
     {keyed(paths, (path) => path).map(({ key, item: path }) => <path className="diagram-mark" d={path} key={key} />)}
-    {label && labelPoint && <text className="diagram-angle-label" x={labelPoint.x} y={labelPoint.y + sceneLayout.objectLabelOffsetY}>{label}</text>}
+    {label && place && <text className="diagram-angle-label" textAnchor={place.anchor} x={place.x} y={place.y}>{label}</text>}
+    {label && !place && labelPoint && <text className="diagram-angle-label" x={labelPoint.x} y={labelPoint.y + sceneLayout.objectLabelOffsetY}>{label}</text>}
   </>
 }
 
@@ -529,6 +533,62 @@ function objectLabelPlacement(
   return best ?? fallback
 }
 
+/* Где написать длину у значка равных или параллельных отрезков.
+
+   Аудит 16 сентября, Г7: «13 см» у сторон AB = BC ставилась в среднюю точку
+   всех четырёх концов - на равнобедренном треугольнике это место высоты BH,
+   и подпись ложилась на её пунктир и на сторону. Буквы вершин к тому времени
+   уже выбирали место по восьми направлениям, а подписи длин - нет.
+
+   Теперь подпись примеряется у каждого отрезка значка: у середины и ближе к
+   концам, по обе стороны и на трёх расстояниях. Счёт тот же, что у вершин:
+   дальше от линий, точек, штрихов значка и чужих подписей. При равном счёте
+   выигрывает сторона наружу от фигуры, как в учебнике. Подпись за краем поля
+   срезал бы клип, такие места не рассматриваются. */
+function segmentMarkLabelPlacement(
+  markPoints: readonly Point[],
+  points: readonly Point[],
+  edges: readonly Segment[],
+  center: { x: number; y: number },
+  layout: LabelLayout,
+  label: string,
+): LabelPlace | null {
+  const pairs = markPoints.length >= 4
+    ? [[markPoints[0], markPoints[1]], [markPoints[2], markPoints[3]]]
+    : [[markPoints[0], markPoints[1]]]
+  const ticks = pairs.flatMap(([start, end]) => (start && end ? [average([start, end])] : []))
+  const obstacles = [...points, ...ticks]
+  const offset = Math.abs(sceneLayout.lineLabelOffsetY)
+  const bounds = { left: sceneLayout.x, top: sceneLayout.y, right: sceneLayout.x + sceneLayout.width, bottom: sceneLayout.y + sceneLayout.height }
+
+  let best: (LabelPlace & { score: number }) | null = null
+  for (const [start, end] of pairs) {
+    if (!start || !end) continue
+    const direction = unit(start, end)
+    if (!direction) continue
+    const normal = { x: -direction.y, y: direction.x }
+    const middle = average([start, end])
+    const outwardSide = (middle.x - center.x) * normal.x + (middle.y - center.y) * normal.y >= 0 ? 1 : -1
+    for (const along of [0.5, 0.35, 0.65]) {
+      for (const side of [1, -1]) {
+        for (const distanceFromLine of [offset, offset * 1.75, offset * 2.5]) {
+          const spot = {
+            x: start.x + (end.x - start.x) * along + normal.x * distanceFromLine * side,
+            // y подписи - базовая линия: середина строки ниже неё на треть кегля.
+            y: start.y + (end.y - start.y) * along + normal.y * distanceFromLine * side + labelFontSize * 0.3,
+          }
+          const rect = labelRect(spot.x, spot.y, label, labelFontSize, 'middle')
+          if (rect.x < bounds.left || rect.y < bounds.top || rect.x + rect.width > bounds.right || rect.y + rect.height > bounds.bottom) continue
+          const score = placementScore({ rect, layout, edges, points: obstacles, clearance: labelClearance })
+            + (side === outwardSide ? labelClearance / 2 : 0)
+          if (!best || score > best.score) best = { x: spot.x, y: spot.y, anchor: 'middle', score }
+        }
+      }
+    }
+  }
+  return best ? { x: best.x, y: best.y, anchor: best.anchor } : null
+}
+
 /* Что писать на чертеже, а что нет.
 
    6 сентября на проде чертёж к задаче про четырёхугольник вышел кашей:
@@ -612,25 +672,38 @@ export function GeometryScene({ scene, description }: { scene: HomeworkDiagramSc
   const labels = new LabelLayout()
   if (axes) reserveAxesLabels(axes, projection, labels)
 
-  const markLabels = scene.marks.map((mark) => {
+  /* Подписи углов стоят там, где им положено, и место занимают сразу.
+     Подписи у отрезков (длина «13 см», имя параллели) выбирают место сами,
+     после них: им есть куда подвинуться. */
+  scene.marks.forEach((mark) => {
     const markPoints = mark.points.map((id) => pointMap.get(id)).filter((point): point is Point => Boolean(point))
     const label = drawnLabel(mark.label, mark.points)
-    if (!label) return null
+    if (!label) return
     if (mark.kind === 'angle') {
       const at = angleLabelPoint(markPoints)
-      return at ? labels.reserveText(at.x, at.y + labelFontSize * 0.4, label, labelFontSize, 'middle') : null
+      if (at) labels.reserveText(at.x, at.y + labelFontSize * 0.4, label, labelFontSize, 'middle')
+      return
     }
     if (mark.kind === 'right-angle') {
       const corners = rightAngleCorners(markPoints)
-      return corners ? labels.reserveText(corners.middleCorner.x, corners.middleCorner.y, label, labelFontSize) : null
+      if (corners) labels.reserveText(corners.middleCorner.x, corners.middleCorner.y, label, labelFontSize)
     }
-    if (markPoints.length === 0) return null
-    const at = average(markPoints)
-    return mark.kind === 'equal-segment'
-      ? labels.reserveText(at.x + sceneLayout.labelOffsetX, at.y + sceneLayout.labelOffsetY, label, labelFontSize)
-      : labels.reserveText(at.x, at.y + sceneLayout.objectLabelOffsetY, label, labelFontSize)
   })
-  void markLabels
+  const markLabelPlaces = scene.marks.map((mark): LabelPlace | null => {
+    if (mark.kind !== 'equal-segment' && mark.kind !== 'parallel') return null
+    const markPoints = mark.points.map((id) => pointMap.get(id)).filter((point): point is Point => Boolean(point))
+    const label = drawnLabel(mark.label, mark.points)
+    if (!label || markPoints.length < 2) return null
+    const place = segmentMarkLabelPlacement(markPoints, points, edges, center, labels, label)
+    if (place) {
+      labels.reserveText(place.x, place.y, label, labelFontSize, place.anchor)
+      return place
+    }
+    const at = average(markPoints)
+    if (mark.kind === 'equal-segment') labels.reserveText(at.x + sceneLayout.labelOffsetX, at.y + sceneLayout.labelOffsetY, label, labelFontSize)
+    else labels.reserveText(at.x, at.y + sceneLayout.objectLabelOffsetY, label, labelFontSize)
+    return null
+  })
 
   const objectLabelPlaces = scene.objects.map((object) => {
     const objectPoints = object.points.map((id) => pointMap.get(id)).filter((point): point is Point => Boolean(point))
@@ -708,9 +781,9 @@ export function GeometryScene({ scene, description }: { scene: HomeworkDiagramSc
           const label = drawnLabel(mark.label, mark.points)
           if (mark.kind === 'angle') return <AngleMark points={markPoints} label={label} key={key} />
           if (mark.kind === 'right-angle') return <RightAngleMark points={markPoints} label={label} key={key} />
-          if (mark.kind === 'equal-segment') return <EqualSegmentMark points={markPoints} label={label} key={key} />
+          if (mark.kind === 'equal-segment') return <EqualSegmentMark points={markPoints} label={label} place={markLabelPlaces[index] ?? null} key={key} />
           if (mark.kind === 'equal-angle') return <EqualAngleMark points={markPoints} arcs={equalAngleArcs.get(mark) ?? 1} key={key} />
-          return <ParallelMark points={markPoints} label={label} key={key} />
+          return <ParallelMark points={markPoints} label={label} place={markLabelPlaces[index] ?? null} key={key} />
         })}
         {points.filter((point) => point.visible).map((point) => {
           const place = vertexPlaces.get(point.id)

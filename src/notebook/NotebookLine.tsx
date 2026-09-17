@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { unbreakableUnits, unitPattern as unit } from './notebookUnits'
 
 /* Дробь столбиком: числитель и знаменатель в скобках через косую черту.
 
@@ -12,13 +13,20 @@ import type { ReactNode } from 'react'
    числа «1/2» остаются строкой. */
 const plain = String.raw`[^\s()·:+=,;/]+`
 const call = String.raw`[^\s()·:+=,;/]+\([^()]*\)`
+
+const numberWithUnit = String.raw`\d+(?:[,.]\d+)?(?:\s|\u00a0)+${unit}`
+
 const fractionPattern = new RegExp([
-  String.raw`(?<![\p{L}\d₀-₉])\((?<n1>[^()]+)\)\s*/\s*(?:\((?<d1>[^()]+)\)|(?<d2>${call}|${plain}))`,
+  /* Аудит 16 сентября, Г7: «(20 м/с - 0)/10 с» печаталось как «(20 м/с - 0)
+     над 10» и «с» после дроби - единица знаменателя выпадала из неё.
+     Число с единицей за чертой - знаменатель целиком. */
+  String.raw`(?<![\p{L}\d₀-₉])\((?<n1>[^()]+)\)\s*/\s*(?:\((?<d1>[^()]+)\)|(?<d2>${numberWithUnit}|${call}|${plain}))`,
   String.raw`(?<![\p{L}\d₀-₉(])(?<n2>${call}|${plain})\s*/\s*\((?<d3>[^()]+)\)`,
   String.raw`(?<![\p{L}\d₀-₉(])(?<n3>${call})\s*/\s*(?<d4>${call})`,
 ].join('|'), 'gu')
 
-export function NotebookText({ text }: { text: string }) {
+export function NotebookText({ text: source }: { text: string }) {
+  const text = unbreakableUnits(source)
   const parts: ReactNode[] = []
   let cursor = 0
   for (const match of text.matchAll(fractionPattern)) {

@@ -7,6 +7,10 @@ import { homeworkSolutionEngineVersion } from './lib/homeworkContract'
 import type { HomeworkSolution, SolveHomeworkRequest } from './lib/homeworkContract'
 import { normalizeTaskCondition } from './textbooks/taskCatalog'
 
+// Весь App с очередью решений: на загруженной машине тесты шли 6-9 секунд и
+// падали по пятисекундному сроку, ничего не нарушив (как AccountDialog.test).
+vi.setConfig({ testTimeout: 30_000 })
+
 
 function mockGeneratedSolution(request: SolveHomeworkRequest): HomeworkSolution {
   const condition = request.condition ?? 'По фотографии найдите угол треугольника.'
@@ -311,7 +315,7 @@ describe('Homework Copilot task flow', () => {
 
     // Возврат на главную и открытие с карточки «Решение готово» — тот путь,
     // который был сломан.
-    fireEvent.click(screen.getByRole('button', { name: /На главную/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Решить следующую задачу/ }))
     fireEvent.click(screen.getByRole('button', { name: /Открыть решение/ }))
     expect(await screen.findByRole('heading', { name: 'Решение задачи' })).toBeInTheDocument()
     expect(screen.queryByText('Выбери учебник')).not.toBeInTheDocument()

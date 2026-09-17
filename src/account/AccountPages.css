@@ -107,6 +107,11 @@
   line-height: var(--leading-ui);
 }
 
+.account-page-notice.has-action { display: grid; justify-items: start; gap: var(--space-3); }
+.account-page-notice.has-action > p { margin: 0; }
+.account-page-notice .account-quiet-button,
+.account-balance-card .account-quiet-button { display: inline-flex; align-items: center; gap: var(--space-2); }
+
 /* Профиль: личные данные и тема. На широком экране - рядом. */
 
 .account-profile-body { display: grid; align-items: start; gap: var(--space-4); }

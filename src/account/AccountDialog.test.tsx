@@ -32,7 +32,7 @@ describe('AccountDialog', () => {
     const age = screen.getByRole('checkbox', { name: /14 лет/ })
     const submit = screen.getByRole('button', { name: /Создать аккаунт/ })
 
-    expect(submit).toBeDisabled()
+    expect(submit).toBeEnabled()
     fireEvent.click(agreement)
     fireEvent.click(personalData)
     fireEvent.click(age)
@@ -42,6 +42,54 @@ describe('AccountDialog', () => {
     expect(screen.getByRole('link', { name: 'пользовательское соглашение' })).toHaveAttribute('href', '/docs/terms')
     expect(screen.getByRole('link', { name: 'согласие на обработку персональных данных' })).toHaveAttribute('href', '/docs/consent')
     expect(screen.getByRole('link', { name: 'политику данных' })).toHaveAttribute('href', '/docs/privacy')
+  })
+
+  // Аудит 16 сентября, Г1: кнопка не гаснет. Нажатие на незаполненной форме
+  // говорит, чего не хватает, и ставит курсор в первое такое поле.
+  it('explains the first missing field instead of disabling Create account', () => {
+    render(<AccountDialog user={null} passwordRecovery={false} onClose={() => undefined} />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Регистрация' }))
+    const submit = screen.getByRole('button', { name: /Создать аккаунт/ })
+    const name = screen.getByPlaceholderText('Как к тебе обращаться')
+    const email = screen.getByPlaceholderText('name@example.com')
+    const password = screen.getByPlaceholderText('Не меньше 8 символов')
+
+    // Правило пароля целиком видно до набора.
+    expect(screen.getByText(/Не меньше 8 символов, строчные и заглавные буквы, хотя бы одна цифра, хотя бы один спецсимвол/)).toBeInTheDocument()
+
+    fireEvent.click(submit)
+    expect(screen.getByRole('alert')).toHaveTextContent('Введи имя')
+    expect(name).toHaveFocus()
+
+    fireEvent.change(name, { target: { value: 'Иван' } })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    fireEvent.click(submit)
+    expect(screen.getByRole('alert')).toHaveTextContent('Введи почту')
+    expect(email).toHaveFocus()
+
+    fireEvent.change(email, { target: { value: 'ivan@example.com' } })
+    fireEvent.change(password, { target: { value: 'homework' } })
+    fireEvent.click(submit)
+    expect(screen.getByRole('alert')).toHaveTextContent('В пароле не хватает: строчные и заглавные буквы, хотя бы одна цифра, хотя бы один спецсимвол')
+    expect(password).toHaveFocus()
+
+    // Класс не выбран - это не помеха: дальше только согласия.
+    fireEvent.change(password, { target: { value: 'Homework2026!' } })
+    fireEvent.click(submit)
+    expect(screen.getByRole('alert')).toHaveTextContent('Прими соглашение')
+    expect(screen.getByRole('checkbox', { name: /пользовательское соглашение/ })).toHaveFocus()
+    expect(submit).toBeEnabled()
+  })
+
+  it('keeps Sign in pressable and points at the empty field', () => {
+    render(<AccountDialog user={null} passwordRecovery={false} onClose={() => undefined} />)
+    const submit = screen.getByRole('button', { name: /^Войти$/ })
+    expect(submit).toBeEnabled()
+
+    fireEvent.change(screen.getByPlaceholderText('name@example.com'), { target: { value: 'ivan@example.com' } })
+    fireEvent.click(submit)
+    expect(screen.getByRole('alert')).toHaveTextContent('Введи пароль')
+    expect(screen.getByPlaceholderText('Твой пароль')).toHaveFocus()
   })
 
   // Ссылка из письма о смене пароля открывает сессию: человек уже вошёл,
@@ -132,7 +180,9 @@ describe('AccountDialog sign-in methods', () => {
     expect(screen.getByRole('button', { name: /Получить код/ })).toBeEnabled()
 
     fireEvent.change(phone, { target: { value: '495 123 45 67' } })
-    expect(screen.getByRole('button', { name: /Получить код/ })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: /Получить код/ }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Нужен российский мобильный номер')
+    expect(phone).toHaveFocus()
 
     // Обратно к почте - пароль и восстановление на месте.
     fireEvent.click(screen.getByRole('button', { name: 'По почте и паролю' }))
@@ -140,23 +190,25 @@ describe('AccountDialog sign-in methods', () => {
     expect(screen.getByRole('button', { name: 'Не помню пароль' })).toBeInTheDocument()
   })
 
-  it('requires name, grade and the three consents before sending a code on sign-up', () => {
+  it('requires name and the three consents, but not grade, before sending a code on sign-up', () => {
     renderAuth({ yandex: false, phone: true })
     fireEvent.click(screen.getByRole('tab', { name: 'Регистрация' }))
     fireEvent.click(screen.getByRole('button', { name: 'По номеру телефона' }))
     fireEvent.change(screen.getByRole('textbox', { name: /Номер телефона/ }), { target: { value: '9123456789' } })
 
     const submit = screen.getByRole('button', { name: /Получить код/ })
-    expect(submit).toBeDisabled()
+    expect(submit).toBeEnabled()
+    fireEvent.click(submit)
+    expect(screen.getByRole('alert')).toHaveTextContent('Введи имя')
 
     fireEvent.change(screen.getByPlaceholderText('Как к тебе обращаться'), { target: { value: 'Иван' } })
-    fireEvent.click(screen.getByRole('combobox', { name: 'Класс' }))
-    fireEvent.click(screen.getByRole('option', { name: '8 класс' }))
-    expect(submit).toBeDisabled()
+    fireEvent.click(submit)
+    expect(screen.getByRole('alert')).toHaveTextContent('Прими соглашение')
 
     fireEvent.click(screen.getByRole('checkbox', { name: /пользовательское соглашение/ }))
     fireEvent.click(screen.getByRole('checkbox', { name: /отдельно даю/ }))
     fireEvent.click(screen.getByRole('checkbox', { name: /14 лет/ }))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(submit).toBeEnabled()
   })
 })

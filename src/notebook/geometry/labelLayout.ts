@@ -68,12 +68,48 @@ export function segmentDistance(point: { x: number; y: number }, start: { x: num
   return Math.hypot(point.x - (start.x + (end.x - start.x) * t), point.y - (start.y + (end.y - start.y) * t))
 }
 
+/* Проходит ли отрезок через прямоугольник (отсечение Лианга - Барски). */
+function segmentCrossesRect(rect: LabelRect, start: { x: number; y: number }, end: { x: number; y: number }) {
+  const dx = end.x - start.x
+  const dy = end.y - start.y
+  let enter = 0
+  let leave = 1
+  const edges = [
+    [-dx, start.x - rect.x],
+    [dx, rect.x + rect.width - start.x],
+    [-dy, start.y - rect.y],
+    [dy, rect.y + rect.height - start.y],
+  ] as const
+  for (const [direction, distance] of edges) {
+    if (direction === 0) {
+      if (distance < 0) return false
+      continue
+    }
+    const t = distance / direction
+    if (direction < 0) enter = Math.max(enter, t)
+    else leave = Math.min(leave, t)
+    if (enter > leave) return false
+  }
+  return true
+}
+
+function pointToRect(point: { x: number; y: number }, rect: LabelRect) {
+  const dx = Math.max(rect.x - point.x, 0, point.x - (rect.x + rect.width))
+  const dy = Math.max(rect.y - point.y, 0, point.y - (rect.y + rect.height))
+  return Math.hypot(dx, dy)
+}
+
 /* Расстояние от прямоугольника подписи до отрезка чертежа.
 
    Меряем от середины и от четырёх углов: подпись, задевающая линию только
-   краем, для расстояния по центру выглядела бы свободной. */
+   краем, для расстояния по центру выглядела бы свободной. Углов мало:
+   крутая линия проходила между двумя углами подписи «13 см» насквозь, а
+   каждый угол оставался в стороне от неё (аудит 16 сентября, Г7). Поэтому
+   отрезок, пересекающий прямоугольник, - ноль, и считается ещё расстояние
+   от концов отрезка до прямоугольника. */
 export function rectToSegment(rect: LabelRect, segment: Segment) {
   const [start, end] = segment
+  if (segmentCrossesRect(rect, start, end)) return 0
   const corners = [
     { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 },
     { x: rect.x, y: rect.y },
@@ -81,7 +117,8 @@ export function rectToSegment(rect: LabelRect, segment: Segment) {
     { x: rect.x, y: rect.y + rect.height },
     { x: rect.x + rect.width, y: rect.y + rect.height },
   ]
-  return corners.reduce((closest, corner) => Math.min(closest, segmentDistance(corner, start, end)), Infinity)
+  const fromCorners = corners.reduce((closest, corner) => Math.min(closest, segmentDistance(corner, start, end)), Infinity)
+  return Math.min(fromCorners, pointToRect(start, rect), pointToRect(end, rect))
 }
 
 /* Занятые места чертежа: подписи, которые уже поставлены.
