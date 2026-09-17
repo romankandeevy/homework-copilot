@@ -14,6 +14,19 @@ export default defineConfig(({ mode }) => {
   plugins: [
     react(),
     {
+      /* В разработке React Refresh вставляет в страницу свой инлайн-скрипт, а
+         политика в index.html пускает только скрипты с известными хэшами
+         (аудит 16 сентября, В8). Для dev-сервера - и для e2e, которые идут на
+         нём, - script-src возвращается к 'unsafe-inline'. В сборку это не
+         попадает: `apply: 'serve'`. */
+      name: 'homework-dev-inline-scripts',
+      apply: 'serve',
+      transformIndexHtml: {
+        order: 'post',
+        handler: (html) => html.replace(/script-src [^;"]*/u, "script-src 'self' 'unsafe-inline'"),
+      },
+    },
+    {
       name: 'homework-kie-solver',
       configureServer(server) {
         server.middlewares.use('/api/solve', (request, response) => {

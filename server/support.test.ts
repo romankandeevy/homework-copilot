@@ -4,7 +4,9 @@ import {
   ensureTelegramWebhook,
   handleSupportRequest,
   isIdeaApprovalPhrase,
+  isSupportRateLimitError,
   normalizeIdeaApprovalPhrase,
+  ownerNotificationText,
   parseIdeaCallbackData,
   secureEqual,
   splitTelegramText,
@@ -119,5 +121,34 @@ describe('support telegram helpers', () => {
     expect(parseIdeaCallbackData('idea:approve:conversation-id')).toBeNull()
     expect(parseIdeaCallbackData('idea:credit:abcdefghijklmnopqrstuvwx')).toBeNull()
     expect(parseIdeaCallbackData('idea:approve:abcdefghijklmnopqrstuvwx:extra')).toBeNull()
+  })
+})
+
+/* Аудит 16 сентября, В6: в Telegram - только ссылка на обращение и начало
+   сообщения. Почта, телефон, имя, баланс и операции кошелька остаются в админке. */
+describe('support owner notification', () => {
+  const conversation = { id: '7d3f1c2a-0000-4000-8000-000000000001', category: 'payment', status: 'pending_owner' }
+
+  it('links the ticket in the admin and keeps only the first 500 characters', () => {
+    const body = 'а'.repeat(480) + 'хвост, которого в Telegram быть не должно ' + 'б'.repeat(200)
+    const text = ownerNotificationText(conversation, body, false)
+    expect(text).toContain('https://www.homeworkcopilot.ru/admin?section=support&conversation=7d3f1c2a-0000-4000-8000-000000000001')
+    expect(text).toContain('Проблема с оплатой или балансом')
+    expect(text).toContain('а'.repeat(480))
+    expect(text).not.toContain('б'.repeat(10))
+    expect(text).not.toMatch(/баланс \d|Пользователь:|Контекст|@/u)
+    expect(text).not.toMatch(/[\u2013\u2014]/u)
+  })
+
+  it('keeps a short message whole and asks for an idea decision when needed', () => {
+    const text = ownerNotificationText({ ...conversation, category: 'feature' }, 'Добавьте тёмную тему', true)
+    expect(text).toContain('Сообщение пользователя:\nДобавьте тёмную тему\n')
+    expect(text).toContain('да это хорошая идея')
+  })
+
+  it('recognizes the database rate limit refusal', () => {
+    expect(isSupportRateLimitError({ message: 'support_rate_limited: messages' })).toBe(true)
+    expect(isSupportRateLimitError({ message: 'duplicate key value' })).toBe(false)
+    expect(isSupportRateLimitError(null)).toBe(false)
   })
 })

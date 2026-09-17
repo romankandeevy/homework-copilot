@@ -17,7 +17,7 @@ import type { Database } from '../src/lib/database.types.ts'
 import { ChatApiError } from './chatErrors.ts'
 import { streamModelAnswer } from './chatProviders.ts'
 import type { ChatContentPart, ChatMessageInput } from './chatProviders.ts'
-import { flagEnabled, loadSolverContext, recordError, recordRequestLog, requestAddress, requestIdOf, requestUserAgent } from './telemetry.ts'
+import { browserOriginAllowed, clientAddress, flagEnabled, loadSolverContext, recordError, recordRequestLog, requestIdOf, requestUserAgent } from './telemetry.ts'
 
 export { ChatApiError } from './chatErrors.ts'
 
@@ -44,13 +44,10 @@ type ChatAccount = {
   token: string
 }
 
+// Локальные адреса разработки добавляет browserOriginAllowed - только не на проде.
 const allowedBrowserOrigins = new Set([
   'https://www.homeworkcopilot.ru',
   'https://homeworkcopilot.ru',
-  'http://localhost:5173',
-  'http://127.0.0.1:5173',
-  'http://localhost:4173',
-  'http://127.0.0.1:4173',
 ])
 
 // Ответ модели ограничиваем и по времени, и по объёму: у serverless-функции
@@ -75,7 +72,7 @@ function textValue(value: unknown, limit: number): string {
 
 function allowBrowser(request: IncomingMessage, response: ServerResponse) {
   const origin = request.headers.origin
-  if (!origin || !allowedBrowserOrigins.has(origin)) return false
+  if (!origin || !browserOriginAllowed(origin, allowedBrowserOrigins)) return false
 
   response.setHeader('Access-Control-Allow-Origin', origin)
   response.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
@@ -330,7 +327,7 @@ export async function handleChatRequest(
 
   // Журнал пишется до закрытия ответа: после него Vercel может заморозить функцию.
   const logChat = async (status: number, message: string | null, error?: unknown) => {
-    const ip = requestAddress(request, null)
+    const ip = clientAddress(request, options.serviceRoleKey)
     await Promise.all([
       recordRequestLog(options, {
         route: 'chat',
@@ -514,7 +511,7 @@ export async function handleChatRequest(
         stack: null,
         requestId,
         userId: account.userId,
-        ip: requestAddress(request, null),
+        ip: clientAddress(request, options.serviceRoleKey),
         input: { modelId, generationId },
       })
       await closeGeneration(service, generationId, 'Расчёт не прошёл: ' + reason, startedAt)
@@ -556,7 +553,7 @@ export async function handleChatRequest(
           stack: null,
           requestId,
           userId: account?.userId ?? null,
-          ip: requestAddress(request, null),
+          ip: clientAddress(request, options.serviceRoleKey),
           input: { modelId, generationId },
         })
       }

@@ -1,4 +1,4 @@
-import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
+import { createHmac } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createClient } from '@supabase/supabase-js'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -21,6 +21,8 @@ import type { HomeworkModelCall, HomeworkSolveStage } from './geometrySolutionEn
 import {
   flagEnabled,
   loadSolverContext,
+  proxyAuthDigest,
+  proxyAuthExpectedPrefixes,
   recordDeviceTouch,
   recordError,
   recordRequestLog,
@@ -28,6 +30,7 @@ import {
   requestBytes,
   requestUserAgent,
   telemetryClient,
+  trustedClientAddress,
 } from './telemetry.ts'
 
 type SolverOptions = {
@@ -404,37 +407,12 @@ function readGuestIdentity(request: IncomingMessage, options: SolverOptions): Gu
   return { guestId: value, ipHash: hashRequestAddress(request, options) }
 }
 
-/* Подпись прокси на Supabase (supabase/functions/api).
-
-   Из российских сетей запрос идёт не напрямую на Vercel, а через функцию
-   на домене Supabase. Vercel переписывает `x-forwarded-for` адресом того,
-   кто подключился, - то есть прокси, - и все гости сливались бы в один
-   адрес, а предел бесплатных решений на адрес закрывал бы их третьим по
-   счёту. Поэтому прокси присылает настоящий адрес в `x-client-ip` и
-   подпись в `x-proxy-auth`: хэш служебного ключа, который есть у обеих
-   сторон. Без верной подписи заголовок не читается - подставить чужой
-   адрес прямым запросом на Vercel нельзя. */
-export function proxyAuthDigest(serviceRoleKey: string) {
-  return createHash('sha256').update(serviceRoleKey + ':homework-copilot-proxy').digest('hex')
-}
+/* Подпись прокси на Supabase живёт в telemetry.ts: адрес ученика нужен и
+   журналам чата, поддержки, оплаты и админки, не только решателю. */
+export { proxyAuthDigest, trustedClientAddress }
 
 function headerText(value: string | string[] | undefined) {
   return (Array.isArray(value) ? value[0] : value ?? '').trim()
-}
-
-export function trustedClientAddress(
-  headers: Record<string, string | string[] | undefined>,
-  serviceRoleKey: string | undefined,
-): string | null {
-  const proxied = headerText(headers['x-client-ip'])
-  const auth = headerText(headers['x-proxy-auth'])
-  if (!proxied || !auth || !serviceRoleKey) return null
-  const expected = Buffer.from(proxyAuthDigest(serviceRoleKey))
-  const matches = auth.split(',').some((candidate) => {
-    const offered = Buffer.from(candidate.trim())
-    return offered.length === expected.length && timingSafeEqual(offered, expected)
-  })
-  return matches ? proxied : null
 }
 
 export function requestCameThroughProxy(request: IncomingMessage, options: SolverOptions) {
@@ -1131,7 +1109,7 @@ export async function handleHomeworkSolverRequest(
       noteLength: task.note ? task.note.length : 0,
       // Начала подписей - своей и присланной: по ним видно, чей ключ разошёлся.
       // Самих ключей в журнале нет.
-      proxyAuthExpected: options.serviceRoleKey ? proxyAuthDigest(options.serviceRoleKey).slice(0, 8) : '',
+      proxyAuthExpected: proxyAuthExpectedPrefixes(options.serviceRoleKey),
       proxyAuthOffered: headerText(request.headers['x-proxy-auth']).split(',').map((entry) => entry.slice(0, 8)).join(','),
     })
 

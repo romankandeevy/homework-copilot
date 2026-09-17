@@ -3,8 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createClient } from '@supabase/supabase-js'
 import type { SupabaseClient, User } from '@supabase/supabase-js'
 import type { Database, Json } from '../src/lib/database.types.ts'
-import { formatRubles } from '../src/lib/currency.ts'
-import { recordError, recordRequestLog, requestAddress, requestIdOf, requestUserAgent } from './telemetry.ts'
+import { clientAddress, recordError, recordRequestLog, requestIdOf, requestUserAgent } from './telemetry.ts'
 
 export type SupportCategory = 'general' | 'payment' | 'feature' | 'wrong_solution'
 
@@ -42,6 +41,16 @@ const telegramChunkSize = 3800
 const ideaApprovalPhrase = 'да это хорошая идея'
 const ideaCallbackPattern = /^idea:(approve|reject):([A-Za-z0-9_-]{20,32})$/
 const telegramWebhookUrl = 'https://homework-copilot-taupe.vercel.app/api/telegram-webhook'
+/* Обращение в админке: раздел «Поддержка» открывает диалог по `conversation`
+   (src/admin/sections/SupportSection.tsx). */
+const adminConversationUrl = 'https://www.homeworkcopilot.ru/admin?section=support&conversation='
+// В Telegram уходит только начало сообщения: остальное - в админке.
+const telegramPreviewLength = 500
+/* Пределы на аккаунт в час (аудит 16 сентября, В6) живут в базе - триггеры
+   20260916130300: 5 новых обращений и 30 сообщений. Их отказ приходит с
+   этим словом в тексте ошибки. */
+const supportRateLimitMarker = 'support_rate_limited'
+const supportRateLimitMessage = 'Слишком много сообщений за час. Мы уже видим твоё обращение - ответим в нём, а новое можно будет написать позже'
 const allowedBrowserOrigins = new Set([
   'https://www.homeworkcopilot.ru',
   'https://homeworkcopilot.ru',
@@ -367,12 +376,33 @@ async function ensureTelegramIdeaCallbacks(config: ServerConfig) {
   console.info(`support telegram webhook ${state}: message,callback_query`)
 }
 
-function contextForTelegram(context: Json) {
-  try {
-    return JSON.stringify(context, null, 2).slice(0, 45_000)
-  } catch {
-    return '{}'
-  }
+/* Текст владельцу в Telegram. Здесь нет ни почты, ни телефона, ни имени,
+   ни баланса, ни операций кошелька, ни контекста обращения: чат бота - не
+   место для платёжных и личных данных (аудит 16 сентября, В6). Всё это
+   видно в админке по ссылке, туда же ведёт и полный текст сообщения. */
+export function ownerNotificationText(
+  conversation: Pick<SupportConversation, 'id' | 'category' | 'status'>,
+  messageBody: string,
+  includeIdeaDecision: boolean,
+) {
+  const body = messageBody.length > telegramPreviewLength
+    ? `${messageBody.slice(0, telegramPreviewLength).trimEnd()}…`
+    : messageBody
+  return [
+    `Homework Copilot · ${categoryLabels[conversation.category as SupportCategory] ?? 'Обращение'}`,
+    `Статус: ${conversation.status}`,
+    `Обращение в админке: ${adminConversationUrl}${encodeURIComponent(conversation.id)}`,
+    '',
+    `Сообщение пользователя:\n${body}`,
+    '',
+    includeIdeaDecision
+      ? 'Выбери решение кнопкой или ответь фразой «да это хорошая идея». Сумма начисляется отдельно в админке.'
+      : 'Ответь на это сообщение в Telegram - ответ попадёт в этот диалог.',
+  ].join('\n')
+}
+
+export function isSupportRateLimitError(error: { message?: string } | null | undefined) {
+  return Boolean(error?.message?.includes(supportRateLimitMarker))
 }
 
 async function notifyOwner(
@@ -380,27 +410,11 @@ async function notifyOwner(
   config: ServerConfig,
   conversation: SupportConversation,
   message: SupportMessage,
-  user: User,
-  account: Awaited<ReturnType<typeof loadAccountContext>>,
   includeIdeaDecision: boolean,
 ) {
   if (!config.telegramBotToken || !config.telegramOwnerChatId) return 'pending' as const
 
-  const notification = [
-    `Homework Copilot · ${categoryLabels[conversation.category as SupportCategory]}`,
-    // Аккаунт, вошедший по номеру телефона, почты не имеет.
-    `Пользователь: ${account.fullName || 'Ученик'} · ${user.email || (user.phone ? `+${user.phone}` : 'без почты')}`,
-    `Класс: ${account.grade ?? '—'} · баланс ${account.balance === null || account.balance === undefined ? '—' : formatRubles(account.balance)}`,
-    `Статус: ${conversation.status}`,
-    '',
-    `Сообщение пользователя:\n${message.body}`,
-    '',
-    'Контекст:\n' + contextForTelegram(conversation.context),
-    '',
-    includeIdeaDecision
-      ? 'Выбери решение кнопкой или ответь фразой «да это хорошая идея». Сумма начисляется отдельно в админке.'
-      : 'Ответь на это сообщение в Telegram — ответ попадёт в этот диалог.',
-  ].join('\n')
+  const notification = ownerNotificationText(conversation, message.body, includeIdeaDecision)
 
   try {
     // Без webhook кнопки не сработают, но сама идея до владельца дойти должна.
@@ -470,7 +484,6 @@ async function saveUserMessage(
   const requestedConversationId = boundedText(payload.conversationId, 80)
   let conversation: SupportConversation
   let isNewConversation = false
-  let account = await loadAccountContext(adminClient, user)
 
   if (requestedConversationId) {
     const { data, error } = await adminClient
@@ -484,7 +497,7 @@ async function saveUserMessage(
   } else {
     if (!requestedCategory) throw new SupportApiError(400, 'Выбери тему обращения')
     const context = requestedCategory === 'payment'
-      ? { ...sanitizeClientContext(requestedCategory, payload.context), ...paymentContext(account) }
+      ? { ...sanitizeClientContext(requestedCategory, payload.context), ...paymentContext(await loadAccountContext(adminClient, user)) }
       : sanitizeClientContext(requestedCategory, payload.context)
     const { data, error } = await adminClient
       .from('support_conversations')
@@ -496,6 +509,7 @@ async function saveUserMessage(
       })
       .select('*')
       .single()
+    if (isSupportRateLimitError(error)) throw new SupportApiError(429, supportRateLimitMessage)
     if (error || !data) throw new SupportApiError(500, 'Не получилось создать обращение')
     conversation = data
     isNewConversation = true
@@ -506,6 +520,7 @@ async function saveUserMessage(
     .insert({ conversation_id: conversation.id, author_type: 'user', author_user_id: user.id, body })
     .select('*')
     .single()
+  if (isSupportRateLimitError(messageError)) throw new SupportApiError(429, supportRateLimitMessage)
   if (messageError || !message) throw new SupportApiError(500, 'Не получилось сохранить сообщение')
 
   const { data: updatedConversation, error: updateError } = await adminClient
@@ -516,7 +531,7 @@ async function saveUserMessage(
     .single()
   if (updateError || !updatedConversation) throw new SupportApiError(500, 'Не получилось обновить обращение')
 
-  const deliveryStatus = await notifyOwner(adminClient, config, updatedConversation, message, user, account, isNewConversation && updatedConversation.category === 'feature')
+  const deliveryStatus = await notifyOwner(adminClient, config, updatedConversation, message, isNewConversation && updatedConversation.category === 'feature')
   if (deliveryStatus !== updatedConversation.owner_notification_status) {
     await adminClient
       .from('support_conversations')
@@ -540,7 +555,7 @@ export async function handleSupportRequest(request: IncomingMessage, response: S
         status,
         requestId: requestIdOf(request),
         userId,
-        ip: requestAddress(request, null),
+        ip: clientAddress(request, config.serviceKey),
         userAgent: requestUserAgent(request),
         durationMs: Date.now() - startedAt,
         error: status >= 400 ? message : null,

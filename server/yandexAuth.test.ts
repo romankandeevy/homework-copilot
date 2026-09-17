@@ -10,7 +10,7 @@ import {
   yandexAuthConfigFromEnv,
   yandexAuthMessages,
 } from './yandexAuth.ts'
-import type { AuthAdminPort, YandexAuthConfig } from './yandexAuth.ts'
+import type { AuthAdminPort, ExistingAccount, YandexAuthConfig } from './yandexAuth.ts'
 
 const config: YandexAuthConfig = {
   clientId: 'client-id',
@@ -45,12 +45,18 @@ function yandexFetch(info: Record<string, unknown>, token: Record<string, unknow
   })
 }
 
-function admin(result: Awaited<ReturnType<AuthAdminPort['createUser']>> = { ok: true }) {
+const confirmedAccount: ExistingAccount = { id: 'user-1', emailConfirmed: true, yandexId: null }
+
+function admin(result: Awaited<ReturnType<AuthAdminPort['createUser']>> = { ok: true }, existing: ExistingAccount | null = confirmedAccount) {
   return {
     createUser: vi.fn<AuthAdminPort['createUser']>(async () => result),
     magicLink: vi.fn<AuthAdminPort['magicLink']>(async () => ({ tokenHash: 'hash-1', verificationType: 'magiclink' })),
+    findAccount: vi.fn<AuthAdminPort['findAccount']>(async () => existing),
+    linkYandex: vi.fn<AuthAdminPort['linkYandex']>(async () => true),
   }
 }
+
+const emailExists = { ok: false as const, exists: true, message: 'A user with this email address has already been registered' }
 
 const profile = { id: '1130000012345678', login: 'pupil', default_email: 'Pupil@Yandex.ru', emails: ['Pupil@Yandex.ru'], real_name: 'Иван Петров', display_name: 'pupil' }
 
@@ -101,11 +107,47 @@ describe('yandex finish', () => {
     expect(port.createUser.mock.calls[0][0].userMetadata).toEqual({ full_name: 'Иван Петров' })
   })
 
-  it('signs in to an existing account with that email', async () => {
-    const port = admin({ ok: false, exists: true, message: 'A user with this email address has already been registered' })
+  it('signs in to an existing confirmed account with that email and links the Yandex ID', async () => {
+    const port = admin(emailExists)
     const result = await finishYandexSignIn(config, { code: 'code-123', state: validState(), nonce }, { admin: port, fetchImpl: yandexFetch(profile), now })
     expect(result).toEqual({ tokenHash: 'hash-1', verificationType: 'magiclink', created: false })
+    expect(port.findAccount).toHaveBeenCalledWith('pupil@yandex.ru')
+    expect(port.linkYandex).toHaveBeenCalledWith('user-1', '1130000012345678')
     expect(port.magicLink).toHaveBeenCalledWith('pupil@yandex.ru')
+  })
+
+  /* Предзахват (аудит 16 сентября, В2): аккаунт с паролем на чужую почту без
+     подтверждения. Ссылка входа подтвердила бы почту и отдала аккаунт
+     вместе с будущими пополнениями тому, кто знает пароль. */
+  it('refuses an existing account whose email is not confirmed', async () => {
+    const port = admin(emailExists, { id: 'user-1', emailConfirmed: false, yandexId: null })
+    await expect(finishYandexSignIn(config, { code: 'code-123', state: validState(), nonce }, { admin: port, fetchImpl: yandexFetch(profile), now }))
+      .rejects.toMatchObject({ status: 409, message: yandexAuthMessages.unconfirmedAccount, reason: 'email_unconfirmed' })
+    expect(port.magicLink).not.toHaveBeenCalled()
+    expect(port.linkYandex).not.toHaveBeenCalled()
+  })
+
+  it('refuses an account linked to another Yandex ID', async () => {
+    const port = admin(emailExists, { id: 'user-1', emailConfirmed: true, yandexId: '999' })
+    await expect(finishYandexSignIn(config, { code: 'code-123', state: validState(), nonce }, { admin: port, fetchImpl: yandexFetch(profile), now }))
+      .rejects.toMatchObject({ status: 409, message: yandexAuthMessages.otherYandexAccount })
+    expect(port.magicLink).not.toHaveBeenCalled()
+  })
+
+  it('signs in to an account created by the same Yandex ID without linking again', async () => {
+    const port = admin(emailExists, { id: 'user-1', emailConfirmed: true, yandexId: '1130000012345678' })
+    const result = await finishYandexSignIn(config, { code: 'code-123', state: validState(), nonce }, { admin: port, fetchImpl: yandexFetch(profile), now })
+    expect(result.created).toBe(false)
+    expect(port.linkYandex).not.toHaveBeenCalled()
+    expect(port.magicLink).toHaveBeenCalledWith('pupil@yandex.ru')
+  })
+
+  it('does not issue a link when the account lookup fails', async () => {
+    const port = admin(emailExists)
+    port.findAccount.mockRejectedValueOnce(new Error('db down'))
+    await expect(finishYandexSignIn(config, { code: 'code-123', state: validState(), nonce }, { admin: port, fetchImpl: yandexFetch(profile), now }))
+      .rejects.toMatchObject({ status: 502, reason: expect.stringContaining('find_account') as unknown })
+    expect(port.magicLink).not.toHaveBeenCalled()
   })
 
   it('refuses a Yandex account without email and creates nothing', async () => {
@@ -170,8 +212,13 @@ function mockResponse() {
 
 describe('yandex auth endpoint', () => {
   it('answers 503 with a clear message until the keys are set', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     expect(yandexAuthConfigFromEnv({})).toBeNull()
+    expect(consoleError).not.toHaveBeenCalled()
+    // Короткий секрет не включает вход и громко пишет почему (аудит 16 сентября, Е3).
     expect(yandexAuthConfigFromEnv({ YANDEX_CLIENT_ID: 'id', YANDEX_CLIENT_SECRET: 'secret', AUTH_STATE_SECRET: 'short' })).toBeNull()
+    expect(consoleError).toHaveBeenCalledWith(expect.stringContaining('AUTH_STATE_SECRET'))
+    consoleError.mockRestore()
     const { response, state } = mockResponse()
     await handleYandexAuthRequest(mockRequest({ action: 'start', nonce }), response, { yandex: null })
     expect(state.status).toBe(503)
@@ -205,6 +252,24 @@ describe('yandex auth endpoint', () => {
     )
     expect(state.status).toBe(200)
     expect(JSON.parse(state.body)).toEqual({ tokenHash: 'hash-1', verificationType: 'magiclink' })
+  })
+
+  it('allows localhost only outside the production deployment', async () => {
+    const previous = process.env.VERCEL_ENV
+    try {
+      process.env.VERCEL_ENV = 'production'
+      const production = mockResponse()
+      await handleYandexAuthRequest(mockRequest({ action: 'start', nonce }, 'http://localhost:5173'), production.response, { yandex: config, now: () => now })
+      expect(production.headers.get('access-control-allow-origin')).toBeUndefined()
+
+      process.env.VERCEL_ENV = 'preview'
+      const preview = mockResponse()
+      await handleYandexAuthRequest(mockRequest({ action: 'start', nonce }, 'http://localhost:5173'), preview.response, { yandex: config, now: () => now })
+      expect(preview.headers.get('access-control-allow-origin')).toBe('http://localhost:5173')
+    } finally {
+      if (previous === undefined) delete process.env.VERCEL_ENV
+      else process.env.VERCEL_ENV = previous
+    }
   })
 
   it('refuses a start without a proper nonce', async () => {

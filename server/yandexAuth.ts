@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
+import { browserOriginAllowed } from './telemetry.ts'
 
 /* Вход через Яндекс ID.
 
@@ -20,7 +21,9 @@ import { createClient } from '@supabase/supabase-js'
       токен приглашения. Сервер проверяет подпись, срок и nonce, меняет код
       на токен Яндекса, читает профиль и требует почту. Нет аккаунта с этой
       почтой - создаёт его (`email_confirm`: почту подтвердил Яндекс) с теми
-      же метаданными, что шлёт регистрация по почте. Есть - входит в него.
+      же метаданными, что шлёт регистрация по почте. Есть - входит в него,
+      но только если почта аккаунта подтверждена, а привязанный Яндекс ID,
+      если он есть, тот же самый (аудит 16 сентября, В2: предзахват).
       Наружу отдаётся одноразовый `token_hash` ссылки входа; браузер меняет
       его на сессию через `verifyOtp`. Сама ссылка никуда не отправляется.
 
@@ -37,14 +40,15 @@ export type YandexAuthConfig = {
 
 export const defaultYandexRedirectUri = 'https://www.homeworkcopilot.ru/app'
 export const stateLifetimeMs = 10 * 60 * 1000
+export const minStateSecretLength = 32
 const yandexTimeoutMs = 10_000
 const maxBodyBytes = 8 * 1024
 const noncePattern = /^[A-Za-z0-9_-]{16,64}$/u
 
+// Локальные адреса разработки добавляет browserOriginAllowed - только не на проде.
 const allowedOrigins = new Set([
   'https://www.homeworkcopilot.ru',
   'https://homeworkcopilot.ru',
-  'http://localhost:5173',
 ])
 
 export const yandexAuthMessages = {
@@ -53,6 +57,8 @@ export const yandexAuthMessages = {
   yandexFailed: 'Яндекс не подтвердил вход. Попробуй ещё раз',
   noEmail: 'В аккаунте Яндекса нет почты. Добавь её в Яндекс ID или войди другим способом',
   accountFailed: 'Не получилось завершить вход. Попробуй ещё раз',
+  unconfirmedAccount: 'На эту почту уже заведён аккаунт, но почта в нём не подтверждена. Войди по почте: «Не помню пароль» пришлёт письмо на неё. Или напиши в поддержку',
+  otherYandexAccount: 'Аккаунт с этой почтой привязан к другому Яндекс ID. Войди тем Яндекс ID или по почте и паролю',
 }
 
 export class YandexAuthError extends Error {
@@ -83,7 +89,16 @@ export function yandexAuthConfigFromEnv(env: Record<string, string | undefined>)
   const clientSecret = text(env.YANDEX_CLIENT_SECRET)
   const stateSecret = text(env.AUTH_STATE_SECRET)
   // Короткий секрет подписи хуже, чем никакого: вход просто не включается.
-  if (!clientId || !clientSecret || stateSecret.length < 32) return null
+  // Молча выключать нельзя (аудит 16 сентября, Е3): кнопка отвечала бы
+  // «пока не подключён», и причину пришлось бы искать по коду.
+  if (stateSecret && stateSecret.length < minStateSecretLength) {
+    console.error(JSON.stringify({
+      event: 'yandex_auth_state_secret_too_short',
+      message: `AUTH_STATE_SECRET короче ${minStateSecretLength} знаков - вход через Яндекс ID выключен. Сгенерируй: openssl rand -hex 32`,
+      length: stateSecret.length,
+    }))
+  }
+  if (!clientId || !clientSecret || stateSecret.length < minStateSecretLength) return null
   return { clientId, clientSecret, stateSecret, redirectUri: text(env.YANDEX_REDIRECT_URI) || defaultYandexRedirectUri }
 }
 
@@ -198,8 +213,10 @@ export async function fetchYandexProfile(token: string, fetchImpl: typeof fetch)
 
 /* ---------- Supabase ---------- */
 
-/* Две операции служебного клиента Supabase, которые нужны входу. Отдельный
+/* Операции служебного клиента Supabase, которые нужны входу. Отдельный
    тип - чтобы тест подменил их, не поднимая клиента. */
+export type ExistingAccount = { id: string; emailConfirmed: boolean; yandexId: string | null }
+
 export type AuthAdminPort = {
   createUser(input: {
     email: string
@@ -207,6 +224,10 @@ export type AuthAdminPort = {
     appMetadata: Record<string, unknown>
   }): Promise<{ ok: true } | { ok: false; exists: boolean; message: string }>
   magicLink(email: string): Promise<{ tokenHash: string; verificationType: string } | null>
+  /* Аккаунт с этой почтой: null - нет такого. Бросает, если база не ответила. */
+  findAccount(email: string): Promise<ExistingAccount | null>
+  /* Привязать Яндекс ID к аккаунту: дальше вход сверяется с ним. */
+  linkYandex(userId: string, yandexId: string): Promise<boolean>
 }
 
 export function supabaseAuthAdmin(supabaseUrl: string, serviceRoleKey: string): AuthAdminPort {
@@ -224,6 +245,22 @@ export function supabaseAuthAdmin(supabaseUrl: string, serviceRoleKey: string): 
       if (!error) return { ok: true }
       const exists = error.code === 'email_exists' || /already (?:been )?registered|already exists/iu.test(error.message)
       return { ok: false, exists, message: error.message }
+    },
+    async findAccount(email) {
+      const { data, error } = await service.rpc('auth_account_for_external_login', { p_email: email })
+      if (error) throw new Error(`account lookup failed: ${error.message}`)
+      const found = record(data)
+      if (typeof found.id !== 'string') return null
+      return {
+        id: found.id,
+        emailConfirmed: found.emailConfirmed === true,
+        yandexId: typeof found.yandexId === 'string' && found.yandexId ? found.yandexId : null,
+      }
+    },
+    async linkYandex(userId, yandexId) {
+      // app_metadata GoTrue сливает по ключам: provider и прочее остаются.
+      const { error } = await service.auth.admin.updateUserById(userId, { app_metadata: { yandex_id: yandexId } })
+      return !error
     },
     async magicLink(email) {
       const { data, error } = await service.auth.admin.generateLink({ type: 'magiclink', email })
@@ -284,6 +321,33 @@ export async function finishYandexSignIn(
   })
   if (!created.ok && !created.exists) throw new YandexAuthError(502, yandexAuthMessages.accountFailed, `create_user: ${created.message}`)
 
+  if (!created.ok) {
+    /* Аккаунт с этой почтой уже есть. Ссылка входа подтверждает почту, так
+       что выдать её в неподтверждённый аккаунт - отдать его тому, кто завёл
+       его с паролем на чужую почту. Удалять такой аккаунт и заводить заново
+       не стали: в нём уже могут быть кошелёк и данные настоящего владельца
+       почты, который просто не дошёл до письма. Отказ с понятным выходом
+       безопаснее: «Не помню пароль» доказывает владение почтой. */
+    let account: ExistingAccount | null
+    try {
+      account = await deps.admin.findAccount(profile.email)
+    } catch (error) {
+      throw new YandexAuthError(502, yandexAuthMessages.accountFailed, `find_account: ${error instanceof Error ? error.message : 'unknown'}`)
+    }
+    if (!account) throw new YandexAuthError(502, yandexAuthMessages.accountFailed, 'account_vanished')
+    if (account.yandexId && !sameText(account.yandexId, profile.id)) {
+      throw new YandexAuthError(409, yandexAuthMessages.otherYandexAccount, 'yandex_id_mismatch')
+    }
+    if (!account.yandexId && !account.emailConfirmed) {
+      throw new YandexAuthError(409, yandexAuthMessages.unconfirmedAccount, 'email_unconfirmed')
+    }
+    // Почта подтверждена и Яндекс её подтвердил тоже - привязываем Яндекс ID.
+    // Не вышло - вход всё равно пускаем: владение почтой доказано дважды.
+    if (!account.yandexId && !(await deps.admin.linkYandex(account.id, profile.id))) {
+      log('yandex_auth_link_failed', { reason: 'update_user' })
+    }
+  }
+
   const link = await deps.admin.magicLink(profile.email)
   if (!link) throw new YandexAuthError(502, yandexAuthMessages.accountFailed, 'magic_link')
   const verificationType = link.verificationType === 'signup' || link.verificationType === 'email' ? link.verificationType : 'magiclink'
@@ -311,7 +375,7 @@ function sendJson(response: ServerResponse, status: number, payload: Record<stri
 
 function allowBrowser(request: IncomingMessage, response: ServerResponse) {
   const origin = request.headers.origin
-  if (!origin || !allowedOrigins.has(origin)) return false
+  if (!origin || !browserOriginAllowed(origin, allowedOrigins)) return false
   response.setHeader('Access-Control-Allow-Origin', origin)
   response.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
   response.setHeader('Access-Control-Allow-Headers', 'Content-Type')

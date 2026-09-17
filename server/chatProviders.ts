@@ -250,8 +250,10 @@ export async function streamModelAnswer(args: StreamArgs): Promise<StreamResult>
       const record = item as Record<string, unknown>
       if (record.type !== 'url_citation') continue
       const link = typeof record.url === 'string' ? record.url : ''
-      // Ссылку от модели отдаём пользователю, поэтому пускаем только https.
-      if (!link.startsWith('https://')) continue
+      // Ссылку от модели отдаём пользователю в href, поэтому пускаем только
+      // http(s): javascript: и data: выполнились бы по нажатию. Клиент
+      // проверяет то же самое (src/chat/ChatPage.tsx).
+      if (!/^https?:\/\//iu.test(link)) continue
       args.onCitation({
         title: typeof record.title === 'string' && record.title ? record.title.slice(0, 200) : link,
         url: link.slice(0, 500),

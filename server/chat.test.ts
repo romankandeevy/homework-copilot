@@ -57,13 +57,14 @@ const fake = vi.hoisted(() => {
 vi.mock('@supabase/supabase-js', () => ({ createClient: () => fake.client }))
 
 vi.mock('./telemetry.ts', () => ({
+  browserOriginAllowed: (origin: string | undefined) => Boolean(origin),
+  clientAddress: () => '127.0.0.1',
   flagEnabled: () => true,
   loadSolverContext: async () => ({ flags: {} }),
   recordError: async (_options: unknown, entry: { message: string }) => {
     fake.state.errors.push(entry.message)
   },
   recordRequestLog: async () => undefined,
-  requestAddress: () => '127.0.0.1',
   requestIdOf: () => 'request-1',
   requestUserAgent: () => 'vitest',
 }))

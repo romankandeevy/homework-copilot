@@ -11,6 +11,7 @@
    которого в продукте больше нет. */
 /* Маршруты пишутся по очереди: их два десятка, параллелить нечего. */
 /* eslint-disable no-await-in-loop */
+import { createHash } from 'node:crypto'
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { getSeoMetadata, legacyDocumentPaths, metadataByPath, siteOrigin } from '../src/lib/siteMetadata.ts'
@@ -82,7 +83,17 @@ async function appPreloadLink() {
 const preloadLinks = await fontPreloadLinks()
 const appLink = await appPreloadLink()
 
-const baseHtml = (await readFile(resolve(outputDirectory, 'index.html'), 'utf8')).replace(
+const builtIndexHtml = await readFile(resolve(outputDirectory, 'index.html'), 'utf8')
+
+/* Защита от встраивания в чужой фрейм - первый скрипт `index.html`. Берём
+   его из сборки как есть: у страниц-переходов он должен совпасть до байта,
+   иначе его хэш не совпадёт с разрешённым в политике. */
+const frameGuardScript = builtIndexHtml.match(/<script>([\s\S]*?)<\/script>/)?.[1]
+if (!frameGuardScript?.includes('window.top')) {
+  throw new Error('В index.html первым скриптом должна стоять защита от встраивания во фрейм (window.top)')
+}
+
+const baseHtml = builtIndexHtml.replace(
   '<link rel="icon"',
   preloadLinks ? `${preloadLinks}\n    <link rel="icon"` : '<link rel="icon"',
 )
@@ -109,7 +120,13 @@ for (const { directory, metadata } of routes) {
    умеет, поэтому здесь лежит маленькая страница: канонический адрес - новый,
    `meta refresh` - для обходчиков без скриптов, `location.replace` - чтобы
    вместе с адресом доехали запрос и якорь (`/terms#section-8`). Копия
-   приложения тут не нужна: человек на этой странице не задерживается. */
+   приложения тут не нужна: человек на этой странице не задерживается.
+
+   Скрипт перехода одинаков для всех страниц - адрес он читает из
+   канонической ссылки. Так у него один хэш в политике безопасности
+   содержимого вместо `'unsafe-inline'` (аудит 16 сентября, В8). */
+const documentRedirectScript = `location.replace(new URL(document.querySelector('link[rel="canonical"]').href).pathname + location.search + location.hash)`
+
 function renderDocumentRedirect(target) {
   const metadata = getSeoMetadata(target)
   const canonicalUrl = new URL(target, siteOrigin).toString()
@@ -122,8 +139,9 @@ function renderDocumentRedirect(target) {
     '    <meta name="color-scheme" content="light dark" />',
     `    <title>${title}</title>`,
     `    <link rel="canonical" href="${canonicalUrl}" />`,
+    `    <script>${frameGuardScript}</script>`,
     `    <meta http-equiv="refresh" content="0; url=${target}" />`,
-    `    <script>location.replace(${JSON.stringify(target)} + location.search + location.hash)</script>`,
+    `    <script>${documentRedirectScript}</script>`,
     '  </head>',
     '  <body>',
     `    <p>Документ открывается по новому адресу: <a href="${target}">${title}</a></p>`,
@@ -154,3 +172,41 @@ await writeFile(
   renderMetadata(appHtml, getSeoMetadata('/404')),
   'utf8',
 )
+
+/* Каждый инлайн-скрипт готовых страниц разрешён хэшем и в meta-политике
+   `index.html` (её читает прод на Pages), и в заголовке `vercel.json` (превью).
+   Разошлось - сборка падает здесь, а не молча в браузере ученика, где
+   заблокированный скрипт темы или защиты виден только в консоли. */
+function inlineScriptHashes(html) {
+  return [...html.matchAll(/<script(\s[^>]*)?>([\s\S]*?)<\/script>/g)]
+    .filter(([, attributes = '']) => !/\bsrc=/.test(attributes) && !/type="application\/ld\+json"/.test(attributes))
+    .map(([, , body]) => `'sha256-${createHash('sha256').update(body, 'utf8').digest('base64')}'`)
+}
+
+function scriptSources(policy) {
+  const directive = policy.split(';').map((entry) => entry.trim()).find((entry) => entry.startsWith('script-src '))
+  return new Set(directive ? directive.split(/\s+/).slice(1) : [])
+}
+
+const metaPolicy = builtIndexHtml.match(/http-equiv="Content-Security-Policy"\s+content="([^"]+)"/)?.[1] ?? ''
+const vercelConfig = JSON.parse(await readFile(resolve('vercel.json'), 'utf8'))
+const headerPolicy = vercelConfig.headers
+  .flatMap(({ headers }) => headers)
+  .find(({ key }) => key.toLowerCase() === 'content-security-policy')?.value ?? ''
+const allowedBySource = { 'index.html': scriptSources(metaPolicy), 'vercel.json': scriptSources(headerPolicy) }
+const checkedPages = [
+  renderMetadata(baseHtml, getSeoMetadata('/')),
+  appHtml,
+  renderDocumentRedirect(Object.values(legacyDocumentPaths)[0] ?? '/docs/terms'),
+]
+const missingHashes = []
+for (const html of checkedPages) {
+  for (const hash of inlineScriptHashes(html)) {
+    for (const [where, allowed] of Object.entries(allowedBySource)) {
+      if (!allowed.has(hash)) missingHashes.push(`${where}: script-src без ${hash}`)
+    }
+  }
+}
+if (missingHashes.length) {
+  throw new Error(`Инлайн-скрипт не разрешён политикой безопасности содержимого:\n${[...new Set(missingHashes)].join('\n')}`)
+}

@@ -1053,7 +1053,8 @@ export default function ChatPage({ userId = null, onRequireAuth, onOpenWallet }:
             )}
 
             {messages.map((message) => {
-              const messageCitations = citations[message.id] ?? []
+              // Ссылку прислала модель: в href пускаем только http(s), не javascript: и не data:.
+              const messageCitations = (citations[message.id] ?? []).filter((citation) => /^https?:\/\//iu.test(citation.url))
               const messagePreviews = previews[message.id] ?? []
               const isAssistant = message.role === 'assistant'
               const isStreamingMessage = isAssistant && message.status === 'streaming'

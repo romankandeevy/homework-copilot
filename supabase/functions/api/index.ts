@@ -12,7 +12,8 @@
    CORS, которые ставит сама функция на Vercel. Единственное, что она
    добавляет, - настоящий адрес ученика в `x-client-ip` с подписью
    `x-proxy-auth`: Vercel переписывает `x-forwarded-for` адресом самого
-   прокси, а по адресу считается предел бесплатных решений гостя.
+   прокси, а по адресу считается предел бесплатных решений гостя. Адрес
+   берётся из того, что ставит платформа, а не клиент (proxyIdentity.ts).
 
    Срок жизни функции на бесплатном плане - 150 секунд. Решатель обычно
    укладывается в 30-60; если нет, Vercel дорешает сам и запишет ответ в
@@ -21,6 +22,8 @@
    Деплой: `supabase functions deploy api --no-verify-jwt` или через MCP.
    JWT не проверяется намеренно: гость приходит без токена, а сессию
    ученика проверяет сама функция на Vercel. */
+
+import { clientAddress, clientAddressSources, minProxySecretLength, proxyAuthDigest, proxySigningKeys } from './proxyIdentity.ts'
 
 const upstreamOrigin = 'https://homework-copilot-taupe.vercel.app'
 /* `payment` зовут двое: браузер ученика и сама Робокасса - её уведомление
@@ -47,69 +50,46 @@ const droppedResponseHeaders = new Set(['content-length', 'content-encoding', 't
 const allowedOrigins = new Set(['https://www.homeworkcopilot.ru', 'https://homeworkcopilot.ru'])
 
 let proxyAuthCache: string | null = null
+let addressSourcesReported = false
 
-async function sha256Hex(value: string) {
-  const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
-  return [...new Uint8Array(hash)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
-}
-
-/* Подпись прокси - хэш служебного ключа проекта, который есть и здесь, и на
-   Vercel. Сам ключ по сети не ходит. Ключей у проекта может быть два -
-   прежний JWT и новый секретный, - подписываем каждым, чтобы сойтись с тем,
-   который лежит на Vercel. */
-/* Все строки-ключи из переменной: форма `SUPABASE_SECRET_KEYS` - объект, и
-   значения в нём могут быть вложенными. Берём каждую строку, похожую на
-   ключ: JWT или `sb_secret_…`. */
-function collectKeys(value: unknown, into: Set<string>) {
-  if (typeof value === 'string') {
-    if (/^(?:eyJ|sb_secret_)/u.test(value)) into.add(value)
-    return
-  }
-  if (Array.isArray(value)) {
-    for (const entry of value) collectKeys(entry, into)
-    return
-  }
-  if (value && typeof value === 'object') {
-    for (const entry of Object.values(value as Record<string, unknown>)) collectKeys(entry, into)
-  }
-}
-
+/* Подпись прокси: хэш общего секрета, который есть и здесь, и на Vercel.
+   Сам секрет по сети не ходит. Какими ключами подписываем и почему -
+   proxyIdentity.ts. */
 async function proxyAuth() {
   if (proxyAuthCache !== null) return proxyAuthCache
-  const keys = new Set<string>()
-  const legacy = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-  if (legacy) keys.add(legacy)
-  /* Ключ, которым подписывает Vercel. Платформа кладёт в SUPABASE_SERVICE_ROLE_KEY
-     новый секретный ключ `sb_secret_…`, а на Vercel лежит прежний JWT
-     service_role - подписи не сходились (5 сентября, журнал
-     proxy_auth_ready против homework_solve_started). Тот же JWT положен
-     секретом функции: `supabase secrets set HOMEWORK_PROXY_KEY=…`. */
-  const shared = Deno.env.get('HOMEWORK_PROXY_KEY')
-  if (shared) keys.add(shared)
-  const secretRaw = Deno.env.get('SUPABASE_SECRET_KEYS')
-  if (secretRaw) {
-    try {
-      collectKeys(JSON.parse(secretRaw) as unknown, keys)
-    } catch {
-      collectKeys(secretRaw, keys)
-    }
+  const { keys, mode, secretTooShort } = proxySigningKeys((name) => Deno.env.get(name))
+  if (secretTooShort) {
+    console.error(JSON.stringify({
+      event: 'proxy_secret_too_short',
+      message: `HOMEWORK_PROXY_SECRET короче ${minProxySecretLength} знаков и не используется. Сгенерируй: openssl rand -hex 32`,
+    }))
   }
-  const digests = await Promise.all([...keys].map((key) => sha256Hex(key + ':homework-copilot-proxy')))
+  const digests = await Promise.all(keys.map((key) => proxyAuthDigest(key)))
   proxyAuthCache = digests.join(',')
-  /* Раз на воркер: начала подписей, по восемь знаков. По ним видно, сошлась
-     ли подпись с той, которую ждёт Vercel (`proxyAuthExpected` в его
+  /* Раз на воркер: режим и начала подписей, по восемь знаков. По ним видно,
+     сошлась ли подпись с той, которую ждёт Vercel (`proxyAuthExpected` в его
      журнале). Самих ключей в журнале нет. */
   console.log(JSON.stringify({
     event: 'proxy_auth_ready',
+    mode,
     digests: digests.map((digest) => digest.slice(0, 8)),
   }))
   return proxyAuthCache
 }
 
-function clientAddress(request: Request) {
-  const forwarded = request.headers.get('x-forwarded-for') ?? ''
-  const first = forwarded.split(',')[0].trim()
-  return first || request.headers.get('x-real-ip') || request.headers.get('cf-connecting-ip') || ''
+/* Раз на воркер: совпадают ли два источника адреса, которые ставит платформа.
+   Адресов в журнале нет - только признаки. */
+function reportAddressSources(request: Request) {
+  if (addressSourcesReported) return
+  addressSourcesReported = true
+  const { cloudflare, lastForwarded, forwardedCount } = clientAddressSources(request.headers)
+  console.log(JSON.stringify({
+    event: 'proxy_address_sources',
+    cloudflare: Boolean(cloudflare),
+    lastForwarded: Boolean(lastForwarded),
+    forwardedCount,
+    same: Boolean(cloudflare) && cloudflare === lastForwarded,
+  }))
 }
 
 function corsHeaders(request: Request) {
@@ -143,7 +123,8 @@ Deno.serve(async (request: Request) => {
     const value = request.headers.get(name)
     if (value) headers.set(name, value)
   }
-  const address = clientAddress(request)
+  reportAddressSources(request)
+  const address = clientAddress(request.headers)
   if (address) {
     headers.set('x-client-ip', address)
     headers.set('x-proxy-auth', await proxyAuth())
