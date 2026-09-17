@@ -167,7 +167,7 @@ describe('BalancePage', () => {
     expect(screen.queryByText(/Тариф/)).not.toBeInTheDocument()
     expect(screen.queryByText(/в сутки/)).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Промокод' })).toBeInTheDocument()
-    expect(await screen.findByText(/Пополнение временно недоступно/)).toBeInTheDocument()
+    expect(await screen.findByText(/Пополнение пока недоступно/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Перейти к оплате' })).not.toBeInTheDocument()
 
     expect(screen.getByRole('link', { name: 'Публичная оферта' })).toHaveAttribute('href', '/docs/offer')
@@ -181,7 +181,28 @@ describe('BalancePage', () => {
     renderBalance()
     expect(await screen.findByRole('button', { name: 'Перейти к оплате' })).toBeInTheDocument()
     expect(screen.getByText(/^от 50 ₽ до 15\s000 ₽$/u)).toBeInTheDocument()
-    expect(screen.queryByText(/Пополнение временно недоступно/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Пополнение пока недоступно/)).not.toBeInTheDocument()
+  })
+
+  // Аудит 16 сентября, Г3: заглушка без выхода была тупиком.
+  it('offers support instead of a dead end while payments are off', async () => {
+    const openSupport = vi.fn()
+    renderBalance({ onOpenSupport: openSupport })
+    expect(await screen.findByText(/подключаем оплату картой, скоро заработает/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Написать в поддержку' }))
+    expect(openSupport).toHaveBeenCalledOnce()
+  })
+
+  // Аудит 16 сентября, Г2: после пополнения и после нехватки денег - к задачам.
+  it('leads back to the tasks from the notice that asks for it', () => {
+    const back = vi.fn()
+    const { rerender } = renderBalance({ notice: 'Баланс пополнен на 100 ₽', onBackToTasks: back })
+    expect(screen.getByText('Баланс пополнен на 100 ₽')).toHaveAttribute('role', 'status')
+    fireEvent.click(screen.getByRole('button', { name: 'Вернуться к задачам' }))
+    expect(back).toHaveBeenCalledOnce()
+
+    rerender(<BalancePage user={user} account={accountWith(1)} promoEnabled onReloadAccount={reload} onNavigate={noop} onSignIn={noop} notice="Проверяем платёж…" />)
+    expect(screen.queryByRole('button', { name: 'Вернуться к задачам' })).not.toBeInTheDocument()
   })
 
   // Выключенный промокод не упоминается и в строке про пополнение.

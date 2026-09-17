@@ -93,10 +93,14 @@ import { featureEnabled, featureOptIn, orderedSubjects, usePublicConfig } from '
 import type { SiteBanner } from './lib/publicConfig'
 import { installClientErrorReporting } from './lib/clientErrors'
 
-const DesignSystemPlayground = lazy(() => import('./DesignSystemPlayground'))
-// Холст тетради нужен только в разработке — в главном чанке ему делать нечего.
-const NotebookCanvas = lazy(() => import('./NotebookCanvas'))
-const AuditSheets = lazy(() => import('./notebook/AuditSheets'))
+/* Инструменты разработки - только в разработке, как студия роликов в
+   `Root.tsx`. Объявленный на уровне модуля `lazy` сборка всё равно режет на
+   чанки, и в `dist/assets` уезжали песочница дизайна (68 КБ скрипта и 50 КБ
+   стилей), записи аудита и фикстуры (аудит 16 сентября, Е4). В сборке здесь
+   `null`, и импорт вместе с чанком выпадает. */
+const DesignSystemPlayground = import.meta.env.DEV ? lazy(() => import('./DesignSystemPlayground')) : null
+const NotebookCanvas = import.meta.env.DEV ? lazy(() => import('./NotebookCanvas')) : null
+const AuditSheets = import.meta.env.DEV ? lazy(() => import('./notebook/AuditSheets')) : null
 const ChatPage = lazy(() => import('./chat/ChatPage'))
 const AccountDialog = lazy(() => import('./account/AccountDialog'))
 const ProfilePage = lazy(() => import('./account/ProfilePage'))
@@ -339,7 +343,7 @@ const textbooks: readonly Textbook[] = [
   {
     id: 'mathematics',
     subject: 'Математика',
-    grade: '5–11 класс',
+    grade: '5-11 класс',
     title: 'Любой учебник',
     authors: 'Сфотографируй задачу или впиши условие',
     edition: 'по фото или тексту',
@@ -351,7 +355,7 @@ const textbooks: readonly Textbook[] = [
   {
     id: 'algebra',
     subject: 'Алгебра',
-    grade: '5–11 класс',
+    grade: '5-11 класс',
     title: 'Любой учебник',
     authors: 'Сфотографируй задачу или впиши условие',
     edition: 'по фото или тексту',
@@ -363,7 +367,7 @@ const textbooks: readonly Textbook[] = [
   {
     id: 'geometry',
     subject: 'Геометрия',
-    grade: '5–11 класс',
+    grade: '5-11 класс',
     title: 'Любой учебник',
     authors: 'Сфотографируй задачу или впиши условие',
     edition: 'по фото или тексту',
@@ -375,7 +379,7 @@ const textbooks: readonly Textbook[] = [
   {
     id: 'physics',
     subject: 'Физика',
-    grade: '5–11 класс',
+    grade: '5-11 класс',
     title: 'Любой учебник',
     authors: 'Сфотографируй задачу или впиши условие',
     edition: 'по фото или тексту',
@@ -387,7 +391,7 @@ const textbooks: readonly Textbook[] = [
   {
     id: 'chemistry',
     subject: 'Химия',
-    grade: '5–11 класс',
+    grade: '5-11 класс',
     title: 'Любой учебник',
     authors: 'Сфотографируй задачу или впиши условие',
     edition: 'по фото или тексту',
@@ -399,7 +403,7 @@ const textbooks: readonly Textbook[] = [
   {
     id: 'biology',
     subject: 'Биология',
-    grade: '5–11 класс',
+    grade: '5-11 класс',
     title: 'Любой учебник',
     authors: 'Сфотографируй задачу или впиши условие',
     edition: 'по фото или тексту',
@@ -411,7 +415,7 @@ const textbooks: readonly Textbook[] = [
   {
     id: 'informatics',
     subject: 'Информатика',
-    grade: '5–11 класс',
+    grade: '5-11 класс',
     title: 'Любой учебник',
     authors: 'Сфотографируй задачу или впиши условие',
     edition: 'по фото или тексту',
@@ -423,7 +427,7 @@ const textbooks: readonly Textbook[] = [
   {
     id: 'russian',
     subject: 'Русский язык',
-    grade: '5–11 класс',
+    grade: '5-11 класс',
     title: 'Любой учебник',
     authors: 'Сфотографируй задачу или впиши условие',
     edition: 'по фото или тексту',
@@ -435,7 +439,7 @@ const textbooks: readonly Textbook[] = [
   {
     id: 'literature',
     subject: 'Литература',
-    grade: '5–11 класс',
+    grade: '5-11 класс',
     title: 'Любой учебник',
     authors: 'Сфотографируй задачу или впиши условие',
     edition: 'по фото или тексту',
@@ -447,7 +451,7 @@ const textbooks: readonly Textbook[] = [
   {
     id: 'english',
     subject: 'Английский язык',
-    grade: '5–11 класс',
+    grade: '5-11 класс',
     title: 'Любой учебник',
     authors: 'Сфотографируй задачу или впиши условие',
     edition: 'по фото или тексту',
@@ -459,7 +463,7 @@ const textbooks: readonly Textbook[] = [
   {
     id: 'history',
     subject: 'История',
-    grade: '5–11 класс',
+    grade: '5-11 класс',
     title: 'Любой учебник',
     authors: 'Сфотографируй задачу или впиши условие',
     edition: 'по фото или тексту',
@@ -471,7 +475,7 @@ const textbooks: readonly Textbook[] = [
   {
     id: 'social',
     subject: 'Обществознание',
-    grade: '5–11 класс',
+    grade: '5-11 класс',
     title: 'Любой учебник',
     authors: 'Сфотографируй задачу или впиши условие',
     edition: 'по фото или тексту',
@@ -483,7 +487,7 @@ const textbooks: readonly Textbook[] = [
   {
     id: 'geography',
     subject: 'География',
-    grade: '5–11 класс',
+    grade: '5-11 класс',
     title: 'Любой учебник',
     authors: 'Сфотографируй задачу или впиши условие',
     edition: 'по фото или тексту',
@@ -495,7 +499,7 @@ const textbooks: readonly Textbook[] = [
   {
     id: 'astronomy',
     subject: 'Астрономия',
-    grade: '5–11 класс',
+    grade: '5-11 класс',
     title: 'Любой учебник',
     authors: 'Сфотографируй задачу или впиши условие',
     edition: 'по фото или тексту',
@@ -819,15 +823,26 @@ function BalanceControl({ balance, active, onOpenWallet }: { balance: number | n
   )
 }
 
+/* Приветствие по часам ученика: «Добрый день» в одиннадцать вечера читалось
+   как заглушка (аудит 16 сентября, Г9). Ночью - просто «Привет»: «Доброй
+   ночи» по-русски прощаются. */
+function greetingFor(hour: number) {
+  if (hour >= 5 && hour < 12) return 'Доброе утро'
+  if (hour >= 12 && hour < 18) return 'Добрый день'
+  if (hour >= 18 && hour < 23) return 'Добрый вечер'
+  return 'Привет'
+}
+
 function PageHeader({ account }: { account: AccountData | null }) {
   const firstName = account?.profile.full_name.trim().split(/\s+/)[0]
+  const greeting = greetingFor(new Date().getHours())
   const formattedDate = new Intl.DateTimeFormat('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date())
   const dateLabel = formattedDate.charAt(0).toLocaleUpperCase('ru') + formattedDate.slice(1)
 
   return (
     <header className="page-header">
       <div className="page-heading">
-        <p className="page-greeting">{firstName ? `Добрый день, ${firstName}` : 'Добрый день'}</p>
+        <p className="page-greeting">{firstName ? `${greeting}, ${firstName}` : greeting}</p>
         <span>{dateLabel}</span>
       </div>
     </header>
@@ -971,17 +986,21 @@ function UnderstandingPage({
     </section>
   ) : null
 
+  /* Аудит 16 сентября, Г5: главная кнопка ведёт к следующей задаче - на
+     `/app` к форме, а не к копированию. Цикл «решил - решаю следующую» и
+     есть работа ученика. У гостя главная кнопка страницы - «Сохранить
+     решение» в приглашении, и вторую такую же рядом не ставим. */
   const actions = (
     <div className="solution-actions">
+      <button className={guestOffer ? 'route-secondary-action' : 'route-primary-action'} type="button" onClick={onGoHome}>
+        Решить следующую задачу <ArrowRight size={18} weight="bold" aria-hidden="true" />
+      </button>
       {generatedSolution && (
-        <button className="route-primary-action" type="button" onClick={() => { void copySolution() }}>
-          {copied ? 'Скопировано' : copyFailed ? 'Не скопировалось — выдели и скопируй сам' : 'Скопировать решение'}
+        <button className="route-secondary-action" type="button" onClick={() => { void copySolution() }}>
+          {copied ? 'Скопировано' : copyFailed ? 'Не скопировалось - выдели и скопируй сам' : 'Скопировать решение'}
           <Check size={18} weight="bold" aria-hidden="true" />
         </button>
       )}
-      <button className="route-secondary-action" type="button" onClick={onGoHome}>
-        ← На главную <House size={18} weight="bold" aria-hidden="true" />
-      </button>
       <button className="route-secondary-action" type="button" onClick={() => { if (generatedSolution) { const textbook = getTextbook(generatedSolution.textbookId); onOpenSupport({ wrongSolution: { textbookId: generatedSolution.textbookId, textbookTitle: generatedSolution.textbookTitle, subject: generatedSolution.subject, grade: textbook.grade, edition: generatedSolution.textbookEdition, source: generatedSolution.source, task: generatedSolution.task, condition: generatedSolution.condition, given: generatedSolution.given, goal: generatedSolution.goal, steps: generatedSolution.steps, ...(generatedSolution.answer ? { answer: generatedSolution.answer } : {}), sourceUrl: generatedSolution.sourceUrl, ...(generatedSolution.sourcePage ? { sourcePage: generatedSolution.sourcePage } : {}) } }) } }}>
         Сообщить об ошибке <WarningCircle size={18} weight="duotone" aria-hidden="true" />
       </button>
@@ -1030,7 +1049,7 @@ function UnderstandingPage({
       <div className="understanding-flow is-single">
         <section><Notebook size={30} weight="duotone" aria-hidden="true" /><h2>Решение не нашлось</h2><p>Оно хранится в аккаунте того, кто его запросил. Если это твоя задача — войди тем же аккаунтом; если нет — реши её заново, это займёт около минуты.</p></section>
       </div>
-      <button className="route-primary-action" type="button" onClick={onGoHome}>← На главную <House size={18} weight="bold" aria-hidden="true" /></button>
+      <button className="route-primary-action" type="button" onClick={onGoHome}>На главную <House size={18} weight="bold" aria-hidden="true" /></button>
     </section>
   )
 }
@@ -1150,6 +1169,10 @@ function HomePage() {
   const [legalGateUserId, setLegalGateUserId] = useState<string | null>(null)
   const legalAcceptanceRequired = Boolean(user) && legalGateUserId === user?.id
   const [accountNotice, setAccountNotice] = useState('')
+  /* Сообщение над балансом, после которого ученику пора к задачам: пополнил
+     или узнал о нехватке. Хранится текстом этого сообщения - сменилось
+     сообщение, пропала и кнопка «Вернуться к задачам» (аудит 16 сентября, Г2). */
+  const [tasksReturnNotice, setTasksReturnNotice] = useState('')
   // Сообщение над очередью: то, что случилось с задачей, а не с аккаунтом.
   const [queueNotice, setQueueNotice] = useState('')
   const [supportOpen, setSupportOpen] = useState(() => currentApplicationPath() === '/support')
@@ -1520,7 +1543,9 @@ function HomePage() {
           const status = await loadPaymentStatus(paymentReturn.invId)
           if (!active) return
           if (status.status === 'paid') {
-            setAccountNotice(`Баланс пополнен на ${formatRubles(status.amountKopecks)}`)
+            const paidNotice = `Баланс пополнен на ${formatRubles(status.amountKopecks)}`
+            setAccountNotice(paidNotice)
+            setTasksReturnNotice(paidNotice)
             return
           }
           if (status.status !== 'pending') {
@@ -1742,7 +1767,21 @@ function HomePage() {
 
   const openBalanceShortfall = (required: number, balance: number) => {
     navigate('Баланс')
-    setAccountNotice(`Не хватает на решение: нужно ${formatRubles(required)}, на балансе ${formatRubles(balance)}. Условия задач сохранены на главной, вернись к ним после пополнения`)
+    const shortfallNotice = `Не хватает на решение: нужно ${formatRubles(required)}, на балансе ${formatRubles(balance)}. Условия задач сохранены на главной, вернись к ним после пополнения`
+    setAccountNotice(shortfallNotice)
+    setTasksReturnNotice(shortfallNotice)
+  }
+  /* Сервер отказал по деньгам уже в очереди: запрос задачи сохранён, и после
+     пополнения карточка на главной решит её заново. */
+  const openTopUpForJob = (job: SolutionJob) => {
+    if (!user) {
+      openWallet()
+      return
+    }
+    navigate('Баланс')
+    const topUpNotice = `${job.error.replace(/[.\s]+$/u, '')}. Задача ждёт на главной: после пополнения нажми «Решить ещё раз»`
+    setAccountNotice(topUpNotice)
+    setTasksReturnNotice(topUpNotice)
   }
 
   const submitFromForm = async (submissions: TaskSubmission[]) => {
@@ -2355,6 +2394,7 @@ function HomePage() {
                     // Сорвавшееся решение — не «неверный ответ»: разбирать там
                     // нечего, поэтому ведём в общую поддержку.
                     onOpenSupport={() => openSupport()}
+                    onTopUp={openTopUpForJob}
                   />
                   {user && (
                     <MySolutions
@@ -2403,6 +2443,8 @@ function HomePage() {
                   onReloadAccount={refreshAccount}
                   onNavigate={openAccountPage}
                   onSignIn={openSignIn}
+                  onBackToTasks={accountNotice && accountNotice === tasksReturnNotice ? () => navigate('Главная') : undefined}
+                  onOpenSupport={() => openSupport()}
                 />
               )}
             </Suspense>
@@ -2464,7 +2506,7 @@ function App() {
   const pathname = currentApplicationPath()
 
   // Инструменты разработки не должны открываться на проде по угадываемой ссылке.
-  if (import.meta.env.DEV) {
+  if (import.meta.env.DEV && NotebookCanvas && AuditSheets && DesignSystemPlayground) {
     if (params.get('canvas') === '1') {
       return <Suspense fallback={null}><NotebookCanvas /></Suspense>
     }

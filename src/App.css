@@ -1470,19 +1470,12 @@
   letter-spacing: 0;
 }
 
-/* Числа и формулы - моноширинным.
+/* Один шрифт на лист.
 
-   «Дано» и «Ответ» это почти всегда величины: m = 200 г, Q = 5,4·10⁶ Дж.
-   Пропорциональным шрифтом степени и единицы прыгают, и колонка «Дано»
-   перестаёт читаться колонкой. Слова в этих разделах короткие, поэтому
-   моноширинный им не вредит - в отличие от хода решения, где идут целые
-   предложения с обоснованиями. */
-.notebook-sheet-given p,
-.notebook-sheet-answer p {
-  font-family: var(--font-mono);
-  font-size: 0.94em;
-  letter-spacing: -0.01em;
-}
+   До 16 сентября «Дано», «Ответ», столбик СИ и таблица деления шли
+   моноширинным JetBrains Mono, а ход решения - Onest: в одной записи два
+   почерка, и аудит (Г7) это отметил. Колонку «Дано» держат цифры одной
+   ширины (`tabular-nums` у всего листа), а не отдельная гарнитура. */
 
 .notebook-sheet-body p { margin: 0; overflow-wrap: break-word; }
 
@@ -1591,8 +1584,6 @@
 .notebook-table {
   border-collapse: collapse;
   margin: 0.15rem 0;
-  font-family: var(--font-mono);
-  font-size: 0.94em;
 }
 
 .notebook-table td {
@@ -1645,7 +1636,6 @@
   border-bottom: 2px solid transparent;
 }
 
-.notebook-sheet-si p { font-family: var(--font-mono); font-size: 0.94em; letter-spacing: -0.01em; }
 
 .notebook-sheet-work { display: grid; gap: clamp(0.9rem, 2vw, 1.35rem); min-width: 0; }
 .notebook-sheet-work .notebook-sheet-diagram { justify-items: start; }
@@ -2045,6 +2035,11 @@
   .support-launcher { bottom: calc(4.5rem + env(safe-area-inset-bottom)); }}
 
 @media (max-width: 640px) {
+  /* Лента не растягивается на экран. Аудит 16 сентября, Г9: у гостя без
+     задач главная короче экрана, и между последней карточкой и подвалом
+     стояло около 600 px пустоты. Прижимать подвал к низу на телефоне
+     незачем: он сам выше экрана, и под ним пустого места не остаётся. */
+  .product-route { min-height: 0; }
   .topbar-brand .brand-lockup { gap: var(--space-2); font-size: 1rem; }
   .topbar-brand .brand-mark { width: 2.5rem; height: 2rem; font-size: 1.75rem; }
   .topbar-actions .profile-button { width: 2.75rem; min-width: 2.75rem; grid-template-columns: 2rem; padding: 0.3125rem; }

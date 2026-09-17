@@ -56,6 +56,19 @@ describe('authErrorMessage', () => {
     expect(authErrorMessage('insufficient_aal')).toBe('Нужен код из приложения-аутентификатора')
   })
 
+  // Аудит 16 сентября, Г9: эти ответы Supabase уходили ученику общей фразой.
+  it('translates email format, reused password, password composition and empty password', () => {
+    expect(authErrorMessage('Unable to validate email address: invalid format'))
+      .toBe('Проверь почту: нужен адрес вида name@example.com')
+    expect(authErrorMessage('New password should be different from the old password.'))
+      .toBe('Новый пароль совпадает со старым. Придумай другой')
+    expect(authErrorMessage('Password should contain at least one character of each: abcdefghijklmnopqrstuvwxyz, ABCDEFGHIJKLMNOPQRSTUVWXYZ, 0123456789, !@#$%^&*()_+-=[]{};\':"|<>?,./`~.'))
+      .toBe('Пароль не подходит. Нужно: не меньше 8 символов, строчные и заглавные буквы, хотя бы одна цифра, хотя бы один спецсимвол')
+    expect(authErrorMessage('Signup requires a valid password'))
+      .toBe('Придумай пароль: не меньше 8 символов, строчные и заглавные буквы, хотя бы одна цифра, хотя бы один спецсимвол')
+    expect(authErrorMessage('Password should be at least 8 characters.')).toBe('Пароль должен содержать минимум 8 символов')
+  })
+
   it('keeps the earlier mappings', () => {
     expect(authErrorMessage('Invalid login credentials')).toBe('Неверная почта или пароль')
     expect(authErrorMessage('Token has expired or is invalid', 'phone')).toBe('Код неверный или уже истёк')

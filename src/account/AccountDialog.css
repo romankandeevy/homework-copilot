@@ -451,3 +451,7 @@
   .account-auth-view { min-height: 0; grid-template-columns: minmax(0, 1fr); }
   .account-auth-context { display: none; }
 }
+
+/* «по желанию» у класса: класс в регистрации необязательный (аудит 16 сентября, Г1). */
+.account-grade-field > span small { color: var(--color-text-subtle); font-size: inherit; font-weight: var(--weight-regular); }
+.account-dialog.is-auth .account-grade-field > span small { color: var(--auth-subtle); }

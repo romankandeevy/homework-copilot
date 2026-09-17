@@ -27,7 +27,7 @@ import { startYandexSignIn } from '../lib/yandexAuth'
 import { useModalIsolation } from '../lib/useModalIsolation'
 import GradeSelect from './GradeSelect'
 import PasswordStrength from './PasswordStrength'
-import { isStrongPassword } from './passwordStrengthRules'
+import { evaluatePassword, isStrongPassword, passwordRequirementsHint } from './passwordStrengthRules'
 import { authErrorMessage } from './authErrors'
 import './AccountDialog.css'
 
@@ -114,6 +114,57 @@ function isValidEmail(value: string) {
 }
 
 const consentErrorMessage = 'Прими соглашение, согласие на обработку данных и подтверди возраст'
+
+type FormProblemField = 'name' | 'phone' | 'email' | 'password' | 'mfa' | 'consents'
+type FormProblem = { field: FormProblemField; message: string }
+
+/* Что мешает отправить форму - первым по порядку полей.
+
+   Кнопки «Создать аккаунт» и «Войти» не гаснут: по серой кнопке
+   четырнадцатилетний всё равно жмёт, ничего не происходит, и почему - не
+   сказано. Это правило «Решить» (AGENTS.md, «Иерархия первого экрана»):
+   нажатие отвечает строкой с причиной, курсор встаёт в поле. Класс в
+   регистрации необязательный: база с 13 сентября хранит пустой. */
+function authFormProblem(input: {
+  screen: 'sign-in' | 'sign-up' | 'forgot' | 'reset'
+  usingPhone: boolean
+  fullName: string
+  phoneValid: boolean
+  email: string
+  password: string
+  consentsGiven: boolean
+  mfaRequired: boolean
+  mfaCode: string
+}): FormProblem | null {
+  const { screen } = input
+  if (screen === 'sign-up' && input.fullName.trim().length < 2) {
+    return { field: 'name', message: input.fullName.trim() ? 'Имя - хотя бы две буквы' : 'Введи имя' }
+  }
+  if (input.usingPhone) {
+    if (!input.phoneValid) return { field: 'phone', message: phoneFormatError }
+  } else {
+    if (screen !== 'reset') {
+      if (!input.email.trim()) return { field: 'email', message: 'Введи почту' }
+      if (!isValidEmail(input.email)) return { field: 'email', message: 'Проверь почту: нужен адрес вида name@example.com' }
+    }
+    if (screen === 'sign-in') {
+      if (!input.password) return { field: 'password', message: 'Введи пароль' }
+      if (input.password.length < 8) return { field: 'password', message: 'Пароль не короче 8 символов - проверь, всё ли набрано' }
+    }
+    if (screen === 'sign-up' || screen === 'reset') {
+      if (!input.password) return { field: 'password', message: `Придумай пароль: ${passwordRequirementsHint.toLocaleLowerCase('ru')}` }
+      const strength = evaluatePassword(input.password)
+      const unmet = strength.rules.filter((rule) => !rule.met)
+      if (unmet.length > 0) return { field: 'password', message: `В пароле не хватает: ${unmet.map((rule) => rule.label.toLocaleLowerCase('ru')).join(', ')}` }
+      if (strength.guessable) return { field: 'password', message: 'Пароль слишком легко угадать - придумай другой' }
+    }
+  }
+  if (screen === 'reset' && input.mfaRequired && input.mfaCode.length !== 6) {
+    return { field: 'mfa', message: 'Введи шесть цифр из приложения-аутентификатора' }
+  }
+  if (screen === 'sign-up' && !input.consentsGiven) return { field: 'consents', message: consentErrorMessage }
+  return null
+}
 
 /* Три отметки согласия. Стоят в регистрации и в окне согласия для того, кто
    вошёл, а отметки о согласии у аккаунта нет. */
@@ -287,9 +338,18 @@ function AuthView({ passwordRecovery, notice, onPasswordUpdated, authMethods = o
   const [phoneIntent, setPhoneIntent] = useState<'sign-in' | 'sign-up'>('sign-in')
   const [phoneSentAt, setPhoneSentAt] = useState(0)
   const passwordStrengthId = useId()
+  const passwordHelpId = useId()
   const phoneHelpId = useId()
+  const formRef = useRef<HTMLFormElement>(null)
+  const nameRef = useRef<HTMLInputElement>(null)
+  const phoneRef = useRef<HTMLInputElement>(null)
+  const emailRef = useRef<HTMLInputElement>(null)
+  const passwordRef = useRef<HTMLInputElement>(null)
+  const mfaRef = useRef<HTMLInputElement>(null)
+  /* Поле, о котором сейчас говорит строка ошибки: человек его правит -
+     строка уходит, иначе она висит над уже исправленной формой. */
+  const [problemField, setProblemField] = useState<FormProblemField | null>(null)
   const requiresStrongPassword = screen === 'sign-up' || screen === 'reset'
-  const passwordIsValid = requiresStrongPassword ? isStrongPassword(password) : password.length >= 8
   const resendIn = verificationSecondsLeft(sentAt, emailResendDelay, now)
   const expiresIn = verificationSecondsLeft(sentAt, emailCodeLifetime, now)
 
@@ -306,15 +366,11 @@ function AuthView({ passwordRecovery, notice, onPasswordUpdated, authMethods = o
   const consentsGiven = agreementAccepted && personalDataAccepted && ageConfirmed
   const phoneIsValid = isRussianMobileDigits(phoneDigits)
 
-  const formFieldsValid = usingPhone
-    ? phoneIsValid && (screen === 'sign-in' || (fullName.trim().length >= 2 && Boolean(grade) && consentsGiven))
-    : screen === 'sign-up'
-      ? fullName.trim().length >= 2 && Boolean(grade) && isValidEmail(email) && passwordIsValid && consentsGiven
-      : screen === 'sign-in'
-        ? isValidEmail(email) && password.length >= 8
-        : screen === 'forgot'
-          ? isValidEmail(email)
-          : passwordIsValid
+  const clearProblem = (field: FormProblemField) => {
+    if (problemField !== field) return
+    setProblemField(null)
+    setError('')
+  }
 
   useEffect(() => {
     if (passwordRecovery) setScreen('reset')
@@ -331,6 +387,7 @@ function AuthView({ passwordRecovery, notice, onPasswordUpdated, authMethods = o
     setScreen(next)
     setStatus('')
     setError('')
+    setProblemField(null)
     setVerificationCode('')
     // Содержимое окна выше самого окна, и после переключения вкладки
     // прокрутка оставалась там же: человек оказывался посреди формы.
@@ -508,14 +565,36 @@ function AuthView({ passwordRecovery, notice, onPasswordUpdated, authMethods = o
     setMethod(next)
     setStatus('')
     setError('')
+    setProblemField(null)
+  }
+
+  const focusProblem = (field: FormProblemField) => {
+    if (field === 'consents') {
+      formRef.current?.querySelector<HTMLInputElement>('.account-legal-consents input:not(:checked)')?.focus()
+      return
+    }
+    const target = { name: nameRef, phone: phoneRef, email: emailRef, password: passwordRef, mfa: mfaRef }[field].current
+    target?.focus()
   }
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!supabase || loading) return
+    if (loading) return
+    if (screen === 'sign-in' || screen === 'sign-up' || screen === 'forgot' || screen === 'reset') {
+      const problem = authFormProblem({ screen, usingPhone, fullName, phoneValid: phoneIsValid, email, password, consentsGiven, mfaRequired, mfaCode })
+      if (problem) {
+        setStatus('')
+        setError(problem.message)
+        setProblemField(problem.field)
+        focusProblem(problem.field)
+        return
+      }
+    }
+    if (!supabase) return
     setLoading(true)
     setStatus('')
     setError('')
+    setProblemField(null)
 
     if (usingPhone) {
       await sendPhoneCode()
@@ -749,18 +828,18 @@ function AuthView({ passwordRecovery, notice, onPasswordUpdated, authMethods = o
         </div>
       )}
 
-      {screen !== 'verify-email' && screen !== 'verify-phone' && <form className="account-auth-form" onSubmit={submit}>
+      {screen !== 'verify-email' && screen !== 'verify-phone' && <form className="account-auth-form" onSubmit={submit} noValidate ref={formRef}>
         {screen === 'sign-up' && (
           <div className="account-field-row">
             <label>
               <span>Имя</span>
               <div className="account-input-shell">
                 <UserCircle size={19} weight="duotone" aria-hidden="true" />
-                <input value={fullName} onChange={(event) => setFullName(event.target.value)} autoComplete="name" maxLength={80} placeholder="Как к тебе обращаться" required autoFocus data-initial-focus={screen === 'sign-up' ? '' : undefined} />
+                <input ref={nameRef} value={fullName} onChange={(event) => { setFullName(event.target.value); clearProblem('name') }} autoComplete="name" maxLength={80} placeholder="Как к тебе обращаться" required autoFocus aria-invalid={problemField === 'name' || undefined} data-initial-focus={screen === 'sign-up' ? '' : undefined} />
               </div>
             </label>
             <div className="account-grade-field">
-              <span>Класс</span>
+              <span>Класс <small>по желанию</small></span>
               <GradeSelect value={grade} onChange={setGrade} compact />
             </div>
           </div>
@@ -777,7 +856,9 @@ function AuthView({ passwordRecovery, notice, onPasswordUpdated, authMethods = o
                 inputMode="tel"
                 autoComplete="tel"
                 value={formatPhoneDigits(phoneDigits)}
-                onChange={(event) => { setPhoneDigits(phoneDigitsFromInput(event.target.value)); setError('') }}
+                ref={phoneRef}
+                onChange={(event) => { setPhoneDigits(phoneDigitsFromInput(event.target.value)); setError(''); setProblemField(null) }}
+                aria-invalid={problemField === 'phone' || undefined}
                 placeholder="900 000-00-00"
                 aria-describedby={phoneHelpId}
                 required
@@ -794,7 +875,7 @@ function AuthView({ passwordRecovery, notice, onPasswordUpdated, authMethods = o
             <span>Почта</span>
             <div className="account-input-shell">
               <EnvelopeSimple size={19} weight="duotone" aria-hidden="true" />
-              <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" placeholder="name@example.com" required autoFocus={screen !== 'sign-up'} data-initial-focus={screen === 'sign-in' || screen === 'forgot' ? '' : undefined} />
+              <input ref={emailRef} type="email" value={email} onChange={(event) => { setEmail(event.target.value); clearProblem('email') }} autoComplete="email" placeholder="name@example.com" required autoFocus={screen !== 'sign-up'} aria-invalid={problemField === 'email' || undefined} data-initial-focus={screen === 'sign-in' || screen === 'forgot' ? '' : undefined} />
             </div>
           </label>
         )}
@@ -806,13 +887,15 @@ function AuthView({ passwordRecovery, notice, onPasswordUpdated, authMethods = o
               <div className="account-input-shell">
                 <LockKey size={19} weight="duotone" aria-hidden="true" />
                 <input
+                  ref={passwordRef}
                   type={passwordVisible ? 'text' : 'password'}
                   value={password}
-                  onChange={(event) => setPassword(event.target.value)}
+                  onChange={(event) => { setPassword(event.target.value); clearProblem('password') }}
                   autoComplete={screen === 'sign-in' ? 'current-password' : 'new-password'}
                   minLength={8}
                   placeholder={requiresStrongPassword ? 'Не меньше 8 символов' : 'Твой пароль'}
-                  aria-describedby={requiresStrongPassword && password ? passwordStrengthId : undefined}
+                  aria-describedby={requiresStrongPassword ? (password ? passwordStrengthId : passwordHelpId) : undefined}
+                  aria-invalid={problemField === 'password' || undefined}
                   required
                   autoFocus={screen === 'reset'}
                 />
@@ -828,9 +911,10 @@ function AuthView({ passwordRecovery, notice, onPasswordUpdated, authMethods = o
                 </button>
               </div>
             </label>
-            {/* Требования показываются, когда человек начал набирать: до этого
-                их пересказывает плейсхолдер, а четыре строки правил только
-                удлиняют окно. */}
+            {/* Требования списком показываются, когда человек начал набирать:
+                до этого правило целиком стоит одной строкой под полем, а
+                четыре строки правил только удлиняют окно. */}
+            {requiresStrongPassword && password.length === 0 && <small id={passwordHelpId} className="account-field-help">{passwordRequirementsHint}.</small>}
             {requiresStrongPassword && password.length > 0 && <PasswordStrength id={passwordStrengthId} value={password} />}
           </div>
         )}
@@ -845,8 +929,10 @@ function AuthView({ passwordRecovery, notice, onPasswordUpdated, authMethods = o
                 autoComplete="one-time-code"
                 pattern="[0-9]{6}"
                 maxLength={6}
+                ref={mfaRef}
                 value={mfaCode}
-                onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, ''))}
+                onChange={(event) => { setMfaCode(event.target.value.replace(/\D/g, '')); clearProblem('mfa') }}
+                aria-invalid={problemField === 'mfa' || undefined}
                 placeholder="6 цифр"
                 required
               />
@@ -868,7 +954,7 @@ function AuthView({ passwordRecovery, notice, onPasswordUpdated, authMethods = o
         {error && <p className="account-form-message is-error" role="alert">{error}</p>}
         {status && <p className="account-form-message is-success" role="status"><CheckCircle size={18} weight="fill" aria-hidden="true" />{status}</p>}
 
-        <button className="account-primary-button" type="submit" disabled={loading || !formFieldsValid || (screen === 'reset' && mfaRequired && mfaCode.length !== 6)}>
+        <button className="account-primary-button" type="submit" disabled={loading}>
           {loading ? 'Подожди…' : usingPhone ? 'Получить код' : screen === 'sign-up' ? 'Создать аккаунт' : screen === 'forgot' ? 'Отправить ссылку' : screen === 'reset' ? 'Сохранить пароль' : 'Войти'}
           {!loading && <ArrowRight size={18} weight="bold" aria-hidden="true" />}
         </button>

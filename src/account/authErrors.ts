@@ -9,12 +9,24 @@
    `channel` — чем шли: письмом или СМС. От него зависит, что писать про
    повторную отправку и неудачу доставки. */
 
+import { passwordRequirementsHint } from './passwordStrengthRules'
+
 export type AuthChannel = 'email' | 'phone'
 
 export function authErrorMessage(message: string, channel: AuthChannel = 'email') {
   const normalized = message.toLocaleLowerCase('en')
   if (normalized.includes('invalid login credentials')) return 'Неверная почта или пароль'
   if (normalized.includes('user already registered')) return 'Аккаунт с этой почтой уже существует'
+  // Аудит 16 сентября, Г9: четыре ответа Supabase доходили до ученика по-английски
+  // или общей фразой. Проверки стоят до «characters»: текст про состав пароля
+  // перечисляет символы, а не «characters».
+  if (normalized.includes('unable to validate email address')) return 'Проверь почту: нужен адрес вида name@example.com'
+  if (normalized.includes('new password should be different')) return 'Новый пароль совпадает со старым. Придумай другой'
+  if (normalized.includes('password should contain at least one character of each')) {
+    return `Пароль не подходит. Нужно: ${passwordRequirementsHint.toLocaleLowerCase('ru')}`
+  }
+  if (normalized.includes('signup requires a valid password')) return `Придумай пароль: ${passwordRequirementsHint.toLocaleLowerCase('ru')}`
+  if (normalized.includes('password is known to be weak')) return 'Пароль слишком легко угадать. Придумай другой'
   if (normalized.includes('password') && normalized.includes('characters')) return 'Пароль должен содержать минимум 8 символов'
   if (normalized.includes('email rate limit')) return 'Слишком много писем. Попробуй немного позже'
   if (normalized.includes('sms rate limit') || normalized.includes('sms_send_rate')) return 'Слишком много СМС. Попробуй немного позже'

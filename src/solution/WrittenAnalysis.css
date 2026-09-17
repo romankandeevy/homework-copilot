@@ -81,16 +81,22 @@
   white-space: nowrap;
 }
 
+/* Кегль разбора - кегль листа, а не мельче.
+
+   Аудит 16 сентября, Г7: разбор по составу стоял 16 px на компьютере и 13 px
+   на телефоне при основном тексте листа 17-19 px, и значки над морфемами
+   выходили меньше 16 px. Разбор наследует кегль записи и не бывает меньше
+   1rem. */
 .analysis-line-tokens {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
   /* Строки со значками выше обычных: сверху пометка, снизу подчёркивание. */
-  row-gap: var(--space-5);
+  row-gap: var(--space-6);
   column-gap: 0.4em;
   min-width: 0;
   color: var(--analysis-ink);
-  font-size: var(--text-body);
+  font-size: max(1em, var(--text-body));
   line-height: 1.5;
 }
 
@@ -101,11 +107,11 @@
   line-height: var(--leading-ui);
 }
 
-/* Формулы и уравнения пишутся моноширинным: в них важны разряды и выравнивание. */
+/* Формулы и уравнения - тем же шрифтом, что лист: разряды выравнивают
+   цифры одной ширины, а не вторая гарнитура. */
 .analysis-line-formula .analysis-line-tokens,
 .analysis-line-equation .analysis-line-tokens {
-  font-family: var(--font-mono);
-  font-size: var(--text-small);
+  font-variant-numeric: tabular-nums;
 }
 
 .analysis-token {
@@ -177,6 +183,16 @@
 }
 
 /* --- Значки разбора по составу ---------------------------------------- */
+
+/* Значок не уже 16 px: над морфемой из одной буквы («к», «а») дуга корня и
+   крышка суффикса сжимались до ширины буквы, около 10 px. */
+.analysis-mark-prefix .analysis-token-body,
+.analysis-mark-root .analysis-token-body,
+.analysis-mark-suffix .analysis-token-body,
+.analysis-mark-ending .analysis-token-body {
+  min-width: 1rem;
+  text-align: center;
+}
 
 /* Приставка: уголок ¬ сверху. */
 .analysis-mark-prefix .analysis-token-body::before {
@@ -283,8 +299,6 @@
     padding-left: calc(var(--analysis-margin) + var(--space-3));
     padding-right: var(--space-3);
   }
-
-  .analysis-line-tokens { font-size: var(--text-small); }
 
   /* На узком экране пометка на поле не помещается рядом со строкой:
      ставим её над записью, а не режем строку переносами. */

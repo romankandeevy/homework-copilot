@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import type { User } from '@supabase/supabase-js'
-import { CheckCircle, CopySimple, Gift, LinkSimple, UsersThree, WarningCircle } from '@phosphor-icons/react'
+import { ArrowRight, CheckCircle, CopySimple, Gift, Lifebuoy, LinkSimple, UsersThree, WarningCircle } from '@phosphor-icons/react'
 import type { AccountData } from '../lib/supabase'
 import { supabase } from '../lib/supabase'
 import type { WalletEntry } from '../lib/database.types'
@@ -41,6 +41,10 @@ type BalancePageProps = {
   onReloadAccount: () => Promise<void>
   onNavigate: (page: AccountPageName) => void
   onSignIn: () => void
+  /** Есть, когда сообщение над балансом ведёт обратно к задачам: пополнение
+      прошло или решению не хватило денег. Черновик формы ждёт на `/app`. */
+  onBackToTasks?: () => void
+  onOpenSupport?: () => void
 }
 
 function promoErrorMessage(message: string) {
@@ -318,7 +322,7 @@ function WalletHistory({ userId, entries }: { userId: string; entries: readonly 
   )
 }
 
-function BalanceContent({ user, account, notice, promoEnabled, onReloadAccount, onNavigate }: Omit<BalancePageProps, 'user' | 'onSignIn'> & { user: User }) {
+function BalanceContent({ user, account, notice, promoEnabled, onReloadAccount, onNavigate, onBackToTasks, onOpenSupport }: Omit<BalancePageProps, 'user' | 'onSignIn'> & { user: User }) {
   const [paymentConfig, setPaymentConfig] = useState<PaymentConfig | null>(null)
   const [paymentConfigLoaded, setPaymentConfigLoaded] = useState(false)
 
@@ -339,7 +343,18 @@ function BalanceContent({ user, account, notice, promoEnabled, onReloadAccount, 
     <section className="route-page account-page" aria-labelledby="account-page-title">
       <AccountPageHeader user={user} account={account} current="balance" onNavigate={onNavigate} />
 
-      {notice && <p className="account-page-notice" role="status">{notice}</p>}
+      {/* Аудит 16 сентября, Г2: после «Баланс пополнен» и после нехватки денег
+          человек дальше идёт к задачам, а путь туда был только через «Главная». */}
+      {notice && !onBackToTasks && <p className="account-page-notice" role="status">{notice}</p>}
+      {notice && onBackToTasks && (
+        <div className="account-page-notice has-action">
+          <p role="status">{notice}</p>
+          <button className="account-quiet-button" type="button" onClick={onBackToTasks}>
+            Вернуться к задачам
+            <ArrowRight size={16} weight="bold" aria-hidden="true" />
+          </button>
+        </div>
+      )}
 
       <div className={`account-balance-grid${topUpEnabled ? ' has-top-up' : ''}${promoEnabled ? ' has-promo' : ''}`}>
         <section className="account-balance-card" aria-labelledby="account-balance-title">
@@ -353,10 +368,21 @@ function BalanceContent({ user, account, notice, promoEnabled, onReloadAccount, 
           <p className="account-balance-rate"><strong>от {formatRubles(minimumSolutionPriceKopecks)}</strong> <span>за решение, точная цена зависит от задачи</span></p>
           {/* Сюда ведут и кнопка баланса в шапке, и нехватка денег перед
               решением. Без строки человек искал бы, где пополнить. */}
+          {/* Аудит 16 сентября, Г3: заглушка была тупиком - без объяснения и без
+              выхода. Срок не называем: его нет в коде, есть только то, что
+              оплату подключаем. */}
           {paymentConfigLoaded && !topUpEnabled && (
-            <p className="account-card-note">
-              Пополнение временно недоступно. {promoEnabled ? 'Рубли приходят по промокоду и за приглашённого друга.' : 'Рубли приходят за приглашённого друга.'}
-            </p>
+            <>
+              <p className="account-card-note">
+                Пополнение пока недоступно: подключаем оплату картой, скоро заработает. {promoEnabled ? 'Рубли приходят по промокоду и за приглашённого друга.' : 'Рубли приходят за приглашённого друга.'}
+              </p>
+              {onOpenSupport && (
+                <button className="account-quiet-button" type="button" onClick={onOpenSupport}>
+                  <Lifebuoy size={17} weight="duotone" aria-hidden="true" />
+                  Написать в поддержку
+                </button>
+              )}
+            </>
           )}
         </section>
 

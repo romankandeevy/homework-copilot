@@ -12,6 +12,13 @@ const passwordRules = [
   { id: 'symbol', label: 'Хотя бы один спецсимвол', test: (value: string) => SYMBOL.test(value) },
 ] as const
 
+/* Правило целиком, одной строкой, до того как человек начал набирать.
+   Собирается из тех же правил, что проверяют пароль: плейсхолдер «Не меньше
+   8 символов» молчал про остальные три, и форма отказывала без объяснения. */
+export const passwordRequirementsHint = passwordRules
+  .map((rule, index) => (index === 0 ? rule.label : rule.label.toLocaleLowerCase('ru')))
+  .join(', ')
+
 export function evaluatePassword(value: string) {
   const rules = passwordRules.map((rule) => ({ ...rule, met: rule.test(value) }))
   const passed = rules.filter((rule) => rule.met).length

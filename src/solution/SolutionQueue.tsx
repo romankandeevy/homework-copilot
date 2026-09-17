@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowClockwise, ArrowRight, Check, CheckCircle, Lifebuoy, SpinnerGap, Trash, WarningCircle } from '@phosphor-icons/react'
+import { ArrowClockwise, ArrowRight, Check, CheckCircle, Lifebuoy, SpinnerGap, Trash, Wallet, WarningCircle } from '@phosphor-icons/react'
 import type { SolutionJob } from '../lib/solutionJobs'
 import { orderedActiveJobs, solutionStages, stageState } from '../lib/solutionJobs'
 import './SolutionQueue.css'
@@ -110,14 +110,26 @@ function QueuedRow({ job, subject, position, mine, onDismiss }: {
   )
 }
 
-function FailedCard({ job, subject, onRetry, onDismiss, onOpenSupport }: {
+/* Отказ по деньгам: сервер отвечает 402 «На балансе меньше N ₽»
+   (`server/homeworkSolver.ts`), и эта строка становится причиной в очереди.
+   Кода ошибки в строке задачи нет, поэтому узнаём по тексту. */
+function isInsufficientFundsFailure(job: SolutionJob) {
+  return /на балансе меньше|не хватает (денег|на решение)/iu.test(job.error)
+}
+
+function FailedCard({ job, subject, onRetry, onDismiss, onOpenSupport, onTopUp }: {
   job: SolutionJob
   subject: string
   onRetry: (job: SolutionJob) => void
   onDismiss: (job: SolutionJob) => void
   onOpenSupport: (job: SolutionJob) => void
+  onTopUp: (job: SolutionJob) => void
 }) {
   const canceled = job.status === 'canceled'
+  /* Аудит 16 сентября, Г2: «Решить ещё раз» при нехватке денег упадёт снова,
+     а пополнить было неоткуда. Первой идёт кнопка на баланс; условие
+     задачи остаётся в хранилище, и повтор после пополнения его возьмёт. */
+  const needsTopUp = !canceled && isInsufficientFundsFailure(job)
 
   return (
     <article className={`solve-card is-failed${canceled ? ' is-canceled' : ''}`} role="alert">
@@ -141,11 +153,17 @@ function FailedCard({ job, subject, onRetry, onDismiss, onOpenSupport }: {
       </p>
 
       <div className="solve-card-actions">
-        <button className="solve-action-primary" type="button" onClick={() => onRetry(job)}>
+        {needsTopUp && (
+          <button className="solve-action-primary" type="button" onClick={() => onTopUp(job)}>
+            <Wallet size={17} weight="bold" aria-hidden="true" />
+            Пополнить баланс
+          </button>
+        )}
+        <button className={needsTopUp ? 'solve-action-quiet' : 'solve-action-primary'} type="button" onClick={() => onRetry(job)}>
           <ArrowClockwise size={17} weight="bold" aria-hidden="true" />
           Решить ещё раз
         </button>
-        {!canceled && (
+        {!canceled && !needsTopUp && (
           <button className="solve-action-quiet" type="button" onClick={() => onOpenSupport(job)}>
             <Lifebuoy size={17} weight="duotone" aria-hidden="true" />
             Написать в поддержку
@@ -196,6 +214,7 @@ export function SolutionQueue({
   onRetry,
   onDismiss,
   onOpenSupport,
+  onTopUp,
 }: {
   jobs: readonly SolutionJob[]
   deviceId: string
@@ -204,6 +223,7 @@ export function SolutionQueue({
   onRetry: (job: SolutionJob) => void
   onDismiss: (job: SolutionJob) => void
   onOpenSupport: (job: SolutionJob) => void
+  onTopUp: (job: SolutionJob) => void
 }) {
   const active = orderedActiveJobs(jobs)
   const running = active.filter((job) => job.status === 'running')
@@ -258,6 +278,7 @@ export function SolutionQueue({
             onRetry={onRetry}
             onDismiss={onDismiss}
             onOpenSupport={onOpenSupport}
+            onTopUp={onTopUp}
           />
         )
       ))}

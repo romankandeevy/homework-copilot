@@ -128,7 +128,7 @@
   --color-success-soft: oklch(94% 0.025 154);
   --color-warning: oklch(70% 0.15 78);
   --color-warning-soft: oklch(95% 0.035 78);
-  --color-danger: oklch(59% 0.19 29);
+  --color-danger: oklch(54% 0.19 29);
   --color-danger-soft: oklch(94% 0.035 29);
 
   --space-1: 0.25rem;
@@ -200,6 +200,7 @@
   --color-success-strong: oklch(76% 0.1 154);
   --color-success-soft: oklch(25% 0.035 154);
   --color-warning-soft: oklch(27% 0.04 78);
+  --color-danger: oklch(68% 0.16 29);
   --color-danger-soft: oklch(25% 0.05 29);
   --shadow-raised: 0 1px 3px oklch(0% 0 0 / 0.24);
   --shadow-control: 0 1px 2px oklch(0% 0 0 / 0.2);
