@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { HomeworkSolution } from '../src/lib/homeworkContract.ts'
-import { subjectRuleQuestions, subjectFormatPrompt, verifySubjectRules } from './subjectRules.ts'
+import { missingQuantities, numbersIn, subjectRuleQuestions, subjectFormatPrompt, verifySubjectRules } from './subjectRules.ts'
 
 /* Правила предмета — это рецензент.
 
@@ -198,6 +198,29 @@ describe('лист самодостаточен', () => {
       answer: '126',
     }))
     expect(issues.some((issue) => issue.includes('использовано, но нигде не введено'))).toBe(false)
+  })
+
+  /* 17 сентября геометрия восьмого класса с фото получила отказ, в том числе
+     за «Обозначение B(...) использовано, но нигде не введено»: B(4; 0) - это
+     точка с координатами, а не функция. */
+  it('не принимает точку с координатами за функцию', () => {
+    const issues = verifySubjectRules(solution({
+      subject: 'Геометрия',
+      textbookId: 'geometry',
+      taskType: 'calculation',
+      condition: 'Найдите длину отрезка AB, если A(1; 2), B(4; 6).',
+      steps: ['AB = √((4 - 1)² + (6 - 2)²)', 'B(4; 0,5) - другая запись не нужна', 'AB = √(9 + 16) = 5'],
+      answer: 'AB = 5',
+    }))
+    expect(issues.some((issue) => issue.includes('использовано, но нигде не введено'))).toBe(false)
+    // А функция без определения по-прежнему ловится.
+    expect(verifySubjectRules(solution({
+      subject: 'Алгебра',
+      textbookId: 'algebra',
+      taskType: 'calculation',
+      steps: ['g(1) = -a < 0'],
+      answer: 'a > 0',
+    })).some((issue) => issue.includes('g(...)'))).toBe(true)
   })
 
   it('ловит комбинаторику из одной формулы без слов', () => {
@@ -466,5 +489,96 @@ describe('образец записи предмета', () => {
     expect(open.some((issue) => issue.includes('Что и требовалось доказать'))).toBe(true)
     const closed = verifySubjectRules(proof(['△ABC = △CDA (по второму признаку)', 'AB = CD, BC = AD', 'Что и требовалось доказать.']))
     expect(closed.some((issue) => issue.includes('Что и требовалось доказать'))).toBe(false)
+  })
+})
+
+/* Аудит 16 сентября: единицы там, где их быть не может, и число «Дано»,
+   записанное иначе, чем в условии. Оба замечания уходили в починку, которую
+   модель честно выполнить не могла. */
+describe('единицы и величины без ложных отказов', () => {
+  const cosine = solution({
+    textbookId: 'geometry',
+    subject: 'Геометрия',
+    condition: 'В прямоугольном треугольнике ABC катеты AC = 6 см и BC = 8 см, ∠C = 90°. Найдите cos A.',
+    given: ['AC = 6 см', 'BC = 8 см'],
+    goal: { title: 'Найти', text: 'cos A' },
+    steps: ['AB = √(6² + 8²) = 10 см', 'cos A = AC/AB = 6/10 = 0,6'],
+    answer: 'cos A = 0,6',
+  })
+
+  it('не требует единицы у косинуса', () => {
+    expect(verifySubjectRules(cosine)).not.toContain('В ответе нет единицы измерения')
+    // Цель не подписана - безразмерность видна по ответу и по вопросу условия.
+    expect(verifySubjectRules({ ...cosine, goal: { title: 'Найти', text: '?' } })).not.toContain('В ответе нет единицы измерения')
+    expect(verifySubjectRules({ ...cosine, goal: { title: 'Найти', text: '?' }, answer: '0,6' })).not.toContain('В ответе нет единицы измерения')
+  })
+
+  it('не требует единицы у отношения и «во сколько раз»', () => {
+    expect(verifySubjectRules(solution({
+      condition: 'Первый участок 12 км, второй 4 км. Во сколько раз первый длиннее второго?',
+      goal: { title: 'Найти', text: 'во сколько раз длиннее' },
+      steps: ['12 : 4 = 3'],
+      answer: '3',
+    }))).not.toContain('В ответе нет единицы измерения')
+    expect(verifySubjectRules(solution({
+      condition: 'Стороны подобных треугольников 6 см и 9 см. Найдите коэффициент подобия.',
+      goal: { title: 'Найти', text: 'k' },
+      steps: ['k = 9 : 6 = 1,5'],
+      answer: 'k = 1,5',
+    }))).not.toContain('В ответе нет единицы измерения')
+  })
+
+  it('всё ещё требует единицу, когда косинус дан, а спрашивают длину', () => {
+    expect(verifySubjectRules({
+      ...cosine,
+      condition: 'В треугольнике ABC ∠C = 90°, cos A = 0,6, AB = 10 см. Найдите AC.',
+      goal: { title: 'Найти', text: 'AC' },
+      steps: ['AC = AB · cos A = 10 · 0,6 = 6'],
+      answer: 'AC = 6',
+    })).toContain('В ответе нет единицы измерения')
+    // «Количество теплоты» - не счёт предметов, у него джоули.
+    expect(verifySubjectRules(solution({
+      subject: 'Физика',
+      textbookId: 'physics',
+      condition: 'Какое количество теплоты нужно, чтобы нагреть 2 кг воды на 30 °C?',
+      given: ['m = 2 кг', 'Δt = 30 °C'],
+      goal: { title: 'Найти', text: 'Q' },
+      steps: ['Q = cmΔt = 4200 · 2 · 30 = 252000'],
+      answer: 'Q = 252000',
+    }))).toContain('В ответе нет единицы измерения')
+  })
+
+  const physics = (condition: string, given: string[]) => verifySubjectRules(solution({
+    subject: 'Физика',
+    textbookId: 'physics',
+    condition,
+    given,
+    goal: { title: 'Найти', text: 'A' },
+    steps: ['A = mv²/2 = 1500 · 15²/2 = 168750 Дж'],
+    answer: 'A = 168750 Дж',
+  })).filter((issue) => issue.includes('В «Дано» нет величины'))
+
+  it('узнаёт число «Дано» в другой записи и после перевода в СИ', () => {
+    expect(physics(
+      'Автомобиль массой 1,5 т разгоняется до 54 км/ч. Сила тяги совершила работу 20 000 Дж за 0.5 мин.',
+      ['m = 1,5 т = 1500 кг', 'v = 15 м/с', 'A = 20000 Дж', 't = 30 с'],
+    )).toEqual([])
+    expect(physics(
+      'Тело массой 200 г нагрели от 27 °C. Энергия 1,2 · 10³ Дж.',
+      ['m = 0,2 кг', 'T = 300 K', 'E = 1200 Дж'],
+    )).toEqual([])
+  })
+
+  it('всё ещё ловит потерянную величину, даже если есть кратное ей число', () => {
+    // 20 в десять раз больше 2, но «2 кг» уже закрыло свою величину.
+    expect(physics('Нагрели 2 кг воды от 20 °C до 100 °C.', ['m = 2 кг', 't₂ = 100 °C'])).toEqual([
+      'В «Дано» нет величины 20 °C из условия: выпиши все заданные числа',
+    ])
+  })
+
+  it('разбирает число с пробелами в тысячах, запятой и степенью десяти', () => {
+    expect(numbersIn('Q = 20 000 Дж, m = 1,5 т, E = 1,2 · 10³ Дж, λ = 5 · 10^-7 м')).toEqual([20000, 1.5, 1200, 5e-7])
+    expect(missingQuantities([2, 20, 100], [2, 100])).toEqual([20])
+    expect(missingQuantities([54], [15])).toEqual([])
   })
 })

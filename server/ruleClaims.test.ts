@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { HomeworkSolution } from '../src/lib/homeworkContract.ts'
 import { rankRepairIssues } from './geometrySolutionEngine.ts'
-import { verifyRuleClaims } from './subjectRules.ts'
+import { verifyRuleAdmissions, verifyRuleClaims } from './subjectRules.ts'
 
 function solution(overrides: Partial<HomeworkSolution>): HomeworkSolution {
   return {
@@ -92,6 +92,32 @@ describe('физика: формула буквами до подстановк�
     const issues = verifyRuleClaims(physics(['Q = 4200 · 2 · 30 = 252 000 Дж'], 'Q = 252 кДж'), claim)
     expect(issues).toHaveLength(1)
     expect(issues[0]).toContain('formula-before-numbers')
+  })
+})
+
+/* Признание модели «правило не выполнено» - только по правилу, которое мы
+   проверяем кодом. Аудит 16 сентября: признание по «корни проверены» или
+   «термины названы» отменяло решение, хотя проверить это нам нечем. */
+describe('признание нарушенного правила', () => {
+  it('не отвергает решение по правилу без проверки кодом', () => {
+    expect(verifyRuleAdmissions(solution({}), [
+      { rule: 'roots-checked', passed: false },
+      { rule: 'identity-named', passed: false },
+      { rule: 'domain-checked', passed: false },
+      { rule: 'выдуманное-правило', passed: false },
+    ])).toEqual([])
+  })
+
+  it('принимает признание по правилу, которое проверяем', () => {
+    expect(verifyRuleAdmissions(solution({}), [
+      { rule: 'numeric-answer', passed: false },
+      { rule: 'steps-show-work', passed: true },
+    ])).toEqual(['Правило предмета не выполнено: numeric-answer'])
+  })
+
+  it('не берёт признание по неприменимому правилу', () => {
+    // answer-units применяется только к условию с единицами.
+    expect(verifyRuleAdmissions(solution({}), [{ rule: 'answer-units', passed: false }])).toEqual([])
   })
 })
 

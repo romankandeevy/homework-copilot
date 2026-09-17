@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { homeworkSolutionEngineVersion } from '../src/lib/homeworkContract.ts'
 import type { HomeworkAnnotatedLine, HomeworkSolution, HomeworkWrittenAnalysis } from '../src/lib/homeworkContract.ts'
-import { analysisRepeatsSteps, answersAgree, applyDraftPatch, clampNotebookLine, isCurrentReviewedSolution, normalizeNotebookNotation, patchableIssue, resolveSubject, validateSolutionQuality, withoutPromptEcho } from './geometrySolutionEngine.ts'
+import { analysisRepeatsSteps, answersAgree, applyDraftPatch, clampNotebookLine, cleanInequalityColumn, conditionEchoMatches, isAdvisoryIssue, isBlockingIssue, isCurrentReviewedSolution, normalizeNotebookNotation, patchableIssue, resolveSubject, splitChainedStep, validateSolutionQuality, withoutPromptEcho } from './geometrySolutionEngine.ts'
 
 const taskFiveSolution: HomeworkSolution = {
   engineVersion: homeworkSolutionEngineVersion,
@@ -157,14 +157,16 @@ describe('пределы строки тетради', () => {
     expect(validateSolutionQuality(morphology)).toEqual([])
   })
 
-  // У геометрии лист фиксированный: длинная строка туда не влезет,
-  // и ослаблять проверку под неё нельзя.
-  it('оставляет геометрии прежнюю тесноту', () => {
-    const issues = validateSolutionQuality({
-      ...taskFiveSolution,
-      goal: { title: 'Построить', text: 'Разобрать слово «подоконник» по составу, указать способ его образования и объяснить написание приставки' },
-    })
-    expect(issues).toContain('Цель задачи не оформлена кратко')
+  /* С 17 сентября у геометрии пределы HTML-листа, а не SVG: на проде решение
+     рисует NotebookSheet, и он переносит строки сам. Цель в сто знаков
+     проходит, в двести - замечание к записи, но не отказ. */
+  it('даёт геометрии просторные пределы HTML-листа', () => {
+    const goal = 'Найти расстояние от точки пересечения диагоналей трапеции ABCD до её большего основания AD'
+    expect(validateSolutionQuality({ ...taskFiveSolution, goal: { title: 'Построить', text: goal } }))
+      .not.toContain('Цель задачи не оформлена кратко')
+    expect(validateSolutionQuality({ ...taskFiveSolution, goal: { title: 'Построить', text: goal.repeat(3) } }))
+      .toContain('Цель задачи не оформлена кратко')
+    expect(isAdvisoryIssue('Цель задачи не оформлена кратко')).toBe(true)
   })
 
   it('обрезает по границе слова, а не посреди него', () => {
@@ -292,7 +294,9 @@ describe('geometry solution quality gate', () => {
       steps: ['Сначала проводим прямую, затем отмечаем на ней все нужные точки и после этого отдельно ставим остальные точки вне прямой.'],
     })
     expect(issues).toContain('Построительная задача перегружена текстом')
-    expect(isCurrentReviewedSolution({ ...taskFiveSolution, steps: ['Длинный словесный пересказ решения без обозначений.'] })).toBe(false)
+    // С 17 сентября это предупреждение к записи: выданное решение сохраняется.
+    expect(isAdvisoryIssue('Построительная задача перегружена текстом')).toBe(true)
+    expect(isCurrentReviewedSolution({ ...taskFiveSolution, steps: ['Длинный словесный пересказ решения без обозначений.'] })).toBe(true)
   })
 
   /* Задача 369 на проде 6 сентября. Ответ верный - ∠A = ∠B = ∠C = 75°,
@@ -735,6 +739,14 @@ describe('geometry solution quality gate', () => {
     })).toBe(false)
   })
 
+  // Выданное с предупреждением решение обязано сохраниться.
+  it('сохраняет решение с предупреждениями к записи, но не с замечанием по существу', () => {
+    const wordy = { ...taskFiveSolution, explanation: taskFiveSolution.explanation?.slice(0, 1) }
+    expect(validateSolutionQuality(wordy).length).toBeGreaterThan(0)
+    expect(isCurrentReviewedSolution(wordy)).toBe(true)
+    expect(isCurrentReviewedSolution({ ...taskFiveSolution, sourceVerified: false })).toBe(false)
+  })
+
   it('converts provider notation to ordinary school symbols', () => {
     expect(normalizeNotebookNotation('$A \\in a$, $C \\notin a$, $a \\parallel b$, x^{2}$')).toBe('A ∈ a, C ∉ a, a ∥ b, x²')
   })
@@ -939,5 +951,247 @@ describe('точечная починка', () => {
       sourceVerified: true, given: [], goal: { title: 'Найти', text: 'x' }, explanation: [], steps: ['x = 1'], answer: '1', answerKey: '1', worksheet: [],
       diagram: { kind: 'none', description: '', vertices: [] },
     }, { patches: [] }, 'Алгебра', 'x')).toBeNull()
+  })
+})
+
+/* Аудит 16 сентября, раздел Б: отказы, которые ученик не может исправить.
+
+   Каждое замечание ниже раньше вело к точечной починке, полному повтору и
+   отказу - два-четыре платных вызова модели за то, чего модель поменять не
+   может: слова ученика в условии, английское слово с «const» внутри, тему
+   истории в разборе, ввод переменной в текстовой задаче. */
+/* Этап 1 разбора решателя, 17 сентября: механику записи чинит код, а
+   замечания к виду записи решение не отменяют. */
+describe('запись чинится кодом, а не отказом', () => {
+  it('разрезает строку по ⇒, ⇔ и «=>»', () => {
+    expect(splitChainedStep('6 + 2x > 1 ⇒ 2x > -5 ⇒ x > -2,5')).toEqual(['6 + 2x > 1', '2x > -5', 'x > -2,5'])
+    expect(splitChainedStep('a = b <=> b = a => готово')).toEqual(['a = b', 'b = a', 'готово'])
+    expect(splitChainedStep('x ≥ 2')).toEqual(['x ≥ 2'])
+  })
+
+  it('снимает пояснение словами со столбика неравенства', () => {
+    expect(cleanInequalityColumn(['-5x ≥ 15 |:(-5) (делим на -5, знак меняется)', 'x ≤ -3', 'x ∈ (-∞; -3]']))
+      .toEqual(['-5x ≥ 15 |:(-5)', 'x ≤ -3', 'x ∈ (-∞; -3]'])
+    expect(cleanInequalityColumn(['2x > 4, откуда x > 2'])).toEqual(['2x > 4', 'x > 2'])
+  })
+
+  it('правка шагов со стрелкой и const не оставляет замечаний о записи', () => {
+    const draft = {
+      ruleChecks: [], condition: 'Решите неравенство 6 + 2x > 1.', taskType: 'calculation' as const, diagramRequired: false,
+      decisions: { taskGoal: 'x', diagramRequired: false, diagramReason: 'не нужен', requiredElements: [], notebookFormat: 'столбик', selfChecks: ['подстановка'] },
+      sourceVerified: true, given: [], goal: { title: 'Найти' as const, text: 'x' }, explanation: [],
+      steps: ['6 + 2x > 1'], answer: 'x > -2,5', answerKey: 'x > -2,5', worksheet: [],
+      diagram: { kind: 'none' as const, description: '', vertices: [] },
+    }
+    const patched = applyDraftPatch(draft, { patches: [{ field: 'steps', lines: ['6 + 2x > 1 ⇒ 2x > -5', 'k = const'] }] }, 'Алгебра', draft.condition)
+    expect(patched?.steps).toEqual(['6 + 2x > 1', '2x > -5', 'k - величина постоянная'])
+  })
+
+  it('не режет длинную строку многоточием до проверки', () => {
+    const draft = {
+      ruleChecks: [], condition: 'Найдите площадь трапеции.', taskType: 'calculation' as const, diagramRequired: false,
+      decisions: { taskGoal: 'S', diagramRequired: false, diagramReason: 'не нужен', requiredElements: [], notebookFormat: 'решение', selfChecks: ['счёт'] },
+      sourceVerified: true, given: [], goal: { title: 'Найти' as const, text: 'S' }, explanation: [],
+      steps: ['S = 1'], answer: 'S = 1', answerKey: '1', worksheet: [],
+      diagram: { kind: 'none' as const, description: '', vertices: [] },
+    }
+    const long = `S = (AD + BC)/2 · BH = ${'(12 + 8)/2 · 5 + '.repeat(12)}0 = 1200`
+    const patched = applyDraftPatch(draft, { patches: [{ field: 'steps', lines: [long] }] }, 'Геометрия', draft.condition)
+    expect(patched?.steps[0]).toBe(long)
+    expect(patched?.steps[0].endsWith('…')).toBe(false)
+  })
+
+  it('делит замечания на отменяющие и предупреждения', () => {
+    for (const issue of [
+      'Слишком много слов и слишком мало математических обозначений',
+      'Есть словесный абзац вместо школьной записи',
+      'Обозначение B(...) использовано, но нигде не введено: определи его строкой до первого применения',
+      'Черновик, «площадь»: число 300 взято ниоткуда - выпиши строкой, как оно получено',
+      'Раздел «Дано» пуст',
+      'Решение не проверено самой моделью',
+      'Разбор короче трёх мыслей: правило, признак задачи, типичная ошибка',
+      'Нет объяснения перед решением',
+      'В строке решения стоит ⇒: следующее преобразование пиши новой строкой, а вывод - словом «значит» или «откуда»',
+    ]) expect(isBlockingIssue(issue)).toBe(false)
+    for (const issue of [
+      'Черновик, «путь»: выражение 2*3 даёт 6, а записано 7. Одно из двух неверно',
+      'Ответ 2,1 нигде не выведен: ни в условии, ни в решении этого числа нет.',
+      'В 8 класс производные, интегралы и пределы не проходят: решай иначе',
+      'Обязательный чертёж отсутствует',
+      'В ответе нет единицы измерения',
+      'Источник не подтверждён',
+      'Условие кандидата не совпадает с приложенным заданием',
+    ]) expect(isBlockingIssue(issue)).toBe(true)
+  })
+})
+
+describe('лишние отказы по аудиту 16 сентября', () => {
+  const inequality: HomeworkSolution = {
+    ...taskFiveSolution,
+    textbookId: 'algebra',
+    subject: 'Алгебра',
+    source: 'text',
+    task: 'Неравенство',
+    condition: 'Какие из чисел множества {1; 2; 3} являются решениями неравенства 2x - 3 > 0?',
+    given: [],
+    goal: { title: 'Найти', text: 'решения неравенства из множества {1; 2; 3}' },
+    explanation: [
+      'Число - решение неравенства, если после подстановки получается верное числовое неравенство.',
+      'Удобнее сначала решить неравенство в общем виде, а потом отобрать числа из множества.',
+      'Частая ошибка - забыть, что при строгом знаке граница в ответ не входит.',
+    ],
+    steps: ['2x - 3 > 0', '2x > 3 |:2', 'x > 1,5'],
+    answer: '2; 3',
+    diagram: { kind: 'none', description: '', vertices: [] },
+    taskType: 'calculation',
+    quality: { diagramRequired: false, reviewPassed: true, symbolicShare: 1 },
+  }
+  const conditionIssues = (issues: string[]) => issues.filter((issue) => issue.startsWith('В условии'))
+
+  it('не проверяет на мусор распознавания условие, вписанное учеником', () => {
+    expect(conditionIssues(validateSolutionQuality(inequality))).toEqual([])
+    expect(conditionIssues(validateSolutionQuality({
+      ...inequality,
+      subject: 'Английский язык',
+      textbookId: 'english',
+      taskType: 'mixed',
+      condition: 'Translate: <b>The ticket costs $10</b>, and {the price} is fixed.',
+    }))).toEqual([])
+  })
+
+  it('у фото пропускает множество в скобках, но ловит обломки разметки', () => {
+    const photo = { ...inequality, source: 'photo' as const }
+    expect(conditionIssues(validateSolutionQuality(photo))).toEqual([])
+    expect(validateSolutionQuality({ ...photo, condition: 'Решите неравенство 2x - 3 > 0 } и отметьте @ решения' }))
+      .toContain('В условии остались признаки ошибки распознавания')
+    expect(validateSolutionQuality({ ...photo, condition: 'Решите неравенство \\dfrac{2x}{3} > 0 на прямой' }))
+      .toContain('В условии осталась техническая разметка')
+  })
+
+  it('не принимает «constitution» за const и не ищет значки в развёрнутом ответе', () => {
+    const english: HomeworkSolution = {
+      ...inequality,
+      textbookId: 'english',
+      subject: 'Английский язык',
+      taskType: 'mixed',
+      condition: 'Прочитайте текст о британской конституции и ответьте на вопрос: why is the British constitution called unwritten?',
+      goal: { title: 'Найти', text: 'Ответ на вопрос о британской конституции' },
+      explanation: [
+        'Конституция бывает писаной - одним документом - и неписаной, из законов, прецедентов и обычаев.',
+        'Опирайся на то, что в Великобритании нет единого документа с названием «конституция».',
+      ],
+      steps: ['The British constitution is called unwritten because it is not a single document: it is made of statutes, court decisions and conventions that constantly develop.'],
+      answer: 'Because it is not written down as one document.',
+    }
+    expect(validateSolutionQuality(english).some((issue) => issue.includes('const'))).toBe(false)
+    // «= const» в тетрадной записи по-прежнему ловится.
+    expect(validateSolutionQuality({ ...inequality, steps: ['2x - 3 > 0', 'k = const'] })
+      .some((issue) => issue.includes('не пишут «const»'))).toBe(true)
+    // А «construction» в тетрадной записи - слово, а не значок.
+    expect(validateSolutionQuality({ ...inequality, steps: ['2x - 3 > 0', 'x > 1,5 (construction)'] })
+      .some((issue) => issue.includes('const'))).toBe(false)
+  })
+
+  /* История: первая строка разбора по промпту говорит, о чём речь, третья -
+     на какие факты опереться. Это лексика условия и абзацев ответа, и
+     трёхграммное сходство срезало такие строки как пересказ. */
+  const history = {
+    ruleChecks: [],
+    condition: 'Назовите причины отмены крепостного права в России.',
+    taskType: 'mixed' as const,
+    diagramRequired: false,
+    decisions: { taskGoal: 'причины', diagramRequired: false, diagramReason: 'не нужен', requiredElements: [], notebookFormat: 'разбор', selfChecks: ['факты'] },
+    sourceVerified: true,
+    given: [],
+    goal: { title: 'Найти' as const, text: 'Причины отмены крепостного права' },
+    explanation: [],
+    steps: [
+      'Первая причина - поражение России в Крымской войне: оно показало отставание экономики и армии от европейских стран.',
+      'Вторая причина - крестьянские восстания: крепостное право вызывало недовольство, и власть боялась большого бунта.',
+      'Третья причина - крепостное право мешало развитию промышленности: не хватало свободных рабочих рук.',
+    ],
+    answer: '',
+    answerKey: '',
+    worksheet: [],
+    diagram: { kind: 'none' as const, description: '', vertices: [] },
+  }
+  const historyExplanation = [
+    // Сходство с условием 0,69 и с первым абзацем ответа 0,70: прежние
+    // пороги 0,6 и 0,55 срезали обе строки, и от разбора оставалось две.
+    'Речь о причинах отмены крепостного права в России в 1861 году.',
+    'Крепостное право - зависимость крестьян от помещика: крестьянин не мог уйти с земли и работал на барина.',
+    'Опирайся на поражение в Крымской войне: оно показало отставание экономики и армии.',
+    'Часто путают причины отмены с её итогами: выкупные платежи - это итог, а не причина.',
+  ]
+  const historySolution: HomeworkSolution = {
+    ...inequality,
+    textbookId: 'history',
+    subject: 'История',
+    taskType: 'mixed',
+    condition: history.condition,
+    goal: history.goal,
+    explanation: historyExplanation,
+    steps: history.steps,
+    answer: '',
+  }
+
+  it('не срезает разбор истории до «меньше трёх мыслей»', () => {
+    const patched = applyDraftPatch(history, { patches: [{ field: 'explanation', lines: historyExplanation }] }, 'История', history.condition)
+    expect(patched?.explanation).toEqual(historyExplanation)
+    expect(validateSolutionQuality(historySolution).filter((issue) => issue.includes('Разбор'))).toEqual([])
+    // Двух законченных мыслей развёрнутому ответу хватает.
+    expect(validateSolutionQuality({ ...historySolution, explanation: historyExplanation.slice(1, 3) })
+      .filter((issue) => issue.includes('Разбор'))).toEqual([])
+    // А дословная копия абзаца ответа - всё ещё пересказ.
+    expect(validateSolutionQuality({ ...historySolution, explanation: [...historyExplanation, history.steps[0]] }))
+      .toContain('Разбор пересказывает шаги решения вместо объяснения темы')
+  })
+
+  it('у задачи со счётом разбор по-прежнему не короче трёх мыслей и не пересказ', () => {
+    expect(validateSolutionQuality({ ...inequality, explanation: inequality.explanation?.slice(0, 2) }))
+      .toContain('Разбор короче трёх мыслей: правило, признак задачи, типичная ошибка')
+    const copy = applyDraftPatch(
+      { ...history, condition: inequality.condition, taskType: 'calculation', steps: inequality.steps, answer: '2; 3' },
+      { patches: [{ field: 'explanation', lines: ['Какие из чисел множества {1; 2; 3} являются решениями неравенства?', ...(inequality.explanation ?? [])] }] },
+      'Алгебра',
+      inequality.condition,
+    )
+    expect(copy?.explanation).toEqual(inequality.explanation)
+  })
+
+  it('не считает ввод переменной в текстовой задаче словесным абзацем', () => {
+    const boat: HomeworkSolution = {
+      ...inequality,
+      condition: 'Лодка прошла 16 км по течению и 12 км против течения, затратив на весь путь 3 ч. Скорость течения 2 км/ч. Найдите скорость лодки в стоячей воде.',
+      goal: { title: 'Найти', text: 'скорость лодки в стоячей воде' },
+      steps: [
+        'Пусть x км/ч - скорость лодки в стоячей воде, тогда (x + 2) км/ч - скорость по течению, а (x - 2) км/ч - против течения',
+        'Составим уравнение по времени в пути: 16/(x + 2) + 12/(x - 2) = 3',
+        '16(x - 2) + 12(x + 2) = 3(x² - 4)',
+        '3x² - 28x - 4 = 0',
+        'x₁ = 28/3 + 2√52/3 ≈ 14, x₂ < 0',
+      ],
+      answer: '14 км/ч',
+    }
+    const issues = validateSolutionQuality(boat)
+    expect(issues).not.toContain('Есть словесный абзац вместо школьной записи')
+    expect(issues).not.toContain('Слишком много слов и слишком мало математических обозначений')
+    // Абзац без ввода переменной по-прежнему не проходит.
+    expect(validateSolutionQuality({
+      ...boat,
+      steps: ['Скорость лодки по течению больше скорости против течения на удвоенную скорость течения реки, и это надо учесть в расчёте времени', ...boat.steps.slice(1)],
+    })).toContain('Есть словесный абзац вместо школьной записи')
+  })
+
+  it('сверяет эхо условия только у фото', () => {
+    const base = {
+      textbookId: 'algebra', task: 't', subject: 'Алгебра', grade: '8 класс', textbookTitle: '', authors: '', edition: '',
+      condition: 'Какие из чисел множества {1; 2; 3} являются решениями неравенства 2x - 3 > 0?', idempotencyKey: 'k',
+    }
+    expect(conditionEchoMatches({ ...base, source: 'text' }, 'Решите уравнение x² = 4')).toBe(true)
+    expect(conditionEchoMatches({ ...base, source: 'number' }, 'Решите уравнение x² = 4')).toBe(true)
+    expect(conditionEchoMatches({ ...base, source: 'photo' }, 'Решите уравнение x² = 4')).toBe(false)
+    expect(conditionEchoMatches({ ...base, source: 'photo' }, base.condition)).toBe(true)
+    expect(conditionEchoMatches({ ...base, source: 'photo', condition: undefined }, 'Решите уравнение x² = 4')).toBe(true)
   })
 })

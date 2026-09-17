@@ -50,23 +50,24 @@ describe('ступень обучения', () => {
 
 describe('приём по классу', () => {
   it('не пускает векторное произведение в одиннадцатый класс', () => {
-    const issues = verifyGradeLevel(solution(vectorProduct), '11 класс')
+    const issues = verifyGradeLevel(solution(vectorProduct), '11 класс', 'Геометрия')
     expect(issues.some((issue) => issue.includes('векторное и смешанное произведение'))).toBe(true)
   })
 
   it('пускает его же в университете', () => {
-    expect(verifyGradeLevel(solution(vectorProduct), 'Университет')).toEqual([])
+    expect(verifyGradeLevel(solution(vectorProduct), 'Университет', 'Геометрия')).toEqual([])
   })
 
   it('молчит, когда класс не выбран', () => {
     // «Класс: любой» - это отказ ученика от ограничения, а не повод его выдумывать.
-    expect(verifyGradeLevel(solution(vectorProduct), '')).toEqual([])
+    expect(verifyGradeLevel(solution(vectorProduct), '', 'Геометрия')).toEqual([])
   })
 
   it('не пускает производную в девятый класс', () => {
     const issues = verifyGradeLevel(
       solution(['f(x) = x² - 4x', 'Производная f′(x) = 2x - 4 обращается в ноль при x = 2']),
       '9 класс',
+      'Алгебра',
     )
     expect(issues.some((issue) => issue.includes('производные'))).toBe(true)
   })
@@ -75,6 +76,7 @@ describe('приём по классу', () => {
     const issues = verifyGradeLevel(
       solution(['f(x) = x² - 4x', 'Производная f′(x) = 2x - 4 обращается в ноль при x = 2']),
       '11 класс',
+      'Алгебра',
     )
     expect(issues).toEqual([])
   })
@@ -84,7 +86,56 @@ describe('приём по классу', () => {
       'Оси: D - начало, DA вдоль x, DC вдоль y, DD₁ вдоль z',
       'Плоскость через A₁N параллельно DM: 2x - 3y + 6z = 12',
       'd = |2 · 0 - 3 · 0 + 6 · 0 - 12| / √(4 + 9 + 36) = 12√53/53',
-    ]), '11 класс')
+    ]), '11 класс', 'Геометрия')
     expect(issues).toEqual([])
+  })
+})
+
+/* Аудит 16 сентября: правила класса не знали предмета.
+
+   Биология восьмого класса про «производные кожи», химия девятого про
+   «производные углеводородов», русский седьмого про «производное слово» и
+   геометрия восьмого с «египетским треугольником (3; 4; 5)» получали
+   замечание «не проходят», которое чинится только полным повтором - и
+   повтор его не снимал. */
+describe('приём по классу знает предмет', () => {
+  it('не видит производной в биологии, химии и русском', () => {
+    expect(verifyGradeLevel(
+      solution(['Волосы, ногти и потовые железы - производные кожи']),
+      '8 класс',
+      'Биология',
+    )).toEqual([])
+    expect(verifyGradeLevel(
+      solution(['Спирты и карбоновые кислоты - производные углеводородов']),
+      '9 класс',
+      'Химия',
+    )).toEqual([])
+    expect(verifyGradeLevel(
+      solution(['Подоконник - производное слово от «окно»']),
+      '7 класс',
+      'Русский язык',
+    )).toEqual([])
+  })
+
+  it('принимает идентификатор предмета так же, как название', () => {
+    const issues = verifyGradeLevel(solution(['Производная f′(x) = 2x - 4']), '9 класс', 'algebra')
+    expect(issues.some((issue) => issue.includes('производные'))).toBe(true)
+    expect(verifyGradeLevel(solution(['Производные кожи']), '8 класс', 'biology')).toEqual([])
+  })
+
+  it('не принимает египетский треугольник за координаты в пространстве', () => {
+    const issues = verifyGradeLevel(solution([
+      'Стороны 6, 8 и 10 пропорциональны тройке (3; 4; 5) - египетский треугольник',
+      '6² + 8² = 36 + 64 = 100 = 10², значит, ∠C = 90°',
+    ]), '8 класс', 'Геометрия')
+    expect(issues).toEqual([])
+  })
+
+  it('всё ещё ловит точку пространства, когда рядом сказано «координаты»', () => {
+    const issues = verifyGradeLevel(solution([
+      'Введём координаты: A(0; 0; 0), B(6; 0; 0), C₁(6; 6; 6)',
+      'AC₁ = √(36 + 36 + 36) = 6√3',
+    ]), '9 класс', 'Геометрия')
+    expect(issues.some((issue) => issue.includes('координаты в пространстве'))).toBe(true)
   })
 })

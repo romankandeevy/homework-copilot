@@ -203,21 +203,22 @@ describe('служебная графа не отменяет решение', (
     expect(urls).toHaveLength(1)
   })
 
-  it('но совсем без самопроверки решение не выпускается', async () => {
+  /* До 17 сентября пустая самопроверка звала полный повтор и кончалась
+     отказом. Это та же служебная графа: решение уходит ученику, а замечание
+     - в панель проверки предупреждением. */
+  it('и совсем без самопроверки решение выдаётся с предупреждением', async () => {
     const noSelfChecks = {
       ...draft,
       decisions: { ...draft.decisions, selfChecks: [] },
     }
-    // Починка отвечает тем же черновиком: модель настаивает, значит отказ.
     const { urls, fetchImpl } = stubProvider((url, stage) => {
       const body = stage === 'review' ? reviewOf(noSelfChecks) : noSelfChecks
       return url.includes('/codex/') ? responsesPayload(body) : geminiPayload(body)
     })
 
-    await expect(solveHomeworkWithReview(request, { apiKey: 'test-key', fetchImpl }))
-      .rejects.toThrow(/не проверено самой моделью/u)
-    // Починку позвали: пустая самопроверка - повод переспросить модель.
-    expect(urls.length).toBeGreaterThan(1)
+    const solution = await solveHomeworkWithReview(request, { apiKey: 'test-key', fetchImpl })
+    expect(urls).toHaveLength(1)
+    expect(solution.verification?.checks.some((check) => check.note.includes('не проверено самой моделью'))).toBe(true)
   })
 })
 
