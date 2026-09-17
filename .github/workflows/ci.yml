@@ -23,7 +23,7 @@ jobs:
       # scripts/check-build-env.mjs проверяет адреса функций.
       GITHUB_PAGES_CUSTOM_DOMAIN: www.homeworkcopilot.ru
       # Браузерные проверки не ходят в нашу базу: такого проекта нет (в адресе
-      # проекта Supabase не бывает дефиса и цифр), а нужные ответы подменяют
+      # проекта Supabase не бывает дефиса), а нужные ответы подменяют
       # tests/fixtures.ts и tests/adminMocks.ts. Домен - *.supabase.co, иначе
       # запрос режет Content-Security-Policy из index.html. Упавшая база или
       # флаг в админке CI не роняют.
