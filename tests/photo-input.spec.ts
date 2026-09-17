@@ -52,7 +52,10 @@ test('передаёт модели изображение без браузер
           sourceVerified: true,
           taskType: 'calculation',
           quality: { diagramRequired: false, reviewPassed: true, symbolicShare: 0.7 },
-          createdAt: '2026-08-28T19:00:00.000Z',
+          /* Дата считается от «сейчас»: решение гостя живёт в браузере
+             неделю (`guestSolutionLifetimeMs`), и вписанная числом дата
+             однажды сделала бы тест просроченным. */
+          createdAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
         },
       }),
     })
