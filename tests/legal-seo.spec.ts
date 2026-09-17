@@ -29,6 +29,12 @@ for (const viewport of [
   { width: 1440, height: 960 },
 ]) {
   test(`legal pages and storage notice remain usable at ${viewport.width}px`, async ({ page }) => {
+    // Документ живёт в том же чанке приложения, что и /app: первый заход в
+    // файле часто попадает на холодный dev-сервер (CLAUDE.md, «первая
+    // загрузка страницы в dev медленная»), а тест открывает три документа
+    // подряд. Запас по времени - не ослабление проверки, а место для
+    // одноразовой компиляции.
+    test.setTimeout(90_000)
     const consoleErrors: string[] = []
     page.on('console', (message) => { if (message.type() === 'error') consoleErrors.push(message.text()) })
     await page.setViewportSize(viewport)
@@ -61,6 +67,11 @@ for (const viewport of [
 }
 
 test('old document addresses open the same document under /docs/', async ({ page }) => {
+  // Девять переходов подряд, каждый - полная перезагрузка страницы (проверяем
+  // прямой заход по старому адресу, а не переход внутри приложения): та же
+  // оговорка про холодный dev-сервер, что и у проверки выше, только помноженная
+  // на число адресов.
+  test.setTimeout(120_000)
   for (const [legacy, target] of legacyAddresses) {
     await page.goto(legacy)
     await expect(page).toHaveURL(new RegExp(`${target}$`))
@@ -76,6 +87,8 @@ test('old document addresses open the same document under /docs/', async ({ page
 })
 
 test('every document lists all six, marks the open one and has no tables', async ({ page }) => {
+  // Шесть полных перезагрузок подряд: та же оговорка, что и выше.
+  test.setTimeout(120_000)
   for (const path of documentPaths) {
     await page.goto(path)
     const documents = page.getByRole('navigation', { name: 'Юридические документы' })
