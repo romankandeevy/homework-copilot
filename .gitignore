@@ -19,6 +19,8 @@ dist-ssr
 .impeccable/
 .playwright-mcp/
 test-results/
+playwright-report/
+blob-report/
 *-qa.png
 design-qa-*.png
 design-qa.md

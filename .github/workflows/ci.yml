@@ -1,0 +1,60 @@
+name: CI
+
+# Проверки на каждый push и pull request. Ничего не выкатывает: превью
+# обновляет Vercel, прод - deploy-pages.yml вручную.
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      # Без домена vite.config видит GITHUB_ACTIONS и ставит базу
+      # `/homework-copilot/`: переходы на `/app` в браузерных проверках
+      # упираются в подсказку Vite. Заодно сборка идёт как под Pages и
+      # scripts/check-build-env.mjs проверяет адреса функций.
+      GITHUB_PAGES_CUSTOM_DOMAIN: www.homeworkcopilot.ru
+      # Браузерные проверки не ходят в нашу базу: такого проекта нет (в адресе
+      # проекта Supabase не бывает дефиса), а нужные ответы подменяют
+      # tests/fixtures.ts и tests/adminMocks.ts. Домен - *.supabase.co, иначе
+      # запрос режет Content-Security-Policy из index.html. Упавшая база или
+      # флаг в админке CI не роняют.
+      VITE_SUPABASE_URL: https://e2e-offline.supabase.co
+      VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_e2e
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run test
+      - run: npx playwright install --with-deps chromium
+      # Снимки тетради сюда не входят: эталоны сняты на другой системе
+      # (`npm run test:visual` - локально).
+      - run: npm run test:e2e
+      - if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+      # Адреса функций - только сборке, как в deploy-pages.yml: браузерные
+      # проверки ходят в /api/* dev-сервера, а не в прод.
+      - run: npm run build
+        env:
+          VITE_HOMEWORK_API_URL: https://opacucumlgwmhgjonhhe.supabase.co/functions/v1/api/solve
+          VITE_SUPPORT_API_URL: https://opacucumlgwmhgjonhhe.supabase.co/functions/v1/api/support
+          VITE_CHAT_API_URL: https://opacucumlgwmhgjonhhe.supabase.co/functions/v1/api/chat

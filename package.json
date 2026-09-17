@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "predev": "node scripts/copy-tesseract-assets.mjs",
     "dev": "vite",
@@ -24,7 +27,6 @@
     "@phosphor-icons/react": "^2.1.10",
     "@supabase/supabase-js": "2.112.3",
     "motion": "^13.1.1",
-    "pdfjs-dist": "6.2.108",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "tesseract.js": "^7.0.0"

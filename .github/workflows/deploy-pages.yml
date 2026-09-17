@@ -39,8 +39,11 @@ jobs:
           # переход на `/app` упирается в подсказку «did you mean /homework-copilot/app»,
           # и падают все тесты подряд, а не один. Первый прогон в CI на это и налетел.
           GITHUB_PAGES_CUSTOM_DOMAIN: www.homeworkcopilot.ru
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          # Не настоящая база: ответы подменяют tests/fixtures.ts и
+          # tests/adminMocks.ts, и упавший Supabase или флаг в админке не
+          # останавливают выкатку. Подробнее - в ci.yml.
+          VITE_SUPABASE_URL: https://e2e-offline.supabase.co
+          VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_e2e
       # Если браузерные проверки упали, отчёт нужен целиком: в нём лежит
       # снимок страницы на момент падения, а по одному симптому причину
       # на другой системе не восстановить.

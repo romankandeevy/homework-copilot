@@ -131,7 +131,7 @@
 
 ## 4. Экономика одного обращения к странице
 
-Все цифры измерены и лежат в `docs/KIE_MODEL_MATRIX.md`.
+Все цифры измерены и лежат в `docs/archive/KIE_MODEL_MATRIX.md`.
 
 | Что | Значение | Источник |
 |---|---|---|
@@ -593,4 +593,4 @@ API ~$250. **Итого ~90–100 человеко-дней + постоянны
 - [Мобильное сканирование, практики — documaster](https://www.documaster.app/blog/mobile-document-scanning-best-practices) · [Dynamsoft](https://www.dynamsoft.com/codepool/flutter-document-scanner-app-android-ios.html)
 - [Жалобы на решатели с диаграммами — ThinkAssist](https://thinkassist.app/blog/homework-answers-scanner)
 - [Атанасян — Хабр](https://habr.com/ru/articles/599611/)
-- Внутренние: `docs/KIE_MODEL_MATRIX.md` (измеренные цены и латентность), `PRODUCT.md`, `server/homeworkSolver.ts`, `src/textbooks/taskLookup.ts`, `src/textbooks/taskCatalog.ts`, `src/textbooks/textbookTaskSource.ts`, `src/App.tsx`, `supabase/migrations/`
+- Внутренние: `docs/archive/KIE_MODEL_MATRIX.md` (измеренные цены и латентность), `PRODUCT.md`, `server/homeworkSolver.ts`, `src/textbooks/taskLookup.ts`, `src/textbooks/taskCatalog.ts`, `src/textbooks/textbookTaskSource.ts`, `src/App.tsx`, `supabase/migrations/`

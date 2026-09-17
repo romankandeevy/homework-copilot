@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 import { mockSupabase, signIn } from './adminMocks'
 
 /* Админка листается с первой загрузки - на компьютере и на телефоне.

@@ -1,63 +1,65 @@
-# Product
+# Продукт
 
-<!-- impeccable:product-schema 1 -->
+Коротко и только то, что есть в коде. Правила и разбор поломок - `AGENTS.md`,
+команды и архитектура - `CLAUDE.md`. Разошлось с кодом - прав код, а этот
+файл правится в том же заходе.
 
-## Platform
+## Что это
 
-web
+Homework Copilot - веб-приложение: ученик приносит условие задачи
+фотографией или текстом и получает готовую запись для тетради - дано, ход
+решения, чертёж, ответ. Запись сначала объясняет, потом оформляет:
+«Сфоткал. Понял. Сдал.», а не «сфоткал и списал».
 
-## Users
+Прод - [www.homeworkcopilot.ru](https://www.homeworkcopilot.ru): витрина на
+`/`, приложение на `/app`, документы под `/docs/`.
 
-Students in grades 7-11 who want to copy school homework, plus university students bringing coursework. They expect the shortest possible path from a task to a finished solution that can be rewritten into a notebook. The stated grade decides which methods a solution may use: a correct answer obtained by a method the class has not covered cannot be handed in.
+## Для кого
 
-## Product Purpose
+Школьники 5-11 класса и студенты университета. Указанный класс ограничивает
+приём решения: верный ответ, полученный способом, которого в этом классе не
+проходят, сдать нельзя (`server/gradeRules.ts`).
 
-Homework Copilot turns a textbook and task number into a complete notebook-ready solution, with an expected wait of about five minutes when the shared base has no ready answer. Geometry is the approved rendering reference, not the product boundary.
+## Предметы
 
-## Positioning
+14: математика, алгебра, геометрия, физика, химия, биология, информатика,
+русский язык, литература, английский язык, история, обществознание,
+география, астрономия (`src/lib/subjects.ts`). Владелец может скрыть
+предмет или поменять порядок в админке без деплоя.
 
-The product is a copying service, not a productivity tracker. Its primary promise is a ready answer formatted the way the student must submit it.
+## Цена и деньги
 
-## Operating Context
+- Цена решения - **от 4 ₽**, и всегда с оговоркой, от чего зависит: длина
+  условия, фотография, счётный предмет. Потолок - 12 ₽. Одного числа нет
+  нигде. Формула - `src/lib/solutionPricing.ts` и её зеркало в базе
+  `private.solution_price_kopecks_for()`; считает и подписывает сервер.
+- Первое решение - без аккаунта и бесплатно. Новый аккаунт получает
+  стартовые 20 ₽ - это пять задач по минимальной цене.
+- Не получилось решить - деньги возвращаются.
+- Баланс пополняется через Робокассу («Оплата через Робокассу» в `AGENTS.md`).
+- ИИ-чат - отдельно, от 20 копеек за ответ.
 
-On the primary path the student uses a saved textbook and enters a task number. The product finds and shows the exact condition for that textbook identity; the student confirms it before an existing answer is reused, a new answer is generated, or a balance entry is made. Processing stages are system-owned status information and are never user-selectable.
+## Что есть в приложении
 
-## Capabilities and Constraints
+- Главная: форма задачи (текст или фото, предмет, класс), очередь решений.
+- «Мои решения»: всё, что ученик решил в аккаунте; открыть снова бесплатно.
+- ИИ-чат: спросить, почему шаг именно такой.
+- Расписание: вручную или с фотографии (распознавание в браузере),
+  хранится в браузере и в аккаунте.
+- Профиль и баланс, промокоды, приглашения, центр помощи с перепиской.
+- Вход: почта с паролем и кодом из письма, Яндекс ID, номер телефона
+  (406-ФЗ; два последних включает флаг в админке). Входа через Google нет
+  и не будет.
+- Админка на `/admin`: роли, обязательная 2FA, журнал.
 
-- The existing `GeometryNotebookLayoutV1` renderer, its semantic input model, fixed SVG coordinate system, pagination, and approved visual snapshots must remain functional and unchanged.
-- Geometry task data may provide semantic content only. It may not control page layout or absolute coordinates.
-- The product must not request, import, store, or process МЭШ cookies or session data.
-- The account has a visible solution balance and a top-up action. Exact pricing and purchase policy are not settled.
-- Every task belongs to an explicit textbook identity: subject, class, title, authors, edition, and where applicable part or ISBN. A number alone is never enough.
-- Textbook selection is saved to the account and the most recently used textbook becomes the default Home context.
-- `База решений` is the shared catalogue of every already-solved task. A matching entry is available immediately.
-- `Мои решения` is the student's personal history of solutions they opened or requested.
-- `Расписание` is a free editable weekly timetable. Students can enter lessons manually or run Russian/English OCR on a photo, review the extracted rows, and keep the confirmed result on their device.
-- Product navigation, monetization, and textbook-catalogue coverage are not settled product policy.
-- The current Home page is a visual-only prototype. Product logic comes later.
+## Границы
 
-## Brand Commitments
-
-The product name is Homework Copilot. The visual identity is intentionally being replaced from scratch; no prior interface styling is a brand commitment.
-
-## Evidence on Hand
-
-- Approved geometry reference: `docs/references/geometry-notebook-layout-v1.png`.
-- Renderer contract: `docs/GEOMETRY_NOTEBOOK_LAYOUT_V1.md`.
-- Local semantic fixtures and visual snapshots exist for the geometry renderer.
-- Confirmed product data categories are textbook identities, task numbers, shared ready solutions, personal solution history, and solution balance.
-- No customer claims, performance benchmarks, pricing, testimonials, or production content are available and none should be fabricated.
-
-## Product Principles
-
-- Put “Списать задачу” first on Home. Keep the saved textbook visible and require only the task number after that context is chosen.
-- Check the shared solution base only after the displayed condition is confirmed.
-- Make the finished solution complete and easy to copy into a notebook.
-- Preserve personal work for later review.
-- Do not add streaks, productivity scoring, completion percentages, or educational gamification without a concrete product reason and a real data source.
-- Treat subject-specific renderers as output formats inside a multi-subject product.
-- Keep unapproved product policy visibly undecided.
-
-## Accessibility & Inclusion
-
-The web interface must remain keyboard accessible, responsive, legible at browser zoom, and usable with reduced motion.
+- Ничего не обещать в интерфейсе, чего нет в коде: цена, сроки (15-70
+  секунд), предметы и бонусы проверяются по исходникам.
+- Никаких серий, очков продуктивности и прочей игрофикации без настоящих
+  данных и причины.
+- Не запрашивать и не хранить данные школьных платформ (МЭШ и подобные).
+- Запись в тетрадь - формат вывода, а не граница продукта: лист один на все
+  предметы, вид записи выбирает предмет.
+- Интерфейс работает с клавиатуры, с 320 px без прокрутки вбок, при
+  увеличении в браузере и с уменьшенной анимацией.

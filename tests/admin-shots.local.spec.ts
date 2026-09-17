@@ -1,4 +1,4 @@
-import { test } from '@playwright/test'
+import { test } from './fixtures'
 import { mockSupabase, signIn } from './adminMocks'
 
 /* Снимки всех разделов админки для разбора дизайна. Запускается вручную:

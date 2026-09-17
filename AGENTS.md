@@ -511,6 +511,7 @@
   `public.complete_homework_solution` с настоящим payload модели внутри
   транзакции, которая заканчивается `raise exception` — так проверяется
   весь путь и ничего не остаётся в базе.
+- Перед `supabase db push` - `supabase db query --linked -f scripts/db-smoke.sql` (или `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f scripts/db-smoke.sql`): оплата, резерв, возврат и права в одной транзакции с `rollback`, успех - последняя строка «db-smoke: все проверки пройдены».
 
 # Неудача бесплатна для ученика, но не для нас
 
