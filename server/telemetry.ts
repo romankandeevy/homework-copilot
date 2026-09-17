@@ -7,6 +7,7 @@
    Запись телеметрии никогда не роняет ответ: учёт - не часть работы.
    Логи Vercel живут считаные дни, а админке нужно минимум 30 дней. */
 
+import { createHash, timingSafeEqual } from 'node:crypto'
 import type { IncomingMessage } from 'node:http'
 import { createClient } from '@supabase/supabase-js'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -38,14 +39,109 @@ function headerText(value: string | string[] | undefined) {
   return (Array.isArray(value) ? value[0] : value ?? '').trim()
 }
 
+/* Подпись прокси на Supabase (supabase/functions/api).
+
+   Из российских сетей запрос идёт не напрямую на Vercel, а через функцию
+   на домене Supabase. Vercel переписывает `x-forwarded-for` адресом того,
+   кто подключился, - то есть прокси, - и все гости сливались бы в один
+   адрес. Поэтому прокси присылает настоящий адрес в `x-client-ip` и
+   подпись в `x-proxy-auth`. Без верной подписи заголовок не читается -
+   подставить чужой адрес прямым запросом на Vercel нельзя.
+
+   Подпись - хэш общего секрета `HOMEWORK_PROXY_SECRET` (аудит 16 сентября,
+   В9). До него подписью служил хэш ключа `service_role`: утечка секрета
+   функции давала полный доступ к базе. На время перехода прежняя подпись
+   принимается, пока нового секрета нет или стоит
+   `HOMEWORK_PROXY_ACCEPT_LEGACY=1`. Как подписывает сама функция на переходе -
+   supabase/functions/api/proxyIdentity.ts. */
+export const minProxySecretLength = 32
+let shortProxySecretReported = false
+
+export function proxyAuthDigest(key: string) {
+  return createHash('sha256').update(key + ':homework-copilot-proxy').digest('hex')
+}
+
+export function proxySigningKeys(serviceRoleKey: string | undefined, env: Record<string, string | undefined> = process.env) {
+  const rawSecret = (env.HOMEWORK_PROXY_SECRET ?? '').trim()
+  let secret = rawSecret
+  if (rawSecret && rawSecret.length < minProxySecretLength) {
+    if (!shortProxySecretReported) {
+      shortProxySecretReported = true
+      console.error(JSON.stringify({
+        event: 'proxy_secret_too_short',
+        message: `HOMEWORK_PROXY_SECRET короче ${minProxySecretLength} знаков и не используется. Сгенерируй: openssl rand -hex 32`,
+      }))
+    }
+    secret = ''
+  }
+  const keys: string[] = []
+  if (secret) keys.push(secret)
+  const acceptLegacy = !secret || (env.HOMEWORK_PROXY_ACCEPT_LEGACY ?? '').trim() === '1'
+  if (acceptLegacy && serviceRoleKey) keys.push(serviceRoleKey)
+  return keys
+}
+
+export function trustedClientAddress(
+  headers: Record<string, string | string[] | undefined>,
+  serviceRoleKey: string | undefined,
+  env: Record<string, string | undefined> = process.env,
+): string | null {
+  const proxied = headerText(headers['x-client-ip'])
+  const auth = headerText(headers['x-proxy-auth'])
+  if (!proxied || !auth) return null
+  const expected = proxySigningKeys(serviceRoleKey, env).map((key) => Buffer.from(proxyAuthDigest(key)))
+  if (!expected.length) return null
+  const matches = auth.split(',').some((candidate) => {
+    const offered = Buffer.from(candidate.trim())
+    return expected.some((digest) => offered.length === digest.length && timingSafeEqual(offered, digest))
+  })
+  return matches ? proxied.slice(0, 64) : null
+}
+
+/* Начала ожидаемых подписей для журнала: по ним видно, чей ключ разошёлся.
+   Самих ключей в журнале нет. */
+export function proxyAuthExpectedPrefixes(serviceRoleKey: string | undefined, env: Record<string, string | undefined> = process.env) {
+  return proxySigningKeys(serviceRoleKey, env).map((key) => proxyAuthDigest(key).slice(0, 8)).join(',')
+}
+
 /* Адрес клиента. За прокси на Supabase настоящий адрес приходит в
    `x-client-ip` - но только с верной подписью, иначе его может подставить
-   кто угодно. Проверка подписи живёт в решателе; сюда приходит уже
-   проверенный адрес или обычный x-forwarded-for. */
+   кто угодно. Сюда приходит уже проверенный адрес или обычный
+   x-forwarded-for, который на Vercel ставит сама платформа. */
 export function requestAddress(request: IncomingMessage, trustedProxyAddress: string | null) {
   if (trustedProxyAddress) return trustedProxyAddress.slice(0, 64)
   const forwarded = headerText(request.headers['x-forwarded-for'])
   return (forwarded.split(',')[0]?.trim() || request.socket?.remoteAddress || '').slice(0, 64) || null
+}
+
+/* Адрес ученика для журналов: подписанный адрес от прокси, иначе адрес
+   соединения. Без этого журналы чата и поддержки писали адрес самого прокси. */
+export function clientAddress(request: IncomingMessage, serviceRoleKey: string | undefined) {
+  return requestAddress(request, trustedClientAddress(request.headers, serviceRoleKey))
+}
+
+/* Адреса локальной разработки для CORS. На проде их быть не должно (аудит
+   16 сентября, В8): чужая страница на localhost у ученика иначе говорила бы
+   с функциями от его имени. `VERCEL_ENV` ставит сам Vercel. */
+export const localDevOrigins = [
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'http://localhost:4173',
+  'http://127.0.0.1:4173',
+]
+
+export function isProductionDeployment(env: Record<string, string | undefined> = process.env) {
+  return env.VERCEL_ENV === 'production'
+}
+
+export function browserOriginAllowed(
+  origin: string | undefined,
+  productionOrigins: ReadonlySet<string>,
+  env: Record<string, string | undefined> = process.env,
+) {
+  if (!origin) return false
+  if (productionOrigins.has(origin)) return true
+  return !isProductionDeployment(env) && localDevOrigins.includes(origin)
 }
 
 export function requestUserAgent(request: IncomingMessage) {

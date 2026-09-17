@@ -2,15 +2,39 @@
 <html lang="ru">
   <head>
     <meta charset="UTF-8" />
+    <!-- Первым делом: не даём встроить страницу в чужой фрейм (кликджекинг). -->
+    <script>
+      (function () {
+        if (window.top === window.self) return
+        try {
+          if (window.top.location.origin === window.location.origin) return
+        } catch (error) {
+          // Родитель с чужого адреса: браузер не даёт прочитать его location.
+        }
+        document.documentElement.style.display = 'none'
+        try {
+          window.top.location.replace(window.location.href)
+        } catch (error) {
+          // Выйти наверх браузер не дал - страница так и остаётся спрятанной.
+        }
+      })()
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="Сфотографируй задачу или впиши условие. Получишь готовую запись для тетради: дано, ход решения, чертёж и ответ. 14 предметов, 5-11 класс и университет." />
     <meta name="robots" content="index, follow" />
     <!-- Заголовки из vercel.json на GitHub Pages не действуют: Pages их не
-         ставит, а фронт раздаёт именно он. Политику держим в разметке -
-         `frame-ancestors` в meta не работает, от кликджекинга защищает
-         `X-Frame-Options` на стороне Vercel. `cdn.jsdelivr.net` нужен
-         распознаванию расписания: tesseract.js берёт оттуда языковые данные. -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://homework-copilot-taupe.vercel.app https://cdn.jsdelivr.net; font-src 'self' data:; form-action 'self'; frame-src https://accounts.google.com https://*.supabase.co; img-src 'self' data: blob: https://*.supabase.co; manifest-src 'self'; media-src 'self'; object-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:" />
+         ставит, а фронт раздаёт именно он. Политику держим в разметке, но
+         `frame-ancestors` в meta браузер игнорирует, а `X-Frame-Options` в
+         meta не читается вовсе. От встраивания в чужую страницу на проде
+         защищает только скрипт выше: во фрейме чужого сайта страница
+         прячется и пытается выйти наверх (аудит 16 сентября, В4). Настоящая
+         защита - заголовок, то есть CDN перед Pages. Инлайн-скрипты
+         разрешены хэшами `sha256-`, а не `'unsafe-inline'`: поменял скрипт -
+         пересчитай хэш здесь и в vercel.json, иначе упадут тест и сборка
+         (src/lib/contentSecurityPolicy.test.ts, scripts/create-static-routes.mjs).
+         `cdn.jsdelivr.net` нужен распознаванию расписания: tesseract.js
+         берёт оттуда языковые данные. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://homework-copilot-taupe.vercel.app https://cdn.jsdelivr.net; font-src 'self' data:; form-action 'self'; frame-src https://*.supabase.co; img-src 'self' data: blob: https://*.supabase.co; manifest-src 'self'; media-src 'self'; object-src 'none'; script-src 'self' 'sha256-5GR3TMyHjUFd02E+oxe0dxpvMhNeb6ZeRV9vwlc+2fo=' 'sha256-8coB2/wME/F6wluaXHff7Ixicy5ewnoOGQfx6ixcSUA=' 'sha256-FoOESi7zOy9p15Q/bv0m3bC1XyatMx4R1ZoyAJj4Lk0='; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:" />
     <meta name="application-name" content="Homework Copilot" />
     <meta name="apple-mobile-web-app-title" content="Homework Copilot" />
     <meta property="og:type" content="website" />
