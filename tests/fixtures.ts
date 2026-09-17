@@ -39,9 +39,18 @@ export const chatModelsMock = {
   ],
 }
 
+/* Очередь решений тоже подменена: адрес базы в проверках подставной
+   (`e2e-offline.supabase.co`), и настоящий запрос к ней не разрешается по
+   DNS. Проверки записи решения следят, чтобы в консоли не было ни одной
+   ошибки, и падали на этом запросе, а до подставного адреса те же проверки
+   молча стучались в прод. Пустая очередь приложению годится: задача
+   решается во вкладке. */
 export async function mockPublicSupabase(context: BrowserContext) {
   await context.route(/\/rest\/v1\/rpc\/get_public_config(\?|$)/, (route) => route.fulfill({ json: publicConfigMock }))
   await context.route(/\/rest\/v1\/rpc\/list_chat_models(\?|$)/, (route) => route.fulfill({ json: chatModelsMock }))
+  await context.route(/\/rest\/v1\/rpc\/list_homework_jobs(\?|$)/, (route) => route.fulfill({ json: [] }))
+  await context.route(/\/rest\/v1\/rpc\/(start_homework_job|close_homework_job|expire_stale_homework_jobs)(\?|$)/, (route) =>
+    route.fulfill({ json: null }))
 }
 
 // Второй аргумент fixture Playwright принято звать `use`; здесь другое имя,
