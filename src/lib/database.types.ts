@@ -705,6 +705,35 @@ export type Database = {
         }
         Relationships: []
       }
+      homework_jobs: {
+        Row: {
+          id: string
+          user_id: string | null
+          guest_id: string | null
+          idempotency_key: string
+          device_id: string
+          textbook_id: string
+          task: string
+          source: string
+          subject: string
+          grade: string
+          condition_preview: string
+          status: string
+          stage: string
+          error: string | null
+          created_at: string
+          updated_at: string
+          started_at: string | null
+          finished_at: string | null
+        }
+        Insert: {
+          [_ in never]: never
+        }
+        Update: {
+          [_ in never]: never
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -872,6 +901,14 @@ export type Database = {
       }
       refund_solution_credit: {
         Args: { p_idempotency_key: string; p_reason?: string }
+        Returns: {
+          balance?: number | null
+          reason?: string
+          refunded: boolean
+        }
+      }
+      refund_solution_credit_for_user: {
+        Args: { p_user_id: string; p_idempotency_key: string; p_reason?: string }
         Returns: {
           balance?: number | null
           reason?: string

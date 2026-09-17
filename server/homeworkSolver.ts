@@ -64,12 +64,27 @@ type AuthenticatedAccount = {
 
 export class HomeworkSolverError extends Error {
   readonly status: number
+  /* Задачу по этому ключу уже решает другой запрос (вторая вкладка,
+     перезагруженная страница). Отмечать строку очереди проваленной нельзя:
+     это сорвало бы работающий запрос, а вкладке - повод ждать, а не хоронить. */
+  readonly inProgress: boolean
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, options: { inProgress?: boolean } = {}) {
     super(message)
     this.status = status
+    this.inProgress = options.inProgress === true
   }
 }
+
+/* Метка ответа решателя (аудит 16 сентября, Б5).
+
+   Между браузером и решателем стоят прокси на Supabase и сам Vercel. Оба
+   умеют ответить 5xx сами: прокси - на обрыв до Vercel и на свой срок в
+   150 секунд, Vercel - на убитую по сроку функцию. Решатель в это время
+   может считать дальше и списать деньги. Поэтому каждый ответ решателя
+   несёт этот заголовок, а 5xx без него вкладка читает как обрыв связи, а не
+   как окончательный отказ. Имя продублировано в src/lib/homeworkSolution.ts. */
+export const homeworkSolverHeader = 'x-homework-solver'
 function text(value: unknown, fallback = '') {
   return typeof value === 'string' ? value.trim() : fallback
 }
@@ -218,33 +233,53 @@ const dailyFailedAttempts = 12
 const dayMs = 24 * 60 * 60 * 1000
 
 /* Лимит тарифа или личный лимит из админки заменяет шестьдесят по
-   умолчанию. Неудачи считаются по-прежнему: это наш расход, а не услуга. */
+   умолчанию. Неудачи считаются по-прежнему: это наш расход, а не услуга.
+
+   Считаются только ключи решений (`solution-…`). До 16 сентября считался
+   любой дебет книги за сутки, выбранный без сортировки и с пределом в 400
+   строк: списания чата, ручные операции админки и возвраты пополнений тоже
+   шли в «решено задач», и шестьдесят вопросов в чате закрывали решения до
+   завтра (аудит 16 сентября, Б8). Теперь считает база, по фильтру. */
+export async function countDailySolveEntries(
+  client: SupabaseClient<Database>,
+  userId: string,
+  since: string,
+): Promise<{ attempts: number; failed: number }> {
+  const [debits, refunds] = await Promise.all([
+    client
+      .from('wallet_entries')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('kind', 'debit')
+      .like('idempotency_key', 'solution-%')
+      .gte('created_at', since),
+    client
+      .from('wallet_entries')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .like('idempotency_key', 'solution-%:refund')
+      .gte('created_at', since),
+  ])
+  const error = debits.error ?? refunds.error
+  if (error) throw new Error(error.message)
+  if (typeof debits.count !== 'number' || typeof refunds.count !== 'number') throw new Error('wallet count is missing')
+  return { attempts: debits.count, failed: refunds.count }
+}
+
 async function assertDailySolveLimits(account: AuthenticatedAccount, planLimit: number | null = null) {
   const attemptsLimit = planLimit ?? dailySolveAttempts
   const since = new Date(Date.now() - dayMs).toISOString()
-  let entries: { kind: string; idempotency_key: string }[]
+  let attempts: number
+  let failed: number
   try {
-    const { data, error } = await account.client
-      .from('wallet_entries')
-      .select('kind,idempotency_key')
-      .eq('user_id', account.userId)
-      .gte('created_at', since)
-      .limit(400)
-    // Книга не прочиталась — это наша беда, а не ученика: решение идёт дальше.
-    if (error || !data) {
-      if (error) logSolverEvent('error', 'homework_solve_limit_unreadable', { message: error.message })
-      return
-    }
-    entries = data
+    ({ attempts, failed } = await countDailySolveEntries(account.client, account.userId, since))
   } catch (error) {
+    // Книга не прочиталась — это наша беда, а не ученика: решение идёт дальше.
     logSolverEvent('error', 'homework_solve_limit_unreadable', {
       message: error instanceof Error ? error.message : 'unknown',
     })
     return
   }
-
-  const attempts = entries.filter((entry) => entry.kind === 'debit').length
-  const failed = entries.filter((entry) => entry.idempotency_key.endsWith(':refund')).length
 
   if (failed >= dailyFailedAttempts) {
     throw new HomeworkSolverError(429, 'Сегодня слишком много задач не решилось. Проверь условие и вернись завтра')
@@ -272,6 +307,12 @@ async function validateRequest(value: unknown, options: SolverOptions): Promise<
   const requiredFields = ['textbookId', 'task', 'subject', 'grade', 'textbookTitle', 'authors', 'edition', 'idempotencyKey']
   if (!source || requiredFields.some((field) => !text(candidate[field]))) {
     throw new HomeworkSolverError(400, 'Не хватает данных учебника или номера задачи')
+  }
+  /* Ключ решения всегда `solution-…`: так его ставит форма, по этой приставке
+     считаются дневные пределы и сверка резервов в админке. Другой ключ обходил
+     бы и то и другое. */
+  if (!solutionKeyPattern.test(text(candidate.idempotencyKey))) {
+    throw new HomeworkSolverError(400, 'Запрос задачи устарел. Обнови страницу и поставь задачу заново')
   }
   // Предмет больше не подсказка, а ключ к правилам проверки: у каждого свои
   // требования к записи, и без предмета проверять решение нечем.
@@ -392,6 +433,8 @@ async function validateRequest(value: unknown, options: SolverOptions): Promise<
   return request
 }
 
+const solutionKeyPattern = /^solution-[0-9A-Za-z-]{6,140}$/
+
 const guestIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
 // Гость приходит без токена, но с меткой браузера. Метка сама по себе ничего
@@ -480,51 +523,77 @@ export function solutionPriceFor(request: SolveHomeworkRequest) {
 
 /* Подпись цены. Секрет живёт в базе и сервер его не видит: база сама
    считает HMAC и сама же проверяет его в reserve_solution_credit_v2.
-   Не подписалось - идём прежним путём с плоской ценой: остаться без
-   решения из-за неподписанной цены хуже, чем взять на полтинник меньше. */
+
+   Не подписалось - решения нет. До 16 сентября сервер в этом случае молча
+   шёл прежним путём reserve_solution_credit с плоскими 5 ₽: задача за 4 ₽
+   стоила пять, за 12 ₽ - тоже пять, вразрез с офертой «списывается ровно
+   она» (аудит 16 сентября, А1). Теперь - 503 с деньгами на балансе и
+   событие `homework_price_unsigned` в журнале, а прежняя функция закрыта в
+   базе (20260916110000). */
 async function signSolutionPrice(
   options: SolverOptions,
   request: SolveHomeworkRequest,
   price: number,
 ): Promise<string | null> {
   const admin = guestAdminClient(options)
-  if (!admin) return null
+  if (!admin) {
+    logSolverEvent('error', 'homework_price_unsigned', { reason: 'service key is not configured', price })
+    return null
+  }
   try {
     const { data, error } = await admin.rpc('sign_solution_price', {
       p_idempotency_key: request.idempotencyKey,
       p_price_kopecks: price,
     })
-    return !error && typeof data === 'string' ? data : null
-  } catch {
+    if (!error && typeof data === 'string') return data
+    logSolverEvent('error', 'homework_price_unsigned', { reason: error?.message ?? 'empty signature', price })
+    return null
+  } catch (error) {
+    logSolverEvent('error', 'homework_price_unsigned', {
+      reason: error instanceof Error ? error.message : 'unknown',
+      price,
+    })
     return null
   }
+}
+
+export const unsignedPriceMessage = 'Не получилось проверить цену, попробуй ещё раз. Деньги не списаны'
+
+/* Подпись операции в истории баланса. Раньше туда шла подпись задачи, и
+   ученик читал «Решение задачи photo-9807d724-…» или первые 60 знаков
+   условия. Номер - только настоящий номер из учебника. */
+function solutionChargeDescription(request: SolveHomeworkRequest) {
+  if (request.source === 'number') return 'Решение задачи № ' + request.task
+  if (request.source === 'photo') return 'Решение задачи по фото'
+  return 'Решение задачи'
+}
+
+type Reservation = {
+  reserved: boolean
+  // Резерв по этому ключу уже был: его сделал другой запрос.
+  alreadyReserved: boolean
 }
 
 async function reserveSolutionCredit(
   account: AuthenticatedAccount | null,
   request: SolveHomeworkRequest,
-  options?: SolverOptions,
-): Promise<boolean> {
-  if (!account) return false
+  options: SolverOptions,
+): Promise<Reservation> {
+  if (!account) return { reserved: false, alreadyReserved: false }
+  // Сообщение о нехватке называет ровно ту сумму, которая подписана и спишется.
   const price = solutionPriceFor(request)
-  const proof = options ? await signSolutionPrice(options, request, price) : null
-  const { data, error } = proof
-    ? await account.client.rpc('reserve_solution_credit_v2', {
-      p_idempotency_key: request.idempotencyKey,
-      p_price_kopecks: price,
-      p_price_proof: proof,
-      p_task_number: Number.isFinite(Number(request.task)) ? Number(request.task) : null,
-      p_textbook_id: request.textbookId,
-      p_source: request.source,
-      p_description: 'Решение задачи ' + request.task,
-    })
-    : await account.client.rpc('reserve_solution_credit', {
-      p_idempotency_key: request.idempotencyKey,
-      p_task_number: Number.isFinite(Number(request.task)) ? Number(request.task) : null,
-      p_textbook_id: request.textbookId,
-      p_source: request.source,
-      p_description: 'Решение задачи ' + request.task,
-    })
+  const proof = await signSolutionPrice(options, request, price)
+  if (!proof) throw new HomeworkSolverError(503, unsignedPriceMessage)
+
+  const { data, error } = await account.client.rpc('reserve_solution_credit_v2', {
+    p_idempotency_key: request.idempotencyKey,
+    p_price_kopecks: price,
+    p_price_proof: proof,
+    p_task_number: request.source === 'number' && Number.isFinite(Number(request.task)) ? Number(request.task) : null,
+    p_textbook_id: request.textbookId,
+    p_source: request.source,
+    p_description: solutionChargeDescription(request),
+  })
 
   if (error) {
     if (error.message.includes('insufficient balance')) {
@@ -541,7 +610,11 @@ async function reserveSolutionCredit(
     throw new HomeworkSolverError(502, 'Не получилось зарезервировать оплату')
   }
 
-  return Boolean(data && typeof data === 'object' && !Array.isArray(data) && data.reserved === true)
+  const record = data && typeof data === 'object' && !Array.isArray(data) ? data as Record<string, unknown> : null
+  return {
+    reserved: record?.reserved === true,
+    alreadyReserved: record?.alreadyReserved === true,
+  }
 }
 
 // Гостевой резерв. Денег у гостя нет, поэтому «резервируется» единственная
@@ -601,6 +674,17 @@ type JobStage = HomeworkSolveStage | 'reading' | 'writing' | 'done' | 'failed'
 type JobReporter = {
   report: (stage: JobStage, extra?: { error?: string; task?: string }) => void
   flush: () => Promise<void>
+  /* Статус строки очереди прямо сейчас; null - строки нет или база не
+     ответила. Решатель смотрит его перед резервом и перед сохранением:
+     вкладка могла закрыть задачу сама (сторож приёма, обрыв, «Снять»), и
+     тогда списывать за неё нельзя (аудит 16 сентября, Б5 и Б6). */
+  status: () => Promise<string | null>
+}
+
+const idleJobReporter: JobReporter = { report: () => {}, flush: async () => {}, status: async () => null }
+
+function isClosedJobStatus(status: string | null) {
+  return status === 'failed' || status === 'canceled'
 }
 
 function createJobReporter(
@@ -610,7 +694,7 @@ function createJobReporter(
   guest: GuestIdentity | null,
 ): JobReporter {
   const admin = guestAdminClient(options)
-  if (!admin || (!account && !guest)) return { report: () => {}, flush: async () => {} }
+  if (!admin || (!account && !guest)) return idleJobReporter
 
   let chain: Promise<unknown> = Promise.resolve()
   return {
@@ -629,6 +713,23 @@ function createJobReporter(
     },
     async flush() {
       await chain.catch(() => undefined)
+    },
+    async status() {
+      try {
+        const base = admin
+          .from('homework_jobs')
+          .select('status')
+          .eq('idempotency_key', request.idempotencyKey)
+        const scoped = account
+          ? base.eq('user_id', account.userId)
+          : base.is('user_id', null).eq('guest_id', guest?.guestId ?? '')
+        const { data, error } = await scoped.maybeSingle()
+        if (error || !data) return null
+        return typeof data.status === 'string' ? data.status : null
+      } catch {
+        // Не прочиталось - не повод отказывать: решаем как раньше.
+        return null
+      }
     },
   }
 }
@@ -692,13 +793,29 @@ function guestAdminClient(options: SolverOptions): SupabaseClient<Database> | nu
 // Компенсация резерва. Возврат проходит только если решение так и не выдано —
 // это проверяет сама функция в базе, поэтому вызов безопасен и при гонках.
 // Ошибку возврата глушим намеренно: она не должна подменять исходную причину сбоя.
+//
+// С 16 сентября браузерная refund_solution_credit возвращает только закрытую
+// задачу (Б12), а решатель возвращает свою неудачу, пока строка ещё открыта.
+// Поэтому он зовёт служебную функцию. Нет её (код выкатили раньше миграции) -
+// прежнюю, токеном ученика.
 async function refundSolutionCredit(
   account: AuthenticatedAccount | null,
   request: SolveHomeworkRequest,
   reason: string,
+  options: SolverOptions,
 ): Promise<void> {
   if (!account) return
+  const admin = guestAdminClient(options)
   try {
+    if (admin) {
+      const { error } = await admin.rpc('refund_solution_credit_for_user', {
+        p_user_id: account.userId,
+        p_idempotency_key: request.idempotencyKey,
+        p_reason: reason.slice(0, 160),
+      })
+      if (!error) return
+      logSolverEvent('error', 'homework_refund_service_failed', { message: error.message })
+    }
     await account.client.rpc('refund_solution_credit', {
       p_idempotency_key: request.idempotencyKey,
       p_reason: reason.slice(0, 160),
@@ -723,7 +840,13 @@ async function withServerProof(
   const { data, error } = await admin.rpc('sign_homework_solution', {
     p_solution: solution as unknown as Json,
   })
-  if (error || typeof data !== 'string' || !/^[0-9a-f]{64}$/.test(data)) return solution
+  if (error || typeof data !== 'string' || !/^[0-9a-f]{64}$/.test(data)) {
+    // С 16 сентября база не сохраняет неподписанное решение ни из какого
+    // источника (В7): без подписи ученик получит отказ и возврат, а здесь -
+    // причина в журнале.
+    logSolverEvent('error', 'homework_solution_unsigned', { reason: error?.message ?? 'empty signature' })
+    return solution
+  }
 
   return { ...solution, _serverProof: data } as HomeworkSolution
 }
@@ -778,8 +901,14 @@ async function completeStoredSolution(
 }
 
 /* Сколько ждём решение, прежде чем признать неудачу. Потолок функции —
-   300 секунд; оставляем запас на сохранение решения и возврат денег. */
-const solveTimeBudgetMs = 230_000
+   300 секунд (maxDuration в vercel.json); оставляем запас на сохранение
+   решения, возврат денег и журнал.
+
+   До 16 сентября срок был 230 секунд, и полминуты работы модели
+   выбрасывались на задачах, которые успевали (аудит, Б9). Срок согласован с
+   `silentSolverLimitMs` во вкладке (330 с) и с
+   `private.expire_stale_homework_jobs` (шесть минут без движения). */
+export const solveTimeBudgetMs = 270_000
 
 function solveDeadline(): Promise<never> {
   return new Promise((_, reject) => {
@@ -846,6 +975,45 @@ function requestId(request: IncomingMessage) {
    Поэтому расход считается сам, на каждой задаче: сколько было вызовов,
    какими моделями и во сколько они обошлись. Кредиты приходят от шлюза в
    теле ответа; молчит шлюз - в журнале пусто, а не выдуманный ноль. */
+/* Вызов модели виден с начала, а не с ответа (аудит 16 сентября, Б9).
+
+   Расход приходит от движка в `onCost` только когда запрос к шлюзу вернулся.
+   Задача, упавшая по сроку, вызов не дождалась - и в админке самая дорогая
+   неудача выглядела как «до модели не дошло». Поэтому запрос к шлюзу
+   записывается в момент отправки, с пустым расходом и назначением
+   `unfinished`, а ответ движка заменяет эту запись настоящей. */
+export function createModelCallTracker(fetchImpl?: typeof fetch) {
+  const calls: HomeworkModelCall[] = []
+  const pending: { entry: HomeworkModelCall; startedAt: number }[] = []
+
+  const trackedFetch = ((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    const body = typeof init?.body === 'string' ? init.body.slice(0, 300) : ''
+    const model = /"model"\s*:\s*"([^"]+)"/.exec(body)?.[1] ?? 'unknown'
+    const entry: HomeworkModelCall = { model, credits: null, seconds: 0, purpose: 'unfinished', failed: true }
+    calls.push(entry)
+    pending.push({ entry, startedAt: Date.now() })
+    return (fetchImpl ?? globalThis.fetch)(input, init)
+  }) as typeof fetch
+
+  const onCost = (call: HomeworkModelCall) => {
+    const index = pending.findIndex((slot) => slot.entry.model === call.model)
+    if (index < 0) {
+      calls.push(call)
+      return
+    }
+    const [slot] = pending.splice(index, 1)
+    Object.assign(slot.entry, call)
+  }
+
+  // Незаконченным вызовам - время ожидания на момент итога.
+  const settle = () => {
+    const now = Date.now()
+    for (const slot of pending) slot.entry.seconds = (now - slot.startedAt) / 1000
+  }
+
+  return { calls, fetch: trackedFetch, onCost, settle }
+}
+
 type SolveCostSummary = {
   calls: number
   credits: number | null
@@ -1032,6 +1200,8 @@ function allowProductionBrowser(request: IncomingMessage, response: ServerRespon
   response.setHeader('Access-Control-Allow-Origin', origin)
   response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
   response.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Guest-Id')
+  // Без этого браузер не отдаст странице метку решателя на чужом источнике.
+  response.setHeader('Access-Control-Expose-Headers', homeworkSolverHeader)
   response.setHeader('Access-Control-Max-Age', '86400')
   response.setHeader('Vary', 'Origin')
   return true
@@ -1042,6 +1212,8 @@ export async function handleHomeworkSolverRequest(
   response: ServerResponse,
   options: SolverOptions,
 ) {
+  // Метка ставится первой: её несёт любой ответ решателя, включая отказы.
+  response.setHeader(homeworkSolverHeader, '1')
   const browserAllowed = allowProductionBrowser(request, response)
   const startedAt = Date.now()
   const solveRequestId = requestId(request)
@@ -1076,9 +1248,10 @@ export async function handleHomeworkSolverRequest(
   let taskNumber: string | undefined
   let source: SolveHomeworkRequest['source'] | undefined
   let stage = 'validate'
-  let job: JobReporter = { report: () => {}, flush: async () => {} }
-  // Во что обошлась задача: по строке на каждый вызов модели.
-  const modelCalls: HomeworkModelCall[] = []
+  let job: JobReporter = idleJobReporter
+  // Во что обошлась задача: по строке на каждый вызов модели, с момента отправки.
+  const modelTracker = createModelCallTracker(options.fetchImpl)
+  const modelCalls = modelTracker.calls
   let solveTask: SolveHomeworkRequest | null = null
   // Ответ уходит после записи телеметрии: Vercel может заморозить функцию
   // сразу после ответа, и недописанный журнал пропал бы.
@@ -1157,12 +1330,33 @@ export async function handleHomeworkSolverRequest(
     }
 
     stage = 'balance'
-    if (account && !existingSolution) await assertDailySolveLimits(account, solverContext.dailySolveLimit)
-    const reserved = existingSolution
-      ? false
-      : guestSolving
-        ? await claimGuestSolution(guestSolving, task, options)
-        : await reserveSolutionCredit(account, task, options)
+    // Повторная генерация старого решения тоже зовёт модель: предел и для неё.
+    if (account) await assertDailySolveLimits(account, solverContext.dailySolveLimit)
+    /* Вкладка могла закрыть задачу, пока запрос шёл: сторож приёма не дождался
+       расписки, «Снять с очереди». Тогда ни резерва, ни модели. */
+    if (isClosedJobStatus(await job.status())) {
+      throw new HomeworkSolverError(409, 'Задача уже снята с очереди. Деньги не списаны')
+    }
+    let reserved = false
+    if (!existingSolution && guestSolving) {
+      reserved = await claimGuestSolution(guestSolving, task, options)
+    } else if (!existingSolution) {
+      const reservation = await reserveSolutionCredit(account, task, options)
+      reserved = reservation.reserved
+      /* Резерв по ключу уже есть - значит, эту задачу прислал второй запрос:
+         вторая вкладка или перезагруженная страница взяли строку, пока она
+         ещё ждала расписки (аудит 16 сентября, Б7). Модель второй раз не
+         зовём: первый запрос решает и сам отметит исход. */
+      if (reservation.alreadyReserved) {
+        const current = await job.status()
+        if (current === 'running' || current === 'queued') {
+          throw new HomeworkSolverError(409, 'Эта задача уже решается. Решение появится в очереди', { inProgress: true })
+        }
+        if (isClosedJobStatus(current)) {
+          throw new HomeworkSolverError(409, 'Задача уже закрыта. Поставь её заново')
+        }
+      }
+    }
     try {
       stage = 'generate'
       // Собственный срок короче потолка функции.
@@ -1178,15 +1372,23 @@ export async function handleHomeworkSolverRequest(
       const solution = await Promise.race([
         solveWithKie(
           task,
-          options,
+          { ...options, fetchImpl: modelTracker.fetch },
           account?.userId,
           (modelStage) => job.report(modelStage),
-          (call) => modelCalls.push(call),
+          modelTracker.onCost,
           solverContext.prompt,
         ),
         solveDeadline(),
       ])
       stage = 'persist'
+      /* Пока решали, вкладка могла закрыть задачу: связь оборвалась до
+         расписки, срок, «Снять». Ученик уже видит неудачу и просит возврат -
+         списывать за решение, которого он не ждёт, нельзя. */
+      if (isClosedJobStatus(await job.status())) {
+        throw new HomeworkSolverError(409, account
+          ? 'Задача закрылась раньше, чем решение было готово. Деньги вернулись на баланс'
+          : 'Задача закрылась раньше, чем решение было готово. Поставь её заново')
+      }
       job.report('writing')
       const completedSolution = await completeStoredSolution(account, task, solution, options)
       if (!completedSolution || !isCurrentReviewedSolution(completedSolution)) {
@@ -1217,14 +1419,18 @@ export async function handleHomeworkSolverRequest(
       reply = { status: 200, payload: { solution: completedSolution } }
     } catch (error) {
       if (reserved && guestSolving) await releaseGuestSolution(guestSolving, task, options)
-      else if (reserved) await refundSolutionCredit(account, task, 'Решение не удалось получить')
+      else if (reserved) await refundSolutionCredit(account, task, 'Решение не удалось получить', options)
       throw error
     }
   } catch (error) {
     const status = error instanceof HomeworkSolverError ? error.status : 500
-    job.report('failed', {
-      error: error instanceof HomeworkSolverError ? error.message : 'Не получилось подготовить решение. Попробуй ещё раз',
-    })
+    modelTracker.settle()
+    // Дубль не закрывает строку: её ведёт первый, работающий запрос.
+    if (!(error instanceof HomeworkSolverError && error.inProgress)) {
+      job.report('failed', {
+        error: error instanceof HomeworkSolverError ? error.message : 'Не получилось подготовить решение. Попробуй ещё раз',
+      })
+    }
     await job.flush()
     /* Ожидаемый исход — не поломка.
 
@@ -1257,7 +1463,7 @@ export async function handleHomeworkSolverRequest(
     failureMessage = error instanceof HomeworkSolverError ? error.message : error instanceof Error ? error.message : 'unexpected solver error'
     if (!(error instanceof HomeworkSolverError)) unexpectedError = error
     reply = error instanceof HomeworkSolverError
-      ? { status: error.status, payload: { error: error.message } }
+      ? { status: error.status, payload: { error: error.message, ...(error.inProgress ? { inProgress: true } : {}) } }
       : { status: 500, payload: { error: 'Не получилось подготовить решение. Попробуй ещё раз' } }
   } finally {
     const status = reply?.status ?? 500

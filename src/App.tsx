@@ -40,7 +40,7 @@ import PrivacyNotice from './PrivacyNotice'
 import type { Database } from './lib/database.types'
 import type { AccountData } from './lib/supabase'
 import { homeworkSolutionForm } from './lib/homeworkContract'
-import type { HomeworkSolution, HomeworkSource } from './lib/homeworkContract'
+import type { HomeworkSolution, HomeworkSource, SolveHomeworkRequest } from './lib/homeworkContract'
 import { formatRubles } from './lib/currency'
 import { recordPendingLegalAcceptance } from './lib/legalConsent'
 import { bindPendingReferral, preparePendingReferralClaim } from './lib/referrals'
@@ -56,8 +56,9 @@ import {
   loadGeneratedSolutions,
   parseStoredHomeworkSolution,
   requestHomeworkSolution,
-  serverAcceptLimitMs,
+  serverAcceptLimitFor,
   SolutionConnectionLostError,
+  SolutionInProgressError,
   SolutionNotAcceptedError,
   saveGeneratedSolutions,
 } from './lib/homeworkSolution'
@@ -65,6 +66,8 @@ import { normalizeTaskCondition } from './textbooks/taskCatalog'
 import {
   findPendingSolution,
   forgetPendingSolution,
+  hydratePendingSolutions,
+  prunePendingSolutions,
   savePendingSolution,
   type PendingSolution,
 } from './lib/pendingSolutions'
@@ -76,11 +79,13 @@ import {
   listSolutionJobs,
   mergeJobs,
   nextRunnableJob,
+  runWithJobLock,
   startSolutionJob,
 } from './lib/solutionJobs'
 import type { SolutionJob } from './lib/solutionJobs'
 import { SolutionQueue } from './solution/SolutionQueue'
 import { SolutionVerificationPanel } from './solution/SolutionVerificationPanel'
+import { SolutionErrorBoundary } from './solution/SolutionErrorBoundary'
 import { MySolutions, SolutionsPage } from './solution/SolutionsPage'
 import { SupportCenter } from './support/SupportCenter'
 import { SupportLauncher } from './support/SupportLauncher'
@@ -218,9 +223,11 @@ function localSolutionJob(input: {
 
 
 /* Сколько ждём молчащего решателя, прежде чем признать задачу сорванной.
-   Его собственный бюджет — 230 секунд (server/homeworkSolver.ts), здесь запас
-   поверх него на сохранение решения и ответ. */
-const silentSolverLimitMs = 300_000
+   Его собственный бюджет - 270 секунд (`solveTimeBudgetMs` в
+   server/homeworkSolver.ts), потолок функции на Vercel - 300. Вкладка ждёт
+   дольше потолка: закрыть задачу, которую функция ещё сохраняет, значит
+   отказаться от решения, за которое уже заплачено моделью. */
+const silentSolverLimitMs = 330_000
 
 /* Смена раздела начинается сверху.
 
@@ -1130,6 +1137,20 @@ function HomePage() {
      закрыт — фотография весит мегабайты, — и тогда задача, поставленная
      только что здесь же, падала как «страница закрылась раньше». */
   const pendingPayloadsRef = useRef(new Map<string, PendingSolution>())
+  /* Запросы, не влезшие в localStorage, лежат в IndexedDB и читаются
+     асинхронно. Очередь не отправляет ничего, пока они не дочитаны. */
+  const [pendingSolutionsReady, setPendingSolutionsReady] = useState(false)
+  useEffect(() => {
+    let active = true
+    void hydratePendingSolutions()
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) setPendingSolutionsReady(true)
+      })
+    return () => {
+      active = false
+    }
+  }, [])
   const [selectedSolution, setSelectedSolution] = useState<SolutionState | null>(() => currentNavigationRoute().solution)
   const [generatedSolutions, setGeneratedSolutions] = useState<HomeworkSolution[]>(loadGeneratedSolutions)
   const [supabaseClient, setSupabaseClient] = useState<SupabaseClient<Database> | null>(null)
@@ -1860,10 +1881,14 @@ function HomePage() {
      возвращать некому: списание в кошельке есть, возврата нет — ровно та
      дыра, из-за которой ученик оставался и без решения, и без денег.
      Поэтому о сорвавшейся задаче своего устройства просим возврат сами.
-     Вызов безопасен: база возвращает деньги только если решение не выдано. */
+     Вызов безопасен: база возвращает деньги только если решение не выдано.
+
+     Смотрим строку базы, а не местную отметку: с 16 сентября возврат из
+     браузера проходит только за задачу, закрытую в базе (аудит, Б12), а
+     местный провал вкладка ставит раньше, чем закрытие дойдёт до базы. */
   useEffect(() => {
     if (!supabaseClient || !user) return
-    const abandoned = visibleJobs.filter((job) => (
+    const abandoned = remoteJobs.filter((job) => (
       job.status === 'failed'
       && job.deviceId === deviceIdRef.current
       && !refundedJobKeysRef.current.has(job.idempotencyKey)
@@ -1885,7 +1910,7 @@ function HomePage() {
     void Promise.all(abandoned.map((job) => askRefund(job.idempotencyKey)))
       .then(() => refreshAccount())
       .catch(() => undefined)
-  }, [refreshAccount, supabaseClient, user, visibleJobs])
+  }, [refreshAccount, remoteJobs, supabaseClient, user])
 
   /* Готовая задача без решения под рукой.
 
@@ -1945,7 +1970,7 @@ function HomePage() {
 
      Обрыв связи задачу больше не хоронит — исход отмечает сам решатель. Но
      если функцию убили на полпути, отмечать некому: в кошельке останется
-     списание, а в очереди — вечное «решается». Бюджет решателя 230 секунд,
+     списание, а в очереди — вечное «решается». Потолок функции 300 секунд,
      поэтому с запасом поверх него задачу своего устройства закрываем здесь,
      а деньги вернёт эффект возврата резерва. */
   useEffect(() => {
@@ -1975,29 +2000,39 @@ function HomePage() {
 
      Здесь и только здесь идёт сам запрос: строка очереди говорит, что решать,
      а сам запрос уходит с того устройства, где лежат фотография и сессия. */
-  const runSolutionJob = useCallback(async (job: SolutionJob): Promise<SolutionState | null> => {
-    const payload = findPendingSolution(job.idempotencyKey) ?? pendingPayloadsRef.current.get(job.idempotencyKey) ?? null
-
-    if (!payload) {
-      const reason = 'Задача не ушла в работу: страница закрылась раньше. Поставь её заново'
-      markLocalJob(job, { status: 'failed', stage: 'failed', error: reason, finishedAt: new Date().toISOString() })
-      if (supabaseClient) await closeSolutionJob(supabaseClient, job.idempotencyKey, 'failed', reason, guestJobId)
-      return null
-    }
-
-    markLocalJob(job, {
-      status: 'running',
-      stage: job.stage === 'queued' ? 'reading' : job.stage,
-      startedAt: job.startedAt || new Date().toISOString(),
-    })
-
+  const sendSolutionJob = useCallback(async (job: SolutionJob, payload: PendingSolution): Promise<SolutionState | null> => {
     const textbook = getTextbook(payload.textbookId, availableTextbooks)
     const solvingAsGuest = Boolean(supabaseClient) && !user
+
+    const solveRequest: SolveHomeworkRequest = {
+      textbookId: payload.textbookId,
+      task: payload.task,
+      source: payload.source,
+      subject: payload.subject || textbook.subject,
+      // Пустой выбор класса передаём прямо, а не диапазоном «7-11 класс»:
+      // модель должна понять, что класс не задан, и взять простейший способ.
+      grade: payload.grade || 'не указан',
+      textbookTitle: textbook.title,
+      authors: textbook.authors,
+      edition: textbook.edition,
+      idempotencyKey: payload.idempotencyKey,
+      /* У задачи с фотографии текст ученика - пометка, а не условие:
+         условие на снимке. Как `condition` эта пометка однажды поехала
+         в промпт «проверенным условием», и модель разобрала подпись
+         «Решить задачу 1 про образование воды» вместо самой задачи. */
+      ...(payload.condition
+        ? (payload.source === 'photo' ? { note: payload.condition } : { condition: payload.condition })
+        : {}),
+      ...(payload.imageDataUrl ? { imageDataUrl: payload.imageDataUrl } : {}),
+    }
+    const body = JSON.stringify(solveRequest)
+    // Расписку сервер даёт, прочитав тело целиком: тяжёлому фото - дольше.
+    const acceptLimitMs = serverAcceptLimitFor(body.length)
 
     /* Сторож приёма.
 
        Получив задачу, сервер сразу ставит ей стадию в очереди - это его
-       расписка. Нет расписки через `serverAcceptLimitMs` - запрос до него не
+       расписка. Нет расписки через `serverAcceptLimitFor` - запрос до него не
        дошёл, и держать его дальше незачем: решатель не считает, денег не
        резервировал. Обрываем сами и говорим ученику правду вместо «Читаем»
        на двадцать минут. Строка, которой в базе нет, расписки дать не может -
@@ -2011,8 +2046,8 @@ function HomePage() {
       const fresh = await listSolutionJobs(supabaseClient, guestJobId)
       if (fresh) setRemoteJobs(fresh)
       const row = (fresh ?? remoteJobsRef.current).find((entry) => entry.idempotencyKey === job.idempotencyKey)
-      if (!serverKnows(row)) abort.abort()
-    }, serverAcceptLimitMs)
+      if (!serverKnows(row)) abort.abort(new SolutionNotAcceptedError(acceptLimitMs))
+    }, acceptLimitMs)
 
     try {
       let accessToken: string | undefined
@@ -2024,30 +2059,11 @@ function HomePage() {
 
       const generatedSolution = await requestHomeworkSolution(
         import.meta.env.VITE_HOMEWORK_API_URL || applicationPath('/api/solve'),
-        {
-          textbookId: payload.textbookId,
-          task: payload.task,
-          source: payload.source,
-          subject: payload.subject || textbook.subject,
-          // Пустой выбор класса передаём прямо, а не диапазоном «7-11 класс»:
-          // модель должна понять, что класс не задан, и взять простейший способ.
-          grade: payload.grade || 'не указан',
-          textbookTitle: textbook.title,
-          authors: textbook.authors,
-          edition: textbook.edition,
-          idempotencyKey: payload.idempotencyKey,
-          /* У задачи с фотографии текст ученика - пометка, а не условие:
-             условие на снимке. Как `condition` эта пометка однажды поехала
-             в промпт «проверенным условием», и модель разобрала подпись
-             «Решить задачу 1 про образование воды» вместо самой задачи. */
-          ...(payload.condition
-            ? (payload.source === 'photo' ? { note: payload.condition } : { condition: payload.condition })
-            : {}),
-          ...(payload.imageDataUrl ? { imageDataUrl: payload.imageDataUrl } : {}),
-        },
+        solveRequest,
         accessToken,
         solvingAsGuest ? getGuestId() : null,
         abort.signal,
+        body,
       )
 
       if (solvingAsGuest) {
@@ -2100,8 +2116,12 @@ function HomePage() {
          пришедшее двумя минутами позже, уже некуда было положить: ученик
          видел «Решение не дошло» на задаче, которая решена и оплачена.
          Теперь задача остаётся в работе, очередь опрашивает сервер, а
-         готовый ответ подхватывает восстановление ниже. */
-      if (error instanceof SolutionConnectionLostError && serverKnows(remoteRow())) {
+         готовый ответ подхватывает восстановление ниже.
+
+         Ответ «эту задачу уже решает другой запрос» - то же самое, и
+         расписку тут ждать не нужно: её дал тот запрос. */
+      if (error instanceof SolutionInProgressError
+        || (error instanceof SolutionConnectionLostError && serverKnows(remoteRow()))) {
         markLocalJob(job, { status: 'running', error: '' })
         void refreshJobs()
         return null
@@ -2135,12 +2155,57 @@ function HomePage() {
     user,
   ])
 
+  const runSolutionJob = useCallback(async (job: SolutionJob): Promise<SolutionState | null> => {
+    const payload = findPendingSolution(job.idempotencyKey) ?? pendingPayloadsRef.current.get(job.idempotencyKey) ?? null
+
+    if (!payload) {
+      const reason = 'Задача не ушла в работу: страница закрылась раньше. Поставь её заново'
+      markLocalJob(job, { status: 'failed', stage: 'failed', error: reason, finishedAt: new Date().toISOString() })
+      if (supabaseClient) await closeSolutionJob(supabaseClient, job.idempotencyKey, 'failed', reason, guestJobId)
+      return null
+    }
+
+    markLocalJob(job, {
+      status: 'running',
+      stage: job.stage === 'queued' ? 'reading' : job.stage,
+      startedAt: job.startedAt || new Date().toISOString(),
+    })
+
+    /* Замок на ключ: вторая вкладка этого браузера ту же задачу не шлёт.
+       Не достался - задача остаётся «в работе» здесь и дальше идёт по опросу
+       базы; закрывать её нельзя, её решает соседняя вкладка. */
+    const locked = await runWithJobLock(job.idempotencyKey, () => sendSolutionJob(job, payload))
+    return locked.acquired ? locked.value : null
+  }, [guestJobId, markLocalJob, sendSolutionJob, supabaseClient])
+
+  /* Сорвавшаяся задача не держит фото дольше срока, решённая и снятая - вовсе
+     (аудит 16 сентября, В11). */
+  useEffect(() => {
+    if (!pendingSolutionsReady) return
+    prunePendingSolutions(remoteJobs)
+  }, [pendingSolutionsReady, remoteJobs])
+
+  /* Гость, перезагрузивший страницу посреди бесплатного решения, должен
+     помнить, что оно израсходовано: метку ставил ответ, который умер вместе
+     со старой вкладкой, и вторая задача получала отказ базы уже в очереди. */
+  useEffect(() => {
+    if (!supabaseClient || user || guestFreeSolutionUsed) return
+    // Только решённая: сорвавшаяся возвращает попытку, а идущую и так
+    // стережёт `submitFromForm`.
+    const spent = remoteJobs.some((job) => job.status === 'done')
+    if (!spent) return
+    rememberGuestSolutionUsed()
+    setGuestFreeSolutionUsed(true)
+  }, [guestFreeSolutionUsed, remoteJobs, supabaseClient, user])
+
   /* Кто идёт в работу следующим.
 
      Очередь двигается сама: как только освобождается место, берётся самая
      ранняя задача этого устройства. Чужие задачи не трогаем — иначе одна и та
      же задача уйдёт в модель дважды и спишется дважды. */
   useEffect(() => {
+    // Пока запросы не дочитаны из IndexedDB, задачу с фото нечем отправить.
+    if (!pendingSolutionsReady) return
     const next = nextRunnableJob(visibleJobs, deviceIdRef.current, runningJobKeysRef.current, solveConcurrency)
     if (!next) return
 
@@ -2160,7 +2225,7 @@ function HomePage() {
     // `dispatchTick` перезапускает разбор очереди, когда место освободилось,
     // а список задач при этом не изменился.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dispatchTick, runSolutionJob, visibleJobs])
+  }, [dispatchTick, pendingSolutionsReady, runSolutionJob, visibleJobs])
 
   /* Постановка задачи в очередь.
 
@@ -2181,9 +2246,16 @@ function HomePage() {
        «solution-». Прежде хвост в 44 знака резался от всего ключа, а он
        ровно на знак длиннее: в базу и в адрес страницы уходило
        «photo-olution-<uuid>» с откушенной буквой. */
+    /* Задача текстом подписывается так же - «text-» и ключ (аудит 16
+       сентября, Б1). Прежде подписью были первые 60 знаков условия, и две
+       задачи с общим началом («Решите неравенство ...: 2x > 4» и «... 3x < 9»)
+       считались одной: вторая открывала решение первой, а новое решение
+       затирало оплаченное. Старые решения с подписью-срезом остаются
+       открываемыми: адрес и поиск по подписи для них прежние. */
+    const keyTail = submission.idempotencyKey.replace(/^solution-/, '').replace(/[^a-z0-9-]/gi, '').slice(-44)
     const resolvedTask = submission.source === 'photo'
-      ? 'photo-' + submission.idempotencyKey.replace(/^solution-/, '').replace(/[^a-z0-9-]/gi, '').slice(-44)
-      : submission.task
+      ? 'photo-' + keyTail
+      : submission.source === 'text' ? 'text-' + keyTail : submission.task
     // Цена этой задачи, а не пол цены: длинное условие, фото и счётный
     // предмет дороже, и пол пропускал задачу, на которую денег уже нет.
     const solutionPrice = pendingSolutionPrice(submission)
@@ -2205,14 +2277,16 @@ function HomePage() {
       // старый формат вместо того, за чем пришёл, и без объяснения.
       isCurrentEngineSolution(solution)
       && solution.textbookId === submission.textbookId
-      && solution.task === resolvedTask
+      // У текста подпись теперь своя у каждой постановки: то же условие
+      // узнаётся по самому условию, а не по подписи.
+      && (submission.source === 'text' ? Boolean(submission.condition) : solution.task === resolvedTask)
       && solution.source === submission.source
       && solution.textbookEdition === textbook.edition
       && solution.sourceUrl === (textbook.sourceUrl ?? '')
       && (!submission.condition || solution.conditionNormalized === normalizeTaskCondition(submission.condition))
     ))
     if (previouslyGenerated) {
-      openSolution({ mode: 'ready', textbookId: submission.textbookId, task: resolvedTask, source: submission.source })
+      openSolution({ mode: 'ready', textbookId: submission.textbookId, task: previouslyGenerated.task, source: submission.source })
       return true
     }
 
@@ -2384,6 +2458,7 @@ function HomePage() {
               )}
             </div>
           ) : selectedSolution ? (
+            <SolutionErrorBoundary key={`${selectedSolution.textbookId}/${selectedSolution.task}`} onGoHome={() => navigate('Главная')}>
             <UnderstandingPage
               solution={selectedSolution}
               generatedSolution={visibleGeneratedSolutions.find(
@@ -2396,6 +2471,7 @@ function HomePage() {
               ratingClient={featureEnabled(publicConfig, 'solution_rating') ? supabaseClient : null}
               ratingGuestId={user ? null : guestJobId}
             />
+            </SolutionErrorBoundary>
           ) : isAccountRoute(activeNavigation) ? (
             <Suspense fallback={<div className="route-loading" role="status">Загружаем аккаунт…</div>}>
               {activeNavigation === 'Профиль' ? (
