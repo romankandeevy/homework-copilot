@@ -6,6 +6,7 @@ import {
   orderedActiveJobs,
   parseSolutionJob,
   queuePosition,
+  runWithJobLock,
   stageState,
 } from './solutionJobs'
 import type { SolutionJob } from './solutionJobs'
@@ -182,5 +183,41 @@ describe('чтение строки задачи', () => {
   it('отбрасывает строку без опознавательных полей', () => {
     expect(parseSolutionJob({ status: 'running' })).toBeNull()
     expect(parseSolutionJob(null)).toBeNull()
+  })
+})
+
+/* Б7. Вторая вкладка того же браузера не отправляет задачу, пока первая
+   держит замок на ключ. */
+describe('замок на задачу', () => {
+  function fakeLocks() {
+    const held = new Set<string>()
+    return {
+      request: async (name: string, _options: { ifAvailable: boolean }, callback: (lock: unknown) => Promise<unknown>) => {
+        if (held.has(name)) return callback(null)
+        held.add(name)
+        try {
+          return await callback({ name })
+        } finally {
+          held.delete(name)
+        }
+      },
+    }
+  }
+
+  it('не запускает ту же задачу второй раз, пока идёт первая', async () => {
+    const locks = fakeLocks()
+    let finish: () => void = () => {}
+    const first = runWithJobLock('solution-1', () => new Promise<string>((resolve) => { finish = () => resolve('решено') }), locks)
+    const second = await runWithJobLock('solution-1', async () => 'дубль', locks)
+
+    expect(second).toEqual({ acquired: false })
+    finish()
+    expect(await first).toEqual({ acquired: true, value: 'решено' })
+    // Замок отпущен - задачу снова можно взять.
+    expect(await runWithJobLock('solution-1', async () => 'повтор', locks)).toEqual({ acquired: true, value: 'повтор' })
+  })
+
+  it('без Web Locks запускает задачу как раньше', async () => {
+    expect(await runWithJobLock('solution-2', async () => 42, null)).toEqual({ acquired: true, value: 42 })
   })
 })

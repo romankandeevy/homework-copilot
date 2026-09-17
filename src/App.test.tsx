@@ -332,7 +332,9 @@ describe('Homework Copilot task flow', () => {
       condition: 'Решите уравнение 5x = 20.',
       idempotencyKey: 'restore-test',
     })
-    window.localStorage.setItem('homework-copilot:generated-solutions-v1', JSON.stringify([solution]))
+    // Свежая запись: решения гостя старше недели браузер забывает.
+    const recent = { ...solution, createdAt: new Date().toISOString() }
+    window.localStorage.setItem('homework-copilot:generated-solutions-v1', JSON.stringify([recent]))
     window.history.replaceState({}, '', `/solutions/algebra/${encodeURIComponent(solution.task)}`)
     installSuccessfulSolver()
     render(<App />)

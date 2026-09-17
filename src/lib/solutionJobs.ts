@@ -277,3 +277,43 @@ export async function closeSolutionJob(
     p_guest_id: guestId,
   })
 }
+
+/* Одна задача - одна вкладка (аудит 16 сентября, Б7).
+
+   Между постановкой и первой отметкой сервера строка очереди ещё `queued`, и
+   вторая вкладка того же браузера (или перезагруженная первая) отправляла тот
+   же ключ второй раз: одна оплата ученика, два-три вызова модели за наш счёт.
+   Web Locks держат замок на ключ, пока запрос идёт; вкладка, которой замок не
+   достался, задачу не отправляет. Между устройствами то же страхует сервер:
+   второй резерв по ключу при идущей задаче отвечает 409.
+
+   Нет API - запускаем как раньше: серверная проверка остаётся. */
+export type JobLockResult<T> = { acquired: true; value: T } | { acquired: false }
+
+type LockManagerLike = {
+  request: (
+    name: string,
+    options: { ifAvailable: boolean },
+    callback: (lock: unknown) => Promise<unknown>,
+  ) => Promise<unknown>
+}
+
+function browserLocks(): LockManagerLike | undefined {
+  if (typeof navigator === 'undefined') return undefined
+  return (navigator as Navigator & { locks?: LockManagerLike }).locks
+}
+
+export async function runWithJobLock<T>(
+  idempotencyKey: string,
+  run: () => Promise<T>,
+  locks: LockManagerLike | null | undefined = browserLocks(),
+): Promise<JobLockResult<T>> {
+  if (!locks || typeof locks.request !== 'function') return { acquired: true, value: await run() }
+
+  let result: JobLockResult<T> = { acquired: false }
+  await locks.request(`homework-solve:${idempotencyKey}`, { ifAvailable: true }, async (lock) => {
+    if (!lock) return
+    result = { acquired: true, value: await run() }
+  })
+  return result
+}

@@ -1,12 +1,21 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { Readable } from 'node:stream'
 import { createClient } from '@supabase/supabase-js'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { homeworkSolutionEngineVersion } from '../src/lib/homeworkContract.ts'
 import type { SolveHomeworkRequest } from '../src/lib/homeworkContract.ts'
 import { findVerifiedTextbookTask, normalizeTaskCondition } from '../src/textbooks/taskCatalog.ts'
 import { defaultHomeworkModels } from './geometrySolutionEngine.ts'
-import { handleHomeworkSolverRequest, proxyAuthDigest, solveWithKie, trustedClientAddress } from './homeworkSolver.ts'
+import {
+  createModelCallTracker,
+  handleHomeworkSolverRequest,
+  homeworkSolverHeader,
+  proxyAuthDigest,
+  solveTimeBudgetMs,
+  solveWithKie,
+  trustedClientAddress,
+  unsignedPriceMessage,
+} from './homeworkSolver.ts'
 
 /* Адрес ученика из-за прокси на Supabase. Vercel переписывает
    x-forwarded-for адресом прокси, поэтому настоящий адрес приходит в
@@ -34,17 +43,90 @@ vi.mock('@supabase/supabase-js', async (importOriginal) => {
 const verifiedTask = findVerifiedTextbookTask('geometry', '14-е издание, Просвещение, 2023', '2')
 if (!verifiedTask) throw new Error('Verified geometry task #2 is required for solver tests')
 
-/* Книга кошелька в мокнутом клиенте: цепочка select-eq-gte-limit, которой
-   решатель считает попытки и неудачи за сутки. */
-function walletQuery(entries: { kind: string; idempotency_key: string }[]) {
+type WalletRow = { kind: string; idempotency_key: string }
+
+/* Книга кошелька в мокнутом клиенте. Решатель считает попытки и неудачи
+   запросом с фильтрами (select head + eq + like + gte), и заглушка честно
+   применяет eq и like к строкам: так тест видит, что чат и ручные операции
+   в счёт не идут. */
+function walletQuery(entries: WalletRow[]) {
+  const filters: ((row: WalletRow) => boolean)[] = []
   const query = {
     select: () => query,
-    eq: () => query,
+    eq: (column: string, value: unknown) => {
+      if (column in (entries[0] ?? {})) filters.push((row) => row[column as keyof WalletRow] === value)
+      return query
+    },
+    like: (column: string, pattern: string) => {
+      const expression = new RegExp('^' + pattern.split('%').map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*') + '$')
+      filters.push((row) => expression.test(String(row[column as keyof WalletRow])))
+      return query
+    },
     gte: () => query,
-    limit: () => Promise.resolve({ data: entries, error: null }),
+    then: (resolve: (value: { count: number; data: null; error: null }) => unknown) => resolve({
+      count: entries.filter((row) => filters.every((filter) => filter(row))).length,
+      data: null,
+      error: null,
+    }),
   }
   return query
 }
+
+function jobsQuery(status: () => string | null) {
+  const query = {
+    select: () => query,
+    eq: () => query,
+    is: () => query,
+    maybeSingle: async () => {
+      const current = status()
+      return { data: current === null ? null : { status: current }, error: null }
+    },
+  }
+  return query
+}
+
+type RpcResult = { data?: unknown; error?: { message: string } | null }
+
+/* Весь Supabase разом: и клиент ученика, и служебный. Решатель создаёт
+   клиентов много раз (резерв, подпись, очередь, журнал), поэтому заглушка
+   одна на все вызовы createClient и отвечает по имени функции. */
+function fakeSupabase(setup: {
+  rpc?: Record<string, (args: Record<string, unknown>) => RpcResult>
+  wallet?: WalletRow[]
+  jobStatus?: () => string | null
+} = {}) {
+  const rpc = vi.fn(async (name: string, args: Record<string, unknown>) => {
+    const result = setup.rpc?.[name]?.(args) ?? {}
+    return { data: result.data ?? null, error: result.error ?? null }
+  })
+  const from = vi.fn((table: string) => (table === 'homework_jobs'
+    ? jobsQuery(setup.jobStatus ?? (() => null))
+    : walletQuery(setup.wallet ?? [])))
+  return {
+    auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'student-1' } }, error: null }) },
+    from,
+    rpc,
+  }
+}
+
+let serviceKeyCounter = 0
+
+// Ключ разный у каждого теста: клиент журнала кэшируется по хвосту ключа.
+function useFakeSupabase(client: ReturnType<typeof fakeSupabase>) {
+  vi.mocked(createClient).mockImplementation(() => client as never)
+  serviceKeyCounter += 1
+  return {
+    supabaseUrl: 'https://project.supabase.co',
+    supabasePublishableKey: 'publishable-test-key',
+    serviceRoleKey: 'service-role-key-' + String(serviceKeyCounter).padStart(12, '0'),
+  }
+}
+
+function rpcNames(client: ReturnType<typeof fakeSupabase>) {
+  return client.rpc.mock.calls.map((call) => call[0])
+}
+
+const signedPrice = { sign_solution_price: () => ({ data: 'price-proof' }) }
 
 const task: SolveHomeworkRequest = {
   textbookId: 'geometry',
@@ -306,6 +388,7 @@ function createHttp(method: string, body?: unknown) {
 
 describe('homework solver', () => {
   beforeEach(() => vi.clearAllMocks())
+  afterEach(() => vi.mocked(createClient).mockReset())
 
   it('returns the confirmed textbook task without asking a provider to invent it', async () => {
     const fetchMock = vi.fn<typeof fetch>()
@@ -692,7 +775,7 @@ describe('homework solver', () => {
     }))
     vi.mocked(createClient).mockReturnValueOnce({
       auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'student-1' } }, error: null }) },
-      from: vi.fn().mockReturnValue(walletQuery(walletEntries)),
+      from: vi.fn(() => walletQuery(walletEntries)),
       rpc,
     } as never)
 
@@ -714,7 +797,7 @@ describe('homework solver', () => {
     expect(http.response.statusCode).toBe(429)
     expect(http.body().error).toContain('не решилось')
     expect(fetchMock).not.toHaveBeenCalled()
-    expect(rpc.mock.calls.some((call) => call[0] === 'reserve_solution_credit')).toBe(false)
+    expect(rpc.mock.calls.some((call) => String(call[0]).startsWith('reserve_solution_credit'))).toBe(false)
   })
 
   it('отказывает после шестидесяти решений за сутки', async () => {
@@ -725,7 +808,7 @@ describe('homework solver', () => {
     }))
     vi.mocked(createClient).mockReturnValueOnce({
       auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'student-1' } }, error: null }) },
-      from: vi.fn().mockReturnValue(walletQuery(walletEntries)),
+      from: vi.fn(() => walletQuery(walletEntries)),
       rpc,
     } as never)
 
@@ -780,36 +863,42 @@ describe('homework solver', () => {
 
   it('stores a confirmed answer and payment atomically after balance validation', async () => {
     const saved = await solveWithKie(task, {}, 'student-1')
-    const rpc = vi.fn()
-      .mockResolvedValueOnce({ data: null, error: null })
-      .mockResolvedValueOnce({ data: { reserved: true, balance: 15, price: 5 }, error: null })
-      .mockResolvedValueOnce({ data: saved, error: null })
-    vi.mocked(createClient).mockReturnValueOnce({
-      auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'student-1' } }, error: null }) },
-      from: vi.fn(),
-      rpc,
-    } as never)
+    let completeCalls = 0
+    const client = fakeSupabase({
+      rpc: {
+        ...signedPrice,
+        reserve_solution_credit_v2: () => ({ data: { reserved: true, balance: 1500, price: 600 } }),
+        sign_homework_solution: () => ({ data: 'a'.repeat(64) }),
+        // Первый вызов - восстановление: сохранённого решения нет.
+        complete_homework_solution: () => ({ data: completeCalls++ === 0 ? null : saved }),
+      },
+    })
+    const options = useFakeSupabase(client)
 
     const http = createHttp('POST', task)
     http.request.headers.authorization = 'Bearer test-session'
     const fetchMock = vi.fn<typeof fetch>()
-    await handleHomeworkSolverRequest(http.request, http.response, {
-      supabaseUrl: 'https://project.supabase.co',
-      supabasePublishableKey: 'publishable-test-key',
-      fetchImpl: fetchMock,
-    })
+    await handleHomeworkSolverRequest(http.request, http.response, { ...options, fetchImpl: fetchMock })
 
     expect(http.response.statusCode).toBe(200)
     expect(fetchMock).not.toHaveBeenCalled()
-    expect(rpc).toHaveBeenCalledTimes(3)
-    // Резерв уходит ДО вызова модели, а не после него.
-    expect(rpc.mock.calls[1]).toEqual(['reserve_solution_credit', expect.objectContaining({
+    const names = rpcNames(client)
+    // Резерв уходит ДО вызова модели и после восстановления, сохранение - после.
+    const reserveAt = names.indexOf('reserve_solution_credit_v2')
+    expect(names.indexOf('complete_homework_solution')).toBeLessThan(reserveAt)
+    expect(names.lastIndexOf('complete_homework_solution')).toBeGreaterThan(reserveAt)
+    expect(names).not.toContain('reserve_solution_credit')
+    expect(client.rpc.mock.calls[reserveAt][1]).toMatchObject({
       p_idempotency_key: task.idempotencyKey,
+      p_price_kopecks: 600,
+      p_price_proof: 'price-proof',
       p_task_number: 2,
       p_textbook_id: 'geometry',
       p_source: 'number',
-    })])
-    expect(rpc.mock.calls[0]).toEqual(['complete_homework_solution', expect.objectContaining({
+      p_description: 'Решение задачи № 2',
+    })
+    const completes = client.rpc.mock.calls.filter((call) => call[0] === 'complete_homework_solution')
+    expect(completes[0][1]).toMatchObject({
       p_idempotency_key: task.idempotencyKey,
       p_source: 'number',
       p_task: '2',
@@ -817,11 +906,136 @@ describe('homework solver', () => {
       p_edition: verifiedTask.edition,
       p_source_url: verifiedTask.sourceUrl,
       p_condition: verifiedTask.condition,
-    })])
-    expect(rpc.mock.calls[2][1]).toMatchObject({
-      p_idempotency_key: task.idempotencyKey,
-      p_solution: { ownerId: 'student-1', answer: '3 прямые' },
     })
+    expect(completes[1][1]).toMatchObject({
+      p_idempotency_key: task.idempotencyKey,
+      p_solution: { ownerId: 'student-1', answer: '3 прямые', _serverProof: 'a'.repeat(64) },
+    })
+    // Метка решателя стоит на ответе: по ней вкладка отличает его от прокси.
+    expect(http.headers.get(homeworkSolverHeader)).toBe('1')
+  })
+
+  /* А1. Цена не подписалась - решения нет. Раньше сервер резервировал
+     прежней функцией плоские 5 ₽ вместо показанной цены. */
+  it('без подписи цены отвечает 503 и ничего не резервирует', async () => {
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const client = fakeSupabase({
+      rpc: { sign_solution_price: () => ({ error: { message: 'solver signing secret is not configured' } }) },
+    })
+    const options = useFakeSupabase(client)
+
+    const http = createHttp('POST', task)
+    http.request.headers.authorization = 'Bearer test-session'
+    const fetchMock = vi.fn<typeof fetch>()
+    await handleHomeworkSolverRequest(http.request, http.response, { ...options, fetchImpl: fetchMock })
+
+    expect(http.response.statusCode).toBe(503)
+    expect(http.body().error).toBe(unsignedPriceMessage)
+    expect(http.headers.get(homeworkSolverHeader)).toBe('1')
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(rpcNames(client).filter((name) => name.startsWith('reserve_solution_credit'))).toEqual([])
+    const events = errorLog.mock.calls.map(([entry]) => {
+      try {
+        return JSON.parse(String(entry)) as Record<string, unknown>
+      } catch {
+        return {}
+      }
+    })
+    expect(events.some((entry) => entry.event === 'homework_price_unsigned')).toBe(true)
+    errorLog.mockRestore()
+  })
+
+  /* Б8. Дневной предел считает только решения: шестьдесят вопросов в чате,
+     ручные операции и возвраты пополнений его не закрывают. */
+  it('не считает чат и ручные операции решениями в дневном пределе', async () => {
+    const wallet: WalletRow[] = [
+      ...Array.from({ length: 70 }, (_, index) => ({ kind: 'debit', idempotency_key: `chat-${index}:charge` })),
+      { kind: 'debit', idempotency_key: 'admin:correction-1' },
+      { kind: 'debit', idempotency_key: 'top-up-refund:42' },
+      ...Array.from({ length: 12 }, (_, index) => ({ kind: 'credit', idempotency_key: `chat-${index}:charge:refund` })),
+      ...Array.from({ length: 3 }, (_, index) => ({ kind: 'debit', idempotency_key: `solution-day-${index}` })),
+    ]
+    const client = fakeSupabase({
+      wallet,
+      rpc: {
+        ...signedPrice,
+        reserve_solution_credit_v2: () => ({ error: { message: 'insufficient balance' } }),
+      },
+    })
+    const options = useFakeSupabase(client)
+
+    const http = createHttp('POST', task)
+    http.request.headers.authorization = 'Bearer test-session'
+    await handleHomeworkSolverRequest(http.request, http.response, options)
+
+    // Предел не сработал: дошли до резерва, а он отказал по деньгам.
+    expect(http.response.statusCode).toBe(402)
+    expect(rpcNames(client)).toContain('reserve_solution_credit_v2')
+  })
+
+  /* Б5, Б6. Вкладка закрыла задачу, пока запрос шёл: ни резерва, ни модели. */
+  it('не резервирует оплату за задачу, которую вкладка уже закрыла', async () => {
+    const client = fakeSupabase({ rpc: signedPrice, jobStatus: () => 'failed' })
+    const options = useFakeSupabase(client)
+
+    const http = createHttp('POST', task)
+    http.request.headers.authorization = 'Bearer test-session'
+    await handleHomeworkSolverRequest(http.request, http.response, options)
+
+    expect(http.response.statusCode).toBe(409)
+    expect(rpcNames(client).filter((name) => name.startsWith('reserve_solution_credit'))).toEqual([])
+  })
+
+  it('не списывает за решение, если задачу закрыли, пока модель решала', async () => {
+    let status = 'running'
+    let completeCalls = 0
+    const client = fakeSupabase({
+      rpc: {
+        ...signedPrice,
+        reserve_solution_credit_v2: () => {
+          // Пока решали, вкладка закрыла задачу.
+          status = 'failed'
+          return { data: { reserved: true, balance: 1000, price: 600 } }
+        },
+        complete_homework_solution: () => ({ data: completeCalls++ === 0 ? null : null }),
+        refund_solution_credit_for_user: () => ({ data: { refunded: true } }),
+      },
+      jobStatus: () => status,
+    })
+    const options = useFakeSupabase(client)
+
+    const http = createHttp('POST', task)
+    http.request.headers.authorization = 'Bearer test-session'
+    await handleHomeworkSolverRequest(http.request, http.response, options)
+
+    expect(http.response.statusCode).toBe(409)
+    expect(completeCalls).toBe(1)
+    expect(rpcNames(client)).toContain('refund_solution_credit_for_user')
+  })
+
+  /* Б7. Второй запрос с тем же ключом при идущей задаче модель не зовёт и
+     строку очереди не закрывает: её ведёт первый запрос. */
+  it('второй запрос по идущей задаче отвечает 409 и не трогает очередь', async () => {
+    const client = fakeSupabase({
+      rpc: {
+        ...signedPrice,
+        reserve_solution_credit_v2: () => ({ data: { reserved: false, alreadyReserved: true, balance: 900 } }),
+      },
+      jobStatus: () => 'running',
+    })
+    const options = useFakeSupabase(client)
+
+    const http = createHttp('POST', photoTask)
+    http.request.headers.authorization = 'Bearer test-session'
+    const fetchMock = vi.fn<typeof fetch>()
+    await handleHomeworkSolverRequest(http.request, http.response, { ...options, apiKey: 'test-key', fetchImpl: fetchMock })
+
+    expect(http.response.statusCode).toBe(409)
+    expect(http.body()).toMatchObject({ inProgress: true })
+    expect(fetchMock).not.toHaveBeenCalled()
+    const reports = client.rpc.mock.calls.filter((call) => call[0] === 'report_homework_job')
+    expect(reports.some((call) => call[1].p_stage === 'failed')).toBe(false)
+    expect(rpcNames(client)).not.toContain('refund_solution_credit_for_user')
   })
 
   it('returns an existing paid answer without calling the provider again', async () => {
@@ -851,59 +1065,68 @@ describe('homework solver', () => {
   })
 
   it('refuses to call the model when the reservation cannot be paid', async () => {
-    const rpc = vi.fn()
-      .mockResolvedValueOnce({ data: null, error: null })
-      .mockResolvedValueOnce({ data: null, error: { message: 'insufficient balance' } })
-    vi.mocked(createClient).mockReturnValueOnce({
-      auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'student-1' } }, error: null }) },
-      from: vi.fn(),
-      rpc,
-    } as never)
+    const client = fakeSupabase({
+      rpc: {
+        ...signedPrice,
+        reserve_solution_credit_v2: () => ({ error: { message: 'insufficient balance' } }),
+      },
+    })
+    const options = useFakeSupabase(client)
 
     const http = createHttp('POST', task)
     http.request.headers.authorization = 'Bearer test-session'
     const fetchMock = vi.fn<typeof fetch>()
-    await handleHomeworkSolverRequest(http.request, http.response, {
-      supabaseUrl: 'https://project.supabase.co',
-      supabasePublishableKey: 'publishable-test-key',
-      fetchImpl: fetchMock,
-    })
+    await handleHomeworkSolverRequest(http.request, http.response, { ...options, fetchImpl: fetchMock })
     expect(http.response.statusCode).toBe(402)
     /* Цена в сообщении - цена этой задачи, а не пол цены: геометрия со
        снимком стоит шесть рублей, и сказать «не хватает пяти» значило бы
-       соврать на рубль. */
+       соврать на рубль. Та же сумма подписана и ушла в резерв. */
     expect(http.body().error).toBe('На балансе меньше 6 ₽')
+    const reserve = client.rpc.mock.calls.find((call) => call[0] === 'reserve_solution_credit_v2')
+    expect(reserve?.[1]).toMatchObject({ p_price_kopecks: 600 })
     expect(fetchMock).not.toHaveBeenCalled()
-    expect(rpc).toHaveBeenCalledTimes(2)
-    /* Без ключа service_role цену подписать нечем, и резерв идёт прежней
-       функцией с плоской ценой: остаться без решения из-за неподписанной
-       цены хуже, чем взять на полтинник меньше. */
-    expect(rpc.mock.calls[1][0]).toBe('reserve_solution_credit')
   })
 
   it('returns the reservation to the account when the model fails', async () => {
-    const rpc = vi.fn()
-      .mockResolvedValueOnce({ data: null, error: null })
-      .mockResolvedValueOnce({ data: { reserved: true, balance: 15, price: 5 }, error: null })
-      .mockResolvedValue({ data: { refunded: true, balance: 20 }, error: null })
-    vi.mocked(createClient).mockReturnValueOnce({
-      auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'student-1' } }, error: null }) },
-      from: vi.fn(),
-      rpc,
-    } as never)
+    const client = fakeSupabase({
+      rpc: {
+        ...signedPrice,
+        reserve_solution_credit_v2: () => ({ data: { reserved: true, balance: 1500, price: 600 } }),
+        refund_solution_credit_for_user: () => ({ data: { refunded: true, balance: 2000 } }),
+      },
+    })
+    const options = useFakeSupabase(client)
 
     // Провайдер не настроен: solveWithKie падает сразу после резерва.
     const http = createHttp('POST', photoTask)
     http.request.headers.authorization = 'Bearer test-session'
-    await handleHomeworkSolverRequest(http.request, http.response, {
-      supabaseUrl: 'https://project.supabase.co',
-      supabasePublishableKey: 'publishable-test-key',
-    })
+    await handleHomeworkSolverRequest(http.request, http.response, options)
 
     expect(http.response.statusCode).toBe(503)
-    const refundCall = rpc.mock.calls.find((call) => call[0] === 'refund_solution_credit')
+    const refundCall = client.rpc.mock.calls.find((call) => call[0] === 'refund_solution_credit_for_user')
     expect(refundCall).toBeDefined()
-    expect(refundCall?.[1]).toMatchObject({ p_idempotency_key: photoTask.idempotencyKey })
+    expect(refundCall?.[1]).toMatchObject({ p_idempotency_key: photoTask.idempotencyKey, p_user_id: 'student-1' })
+  })
+
+  it('возвращает резерв прежней функцией, если служебной ещё нет в базе', async () => {
+    const client = fakeSupabase({
+      rpc: {
+        ...signedPrice,
+        reserve_solution_credit_v2: () => ({ data: { reserved: true, balance: 1500, price: 600 } }),
+        refund_solution_credit_for_user: () => ({ error: { message: 'Could not find the function' } }),
+        refund_solution_credit: () => ({ data: { refunded: true, balance: 2000 } }),
+      },
+    })
+    const options = useFakeSupabase(client)
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    const http = createHttp('POST', photoTask)
+    http.request.headers.authorization = 'Bearer test-session'
+    await handleHomeworkSolverRequest(http.request, http.response, options)
+
+    expect(http.response.statusCode).toBe(503)
+    expect(rpcNames(client)).toContain('refund_solution_credit')
+    errorLog.mockRestore()
   })
 
   it('returns an actionable 503 for a photo when the provider is not configured', async () => {
@@ -940,9 +1163,10 @@ describe('homework solver', () => {
         fetchImpl: (() => new Promise(() => {})) as unknown as typeof fetch,
       })
 
-      await vi.advanceTimersByTimeAsync(240_000)
+      await vi.advanceTimersByTimeAsync(solveTimeBudgetMs + 10_000)
       await solving
 
+      expect(solveTimeBudgetMs).toBeLessThan(300_000)
       expect(http.response.statusCode).toBe(504)
       expect(http.body().error).toContain('Деньги вернулись на баланс')
     } finally {
@@ -950,4 +1174,22 @@ describe('homework solver', () => {
     }
   })
 
+  /* Б9. Вызов модели виден с момента отправки: задача, упавшая по сроку,
+     в админке показывает вызов, а не «до модели не дошло». */
+  it('записывает вызов модели до ответа и заменяет его настоящим расходом', async () => {
+    let finish: (value: Response) => void = () => {}
+    const fetchImpl = vi.fn(() => new Promise<Response>((resolve) => { finish = resolve }))
+    const tracker = createModelCallTracker(fetchImpl as unknown as typeof fetch)
+
+    const pending = tracker.fetch('https://api.kie.ai/x', { method: 'POST', body: JSON.stringify({ model: 'gemini-test', messages: [] }) })
+    expect(tracker.calls).toEqual([{ model: 'gemini-test', credits: null, seconds: 0, purpose: 'unfinished', failed: true }])
+
+    tracker.settle()
+    expect(tracker.calls[0].purpose).toBe('unfinished')
+
+    finish({ ok: true } as Response)
+    await pending
+    tracker.onCost({ model: 'gemini-test', credits: 0.5, seconds: 12, purpose: 'solution', failed: false })
+    expect(tracker.calls).toEqual([{ model: 'gemini-test', credits: 0.5, seconds: 12, purpose: 'solution', failed: false }])
+  })
 })
