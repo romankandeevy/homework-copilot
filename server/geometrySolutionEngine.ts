@@ -3414,23 +3414,27 @@ async function callModelWithRetry(
     let settled = false
     let lastError: unknown = new GeometrySolutionEngineError('Модель не вернула решение')
     let hedgeTimer: ReturnType<typeof setTimeout> | undefined
-    // Модели, чей путь лёг целиком: второй запрос туда не посылаем.
+    // Модели, чей путь лёг целиком (5xx шлюза): второй запрос туда не
+    // посылаем. Оборванное соединение сюда не идёт - 18 сентября так рвала
+    // и gemini-3-5, а повтор через секунды отвечал.
     const dead = new Set<string>()
     /* Пул кончился, а последняя молчит - второй запрос живой модели. 18
        сентября геометрия упёрлась ровно в это: /codex лежал, gemini-3-6
        рвала соединение, а gemini-3-5 повисла на пять минут, хотя соседние
        её запросы отвечали за 14 секунд. Новый запрос уходит на другой
-       инстанс шлюза. */
+       инстанс шлюза. Повторов до трёх, по кругу живых моделей, и только
+       пока не вышел срок (deadline). */
     let resends = 0
     const pick = () => {
       if (next < order.length) {
         next += 1
         return order[next - 1]
       }
-      if (resends >= 1) return null
-      const model = order.find((candidate) => !dead.has(candidate))
-      if (model) resends += 1
-      return model ?? null
+      if (resends >= 3) return null
+      const alive = order.filter((candidate) => !dead.has(candidate))
+      if (alive.length === 0) return null
+      resends += 1
+      return alive[(resends - 1) % alive.length]
     }
 
     const finish = (outcome: () => void) => {
@@ -3464,7 +3468,7 @@ async function callModelWithRetry(
       }, (error) => {
         inFlight -= 1
         if (settled) return
-        if (isProviderOutage(error)) dead.add(model)
+        if (error instanceof GeometrySolutionEngineError && error.message === providerUnavailableMessage) dead.add(model)
         // Отклонённый ключ или отказ по существу перебором не лечится.
         if (!isTransientModelFailure(error)) {
           finish(() => reject(error))
@@ -3474,6 +3478,7 @@ async function callModelWithRetry(
         // Рядом ещё идёт запасная - ждём её, а не зовём третью.
         if (inFlight > 0) return
         if (!launch()) finish(() => reject(lastError))
+        return
       })
       return true
     }

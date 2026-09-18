@@ -20,7 +20,7 @@ describe('модель под предмет', () => {
      промах. Держим её последней, на отказ шлюза. */
   it('везде первой идёт проверенная быстрая модель', () => {
     for (const subject of ['Математика', 'Физика', 'Информатика', 'Русский язык', 'История', 'Геометрия']) {
-      expect(homeworkModelsForSubject(subject)[0], subject).toBe('gemini-3-6-flash-openai')
+      expect(homeworkModelsForSubject(subject)[0], subject).toBe('gemini-3-5-flash-openai')
     }
   })
 
@@ -43,7 +43,7 @@ describe('модель под предмет', () => {
 
   it('понимает и название предмета, и его идентификатор', () => {
     expect(homeworkModelsForSubject('mathematics')).toEqual(homeworkModelsForSubject('Математика'))
-    expect(homeworkModelsForSubject('  Химия  ')[0]).toBe('gemini-3-6-flash-openai')
+    expect(homeworkModelsForSubject('  Химия  ')[0]).toBe('gemini-3-5-flash-openai')
   })
 
   it('у незнакомого предмета остаётся общий пул', () => {

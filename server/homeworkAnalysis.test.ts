@@ -126,8 +126,8 @@ describe('один проход умной моделью', () => {
     // Пул отсортирован от умной модели к запасной, и проход берёт первую.
     // Прежде проходов было два, а на расхождении звался ещё и рецензент:
     // три-четыре вызова на задачу и 2,5 минуты ожидания.
-    expect(defaultHomeworkModels[0]).toBe('gemini-3-6-flash-openai')
-    expect(urls).toEqual(['https://api.kie.ai/gemini-3-6-flash-openai/v1/chat/completions'])
+    expect(defaultHomeworkModels[0]).toBe('gemini-3-5-flash-openai')
+    expect(urls).toEqual(['https://api.kie.ai/gemini-3-5-flash-openai/v1/chat/completions'])
     // Проверка прошла кодом — второй модели «на всякий случай» не зовём.
     expect(solution.quality?.reviewPassed).toBe(true)
   })
