@@ -1,5 +1,5 @@
 import { homeworkSolutionEngineVersion } from './homeworkContract'
-import type { HomeworkSolution, SolveHomeworkRequest } from './homeworkContract'
+import type { HomeworkSolution, SolveHomeworkRequest, SolveReceipt } from './homeworkContract'
 import type { Json } from './database.types'
 
 export const generatedSolutionsStorageKey = 'homework-copilot:generated-solutions-v1'
@@ -293,7 +293,7 @@ export async function requestHomeworkSolution(
   signal?: AbortSignal,
   // Уже собранное тело: вкладка меряет его, чтобы выставить срок сторожа.
   body: string = JSON.stringify(request),
-): Promise<HomeworkSolution> {
+): Promise<{ solution: HomeworkSolution; receipt: SolveReceipt | null }> {
   let response: Response
 
   try {
@@ -343,5 +343,14 @@ export async function requestHomeworkSolution(
     throw new Error('Сервер не вернул готовое решение')
   }
 
-  return payload.solution as HomeworkSolution
+  return { solution: payload.solution as HomeworkSolution, receipt: readReceipt(payload) }
+}
+
+// Старый сервер чека не присылает - тогда его просто нет, решение важнее.
+function readReceipt(payload: object): SolveReceipt | null {
+  const receipt = 'receipt' in payload ? payload.receipt : null
+  if (!receipt || typeof receipt !== 'object') return null
+  const { seconds, kopecks, reused } = receipt as Record<string, unknown>
+  if (typeof seconds !== 'number' || typeof kopecks !== 'number') return null
+  return { seconds, kopecks, ...(reused === true ? { reused: true } : {}) }
 }

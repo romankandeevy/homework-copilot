@@ -929,6 +929,8 @@ describe('homework solver', () => {
     await handleHomeworkSolverRequest(http.request, http.response, { ...options, fetchImpl: fetchMock })
 
     expect(http.response.statusCode).toBe(200)
+    // Ученик видит ту сумму, что зарезервирована, и время решения.
+    expect(http.body().receipt).toMatchObject({ kopecks: 600, seconds: expect.any(Number) })
     expect(fetchMock).not.toHaveBeenCalled()
     const names = rpcNames(client)
     // Резерв уходит ДО вызова модели и после восстановления, сохранение - после.
@@ -1108,6 +1110,7 @@ describe('homework solver', () => {
       answer: '3 прямые',
       diagram: { kind: 'three-point-extended-lines', vertices: ['A', 'B', 'C'] },
     })
+    expect(http.body().receipt).toMatchObject({ kopecks: 0, reused: true })
     expect(rpc).toHaveBeenCalledOnce()
     expect(from).not.toHaveBeenCalled()
   })

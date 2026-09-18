@@ -40,7 +40,8 @@ import PrivacyNotice from './PrivacyNotice'
 import type { Database } from './lib/database.types'
 import type { AccountData } from './lib/supabase'
 import { homeworkSolutionForm } from './lib/homeworkContract'
-import type { HomeworkSolution, HomeworkSource, SolveHomeworkRequest } from './lib/homeworkContract'
+import type { HomeworkSolution, HomeworkSource, SolveHomeworkRequest, SolveReceipt } from './lib/homeworkContract'
+import { loadReceipts, receiptKey, receiptLabel, withReceipt } from './lib/solveReceipts'
 import { formatRubles } from './lib/currency'
 import { recordPendingLegalAcceptance } from './lib/legalConsent'
 import { bindPendingReferral, preparePendingReferralClaim } from './lib/referrals'
@@ -878,9 +879,12 @@ function UnderstandingPage({
   onOpenAccount,
   ratingClient = null,
   ratingGuestId = null,
+  receipt = null,
 }: {
   solution: SolutionState | null
   generatedSolution?: HomeworkSolution
+  /** Сколько шло решение и сколько списано; есть в той вкладке, что его заказала. */
+  receipt?: SolveReceipt | null
   onGoHome: () => void
   onOpenSupport: (context: SupportPrefill) => void
   /** Решение получено без аккаунта: оно лежит только в этом браузере. */
@@ -999,6 +1003,7 @@ function UnderstandingPage({
         <header className="route-page-header">
           <h1 id="understanding-page-title">{solution?.source === 'number' ? 'Решение № ' + generatedSolution.task : solution?.source === 'photo' ? 'Решение по фото' : 'Решение задачи'}</h1>
           <p>{generatedSolution.subject}. Готовая запись для тетради.</p>
+          {receiptLabel(receipt) && <p className="solution-receipt">{receiptLabel(receipt)}</p>}
         </header>
         <div className="solution-condition">
           <strong>Условие</strong>
@@ -1153,6 +1158,7 @@ function HomePage() {
   }, [])
   const [selectedSolution, setSelectedSolution] = useState<SolutionState | null>(() => currentNavigationRoute().solution)
   const [generatedSolutions, setGeneratedSolutions] = useState<HomeworkSolution[]>(loadGeneratedSolutions)
+  const [solveReceipts, setSolveReceipts] = useState<Record<string, SolveReceipt>>(loadReceipts)
   const [supabaseClient, setSupabaseClient] = useState<SupabaseClient<Database> | null>(null)
   const [user, setUser] = useState<User | null>(null)
   const [account, setAccount] = useState<AccountData | null>(null)
@@ -2057,7 +2063,7 @@ function HomePage() {
         if (error || !accessToken) throw new Error('Сессия закончилась. Войди в аккаунт ещё раз')
       }
 
-      const generatedSolution = await requestHomeworkSolution(
+      const { solution: generatedSolution, receipt } = await requestHomeworkSolution(
         import.meta.env.VITE_HOMEWORK_API_URL || applicationPath('/api/solve'),
         solveRequest,
         accessToken,
@@ -2065,6 +2071,11 @@ function HomePage() {
         abort.signal,
         body,
       )
+
+      if (receipt) {
+        const key = receiptKey(generatedSolution.textbookId, generatedSolution.task, generatedSolution.source)
+        setSolveReceipts((current) => withReceipt(current, key, receipt))
+      }
 
       if (solvingAsGuest) {
         rememberGuestSolutionUsed()
@@ -2445,6 +2456,7 @@ function HomePage() {
                     // нечего, поэтому ведём в общую поддержку.
                     onOpenSupport={() => openSupport()}
                     onTopUp={openTopUpForJob}
+                    receiptOf={(job) => solveReceipts[receiptKey(job.textbookId, job.task, job.source)] ?? null}
                   />
                   {user && (
                     <MySolutions
@@ -2464,6 +2476,7 @@ function HomePage() {
               generatedSolution={visibleGeneratedSolutions.find(
                 (solution) => solution.textbookId === selectedSolution.textbookId && solution.task === selectedSolution.task,
               )}
+              receipt={solveReceipts[receiptKey(selectedSolution.textbookId, selectedSolution.task, selectedSolution.source)] ?? null}
               onGoHome={() => navigate('Главная')}
               onOpenSupport={(context) => openSupport('wrong_solution', context)}
               guestOffer={Boolean(supabaseClient) && !user}

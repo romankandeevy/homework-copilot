@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { ArrowClockwise, ArrowRight, Check, CheckCircle, Lifebuoy, SpinnerGap, Trash, Wallet, WarningCircle } from '@phosphor-icons/react'
+import type { SolveReceipt } from '../lib/homeworkContract'
 import type { SolutionJob } from '../lib/solutionJobs'
+import { receiptLabel } from '../lib/solveReceipts'
 import { orderedActiveJobs, solutionStages, stageState } from '../lib/solutionJobs'
 import './SolutionQueue.css'
 
@@ -175,12 +177,22 @@ function FailedCard({ job, subject, onRetry, onDismiss, onOpenSupport, onTopUp }
   )
 }
 
-function ReadyCard({ job, subject, onOpen, onDismiss }: {
+// Время по строке очереди: от старта до закрытия. Чек с сервера точнее, но
+// есть только в той вкладке, что отправляла задачу.
+function jobSeconds(job: SolutionJob) {
+  const from = Date.parse(job.startedAt || job.createdAt)
+  const to = Date.parse(job.finishedAt)
+  return Number.isFinite(from) && Number.isFinite(to) && to >= from ? (to - from) / 1000 : null
+}
+
+function ReadyCard({ job, subject, receipt, onOpen, onDismiss }: {
   job: SolutionJob
   subject: string
+  receipt: SolveReceipt | null
   onOpen: (job: SolutionJob) => void
   onDismiss: (job: SolutionJob) => void
 }) {
+  const spent = receiptLabel(receipt, jobSeconds(job))
   return (
     <article className="solve-card is-ready">
       <header className="solve-card-head">
@@ -189,7 +201,7 @@ function ReadyCard({ job, subject, onOpen, onDismiss }: {
         </span>
         <div className="solve-card-title">
           <h2>Решение готово</h2>
-          <p>{subjectLabel(job, subject)} · оформлено тетрадной страницей</p>
+          <p>{subjectLabel(job, subject)} · {spent ?? 'оформлено тетрадной страницей'}</p>
         </div>
       </header>
 
@@ -215,10 +227,12 @@ export function SolutionQueue({
   onDismiss,
   onOpenSupport,
   onTopUp,
+  receiptOf = () => null,
 }: {
   jobs: readonly SolutionJob[]
   deviceId: string
   subjectOf: (textbookId: string) => string
+  receiptOf?: (job: SolutionJob) => SolveReceipt | null
   onOpen: (job: SolutionJob) => void
   onRetry: (job: SolutionJob) => void
   onDismiss: (job: SolutionJob) => void
@@ -269,7 +283,7 @@ export function SolutionQueue({
       )}
 
       {finished.map((job) => (job.status === 'done'
-        ? <ReadyCard key={job.id} job={job} subject={subjectOf(job.textbookId)} onOpen={onOpen} onDismiss={onDismiss} />
+        ? <ReadyCard key={job.id} job={job} subject={subjectOf(job.textbookId)} receipt={receiptOf(job)} onOpen={onOpen} onDismiss={onDismiss} />
         : (
           <FailedCard
             key={job.id}

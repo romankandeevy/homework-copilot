@@ -1054,6 +1054,11 @@
   line-height: var(--leading-copy);
 }
 
+.route-page-header .solution-receipt {
+  font-size: var(--text-small);
+  font-variant-numeric: tabular-nums;
+}
+
 .route-search {
   display: grid;
   width: min(100%, 36rem);

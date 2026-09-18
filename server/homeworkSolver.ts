@@ -3,7 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createClient } from '@supabase/supabase-js'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { homeworkSolutionEngineVersion, maxConditionLength } from '../src/lib/homeworkContract.ts'
-import type { HomeworkSolution, HomeworkTaskType, SolveHomeworkRequest } from '../src/lib/homeworkContract.ts'
+import type { HomeworkSolution, HomeworkTaskType, SolveHomeworkRequest, SolveReceipt } from '../src/lib/homeworkContract.ts'
 import type { Database, Json } from '../src/lib/database.types.ts'
 import { formatRubles } from '../src/lib/currency.ts'
 import { estimateSolutionPrice, kieCreditKopecks } from '../src/lib/solutionPricing.ts'
@@ -1331,7 +1331,8 @@ export async function handleHomeworkSolverRequest(
       await job.flush()
       deliveredSolution = existingSolution
       reusedSolution = true
-      reply = { status: 200, payload: { solution: existingSolution } }
+      const receipt: SolveReceipt = { seconds: Math.round((Date.now() - startedAt) / 1000), kopecks: 0, reused: true }
+      reply = { status: 200, payload: { solution: existingSolution, receipt } }
       return
     }
 
@@ -1422,7 +1423,12 @@ export async function handleHomeworkSolverRequest(
       }, completedSolution)
       job.report('done', { task: completedSolution.task })
       await job.flush()
-      reply = { status: 200, payload: { solution: completedSolution } }
+      // Та же цена, что подписана и зарезервирована; гостю первое решение даром.
+      const receipt: SolveReceipt = {
+        seconds: Math.round((Date.now() - startedAt) / 1000),
+        kopecks: guestSolving ? 0 : solutionPriceFor(task),
+      }
+      reply = { status: 200, payload: { solution: completedSolution, receipt } }
     } catch (error) {
       if (reserved && guestSolving) await releaseGuestSolution(guestSolving, task, options)
       else if (reserved) await refundSolutionCredit(account, task, 'Решение не удалось получить', options)
