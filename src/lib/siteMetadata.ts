@@ -104,6 +104,12 @@ export const metadataByPath: Record<string, SeoMetadata> = {
     path: '/docs/offer',
     robots: 'index, follow',
   },
+  '/docs/refund': {
+    title: 'Возврат денег и отказ от услуги - Homework Copilot',
+    description: 'Как вернуть деньги в Homework Copilot: неиспользованный остаток, неудачное и неверное решение, сроки и порядок заявки.',
+    path: '/docs/refund',
+    robots: 'index, follow',
+  },
   '/docs/contacts': {
     title: 'Реквизиты и контакты - Homework Copilot',
     description: 'Исполнитель услуг Homework Copilot: самозанятый, ИНН и контакты для связи.',
@@ -118,7 +124,7 @@ export const metadataByPath: Record<string, SeoMetadata> = {
   },
 }
 
-export const legalDocumentKinds = ['terms', 'privacy', 'consent', 'cookies', 'offer', 'contacts'] as const
+export const legalDocumentKinds = ['terms', 'privacy', 'consent', 'cookies', 'offer', 'refund', 'contacts'] as const
 export type LegalDocumentKind = (typeof legalDocumentKinds)[number]
 
 /* Прежние адреса документов. До 14 сентября 2026 документы лежали в корне, и
@@ -135,6 +141,7 @@ export const legacyDocumentPaths: Record<string, string> = {
   '/consent': '/docs/consent',
   '/cookies': '/docs/cookies',
   '/offer': '/docs/offer',
+  '/refund': '/docs/refund',
   '/contacts': '/docs/contacts',
   '/docs': '/docs/terms',
 }

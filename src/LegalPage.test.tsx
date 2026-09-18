@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import LegalPage from './LegalPage'
 import type { LegalPageKind } from './LegalPage'
 
-const kinds: LegalPageKind[] = ['terms', 'privacy', 'consent', 'cookies', 'offer', 'contacts']
+const kinds: LegalPageKind[] = ['terms', 'privacy', 'consent', 'cookies', 'offer', 'refund', 'contacts']
 
 describe('LegalPage', () => {
   afterEach(cleanup)

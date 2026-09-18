@@ -21,6 +21,7 @@ const knownDestinations: Destination[] = [
   { path: '/docs/consent', label: 'Согласие на обработку данных' },
   { path: '/docs/cookies', label: 'Cookie и хранилище' },
   { path: '/docs/offer', label: 'Публичная оферта' },
+  { path: '/docs/refund', label: 'Возврат и отказ от услуги' },
   { path: '/docs/contacts', label: 'Реквизиты и контакты' },
 ]
 

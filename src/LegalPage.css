@@ -210,6 +210,18 @@
   margin-top: var(--space-3);
 }
 
+/* Списки страницы возврата: «коротко» и шаги заявки. */
+.legal-sections section > ul,
+.legal-sections section > ol {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-3);
+  padding-left: 1.25em;
+  color: var(--color-text);
+  font-size: var(--text-body);
+  line-height: var(--leading-copy);
+}
+
 /* Ссылка внутри абзаца - строчная: прежняя высота в 44 пикселя раздвигала
    строки абзаца, и текст шёл неровно. Длинная почта переносится, а не
    распирает страницу на телефоне. */

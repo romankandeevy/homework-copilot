@@ -24,6 +24,7 @@
 - [Политика обработки персональных данных](https://www.homeworkcopilot.ru/docs/privacy)
 - [Cookie и локальное хранение](https://www.homeworkcopilot.ru/docs/cookies)
 - [Публичная оферта](https://www.homeworkcopilot.ru/docs/offer)
+- [Возврат денег и отказ от услуги](https://www.homeworkcopilot.ru/docs/refund)
 - [Реквизиты и контакты](https://www.homeworkcopilot.ru/docs/contacts)
 
 ## Ограничения

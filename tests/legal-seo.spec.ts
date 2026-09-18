@@ -8,7 +8,7 @@ async function expectNoPageOverflow(page: import('@playwright/test').Page) {
 }
 
 /* С 14 сентября 2026 документы живут под /docs/. */
-const documentPaths = ['/docs/terms', '/docs/privacy', '/docs/consent', '/docs/cookies', '/docs/offer', '/docs/contacts']
+const documentPaths = ['/docs/terms', '/docs/privacy', '/docs/consent', '/docs/cookies', '/docs/offer', '/docs/refund', '/docs/contacts']
 
 /* Прежние адреса уже в письмах, отметках согласия и поиске - обязаны
    открывать тот же документ. */
@@ -86,13 +86,13 @@ test('old document addresses open the same document under /docs/', async ({ page
   await expect(page.locator('#section-8 h2')).toBeInViewport()
 })
 
-test('every document lists all six, marks the open one and has no tables', async ({ page }) => {
-  // Шесть полных перезагрузок подряд: та же оговорка, что и выше.
+test('every document lists all seven, marks the open one and has no tables', async ({ page }) => {
+  // Семь полных перезагрузок подряд: та же оговорка, что и выше.
   test.setTimeout(120_000)
   for (const path of documentPaths) {
     await page.goto(path)
     const documents = page.getByRole('navigation', { name: 'Юридические документы' })
-    await expect(documents.getByRole('link')).toHaveCount(6)
+    await expect(documents.getByRole('link')).toHaveCount(7)
     await expect(documents.locator('[aria-current="page"]')).toHaveCount(1)
     await expect(documents.locator('[aria-current="page"]')).toHaveAttribute('href', path)
     await expect(page.locator('table')).toHaveCount(0)

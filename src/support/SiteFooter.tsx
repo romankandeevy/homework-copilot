@@ -19,6 +19,7 @@ const documentLinks: FooterLink[] = [
   { href: '/docs/consent', label: 'Согласие на обработку данных' },
   { href: '/docs/cookies', label: 'Cookie и хранилище' },
   { href: '/docs/offer', label: 'Публичная оферта' },
+  { href: '/docs/refund', label: 'Возврат и отказ от услуги' },
   { href: '/docs/contacts', label: 'Реквизиты и контакты' },
 ]
 
