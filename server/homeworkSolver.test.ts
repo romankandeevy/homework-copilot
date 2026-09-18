@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { homeworkSolutionEngineVersion } from '../src/lib/homeworkContract.ts'
 import type { SolveHomeworkRequest } from '../src/lib/homeworkContract.ts'
 import { findVerifiedTextbookTask, normalizeTaskCondition } from '../src/textbooks/taskCatalog.ts'
-import { defaultHomeworkModels } from './geometrySolutionEngine.ts'
+import { defaultHomeworkModels, resetModelCooldowns } from './geometrySolutionEngine.ts'
 import {
   createModelCallTracker,
   handleHomeworkSolverRequest,
@@ -689,6 +689,54 @@ describe('homework solver', () => {
     // к следующей модели пула, поэтому вызов к упавшей ровно один.
     expect(failingCalls).toBe(1)
     expect(fetchMock.mock.calls.some(([input]) => !String(input).startsWith(failing))).toBe(true)
+  })
+
+  /* 18 сентября головная gemini-3-6 держала черновик по 46-171 секунде и
+     рвала соединение, а запасная стояла в очереди за ней. Теперь запасная
+     стартует рядом, как только головная замолчала дольше порога. */
+  it('зовёт запасную модель, пока головная молчит, и не ждёт её', async () => {
+    resetModelCooldowns()
+    const hanging = `https://api.kie.ai/${defaultHomeworkModels[0]}/`
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.startsWith(hanging)) return new Promise<Response>(() => {})
+      const body = typeof init?.body === 'string' ? init.body : ''
+      return providerResponse(body.includes('homework_solution_review')
+        ? { approved: true, issues: [], solution: photoDraft }
+        : photoDraft, url)
+    })
+
+    const solution = await solveWithKie(photoTask, { apiKey: 'secret-test-key', fetchImpl: fetchMock, hedgeDelayMs: 20 })
+
+    expect(solution.answer).toBe(providerSolution.answer)
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).startsWith(hanging))).toHaveLength(1)
+    // Зависший вызов не обрывается: правило «вызов модели не обрывается».
+    expect(fetchMock.mock.calls.every(([, init]) => init?.signal === undefined)).toBe(true)
+  })
+
+  it('когда пул кончился, а последняя молчит, шлёт ей второй запрос', async () => {
+    resetModelCooldowns()
+    const [head, spare, last] = defaultHomeworkModels
+    let spareCalls = 0
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes(`/${head}/`) || url.includes(`/${last}/`) || url.includes('/codex/')) {
+        return { ok: false, status: 500, json: async () => ({}) } as Response
+      }
+      if (url.includes(`/${spare}/`)) {
+        spareCalls += 1
+        if (spareCalls === 1) return new Promise<Response>(() => {})
+      }
+      const body = typeof init?.body === 'string' ? init.body : ''
+      return providerResponse(body.includes('homework_solution_review')
+        ? { approved: true, issues: [], solution: photoDraft }
+        : photoDraft, url)
+    })
+
+    const solution = await solveWithKie(photoTask, { apiKey: 'secret-test-key', fetchImpl: fetchMock, hedgeDelayMs: 20 })
+
+    expect(solution.answer).toBe(providerSolution.answer)
+    expect(spareCalls).toBeGreaterThanOrEqual(2)
   })
 
   it('отдаёт 503 и понятный текст, когда лежат все семейства', async () => {

@@ -43,6 +43,7 @@ type SolverOptions = {
   // отвергает любое сгенерированное решение по номеру задачи.
   serviceRoleKey?: string
   fetchImpl?: typeof fetch
+  hedgeDelayMs?: number
   taskLookup?: (request: SolveHomeworkRequest) => Promise<VerifiedTaskRecord | null>
 }
 type GuestIdentity = {
@@ -153,6 +154,7 @@ export async function solveWithKie(
       apiKey: options.apiKey,
       model: options.model,
       fetchImpl: options.fetchImpl,
+      ...(options.hedgeDelayMs ? { hedgeDelayMs: options.hedgeDelayMs } : {}),
       ...(onStage ? { onStage } : {}),
       ...(onCost ? { onCost } : {}),
       ...(subjectInstructions ? { subjectInstructions } : {}),

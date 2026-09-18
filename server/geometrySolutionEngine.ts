@@ -97,6 +97,8 @@ type EngineOptions = {
   /* Указания владельца для предмета из админки (промпт с версией). Идут
      в сообщение после правил предмета и не отменяют их. */
   subjectInstructions?: string | null
+  /** Через сколько без ответа звать запасную модель; в тестах - миллисекунды. */
+  hedgeDelayMs?: number
 }
 
 /* Один вызов модели: во что он обошёлся и чем кончился. */
@@ -3313,6 +3315,11 @@ const transientRetryDelayMs = 1_000
 const modelCooldownMs = 120_000
 const modelCooldownUntil = new Map<string, number>()
 
+// Отметки живут на весь модуль; тестам нужен чистый пул.
+export function resetModelCooldowns() {
+  modelCooldownUntil.clear()
+}
+
 function modelIsCoolingDown(model: string) {
   const until = modelCooldownUntil.get(model)
   if (until === undefined) return false
@@ -3342,6 +3349,24 @@ function candidateModels(options: EngineOptions, assigned?: string, pool?: reado
   return ready.length > 0 ? ready : ordered
 }
 
+/* Запасная модель стартует, не дожидаясь отказа головной.
+
+   18 сентября gemini-3-6-flash-openai на шлюзе отвечала на «2+2» за 55
+   секунд, а черновик держала по 46-171 секунде и потом рвала соединение.
+   Ученик смотрел на «Решаем» больше двух минут, а история восьмого класса
+   ушла в отказ: запасная модель стоит в очереди за упавшей, и до неё
+   просто не дошло время. gemini-3-5 в тот же момент отвечала за 5 секунд.
+
+   Ждать, пока зависшая модель откажет сама, нельзя - своего срока у шлюза
+   нет. Поэтому через hedgeDelayMs без ответа следующий кандидат пула
+   запускается рядом, и берётся первый годный ответ. Опоздавший запрос не
+   обрывается (правило «вызов модели не обрывается» в AGENTS.md): его ответ
+   просто не нужен. Живая модель укладывает черновик в 10-30 секунд, так что
+   на здоровом шлюзе второй вызов почти не случается. Проигравшая по
+   времени модель остывает, как и упавшая: соседние задачи той же функции
+   начнут сразу со здоровой. */
+export const hedgeDelayMs = 35_000
+
 async function callModelWithRetry(
   options: EngineOptions,
   system: string,
@@ -3353,20 +3378,17 @@ async function callModelWithRetry(
   pool?: readonly string[],
 ) {
   const candidates = candidateModels(options, modelOverride, pool)
-  let lastError: unknown = new GeometrySolutionEngineError('Модель не вернула решение')
-  let calls = 0
+  const queue = candidates.filter((model, index) => !modelIsCoolingDown(model) || index === candidates.length - 1)
+  // Список составлен на старте, а семья могла лечь уже после: соседний
+  // проход узнаёт об этом раньше нас. Пропускаем - но последний кандидат
+  // вызывается даже остывающим, иначе можно вернуть отказ без единого запроса.
+  const order = queue.length > 0 ? queue : candidates.slice(-1)
 
-  for (const [index, model] of candidates.entries()) {
-    // Список составлен на старте, а семья могла лечь уже после: соседний
-    // проход узнаёт об этом раньше нас. Пропускаем — но не все сразу:
-    // последний кандидат вызывается даже остывающим, иначе можно вернуть
-    // отказ, не сделав ни одного запроса.
-    if (modelIsCoolingDown(model) && !(index === candidates.length - 1 && calls === 0)) continue
-    calls += 1
-
-    // Повтор той же моделью нужен после стохастического сбоя — битого JSON
-    // или пустого ответа. После отказа шлюза он бессмыслен: там лежит не
-    // ответ, а сам путь, и следующая попытка идёт уже другой моделью.
+  // Повтор той же моделью нужен после стохастического сбоя - битого JSON
+  // или пустого ответа. После отказа шлюза он бессмыслен: там лежит не
+  // ответ, а сам путь, и следующая попытка идёт уже другой моделью.
+  const runModel = async (model: string) => {
+    let lastError: unknown = new GeometrySolutionEngineError('Модель не вернула решение')
     for (let attempt = 1; attempt <= 2; attempt += 1) {
       try {
         // eslint-disable-next-line no-await-in-loop
@@ -3374,21 +3396,90 @@ async function callModelWithRetry(
         if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
           throw new GeometrySolutionEngineError('Модель не вернула решение')
         }
-        modelCooldownUntil.delete(model)
         return payload
       } catch (error) {
         lastError = error
         reportModelFailure(model, error)
-        // Отклонённый ключ или отказ по существу перебором не лечится.
-        if (!isTransientModelFailure(error) || Date.now() > deadline) throw error
-        if (attempt === 2 || isProviderOutage(error)) break
+        if (!isTransientModelFailure(error) || attempt === 2 || isProviderOutage(error) || Date.now() > deadline) break
         // eslint-disable-next-line no-await-in-loop
         await new Promise((resolve) => { setTimeout(resolve, transientRetryDelayMs).unref?.() })
       }
     }
+    throw lastError
   }
 
-  throw lastError
+  return new Promise<Record<string, unknown>>((resolve, reject) => {
+    let inFlight = 0
+    let next = 0
+    let settled = false
+    let lastError: unknown = new GeometrySolutionEngineError('Модель не вернула решение')
+    let hedgeTimer: ReturnType<typeof setTimeout> | undefined
+    // Модели, чей путь лёг целиком: второй запрос туда не посылаем.
+    const dead = new Set<string>()
+    /* Пул кончился, а последняя молчит - второй запрос живой модели. 18
+       сентября геометрия упёрлась ровно в это: /codex лежал, gemini-3-6
+       рвала соединение, а gemini-3-5 повисла на пять минут, хотя соседние
+       её запросы отвечали за 14 секунд. Новый запрос уходит на другой
+       инстанс шлюза. */
+    let resends = 0
+    const pick = () => {
+      if (next < order.length) {
+        next += 1
+        return order[next - 1]
+      }
+      if (resends >= 1) return null
+      const model = order.find((candidate) => !dead.has(candidate))
+      if (model) resends += 1
+      return model ?? null
+    }
+
+    const finish = (outcome: () => void) => {
+      if (settled) return
+      settled = true
+      clearTimeout(hedgeTimer)
+      outcome()
+    }
+
+    const launch = () => {
+      if (settled) return false
+      // После срока новую модель не зовём: починка уже не успеет.
+      if (next > 0 && Date.now() > deadline) return false
+      const model = pick()
+      if (!model) return false
+      inFlight += 1
+      clearTimeout(hedgeTimer)
+      hedgeTimer = setTimeout(() => {
+        if (settled) return
+        console.warn(JSON.stringify({ level: 'warn', event: 'homework_model_hedged', model, purpose: schemaName }))
+        modelCooldownUntil.set(model, Date.now() + modelCooldownMs)
+        launch()
+      }, options.hedgeDelayMs ?? hedgeDelayMs)
+      hedgeTimer.unref?.()
+
+      runModel(model).then((payload) => {
+        inFlight -= 1
+        if (settled) return
+        modelCooldownUntil.delete(model)
+        finish(() => resolve(payload as Record<string, unknown>))
+      }, (error) => {
+        inFlight -= 1
+        if (settled) return
+        if (isProviderOutage(error)) dead.add(model)
+        // Отклонённый ключ или отказ по существу перебором не лечится.
+        if (!isTransientModelFailure(error)) {
+          finish(() => reject(error))
+          return
+        }
+        lastError = error
+        // Рядом ещё идёт запасная - ждём её, а не зовём третью.
+        if (inFlight > 0) return
+        if (!launch()) finish(() => reject(lastError))
+      })
+      return true
+    }
+
+    launch()
+  })
 }
 
 /* Эхо условия сверяется только у фото.

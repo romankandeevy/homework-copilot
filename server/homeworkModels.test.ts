@@ -30,10 +30,15 @@ describe('модель под предмет', () => {
     expect(counting.indexOf('gpt-5-6-sol')).toBeGreaterThan(0)
   })
 
-  it('у счётного предмета и предмета слова порядок разный', () => {
+  it('у каждого предмета свой пул, и дорогая модель в нём последняя', () => {
     // Разделение остаётся: замер по предметам ещё не сделан, но место для
     // него есть, и менять пул одного предмета можно, не трогая остальные.
-    expect(homeworkModelsForSubject('Геометрия')).not.toEqual(homeworkModelsForSubject('Русский язык'))
+    // Порядок совпал с 18 сентября: /codex лежал, и gpt-5-6-sol второй у
+    // геометрии отнимал запасную flash.
+    for (const subject of solvableSubjects) {
+      expect(homeworkModelsBySubject[subject.id], subject.name).toBeDefined()
+      expect(homeworkModelsBySubject[subject.id].at(-1), subject.name).toBe('gpt-5-6-sol')
+    }
   })
 
   it('понимает и название предмета, и его идентификатор', () => {
