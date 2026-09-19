@@ -62,6 +62,7 @@ import {
   SolutionInProgressError,
   SolutionNotAcceptedError,
   saveGeneratedSolutions,
+  untilAborted,
 } from './lib/homeworkSolution'
 import { normalizeTaskCondition } from './textbooks/taskCatalog'
 import {
@@ -2058,9 +2059,10 @@ function HomePage() {
     try {
       let accessToken: string | undefined
       if (supabaseClient && user) {
-        const { data, error } = await supabaseClient.auth.getSession()
+        const { data, error } = await untilAborted(supabaseClient.auth.getSession(), abort.signal)
         accessToken = data.session?.access_token
-        if (error || !accessToken) throw new Error('Сессия закончилась. Войди в аккаунт ещё раз')
+        if (error && !accessToken) throw new Error('Не получилось проверить вход: нет связи с сервером. Проверь интернет и нажми «Решить ещё раз»')
+        if (!accessToken) throw new Error('Сессия закончилась. Войди в аккаунт ещё раз')
       }
 
       const { solution: generatedSolution, receipt } = await requestHomeworkSolution(

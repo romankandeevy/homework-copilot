@@ -8,12 +8,45 @@ const supabasePublishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as 
 export const isSupabaseConfigured = import.meta.env.MODE !== 'test'
   && Boolean(supabaseUrl && supabasePublishableKey)
 
+/* Срок на каждый запрос клиента Supabase.
+
+   Без срока запрос ждёт вечно, если соединение не рвётся, а подвисает - так
+   ведёт себя придушенный трафик. 19 сентября вкладка, пролежавшая час, при
+   нажатии «Решить» пошла обновлять истёкший токен входа, запрос повис, и
+   задача не ушла на сервер вовсе: очередь показывала «Читаем», а после
+   перезагрузки вход повис на том же обновлении, и очередь не загрузилась.
+   Оборванный по сроку запрос auth-js считает сетевым сбоем: повторяет и
+   сессию не сбрасывает. Хранилище не трогаем - там бывают большие файлы. */
+export const supabaseRequestTimeoutMs = 20_000
+
+export function withRequestTimeout(fetchImpl: typeof fetch, timeoutMs = supabaseRequestTimeoutMs): typeof fetch {
+  return (input, init) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+    if (url.includes('/storage/v1/')) return fetchImpl(input, init)
+    const controller = new AbortController()
+    const outer = init?.signal
+    const forward = () => controller.abort(outer?.reason)
+    if (outer?.aborted) forward()
+    else outer?.addEventListener('abort', forward, { once: true })
+    const timer = setTimeout(() => {
+      controller.abort(new DOMException('Supabase не ответил вовремя', 'TimeoutError'))
+    }, timeoutMs)
+    return fetchImpl(input, { ...init, signal: controller.signal }).finally(() => {
+      clearTimeout(timer)
+      outer?.removeEventListener('abort', forward)
+    })
+  }
+}
+
 export const supabase = isSupabaseConfigured
   ? createClient<Database>(supabaseUrl!, supabasePublishableKey!, {
       auth: {
         autoRefreshToken: true,
         detectSessionInUrl: true,
         persistSession: true,
+      },
+      global: {
+        fetch: withRequestTimeout((input, init) => fetch(input, init)),
       },
     })
   : null

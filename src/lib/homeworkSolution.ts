@@ -282,6 +282,20 @@ export class SolutionNotAcceptedError extends Error {
   }
 }
 
+/* Ожидание, которое сторож приёма может оборвать.
+
+   Сторож обрывал только сам запрос решения, а до него вкладка ещё ждёт
+   сессию входа. Повисла она - обрывать было нечего, и «Читаем» висело до
+   перезагрузки (19 сентября). */
+export function untilAborted<T>(pending: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(signal.reason)
+  return new Promise<T>((resolve, reject) => {
+    const stop = () => reject(signal.reason)
+    signal.addEventListener('abort', stop, { once: true })
+    pending.then(resolve, reject).finally(() => signal.removeEventListener('abort', stop))
+  })
+}
+
 export async function requestHomeworkSolution(
   endpoint: string,
   request: SolveHomeworkRequest,

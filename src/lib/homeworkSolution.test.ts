@@ -12,6 +12,7 @@ import {
   serverAcceptLimitMs,
   SolutionConnectionLostError,
   SolutionInProgressError,
+  untilAborted,
 } from './homeworkSolution'
 import type { HomeworkSolution, SolveHomeworkRequest } from './homeworkContract'
 
@@ -160,5 +161,21 @@ describe('фото в HEIC', () => {
     vi.stubGlobal('createImageBitmap', undefined)
     const file = new File(['heic-bytes'], 'photo.heif', { type: '' })
     await expect(prepareTaskPhoto(file)).rejects.toThrow(heicUnsupportedMessage)
+  })
+})
+
+describe('ожидание перед отправкой задачи', () => {
+  // 19 сентября сессия входа повисла до запроса решения, и сторож приёма,
+  // обрывавший только сам запрос, ничего не мог сделать: «Читаем» висело.
+  it('обрывается сторожем, даже если ожидание не кончается никогда', async () => {
+    const abort = new AbortController()
+    const waiting = untilAborted(new Promise<never>(() => {}), abort.signal)
+    abort.abort(new Error('сторож'))
+    await expect(waiting).rejects.toThrow('сторож')
+  })
+
+  it('отдаёт результат, если он пришёл раньше сторожа', async () => {
+    const abort = new AbortController()
+    await expect(untilAborted(Promise.resolve('сессия'), abort.signal)).resolves.toBe('сессия')
   })
 })
