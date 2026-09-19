@@ -163,7 +163,7 @@ function promoRows(page: Page) {
 }
 
 test.describe('админка: настройки', () => {
-  test('меню по смыслу, «Лимиты и тарифы» с честным текстом, история', async ({ page }) => {
+  test('меню по частоте, «Лимиты и тарифы» с честным текстом, история', async ({ page }) => {
     const errors: string[] = []
     page.on('pageerror', (error) => errors.push(error.message))
     await mockSettings(page)
@@ -171,7 +171,7 @@ test.describe('админка: настройки', () => {
     await signIn(page)
 
     const rail = page.getByRole('navigation', { name: 'Разделы админки' })
-    await expect(rail.locator('.adm-rail-group')).toHaveText(['Обзор', 'Ученики', 'Деньги', 'Контент', 'Система'])
+    await expect(rail.locator('.adm-rail-group')).toHaveText(['Каждый день', 'Рост', 'Сайт', 'Система'])
     await expect(rail.getByRole('link', { name: 'Промокоды' })).toHaveAttribute('href', '/admin?section=promo')
 
     await rail.getByRole('link', { name: 'Настройки' }).click()
