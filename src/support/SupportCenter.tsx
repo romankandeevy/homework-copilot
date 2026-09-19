@@ -4,22 +4,20 @@ import type { RealtimeChannel, SupabaseClient, User } from '@supabase/supabase-j
 import {
   ArrowLeft,
   ArrowRight,
-  CheckCircle,
   Checks,
   CircleNotch,
-  CreditCard,
-  Lightbulb,
   Lifebuoy,
   PaperPlaneTilt,
   Question,
-  ShieldCheck,
   Star,
-  WarningCircle,
   X,
 } from '@phosphor-icons/react'
 import type { Database } from '../lib/database.types'
 import { contactEmail } from '../lib/seller'
 import { useModalIsolation } from '../lib/useModalIsolation'
+import { SupportWizard } from './SupportWizard'
+import { initialTopic } from './supportFlows'
+import type { TicketCategory } from './supportFlows'
 import './SupportCenter.css'
 
 export type SupportCategory = 'general' | 'payment' | 'feature' | 'wrong_solution'
@@ -57,13 +55,6 @@ type SupportCenterProps = {
   onRequireAuth: () => void
   onClose: () => void
 }
-
-const categories: { id: SupportCategory; title: string; copy: string; icon: typeof Lifebuoy }[] = [
-  { id: 'general', title: 'Общий вопрос', copy: 'Как работает сервис или где найти функцию.', icon: Lifebuoy },
-  { id: 'payment', title: 'Оплата и баланс', copy: 'Баланс, списание или вопрос по оплате.', icon: CreditCard },
-  { id: 'feature', title: 'Идея для сервиса', copy: 'Если идея понравится, начислим 10 ₽ на баланс.', icon: Lightbulb },
-  { id: 'wrong_solution', title: 'Решение неверное', copy: 'Разберём условие и найденную ошибку.', icon: WarningCircle },
-]
 
 const faqs = [
   { question: 'Как получить решение задачи?', answer: 'Впиши условие на главной или приложи фотографию задачи, выбери предмет и нажми «Решить». Предмет обязателен: по нему решение проверяется — единица измерения при ответе, разбор по составу, уравненная реакция. Класс можно не указывать. Готовое решение останется в разделе «Мои решения».' },
@@ -205,7 +196,6 @@ function SupportRating({ conversation, client, onRated }: { conversation: Suppor
 }
 
 export function SupportCenter({ user, supabaseClient, initialCategory, initialContext, onRequireAuth, onClose }: SupportCenterProps) {
-  const [category, setCategory] = useState<SupportCategory>(initialCategory)
   const [messageText, setMessageText] = useState('')
   const [conversations, setConversations] = useState<SupportConversation[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -218,6 +208,7 @@ export function SupportCenter({ user, supabaseClient, initialCategory, initialCo
   const [faqOpen, setFaqOpen] = useState<number | null>(null)
   const [showNew, setShowNew] = useState(true)
   const initialFocusRef = useRef<HTMLButtonElement>(null)
+  const startTopic = initialTopic(initialCategory, Boolean(initialContext?.wrongSolution))
   const dialogRef = useModalIsolation<HTMLElement>(true, onClose, initialFocusRef)
   const { peerTyping: ownerTyping, notifyTyping, clearPeer: clearOwnerTyping } = useSupportTyping(supabaseClient, user ? selectedId : null)
 
@@ -295,38 +286,55 @@ export function SupportCenter({ user, supabaseClient, initialCategory, initialCo
     }
   }, [clearOwnerTyping, markRead, refreshConversations, refreshMessages, selectedId, supabaseClient])
 
+  const postSupport = async (payload: Record<string, unknown>) => {
+    if (!supabaseClient) throw new Error('Поддержка сейчас недоступна. Попробуй позже.')
+    const token = await accessToken(supabaseClient)
+    const response = await fetch(import.meta.env.VITE_SUPPORT_API_URL || '/api/support', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    const result = await response.json() as { error?: string; conversationId?: string; deliveryStatus?: string }
+    if (!response.ok && response.status !== 202) throw new Error(result.error || 'support request failed')
+    return result
+  }
+
+  // Новое обращение из разговора: ответы уже собраны в текст (supportFlows.ticketBody).
+  const sendTicket = async (ticketCategory: TicketCategory, body: string) => {
+    setError('')
+    setNotice('')
+    try {
+      const result = await postSupport({ category: ticketCategory, context: ticketCategory === 'wrong_solution' ? initialContext : undefined, body })
+      setNotice(result.deliveryStatus === 'failed'
+        ? 'Обращение сохранено. Разработчик увидит его чуть позже.'
+        : 'Отправлено разработчику. Ответ появится здесь.')
+      await refreshConversations()
+      if (result.conversationId) {
+        setSelectedId(result.conversationId)
+        setShowNew(false)
+        await refreshMessages(result.conversationId)
+      }
+    } catch (submissionError) {
+      throw new Error(errorMessage(submissionError instanceof Error ? submissionError.message : ''))
+    }
+  }
+
+  // Уточнение в открытой переписке.
   const submitMessage = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!user) {
       onRequireAuth()
       return
     }
-    if (!supabaseClient || sending || !messageText.trim()) return
+    if (!selectedId || sending || !messageText.trim()) return
     setSending(true)
     setError('')
     setNotice('')
     try {
-      const token = await accessToken(supabaseClient)
-      const response = await fetch(import.meta.env.VITE_SUPPORT_API_URL || '/api/support', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...(selectedId && !showNew ? { conversationId: selectedId } : { category, context: initialContext }),
-          body: messageText.trim(),
-        }),
-      })
-      const payload = await response.json() as { error?: string; conversationId?: string; deliveryStatus?: string }
-      if (!response.ok && response.status !== 202) throw new Error(payload.error || 'support request failed')
+      await postSupport({ conversationId: selectedId, body: messageText.trim() })
       setMessageText('')
-      setNotice(payload.deliveryStatus === 'failed'
-        ? 'Обращение сохранено. Владелец увидит его после подключения Telegram.'
-        : 'Сообщение отправлено владельцу.')
+      await refreshMessages(selectedId)
       await refreshConversations()
-      if (payload.conversationId) {
-        setSelectedId(payload.conversationId)
-        setShowNew(false)
-        await refreshMessages(payload.conversationId)
-      }
     } catch (submissionError) {
       setError(errorMessage(submissionError instanceof Error ? submissionError.message : ''))
     } finally {
@@ -353,26 +361,19 @@ export function SupportCenter({ user, supabaseClient, initialCategory, initialCo
 
         <div className="support-center-body">
           {!user ? (
-            <section className="support-auth-gate"><ShieldCheck size={34} weight="duotone" aria-hidden="true" /><div><h2>Поддержка в аккаунте</h2><p>Войди, чтобы отправить обращение и увидеть ответ владельца в этой переписке.</p><button className="support-primary-button" type="button" onClick={onRequireAuth}>Войти в аккаунт <ArrowRight size={17} weight="bold" aria-hidden="true" /></button>{/* Гость с бесплатным решением аккаунта не имеет, и без этой строки
-                пожаловаться на своё решение ему было некуда. */}<p className="support-auth-gate-email">Без аккаунта напиши на <a href={`mailto:${supportEmail}`}>{supportEmail}</a> — приложи условие и полученное решение.</p></div></section>
+            <SupportWizard signedIn={false} startTopic={startTopic} onSend={sendTicket} onRequireAuth={onRequireAuth} />
           ) : (
             <>
-              <div className="support-center-intro"><div><span className="support-kicker">Личные обращения</span><h2>{selectedConversation && !showNew ? selectedConversation.subject : 'Чем помочь?'}</h2><p>{selectedConversation && !showNew ? 'Ответ владельца появится здесь и продублируется в статусе обращения.' : 'Выбери тему, опиши ситуацию — мы сохраним переписку в твоём аккаунте.'}</p></div>{selectedConversation && !showNew && <button className="support-back-button" type="button" onClick={() => { setShowNew(true); setSelectedId(null); setNotice(''); setError('') }}><ArrowLeft size={16} weight="bold" aria-hidden="true" /> Все обращения</button>}</div>
+              <div className="support-center-intro"><div><span className="support-kicker">Личные обращения</span><h2>{selectedConversation && !showNew ? selectedConversation.subject : 'Чем помочь?'}</h2><p>{selectedConversation && !showNew ? 'Ответ владельца появится здесь и продублируется в статусе обращения.' : 'Выбери тему - подскажем сразу или передадим разработчику. Переписка сохранится в аккаунте.'}</p></div>{selectedConversation && !showNew && <button className="support-back-button" type="button" onClick={() => { setShowNew(true); setSelectedId(null); setNotice(''); setError('') }}><ArrowLeft size={16} weight="bold" aria-hidden="true" /> Все обращения</button>}</div>
 
               {showNew ? (
                 <>
-                  <div className="support-category-grid" role="list" aria-label="Тема обращения">
-                    {categories.map(({ id, title, copy, icon: Icon }) => <button key={id} className={`support-category-card${category === id ? ' is-selected' : ''}`} type="button" onClick={() => setCategory(id)} aria-pressed={category === id}><Icon size={23} weight="duotone" aria-hidden="true" /><span><strong>{title}</strong><small>{copy}</small></span>{category === id && <CheckCircle className="support-category-check" size={19} weight="fill" aria-hidden="true" />}</button>)}
-                  </div>
-                  {category === 'wrong_solution' && initialContext?.wrongSolution && <div className="support-context-note"><WarningCircle size={19} weight="duotone" aria-hidden="true" /><p><strong>Контекст решения приложится автоматически.</strong><span>Условие, найденное решение и данные задачи уже будут в обращении.</span></p></div>}
-                  {category === 'feature' && <div className="support-context-note is-feature"><Lightbulb size={19} weight="duotone" aria-hidden="true" /><p><strong>За полезную идею начислим 10 ₽.</strong><span>Награда доступна после одобрения владельцем.</span></p></div>}
-                  {category === 'payment' && <div className="support-context-note is-payment"><CreditCard size={19} weight="duotone" aria-hidden="true" /><p><strong>Мы проверим баланс и историю операций.</strong><span>Если платёж не пришёл, укажи дату и сумму. Возврат остатка выполняется вручную в течение десяти дней.</span></p></div>}
-                  <form className="support-compose" onSubmit={submitMessage}><label htmlFor="support-new-message">Сообщение</label><textarea id="support-new-message" value={messageText} onChange={(event) => setMessageText(event.target.value.slice(0, 4000))} placeholder="Опиши, что произошло…" maxLength={4000} autoFocus /><div className="support-compose-footer"><span>{messageText.length}/4000</span><button className="support-primary-button" type="submit" disabled={sending || !messageText.trim()}>{sending ? <><CircleNotch size={17} className="support-spinner" aria-hidden="true" /> Отправляем…</> : <>Отправить <PaperPlaneTilt size={16} weight="bold" aria-hidden="true" /></>}</button></div></form>
+                  <SupportWizard signedIn startTopic={startTopic} onSend={sendTicket} onRequireAuth={onRequireAuth} />
                   <section className="support-history" aria-labelledby="support-history-title"><header><div><span className="support-kicker">История</span><h3 id="support-history-title">Твои обращения</h3></div><span>{loading ? 'Загружаем…' : conversations.length}</span></header>{conversations.length ? <div className="support-conversation-list">{conversations.map((conversation) => <button type="button" key={conversation.id} onClick={() => openConversation(conversation.id)}><span className={`support-status-dot is-${conversation.status}`} /><span className="support-conversation-copy"><strong>{conversation.subject}</strong><small>{conversation.context && typeof conversation.context === 'object' && 'wrongSolution' in conversation.context ? 'Контекст решения приложен' : conversation.category === 'payment' ? 'Проверка баланса и операций' : 'Личное обращение'}</small></span><span className="support-conversation-date">{formatDate(conversation.updated_at)}</span><ArrowRight size={17} weight="bold" aria-hidden="true" /></button>)}</div> : <p className="support-empty">Здесь появятся отправленные обращения.</p>}</section>
                 </>
               ) : selectedConversation ? (
                 <>
-                  <div className="support-message-list" aria-live="polite">{messagesLoading ? <div className="support-loading"><CircleNotch size={22} className="support-spinner" aria-hidden="true" /> Загружаем переписку…</div> : <>{messages.map((message) => <article className={`support-message${message.author_type === 'owner' ? ' is-owner' : ' is-user'}`} key={message.id}><div className="support-message-meta"><strong>{message.author_type === 'owner' ? 'Владелец' : 'Ты'}</strong><time dateTime={message.created_at}>{formatDate(message.created_at)}</time></div><p>{message.body}</p>{message.author_type !== 'owner' && ownerReadAt >= Date.parse(message.created_at) && <span className="support-message-read"><Checks size={14} weight="bold" aria-hidden="true" /> Прочитано</span>}</article>)}{ownerTyping && <p className="support-typing" role="status"><span className="support-typing-dots" aria-hidden="true"><i /><i /><i /></span>Поддержка печатает…</p>}</>}</div>
+                  <div className="support-message-list" aria-live="polite">{messagesLoading ? <div className="support-loading"><CircleNotch size={22} className="support-spinner" aria-hidden="true" /> Загружаем переписку…</div> : <>{messages.map((message) => <article className={`support-message${message.author_type === 'owner' ? ' is-owner' : ' is-user'}`} key={message.id}><div className="support-message-meta"><strong>{message.author_type === 'owner' ? 'Поддержка' : 'Ты'}</strong><time dateTime={message.created_at}>{formatDate(message.created_at)}</time></div><p>{message.body}</p>{message.author_type !== 'owner' && ownerReadAt >= Date.parse(message.created_at) && <span className="support-message-read"><Checks size={14} weight="bold" aria-hidden="true" /> Прочитано</span>}</article>)}{ownerTyping && <p className="support-typing" role="status"><span className="support-typing-dots" aria-hidden="true"><i /><i /><i /></span>Поддержка печатает…</p>}</>}</div>
                   {selectedConversation.status === 'resolved' && <SupportRating key={selectedConversation.id} conversation={selectedConversation} client={supabaseClient} onRated={() => { void refreshConversations() }} />}
                   <form className="support-compose support-compose-followup" onSubmit={submitMessage}><label htmlFor="support-followup-message">Новое сообщение</label><textarea id="support-followup-message" value={messageText} onChange={(event) => { setMessageText(event.target.value.slice(0, 4000)); if (event.target.value) notifyTyping() }} placeholder="Напиши уточнение…" maxLength={4000} /><div className="support-compose-footer"><span>{messageText.length}/4000</span><button className="support-primary-button" type="submit" disabled={sending || !messageText.trim()}>{sending ? 'Отправляем…' : <>Отправить <PaperPlaneTilt size={16} weight="bold" aria-hidden="true" /></>}</button></div></form>
                 </>
