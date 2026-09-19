@@ -439,17 +439,6 @@
 .adm-card-error { color: color-mix(in oklch, var(--color-danger) 75%, var(--color-text)); font-size: var(--text-small); }
 .adm-card-hint { color: var(--color-text-subtle); font-size: var(--text-small); }
 
-.adm-card-warning {
-  padding: var(--space-3);
-  border: 1px solid color-mix(in oklch, var(--color-danger) 55%, var(--color-border));
-  border-radius: var(--radius-surface);
-  background: var(--color-danger-soft);
-  line-height: var(--leading-copy);
-}
-
-.adm-card-link-field { display: flex; align-items: center; gap: var(--space-2); }
-.adm-card-link-field input { font-family: var(--font-mono); font-size: var(--text-small); }
-
 .adm-card-pre {
   max-height: 16rem;
   margin: 0;

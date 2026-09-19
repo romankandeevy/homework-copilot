@@ -1,5 +1,6 @@
 /* Подробности группы ошибок: статус, счётчики, одно событие целиком
-   (стек, браузер, IP, время, маршрут, кто, вход, лог решения) и честная
+   (стек, браузер, время, маршрут, кто, вход, лог решения; IP не
+   показываем) и честная
    «попытка воспроизвести»: шаги из записанного и копирование контекста.
    Ничего никуда не отправляется. */
 
@@ -41,7 +42,6 @@ type ErrorEvent = {
   userId: string | null
   email: string | null
   guestId: string | null
-  ip: string | null
   input: Json | undefined
   environment: Json | undefined
   createdAt: string | null
@@ -64,7 +64,6 @@ function parseEvent(row: Row): ErrorEvent {
     userId: strOrNull(row.userId),
     email: strOrNull(row.email),
     guestId: strOrNull(row.guestId),
-    ip: strOrNull(row.ip),
     input: row.input ?? undefined,
     environment: row.environment ?? undefined,
     createdAt: strOrNull(row.createdAt),
@@ -144,7 +143,6 @@ export function ErrorDetailDrawer({ fingerprint, eventId, onSelectEvent, onClose
     route: selected.route,
     createdAt: selected.createdAt,
     who: who(selected),
-    ip: selected.ip,
     userAgent: selected.userAgent,
     requestId: selected.requestId,
     request: selected.request ? {
@@ -257,7 +255,6 @@ export function ErrorDetailDrawer({ fingerprint, eventId, onSelectEvent, onClose
                     <span>Гость <code className="adm-mono">{selected.guestId}</code></span>
                   ) : <span className="adm-muted">Не записан</span>}
                 </dd>
-                <dt>IP</dt><dd className="adm-mono">{selected.ip || '-'}</dd>
                 <dt>Браузер</dt>
                 <dd>
                   {selected.userAgent ? (

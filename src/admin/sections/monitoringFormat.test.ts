@@ -61,7 +61,6 @@ describe('контекст воспроизведения', () => {
     route: '/app',
     createdAt: '2026-09-12T11:03:27Z',
     who: 'ученик alina@example.test',
-    ip: '10.0.0.1',
     userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1',
     requestId: null,
     request: null,
@@ -81,6 +80,8 @@ describe('контекст воспроизведения', () => {
     const text = reproContext(event)
     expect(text).toContain('Когда: 12.09.2026, 14:03:27 МСК')
     expect(text).toContain('Стек:\nTypeError: x')
+    // IP админке не показываем - и в копируемом контексте тоже.
+    expect(text).not.toContain('IP')
     expect(text).not.toMatch(/[–—]/)
   })
 })

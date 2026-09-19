@@ -28,7 +28,6 @@ const requestCsv: CsvColumn<Row>[] = [
   { header: 'Почта', value: (row) => str(row.email) },
   { header: 'User id', value: (row) => str(row.userId) },
   { header: 'Guest id', value: (row) => str(row.guestId) },
-  { header: 'IP', value: (row) => str(row.ip) },
   { header: 'User agent', value: (row) => str(row.userAgent) },
   { header: 'Request id', value: (row) => str(row.requestId) },
   { header: 'Ошибка', value: (row) => str(row.error) },
@@ -112,14 +111,12 @@ export function LogsTab() {
     { key: 'user', header: 'Кто', render: userCell },
     {
       key: 'client',
-      header: 'IP и браузер',
+      header: 'Браузер',
       mobile: false,
-      render: (row) => (
-        <div className="adm-cell-main">
-          <span className="adm-mono">{str(row.ip) || '-'}</span>
-          {str(row.userAgent) && <small title={str(row.userAgent)}>{describeAgent(str(row.userAgent)) ?? 'браузер не распознан'}</small>}
-        </div>
-      ),
+      // IP в админке не показываем - ни в таблице, ни в выгрузке.
+      render: (row) => (str(row.userAgent)
+        ? <span title={str(row.userAgent)}>{describeAgent(str(row.userAgent)) ?? 'браузер не распознан'}</span>
+        : <span className="adm-muted">-</span>),
     },
     { key: 'request', header: 'Request id', mobile: false, render: requestIdCell },
     { key: 'error', header: 'Ошибка', mobile: false, render: (row) => (str(row.error) ? <span className="adm-clamp mon-bad">{str(row.error)}</span> : <span className="adm-muted">-</span>) },
@@ -184,7 +181,7 @@ export function LogsTab() {
           onChange={(value) => setQ({ m_kind: value, m_lpage: '1' })}
         />
         <Field label="Текст" className="is-grow">
-          <input name="text" type="search" defaultValue={q.m_rq} placeholder={kind === 'solutions' ? 'Условие, задача, предмет, ошибка' : 'Маршрут, ошибка, IP или код ответа'} />
+          <input name="text" type="search" defaultValue={q.m_rq} placeholder={kind === 'solutions' ? 'Условие, задача, предмет, ошибка' : 'Маршрут, ошибка или код ответа'} />
         </Field>
         <Field label="Request id">
           <input name="request" defaultValue={q.m_request} className="adm-mono" placeholder="req-…" />

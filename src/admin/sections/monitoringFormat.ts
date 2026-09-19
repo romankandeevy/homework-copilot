@@ -153,7 +153,6 @@ export type ReproEvent = {
   route: string | null
   createdAt: string | null
   who: string
-  ip: string | null
   userAgent: string | null
   requestId: string | null
   request: { method: string; route: string; status: number | null; durationMs: number | null } | null
@@ -194,7 +193,6 @@ export function reproContext(event: ReproEvent) {
     `Когда: ${formatExactMsk(event.createdAt)}`,
     `Маршрут: ${event.route || '-'}`,
     `Кто: ${event.who}`,
-    `IP: ${event.ip || '-'}`,
     `Браузер: ${describeAgent(event.userAgent) ?? '-'}`,
     `User agent: ${event.userAgent || '-'}`,
     `Request id: ${event.requestId || '-'}`,

@@ -5,7 +5,7 @@
 
 import { useEffect, useId, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
-import { Gauge, Key, LockOpen, Prohibit, SignIn, Trash, WarningCircle } from '@phosphor-icons/react'
+import { Gauge, Key, LockOpen, Prohibit, Trash, WarningCircle } from '@phosphor-icons/react'
 import type { Json } from '../lib/database.types'
 import {
   adminAction,
@@ -30,6 +30,7 @@ import { useAdmin } from './context'
 import { Badge, Button, CopyButton, DataTable, Drawer, EmptyState, ErrorState, Field, HorizontalBars, JsonView, LoadingState, Modal, Panel, Stat, StatGrid, Tabs, useAction, useAsync } from './ui'
 import type { Column, Tone } from './ui'
 import { rememberRecentUser } from './recentUsers'
+import { fraudExplanation } from './addressPrivacy'
 import { formatPhoneForDisplay } from '../lib/phone'
 import { BanDialog, ConfirmDialog } from './userDialogs'
 import { DeleteUserDialog } from './deleteUserDialog'
@@ -44,8 +45,6 @@ type Dialog =
   | { kind: 'unban' }
   | { kind: 'limit' }
   | { kind: 'reset' }
-  | { kind: 'impersonate' }
-  | { kind: 'link'; link: string; email: string }
   | { kind: 'log'; logId: string }
   | { kind: 'revokePlan' }
   | { kind: 'deleteNote'; noteId: string; body: string }
@@ -243,14 +242,6 @@ function UserCardView({ userId, onClose }: { userId: string; onClose: () => void
     (result) => `Письмо для смены пароля отправлено на ${result.email ?? email}`,
   )
 
-  const impersonate = async (reason: string) => {
-    const result = await run('impersonate', () => adminAction<{ link?: string; email?: string }>('impersonate', { userId, reason }))
-    if (!result) return
-    if (typeof result.link !== 'string' || !result.link) return
-    card.reload()
-    setDialog({ kind: 'link', link: result.link, email: result.email ?? email })
-  }
-
   const revokePlan = () => performAndClose(
     'plan',
     () => adminRpc<Json>('admin_set_user_plan', { p_user_id: userId, p_plan_id: null, p_expires_at: null, p_note: null }),
@@ -287,7 +278,7 @@ function UserCardView({ userId, onClose }: { userId: string; onClose: () => void
     { value: 'plan', label: 'Тариф и платежи' },
     { value: 'tasks', label: 'Задачи', badge: tasks.length },
     { value: 'economics', label: 'Экономика' },
-    { value: 'sessions', label: 'Сессии и IP', badge: devices.length },
+    { value: 'sessions', label: 'Сессии', badge: devices.length },
     { value: 'linked', label: 'Связанные', badge: linked.length },
     { value: 'support', label: 'Поддержка', badge: tickets.length },
     { value: 'notes', label: 'Заметки', badge: notes.length },
@@ -324,12 +315,11 @@ function UserCardView({ userId, onClose }: { userId: string; onClose: () => void
                 <Button size="sm" variant="danger" icon={<Prohibit size={16} weight="bold" aria-hidden="true" />} onClick={() => setDialog({ kind: 'ban' })}>Забанить</Button>
               )}
               <Button size="sm" icon={<Gauge size={16} weight="bold" aria-hidden="true" />} onClick={() => setDialog({ kind: 'limit' })}>Лимит решений</Button>
-              {/* Письмо сброса и ссылку входа Supabase выписывает только на почту. */}
+              {/* Письмо сброса Supabase отправляет только на почту. Входа под
+                  пользователем нет: он открывал чат ученика, а политика обещает,
+                  что содержимое чата администратору не видно. */}
               {email && (
                 <Button size="sm" icon={<Key size={16} weight="bold" aria-hidden="true" />} onClick={() => setDialog({ kind: 'reset' })}>Сбросить пароль</Button>
-              )}
-              {!isAdmin && !isSelf && email && (
-                <Button size="sm" icon={<SignIn size={16} weight="bold" aria-hidden="true" />} onClick={() => setDialog({ kind: 'impersonate' })}>Войти под пользователем</Button>
               )}
               {canDelete && (
                 <Button size="sm" variant="danger" icon={<Trash size={16} weight="bold" aria-hidden="true" />} onClick={() => setDialog({ kind: 'delete' })}>Удалить аккаунт</Button>
@@ -337,7 +327,7 @@ function UserCardView({ userId, onClose }: { userId: string; onClose: () => void
             </div>
           )}
           {canModerate && !email && (
-            <p className="adm-card-note">Аккаунт входит по номеру телефона кодом из СМС: почты и пароля у него нет, поэтому сброс пароля и вход под пользователем недоступны.</p>
+            <p className="adm-card-note">Аккаунт входит по номеру телефона кодом из СМС: почты и пароля у него нет, поэтому сброс пароля недоступен.</p>
           )}
 
           {canModerate && <InternalAccountControl userId={userId} />}
@@ -359,7 +349,7 @@ function UserCardView({ userId, onClose }: { userId: string; onClose: () => void
                   return (
                     <li key={str(flag.id)}>
                       <Badge tone={riskTone(risk)}>{RISK_LABEL[risk] ?? risk}</Badge>
-                      <span>{str(flag.explanation)}</span>
+                      <span>{fraudExplanation(str(flag.explanation))}</span>
                       {str(flag.status) === 'deferred' && <span className="adm-muted">отложен</span>}
                     </li>
                   )
@@ -463,10 +453,6 @@ function UserCardView({ userId, onClose }: { userId: string; onClose: () => void
           <p>На {email} уйдёт письмо со ссылкой для смены пароля. Отправка попадёт в журнал.</p>
         </ConfirmDialog>
       )}
-      {dialog?.kind === 'impersonate' && (
-        <ImpersonateDialog email={email} pending={pending === 'impersonate'} onClose={closeDialog} onSubmit={(reason) => void impersonate(reason)} />
-      )}
-      {dialog?.kind === 'link' && <LinkDialog link={dialog.link} email={dialog.email} onClose={closeDialog} />}
       {dialog?.kind === 'log' && <SolutionLogDialog logId={dialog.logId} onClose={closeDialog} />}
       {dialog?.kind === 'revokePlan' && (
         <ConfirmDialog title="Отозвать тариф" confirmLabel="Отозвать" tone="danger" pending={pending === 'plan'} onClose={closeDialog} onConfirm={() => void revokePlan()}>
@@ -514,7 +500,6 @@ function ProfileTab({ profile, devices, linkedCount, canEdit, saving, onSave, on
     ...(str(profile.provider) === 'yandex' ? ['yandex'] : []),
     ...arr(profile.providers).filter((item): item is string => typeof item === 'string'),
   ])]
-  const ips = new Set(devices.map((device) => str(device.ip)).filter(Boolean))
   const deviceIds = new Set(devices.map((device) => str(device.deviceId)).filter(Boolean))
   const lastDevice = devices[0]
   const confirmedAt = str(profile.emailConfirmedAt)
@@ -608,13 +593,11 @@ function ProfileTab({ profile, devices, linkedCount, canEdit, saving, onSave, on
           <dl className="adm-kv">
             <dt>Записей</dt>
             <dd>{devices.length >= 50 ? '50 и больше' : formatNumber(devices.length)}</dd>
-            <dt>Разных IP</dt>
-            <dd>{formatNumber(ips.size)}</dd>
             <dt>Меток браузера</dt>
             <dd>{formatNumber(deviceIds.size)}</dd>
             <dt>Последнее</dt>
             <dd>
-              {ago(str(lastDevice.lastSeenAt))} · <span className="adm-mono">{str(lastDevice.ip) || 'IP неизвестен'}</span>
+              {ago(str(lastDevice.lastSeenAt))}
               {str(lastDevice.userAgent) && <><br /><span className="adm-muted">{str(lastDevice.userAgent)}</span></>}
             </dd>
             <dt>Связанных аккаунтов</dt>
@@ -969,8 +952,9 @@ function EconomicsTab({ economics }: { economics: Row }) {
   )
 }
 
+/* IP админке не показываем: база их хранит для антифрода, а человеку за
+   пультом хватает браузера, метки устройства и времени. */
 const DEVICE_COLUMNS: Column<Row>[] = [
-  { key: 'ip', header: 'IP', render: (row) => <span className="adm-mono">{str(row.ip) || '-'}</span> },
   { key: 'ua', header: 'Браузер', render: (row) => <span className="adm-clamp">{str(row.userAgent) || '-'}</span> },
   { key: 'device', header: 'Метка устройства', mobile: false, render: (row) => (str(row.deviceId) ? <span className="adm-mono" title={str(row.deviceId)}>{str(row.deviceId).slice(0, 12)}</span> : '-') },
   { key: 'hits', header: 'Заходов', align: 'right', render: (row) => formatNumber(num(row.hits)) },
@@ -985,10 +969,12 @@ const ACTIVITY_COLUMNS: Column<Row>[] = [
 ]
 
 function SessionsTab({ devices, activity }: { devices: Row[]; activity: Row[] }) {
+  // Строки различались по IP; теперь ключ - порядковый номер записи.
+  const deviceRows = devices.map((row, index) => ({ ...row, rowKey: `${index}|${str(row.deviceId)}|${str(row.firstSeenAt)}` }))
   return (
     <div className="adm-card-section">
-      <Panel title="Устройства и IP" description={devices.length >= 50 ? 'Последние 50 записей.' : undefined}>
-        <DataTable columns={DEVICE_COLUMNS} rows={devices} rowKey={(row) => `${str(row.ip)}|${str(row.deviceId)}|${str(row.userAgent)}|${str(row.firstSeenAt)}`} empty="Устройств пока нет." />
+      <Panel title="Устройства" description={devices.length >= 50 ? 'Последние 50 записей.' : undefined}>
+        <DataTable columns={DEVICE_COLUMNS} rows={deviceRows} rowKey={(row) => str(row.rowKey)} empty="Устройств пока нет." />
       </Panel>
       <Panel title="Недавняя активность" description={activity.length >= 50 ? 'Последние 50 событий.' : undefined}>
         <DataTable columns={ACTIVITY_COLUMNS} rows={activity} rowKey={(row) => str(row.id)} empty="Событий пока нет." />
@@ -1000,12 +986,15 @@ function SessionsTab({ devices, activity }: { devices: Row[]; activity: Row[] })
 function LinkedTab({ linked, onOpen }: { linked: Row[]; onOpen: (userId: string) => void }) {
   const columns: Column<Row>[] = [
     { key: 'email', header: 'Аккаунт', render: (row) => <strong className="adm-users-link">{str(row.email) || str(row.userId)}</strong> },
-    { key: 'via', header: 'Связь', render: (row) => (str(row.via) === 'device' ? <Badge tone="warning">устройство</Badge> : <Badge tone="info">IP</Badge>) },
-    { key: 'value', header: 'Общее значение', render: (row) => <span className="adm-mono adm-clamp">{str(row.value)}</span> },
+    { key: 'via', header: 'Связь', render: (row) => (str(row.via) === 'device' ? <Badge tone="warning">устройство</Badge> : <Badge tone="info">адрес</Badge>) },
+    // Сам адрес не печатаем: достаточно знать, что он совпал.
+    { key: 'value', header: 'Общее значение', render: (row) => (str(row.via) === 'device'
+      ? <span className="adm-mono adm-clamp">{str(row.value)}</span>
+      : <span className="adm-muted">совпадает адрес (хэш)</span>) },
     { key: 'banned', header: 'Статус', render: (row) => (bool(row.isBanned) ? <Badge tone="danger">забанен</Badge> : <Badge tone="success">активен</Badge>) },
   ]
   return (
-    <Panel title="Связанные аккаунты" description="Аккаунты с общим IP или общей меткой устройства. Нажми на строку, чтобы открыть карточку.">
+    <Panel title="Связанные аккаунты" description="Аккаунты с общим адресом или общей меткой устройства. Нажми на строку, чтобы открыть карточку.">
       <DataTable
         columns={columns}
         rows={linked}
@@ -1215,55 +1204,6 @@ function LimitDialog({ current, currentReason, pending, onClose, onSubmit }: {
         </Field>
         {error && <p className="adm-card-error" role="alert">{error}</p>}
       </form>
-    </Modal>
-  )
-}
-
-function ImpersonateDialog({ email, pending, onClose, onSubmit }: { email: string; pending: boolean; onClose: () => void; onSubmit: (reason: string) => void }) {
-  const formId = useId()
-  const [reason, setReason] = useState('')
-  return (
-    <Modal
-      open
-      title="Войти под пользователем"
-      onClose={onClose}
-      footer={(
-        <>
-          <Button onClick={onClose}>Отмена</Button>
-          <Button type="submit" form={formId} variant="primary" loading={pending}>Получить ссылку</Button>
-        </>
-      )}
-    >
-      <form
-        id={formId}
-        className="adm-card-form"
-        onSubmit={(event) => {
-          event.preventDefault()
-          onSubmit(reason.trim())
-        }}
-      >
-        <p>Выпишем одноразовую ссылку входа в аккаунт {email}. Вход с причиной попадёт в журнал.</p>
-        <Field label="Зачем входишь" hint="Например: проверить, что видит ученик после жалобы.">
-          <input data-initial-focus value={reason} maxLength={300} onChange={(event) => setReason(event.target.value)} />
-        </Field>
-      </form>
-    </Modal>
-  )
-}
-
-function LinkDialog({ link, email, onClose }: { link: string; email: string; onClose: () => void }) {
-  return (
-    <Modal open title="Ссылка входа готова" onClose={onClose} footer={<Button variant="primary" onClick={onClose}>Готово</Button>}>
-      <div className="adm-card-warning" role="alert">
-        <strong>Открой ссылку только в приватном окне (инкогнито).</strong> В обычном окне этого браузера вход под {email} заменит твою сессию администратора - админка выйдет из аккаунта.
-      </div>
-      <Field label="Одноразовая ссылка">
-        <span className="adm-card-link-field">
-          <input readOnly value={link} onFocus={(event) => event.target.select()} />
-          <CopyButton value={link} label="Скопировать ссылку" />
-        </span>
-      </Field>
-      <p className="adm-card-hint">Ссылка срабатывает один раз. Вход под пользователем уже записан в журнал.</p>
     </Modal>
   )
 }
