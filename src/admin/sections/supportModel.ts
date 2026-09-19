@@ -5,6 +5,7 @@ import type { Json } from '../../lib/database.types'
 import { bool, formatKopecks, isRecord, num, numOrNull, obj, rows, str, strOrNull, arr } from '../api'
 import type { CsvColumn, Row } from '../api'
 import type { Tone } from '../ui'
+import { fraudExplanation } from '../addressPrivacy'
 
 export const PAGE_SIZE = 30
 export const EXPORT_PAGE_SIZE = 200
@@ -290,7 +291,7 @@ export function parseThread(value: Json): Thread | null {
       createdAt: str(row.createdAt),
       logId: strOrNull(row.logId),
     })),
-    flags: rows(source.flags).map((row) => ({ ruleId: str(row.ruleId), risk: str(row.risk), explanation: str(row.explanation), status: str(row.status) })),
+    flags: rows(source.flags).map((row) => ({ ruleId: str(row.ruleId), risk: str(row.risk), explanation: fraudExplanation(str(row.explanation)), status: str(row.status) })),
     walletEntries: rows(source.walletEntries).map((row) => ({ id: str(row.id), amount: num(row.amount), description: str(row.description), createdAt: str(row.createdAt) })),
     ideaApproval: { status: str(approval.status, 'pending'), credited: bool(approval.credited) },
     templates: rows(source.templates).map((row) => ({ id: str(row.id), title: str(row.title), body: str(row.body) })),

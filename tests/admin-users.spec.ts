@@ -150,6 +150,43 @@ test.describe('админка: пользователи', () => {
     await expect(sofia).toBeFocused()
   })
 
+  test('карточка: нет входа под пользователем и нет IP', async ({ page }) => {
+    const errors: string[] = []
+    page.on('pageerror', (error) => errors.push(error.message))
+    await page.goto(`/admin?section=users&user=${studentId}`)
+    const card = page.getByRole('dialog')
+    await expect(card.getByRole('button', { name: 'Сбросить пароль' })).toBeVisible()
+    // Вход под учеником открывал его чат, а политика обещает, что админка чат не видит.
+    await expect(card.getByRole('button', { name: 'Войти под пользователем' })).toHaveCount(0)
+    // Флаг «с одного адреса» говорит о совпадении, а не печатает адрес.
+    await expect(card.getByText('Совпадает адрес (хэш): за 24 ч зарегистрировано 3 аккаунтов')).toBeVisible()
+    await expect(card).not.toContainText('10.0.0.1')
+
+    // Вкладки открываем с клавиатуры: над ними лежит липкая шапка карточки.
+    const sessions = card.getByRole('tab', { name: /^Сессии/ })
+    await sessions.focus()
+    await page.keyboard.press('Enter')
+    await expect(sessions).toHaveAttribute('aria-selected', 'true')
+    await expect(card.getByRole('columnheader', { name: 'Браузер' })).toBeVisible()
+    await expect(card.getByRole('columnheader', { name: 'IP', exact: true })).toHaveCount(0)
+    await expect(card).not.toContainText('10.0.0.1')
+
+    const linked = card.getByRole('tab', { name: /^Связанные/ })
+    await linked.focus()
+    await page.keyboard.press('Enter')
+    await expect(linked).toHaveAttribute('aria-selected', 'true')
+    await expect(card.getByText('совпадает адрес (хэш)', { exact: true })).toBeVisible()
+    await expect(card).not.toContainText('10.0.0.1')
+    expect(errors).toEqual([])
+  })
+
+  test('антифрод: совпадение адреса без самого адреса', async ({ page }) => {
+    await page.goto('/admin?section=fraud')
+    await expect(page.getByText('Совпадает адрес (хэш): за 24 ч зарегистрировано 3 аккаунтов')).toBeVisible()
+    await expect(page.locator('.adm-fraud-evidence-line').first()).toContainText('адрес: совпадает адрес (хэш)')
+    await expect(page.locator('main')).not.toContainText('10.0.0.1')
+  })
+
   test('массовые действия и выгрузка выбранных', async ({ page }) => {
     await openUsers(page)
     await page.getByRole('checkbox', { name: 'Выбрать: Алина Смирнова' }).check()

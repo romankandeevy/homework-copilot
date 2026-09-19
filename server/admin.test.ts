@@ -117,6 +117,19 @@ describe('admin health checks', () => {
   })
 })
 
+describe('admin actions', () => {
+  it('answers the removed impersonation like any unknown action', async () => {
+    reset()
+    const removed = mockResponse()
+    await handleAdminRequest(jsonRequest({ action: 'impersonate', userId: studentId, reason: 'проверка' }), removed.response, options)
+    const unknown = mockResponse()
+    await handleAdminRequest(jsonRequest({ action: 'no_such_action' }), unknown.response, options)
+    expect(removed.response.statusCode).toBe(400)
+    expect(removed.json()).toEqual(unknown.json())
+    expect(database.calls.map((call) => call.name)).not.toContain('admin_record_external_action')
+  })
+})
+
 describe('admin account deletion', () => {
   it('does not take the word instead of the email for a single account', async () => {
     reset()

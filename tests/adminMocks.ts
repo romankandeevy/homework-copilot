@@ -233,7 +233,7 @@ export const rpcFixtures: Record<string, (aal: string, body: Record<string, unkn
     tasks: [{ key: 'solution-1', subject: 'Физика', grade: '8 класс', source: 'text', task: 'Задача', preview: 'Тело массой 2 кг бросили вертикально вверх', status: 'done', stage: 'done', error: null, createdAt: '2026-09-10T18:00:00Z', finishedAt: '2026-09-10T18:01:00Z', logId: null, costKopecks: 38 }],
     economics: { solutionCostKopecks: 380, chatCostKopecks: 0, chatChargedKopecks: 0, solutionChargedKopecks: 3150, paidKopecks: 10000, refundedKopecks: 0 },
     devices: [{ ip: '10.0.0.1', userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)', deviceId: 'device-1', hits: 14, firstSeenAt: '2026-09-01T09:00:00Z', lastSeenAt: '2026-09-10T18:00:00Z' }],
-    activity: [], linked: [], tickets: [{ id: 'conversation-1', subject: conversation.subject, category: 'payment', status: 'pending_owner', updatedAt: ago(45) }],
+    activity: [], linked: [{ userId: moreStudents[0].id, email: moreStudents[0].email, via: 'ip', value: '10.0.0.1', isBanned: false }], tickets: [{ id: 'conversation-1', subject: conversation.subject, category: 'payment', status: 'pending_owner', updatedAt: ago(45) }],
     flags: [{ id: 'flag-1', ruleId: 'ip_accounts', risk: 'medium', explanation: 'С адреса 10.0.0.1 за 24 ч зарегистрировано 3 аккаунтов', status: 'open', createdAt: ago(300) }],
     notes: [], audit: [], viewerRole: 'owner',
   }),

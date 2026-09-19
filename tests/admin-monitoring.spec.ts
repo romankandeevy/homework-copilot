@@ -86,7 +86,9 @@ test.describe('админка: мониторинг', () => {
     await expect(drawer.getByText('Стек-трейс')).toBeVisible()
     await expect(drawer.getByText('Safari 18.0, iOS 18.0, телефон', { exact: true })).toBeVisible()
     await expect(drawer.getByText(/МСК/).first()).toBeVisible()
-    await expect(drawer.getByText('10.0.0.1')).toBeVisible()
+    // IP админке не показываем: в событии он есть, на экране - нет.
+    await expect(drawer).not.toContainText('10.0.0.1')
+    await expect(drawer.getByText('IP', { exact: true })).toHaveCount(0)
     await expect(drawer.getByText('Как воспроизвести')).toBeVisible()
     await expect(drawer.getByRole('button', { name: 'Скопировать весь контекст' })).toBeVisible()
     await expect(drawer.getByRole('button', { name: 'Открыть лог' })).toBeVisible()

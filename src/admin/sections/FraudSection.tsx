@@ -33,6 +33,7 @@ import {
 } from '../ui'
 import type { Column, Tone } from '../ui'
 import './fraud.css'
+import { fraudExplanation, SAME_ADDRESS } from '../addressPrivacy'
 
 const PAGE_SIZE = 50
 const QUERY_DEFAULTS = { f_view: 'queue', f_status: 'open', f_risk: '', f_page: '1' }
@@ -83,7 +84,7 @@ function riskTone(risk: string): Tone {
 }
 
 const EVIDENCE_LABEL: Record<string, string> = {
-  ip: 'IP',
+  ip: 'адрес',
   users: 'аккаунтов',
   emails: 'адресов',
   deviceId: 'метка',
@@ -115,7 +116,7 @@ const THRESHOLD_LABEL: Record<string, string> = {
 const WHITELIST_KIND: Record<WhitelistKind, { label: string; hint: string; placeholder: string }> = {
   ip: {
     label: 'IP-адрес',
-    hint: 'Школа, общежитие, общий Wi-Fi. Открытые флаги «Аккаунты с одного IP» по этому адресу закроются, в графе связей он не учитывается.',
+    hint: 'Школа, общежитие, общий Wi-Fi. Открытые флаги «Аккаунты с одного IP» по этому адресу закроются, в графе связей он не учитывается. Адрес в списке не показывается - подпиши запись комментарием.',
     placeholder: '203.0.113.7',
   },
   email_domain: {
@@ -134,6 +135,8 @@ const when = (value: string | null | undefined) => (value ? formatDateTime(value
 
 function compactEvidence(key: string, value: Json | undefined): string {
   if (value === null || value === undefined) return '-'
+  // Сам адрес не печатаем: достаточно знать, что он совпал.
+  if (key === 'ip') return SAME_ADDRESS
   if (Array.isArray(value)) return formatNumber(value.length)
   if (typeof value === 'number') return /kopecks/i.test(key) ? formatKopecks(value) : formatNumber(value)
   if (typeof value === 'boolean') return value ? 'да' : 'нет'
@@ -385,7 +388,7 @@ function FraudWorkspace() {
           )}
         >
           <p>
-            {WHITELIST_KIND[str(removeEntry.kind) as WhitelistKind]?.label ?? str(removeEntry.kind)} <span className="adm-mono">{str(removeEntry.value)}</span> снова будет проверяться детекторами со следующего прогона.
+            {WHITELIST_KIND[str(removeEntry.kind) as WhitelistKind]?.label ?? str(removeEntry.kind)} {str(removeEntry.kind) === 'ip' ? (str(removeEntry.note) ? `«${str(removeEntry.note)}»` : '') : <span className="adm-mono">{str(removeEntry.value)}</span>} снова будет проверяться детекторами со следующего прогона.
           </p>
         </Modal>
       )}
@@ -421,7 +424,7 @@ function FlagItem({ flag, stale, onOpenUser, onDecide, onGraph }: {
         {banned && status !== 'banned' && <Badge tone="danger">аккаунт забанен</Badge>}
         <span className="adm-fraud-balance adm-mono" title="Баланс">{formatKopecks(num(flag.balance))}</span>
       </div>
-      <p className="adm-fraud-why"><span className="adm-muted">Почему сработало: </span>{str(flag.explanation)}</p>
+      <p className="adm-fraud-why"><span className="adm-muted">Почему сработало: </span>{fraudExplanation(str(flag.explanation))}</p>
       <EvidenceView evidence={flag.evidence} />
       <div className="adm-fraud-meta">
         <span>Поставлен {when(str(flag.createdAt))}</span>
@@ -443,6 +446,13 @@ function FlagItem({ flag, stale, onOpenUser, onDecide, onGraph }: {
   )
 }
 
+/** Улики целиком, но вместо адреса - отметка о совпадении. */
+function withoutAddress(evidence: Record<string, Json | undefined>): Json {
+  const copy: Record<string, Json | undefined> = { ...evidence }
+  if ('ip' in copy) copy.ip = SAME_ADDRESS
+  return copy as Json
+}
+
 function EvidenceView({ evidence }: { evidence: Json | undefined }) {
   if (!isRecord(evidence)) return null
   const entries = Object.entries(evidence)
@@ -456,7 +466,7 @@ function EvidenceView({ evidence }: { evidence: Json | undefined }) {
       </div>
       <details>
         <summary>Улики целиком</summary>
-        <JsonView value={evidence} maxHeight={260} />
+        <JsonView value={withoutAddress(evidence)} maxHeight={260} />
       </details>
     </div>
   )
@@ -526,7 +536,7 @@ function DecisionDialog({ decision, pending, onClose, onSubmit }: {
     >
       <form id={formId} className="adm-card-form adm-fraud-rule" onSubmit={submit}>
         <p><b>{who}</b> · {ruleTitle}</p>
-        <p className="adm-muted">{str(flag.explanation)}</p>
+        <p className="adm-muted">{fraudExplanation(str(flag.explanation))}</p>
         {action === 'clear' && (
           <p>Флаг закроется, а для этого аккаунта появится исключение: правило «{ruleTitle}» его больше не помечает. Решение попадёт в журнал.</p>
         )}
@@ -718,7 +728,7 @@ function FraudGraph({ root, nodeRows, edgeRows, onOpenUser }: { root: string; no
   }
 
   if (nodes.length <= 1 || edges.length === 0) {
-    return <EmptyState>Связей через общий IP или метку устройства не нашлось.</EmptyState>
+    return <EmptyState>Связей через общий адрес или метку устройства не нашлось.</EmptyState>
   }
 
   const listColumns: Column<GraphNode>[] = [
@@ -743,7 +753,7 @@ function FraudGraph({ root, nodeRows, edgeRows, onOpenUser }: { root: string; no
   return (
     <>
       <div className="adm-graph-legend" aria-label="Легенда">
-        <span><i className="is-line is-ip" />общий IP · {formatNumber(ipCount)}</span>
+        <span><i className="is-line is-ip" />общий адрес · {formatNumber(ipCount)}</span>
         <span><i className="is-line is-device" />общее устройство · {formatNumber(deviceCount)}</span>
         <span><i className="is-dot is-root" />проверяемый</span>
         <span><i className="is-dot is-flagged" />есть открытые флаги</span>
@@ -760,7 +770,7 @@ function FraudGraph({ root, nodeRows, edgeRows, onOpenUser }: { root: string; no
               if (!a || !b) return null
               return (
                 <path key={edge.key} d={edgePath(a, b, edge.kind)} className={`adm-graph-edge is-${edge.kind}`} strokeWidth={1.5 + Math.min(3, edge.values.length - 1) * 0.6}>
-                  <title>{edge.kind === 'ip' ? 'Общий IP' : 'Общее устройство'}: {edge.values.join(', ') || 'без значения'}</title>
+                  <title>{edge.kind === 'ip' ? `Общий адрес: ${SAME_ADDRESS}` : `Общее устройство: ${edge.values.join(', ') || 'без значения'}`}</title>
                 </path>
               )
             })}
@@ -864,6 +874,12 @@ function RuleEditor({ rule, saving, onSave }: { rule: Row; saving: boolean; onSa
 
 /* ---------- Белый список ---------- */
 
+/* Адрес из белого списка тоже не печатаем: узнать запись помогает комментарий. */
+function whitelistValue(row: Row) {
+  if (str(row.kind) === 'ip') return <span className="adm-muted">адрес скрыт</span>
+  return <span className="adm-mono">{str(row.value)}</span>
+}
+
 function WhitelistPanel({ items, loading, adding, onAdd, onRemove }: {
   items: Row[]
   loading: boolean
@@ -905,7 +921,7 @@ function WhitelistPanel({ items, loading, adding, onAdd, onRemove }: {
 
   const columns: Column<Row>[] = [
     { key: 'kind', header: 'Тип', render: (row) => <Badge>{WHITELIST_KIND[str(row.kind) as WhitelistKind]?.label ?? str(row.kind)}</Badge> },
-    { key: 'value', header: 'Значение', render: (row) => <span className="adm-mono">{str(row.value)}</span> },
+    { key: 'value', header: 'Значение', render: (row) => whitelistValue(row) },
     { key: 'note', header: 'Комментарий', render: (row) => <span className="adm-clamp">{str(row.note) || '-'}</span> },
     { key: 'created', header: 'Добавлено', mobile: false, render: (row) => <span className="adm-nowrap">{when(str(row.createdAt))}</span> },
     {

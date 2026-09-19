@@ -3,10 +3,13 @@
    Всё, что админка умеет делать через базу, она делает через admin-RPC.
    Сюда вынесено только то, чего база не может сама:
 
-   - вход под пользователем (одноразовая ссылка авторизации);
    - письмо сброса пароля;
    - доставка уведомлений в Telegram и на почту;
    - проверка внешних сервисов: провайдер моделей, прокси, Telegram, почта.
+
+   Входа под пользователем нет и не будет: он открывал администратору
+   ИИ-чат и фотографии ученика, а политика обещает, что содержимое чата
+   админке не видно (19 сентября 2026, «Админка» в AGENTS.md).
 
    Два входа. Администратор приходит со своим JWT: роль и второй фактор
    проверяет база (`get_admin_context`). pg_cron приходит раз в минуту с
@@ -163,20 +166,18 @@ async function targetUser(options: AdminServerOptions, userId: unknown) {
   return { user: data.user, email: data.user.email ?? '' }
 }
 
-/* Аккаунт, вошедший по номеру телефона, почты не имеет. Ссылку входа и письмо
-   сброса Supabase умеет только на почту, а пароля у такого аккаунта нет вовсе. */
-function requireEmail(email: string, action: 'impersonate' | 'reset') {
+/* Аккаунт, вошедший по номеру телефона, почты не имеет. Письмо сброса
+   Supabase умеет только на почту, а пароля у такого аккаунта нет вовсе. */
+function requireEmail(email: string) {
   if (email) return email
-  throw new AdminApiError(409, action === 'impersonate'
-    ? 'У аккаунта нет почты: он входит по номеру телефона. Ссылку входа выписать нельзя'
-    : 'У аккаунта нет почты и пароля: он входит по номеру телефона кодом из СМС')
+  throw new AdminApiError(409, 'У аккаунта нет почты и пароля: он входит по номеру телефона кодом из СМС')
 }
 
 async function isAdminAccount(options: AdminServerOptions, userId: string) {
   const service = serviceClient(options)
   const { data, error } = await service.rpc('is_admin_user', { p_user_id: userId })
   // Не смогли проверить - считаем администратором: лучше отказать, чем
-  // выписать ссылку входа в чужой пульт.
+  // удалить аккаунт администратора.
   if (error) return true
   return data === true
 }
@@ -185,37 +186,11 @@ async function isAdminAccount(options: AdminServerOptions, userId: string) {
    Действия администратора
    ------------------------------------------------------------------------ */
 
-async function impersonate(options: AdminServerOptions, admin: AdminContext, body: Record<string, unknown>) {
-  if (!admin.permissions.moderate) throw new AdminApiError(403, 'Роль не позволяет входить под пользователем')
-  const target = await targetUser(options, body.userId)
-  const { user } = target
-  const email = requireEmail(target.email, 'impersonate')
-  if (user.id === admin.userId) throw new AdminApiError(400, 'Это твой собственный аккаунт')
-  if (await isAdminAccount(options, user.id)) throw new AdminApiError(403, 'Под администратором входить нельзя')
-
-  const service = serviceClient(options)
-  const { data, error } = await service.auth.admin.generateLink({
-    type: 'magiclink',
-    email,
-    options: { redirectTo: `${productionOrigin}/app` },
-  })
-  if (error || !data.properties?.action_link) throw new AdminApiError(502, 'Не получилось выписать ссылку входа')
-
-  const { error: auditError } = await admin.client.rpc('admin_record_external_action', {
-    p_event: 'user_impersonated',
-    p_target_user_id: user.id,
-    p_payload: { email, reason: typeof body.reason === 'string' ? body.reason.slice(0, 300) : null } as Json,
-  })
-  // Вход под учеником без записи в журнале не выдаём: ссылка сгорит сама.
-  if (auditError) throw new AdminApiError(502, 'Не получилось записать вход в журнал - ссылка не выдана')
-  return { link: data.properties.action_link, email }
-}
-
 async function resetPassword(options: AdminServerOptions, admin: AdminContext, body: Record<string, unknown>) {
   if (!admin.permissions.moderate) throw new AdminApiError(403, 'Роль не позволяет сбрасывать пароль')
   const target = await targetUser(options, body.userId)
   const { user } = target
-  const email = requireEmail(target.email, 'reset')
+  const email = requireEmail(target.email)
   if (!options.supabaseUrl || !options.supabasePublishableKey) throw new AdminApiError(503, 'Сервер админки не настроен')
 
   // Письмо шлёт Supabase Auth тем же шаблоном, что и «Не помню пароль».
@@ -704,9 +679,7 @@ export async function handleAdminRequest(request: IncomingMessage, response: Ser
 
     const admin = await authenticateAdmin(request, options)
     adminId = admin.userId
-    if (action === 'impersonate') {
-      sendJson(response, 200, await impersonate(options, admin, body))
-    } else if (action === 'reset_password') {
+    if (action === 'reset_password') {
       sendJson(response, 200, await resetPassword(options, admin, body))
     } else if (action === 'delete_users') {
       sendJson(response, 200, await deleteUsers(options, admin, body))

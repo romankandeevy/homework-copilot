@@ -10,7 +10,7 @@ export type AdminPermissions = {
   users: boolean
   /** Обращения в поддержку. Есть у всех ролей. */
   support: boolean
-  /** Бан, лимиты, тарифы, антифрод, вход под пользователем. admin и owner. */
+  /** Бан, лимиты, тарифы, антифрод, сброс пароля. admin и owner. */
   moderate: boolean
   /** Баланс, пополнения, финансы. admin и owner. */
   money: boolean
