@@ -206,6 +206,8 @@ function costText(cost: NonNullable<SolutionDetail['cost']>) {
   const parts = [cost.costKopecks !== null ? formatKopecks(cost.costKopecks) : 'шлюз не сообщил расход']
   if (cost.seconds !== null) parts.push(`${formatNumber(Math.round(cost.seconds))} с`)
   if (cost.calls > 0) parts.push(`вызовов модели: ${formatNumber(cost.calls)}`)
+  // Какие модели решали: без этого 3,58 ₽ за задачу 18 сентября нечем было объяснить.
+  if (cost.models) parts.push(`модели: ${cost.models}`)
   return parts.join(' · ')
 }
 

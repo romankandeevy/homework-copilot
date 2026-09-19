@@ -24,20 +24,15 @@ describe('модель под предмет', () => {
     }
   })
 
-  it('дорогая модель стоит последней, а не первой', () => {
-    const counting = homeworkModelsForSubject('Математика')
-    expect(counting.at(-1)).toBe('gpt-5-6-sol')
-    expect(counting.indexOf('gpt-5-6-sol')).toBeGreaterThan(0)
-  })
-
-  it('у каждого предмета свой пул, и дорогая модель в нём последняя', () => {
-    // Разделение остаётся: замер по предметам ещё не сделан, но место для
-    // него есть, и менять пул одного предмета можно, не трогая остальные.
-    // Порядок совпал с 18 сентября: /codex лежал, и gpt-5-6-sol второй у
-    // геометрии отнимал запасную flash.
+  // 19 сентября gpt-5-6-sol убрана: 18-го она дорешала задачу за 3,58 ₽ из 5.
+  // Запасные не от Google (terra на /codex, grok на /grok) в тот день
+  // отказывали на каждом вызове, поэтому в пуле только дешёвые gemini.
+  it('в пуле нет дорогих моделей: только дешёвые gemini', () => {
     for (const subject of solvableSubjects) {
-      expect(homeworkModelsBySubject[subject.id], subject.name).toBeDefined()
-      expect(homeworkModelsBySubject[subject.id].at(-1), subject.name).toBe('gpt-5-6-sol')
+      const pool = homeworkModelsBySubject[subject.id]
+      expect(pool, subject.name).toBeDefined()
+      expect(pool.every((model) => model.startsWith('gemini-')), subject.name).toBe(true)
+      expect(pool, subject.name).not.toContain('gpt-5-6-sol')
     }
   })
 
