@@ -101,6 +101,17 @@ describe('yandex finish', () => {
     expect(port.magicLink).toHaveBeenCalledWith('pupil@yandex.ru')
   })
 
+  // База не создаёт профиль с пустым именем - 19 сентября вход падал на этом.
+  it('never sends an empty name when Yandex returns none', async () => {
+    const withLogin = admin()
+    await finishYandexSignIn(config, { code: 'code-123', state: validState(), nonce }, { admin: withLogin, fetchImpl: yandexFetch({ id: '7', login: 'pupil', default_email: 'Pupil@Yandex.ru' }), now })
+    expect(withLogin.createUser.mock.calls[0][0].userMetadata.full_name).toBe('pupil')
+
+    const emailOnly = admin()
+    await finishYandexSignIn(config, { code: 'code-123', state: validState(), nonce }, { admin: emailOnly, fetchImpl: yandexFetch({ id: '8', default_email: 'Masha.K@yandex.ru' }), now })
+    expect(emailOnly.createUser.mock.calls[0][0].userMetadata.full_name).toBe('masha.k')
+  })
+
   it('does not record consent when the button was pressed on the sign-in tab', async () => {
     const port = admin()
     await finishYandexSignIn(config, { code: 'code-123', state: validState(false), nonce }, { admin: port, fetchImpl: yandexFetch(profile), now })

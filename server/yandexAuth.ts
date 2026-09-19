@@ -203,11 +203,18 @@ export async function fetchYandexProfile(token: string, fetchImpl: typeof fetch)
   const email = normalizeEmail(info.default_email) ?? emails.map(normalizeEmail).find((entry): entry is string => Boolean(entry)) ?? null
   if (!email) throw new YandexAuthError(400, yandexAuthMessages.noEmail, 'no_email')
 
+  /* Имя в профиле база требует непустым (profiles_full_name_length, 1-80).
+     19 сентября 2026 Яндекс вернул профиль без имени, и база отказала в
+     создании аккаунта: «Database error creating new user». Поэтому имя не
+     бывает пустым: логин, начало почты, в крайнем случае «Ученик». */
   const fullName = (
     nonEmpty(info.real_name)
     || [nonEmpty(info.first_name), nonEmpty(info.last_name)].filter(Boolean).join(' ')
     || nonEmpty(info.display_name)
-  ).slice(0, 80)
+    || nonEmpty(info.login)
+    || email.split('@')[0]
+    || 'Ученик'
+  ).slice(0, 80).trim() || 'Ученик'
   return { id, email, fullName }
 }
 
