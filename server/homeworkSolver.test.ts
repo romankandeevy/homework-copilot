@@ -716,11 +716,11 @@ describe('homework solver', () => {
 
   it('когда пул кончился, а последняя молчит, шлёт ей второй запрос', async () => {
     resetModelCooldowns()
-    const [head, spare, last] = defaultHomeworkModels
+    const [head, spare] = defaultHomeworkModels
     let spareCalls = 0
     const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
       const url = String(input)
-      if (url.includes(`/${head}/`) || url.includes(`/${last}/`) || url.includes('/codex/')) {
+      if (url.includes(`/${head}/`) || url.includes('/codex/')) {
         return { ok: false, status: 500, json: async () => ({}) } as Response
       }
       if (url.includes(`/${spare}/`)) {
