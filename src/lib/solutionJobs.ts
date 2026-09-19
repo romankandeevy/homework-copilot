@@ -200,7 +200,18 @@ export function queuePosition(job: SolutionJob, jobs: readonly SolutionJob[]) {
    что она отправляла, а решатель на сервере продолжает считать и сохранит
    решение сам. Взяться за такую строку заново значило бы гнать вторую
    генерацию поверх работающей первой. Не дождётся — строку закроет срок,
-   и ученик увидит честную неудачу с кнопкой повтора. */
+   и ученик увидит честную неудачу с кнопкой повтора.
+
+   19 сентября: закрытая без расписки вкладка (обрыв сети, закрытая
+   страница) оставляла свою задачу `running` в базе, и сервер списывал её
+   только через `expire_stale_homework_jobs` - шесть минут без движения.
+   Всё это время она занимала место в лимите одновременных задач, и новая
+   задача того же устройства не уходила на сервер вовсе, а очередь молча
+   показывала «Читаем» - неотличимо от настоящего решения. Осиротевшую
+   строку не отличить от настоящей по одному статусу, но у настоящей
+   `updatedAt` двигается: решатель отмечает стадию на каждом шаге. Не
+   обновлялась минуту - в этой вкладке она не жива, место отдаём новой; сама
+   она всё равно закроется сроком на сервере. */
 export function nextRunnableJob(
   jobs: readonly SolutionJob[],
   deviceId: string,
@@ -208,7 +219,12 @@ export function nextRunnableJob(
   concurrency: number,
 ): SolutionJob | null {
   const mine = orderedActiveJobs(jobs).filter((job) => job.deviceId === deviceId)
-  const inFlight = mine.filter((job) => job.status === 'running' || runningKeys.has(job.idempotencyKey)).length
+  const inFlight = mine.filter((job) => {
+    if (runningKeys.has(job.idempotencyKey)) return true
+    if (job.status !== 'running') return false
+    const updatedAt = Date.parse(job.updatedAt)
+    return !Number.isFinite(updatedAt) || Date.now() - updatedAt < 60_000
+  }).length
   if (inFlight >= concurrency) return null
   return mine.find((job) => job.status === 'queued' && !runningKeys.has(job.idempotencyKey)) ?? null
 }

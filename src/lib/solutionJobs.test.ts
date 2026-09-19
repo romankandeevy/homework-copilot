@@ -101,12 +101,35 @@ describe('очередь', () => {
 
   it('считает начатую задачу занятым местом в очереди', () => {
     const jobs = [
-      job({ idempotencyKey: 'started', status: 'running', createdAt: '2026-08-31T10:00:00.000Z' }),
+      job({
+        idempotencyKey: 'started',
+        status: 'running',
+        createdAt: '2026-08-31T10:00:00.000Z',
+        updatedAt: new Date().toISOString(),
+      }),
       job({ idempotencyKey: 'waiting-1', createdAt: '2026-08-31T10:00:01.000Z' }),
       job({ idempotencyKey: 'waiting-2', createdAt: '2026-08-31T10:00:02.000Z' }),
     ]
     expect(nextRunnableJob(jobs, 'this-device', new Set(), 2)?.idempotencyKey).toBe('waiting-1')
     expect(nextRunnableJob(jobs, 'this-device', new Set(['waiting-1']), 2)).toBeNull()
+  })
+
+  /* 19 сентября: закрытая без расписки вкладка оставляла свою задачу
+     `running`, и она занимала место в лимите одновременных задач до шести
+     минут - срока, за который её спишет `expire_stale_homework_jobs`. Новая
+     задача устройства всё это время не уходила на сервер вовсе, а очередь
+     показывала «Читаем» неотличимо от настоящего решения. */
+  it('не считает занятым место осиротевшей задачи, которая минуту не двигалась', () => {
+    const jobs = [
+      job({
+        idempotencyKey: 'orphaned',
+        status: 'running',
+        createdAt: '2026-08-31T10:00:00.000Z',
+        updatedAt: new Date(Date.now() - 5 * 60_000).toISOString(),
+      }),
+      job({ idempotencyKey: 'waiting', createdAt: '2026-08-31T10:00:01.000Z' }),
+    ]
+    expect(nextRunnableJob(jobs, 'this-device', new Set(), 2)?.idempotencyKey).toBe('waiting')
   })
 })
 
