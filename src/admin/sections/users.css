@@ -81,7 +81,7 @@
 }
 
 .adm-users-stats > div:last-child { border-right: 0; }
-.adm-users-stats dt { color: var(--color-text-muted); font: var(--type-eyebrow); letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; }
+.adm-users-stats dt { color: var(--color-text-muted); font: var(--type-eyebrow); letter-spacing: var(--tracking-eyebrow);}
 .adm-users-stats dd { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.55rem; margin: 0; }
 
 .adm-users-stats strong {
@@ -168,10 +168,9 @@
   color: var(--color-text-subtle);
   font: var(--type-eyebrow);
   letter-spacing: var(--tracking-eyebrow);
-  text-transform: uppercase;
 }
 
-.adm-qs-foot { border-top: 1px solid var(--color-border); margin-top: var(--space-1); letter-spacing: 0.06em; }
+.adm-qs-foot { border-top: 1px solid var(--color-border); margin-top: var(--space-1);}
 .adm-qs-list { display: grid; gap: 0.1rem; margin: 0; padding: 0; list-style: none; }
 
 .adm-qs-list li {
@@ -272,8 +271,6 @@
   align-items: center;
   color: var(--color-text-muted);
   font: var(--type-eyebrow);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
   cursor: pointer;
 }
 
@@ -317,7 +314,7 @@
   .adm-table .adm-users-col-wide { display: none; }
 }
 
-.adm-users-pill { height: 1.625rem; font-size: 0.6875rem; }
+.adm-users-pill { height: 1.625rem; font-size: var(--font-size-label-sm); }
 /* Столбец «…» прилипает к правому краю: меню действий доступно без
    прокрутки таблицы вбок. Фон непрозрачный - под ним едут другие столбцы. */
 .adm-table .adm-users-col-menu {
@@ -380,12 +377,12 @@
 .adm-users-empty-ink rect,
 .adm-users-empty-ink circle { fill: var(--color-surface); }
 .adm-users-empty-signal { stroke: var(--signal-500); stroke-width: 2.5; }
-.adm-users-empty h3 { color: var(--color-strong); font: var(--weight-bold) 1rem/1.2 var(--font-display); letter-spacing: -0.01em; text-transform: uppercase; }
+.adm-users-empty h3 { color: var(--color-strong); font: var(--weight-bold) 1rem/1.2 var(--font-display); letter-spacing: -0.01em;}
 .adm-users-empty p { max-width: 42ch; color: var(--color-text-muted); font-size: var(--text-small); line-height: var(--leading-copy); }
 
 /* Панель выбранных держится у нижнего края окна, пока видна таблица */
 .adm-users-bulkbar { position: sticky; z-index: 20; bottom: var(--space-3); margin: var(--space-3) 0 0; box-shadow: var(--shadow-raised); }
-.adm-users-bulk-progress { color: var(--paper-000); font: var(--type-eyebrow); letter-spacing: 0.06em; }
+.adm-users-bulk-progress { color: var(--paper-000); font: var(--type-eyebrow);}
 
 @media (max-width: 960px) {
   .adm-users-panel { grid-template-columns: repeat(2, minmax(0, 1fr)); }

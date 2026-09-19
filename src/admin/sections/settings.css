@@ -219,7 +219,7 @@
 .set-history-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-2); }
 .set-history-head strong { color: var(--color-strong); font-weight: var(--weight-semibold); }
 .set-history-head time { margin-left: auto; color: var(--color-text-subtle); font: var(--type-mono); white-space: nowrap; }
-.set-history-tag { color: var(--color-text-subtle); font: var(--type-eyebrow); letter-spacing: 0.08em; text-transform: uppercase; }
+.set-history-tag { color: var(--color-text-subtle); font: var(--type-eyebrow);}
 .set-history-who { color: var(--color-text-subtle); font-size: var(--text-small); overflow-wrap: anywhere; }
 .set-history-changes { display: grid; gap: 0.15rem; margin: 0; padding: 0; list-style: none; color: var(--color-text-muted); font: var(--type-mono); overflow-wrap: anywhere; }
 .set-history-empty { color: var(--color-text-subtle); font-size: var(--text-small); line-height: var(--leading-copy); }
@@ -352,11 +352,11 @@
 
 .set-run.is-draft { border-color: color-mix(in oklch, var(--signal-500) 45%, var(--color-border)); }
 .set-run-head { display: grid; gap: 0.4rem; }
-.set-run-head h3 { font: var(--weight-bold) 0.8125rem/1.3 var(--font-display); letter-spacing: 0.02em; text-transform: uppercase; }
+.set-run-head h3 { font: var(--weight-bold) 0.8125rem/1.3 var(--font-display);}
 .set-run-head small { color: var(--color-text-subtle); font: var(--type-mono); overflow-wrap: anywhere; }
 .set-run-block { display: grid; gap: 0.35rem; }
 .set-run-block h4,
-.set-run-answer h4 { color: var(--color-text-subtle); font: var(--type-eyebrow); letter-spacing: 0.08em; text-transform: uppercase; }
+.set-run-answer h4 { color: var(--color-text-subtle); font: var(--type-eyebrow);}
 .set-run-block p,
 .set-run-block li { font-size: var(--text-small); line-height: var(--leading-copy); overflow-wrap: anywhere; }
 .set-run-block ol,

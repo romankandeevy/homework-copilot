@@ -80,7 +80,7 @@ test.describe('админка: пользователи', () => {
     await expect(page.getByLabel('Активность')).toHaveValue('7d')
     await expect(page.getByRole('button', { name: /Показать фильтры/ })).toContainText('1')
 
-    await page.getByRole('navigation', { name: 'Разделы админки' }).getByRole('link', { name: 'Дашборд' }).click()
+    await page.getByRole('navigation', { name: 'Разделы админки' }).getByRole('link', { name: 'Сводка' }).click()
     await expect(page).not.toHaveURL(/u_seen/)
     await openUsers(page)
     await expect(page).toHaveURL(/u_seen=7d/)

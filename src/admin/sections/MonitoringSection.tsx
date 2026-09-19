@@ -29,7 +29,7 @@ export default function MonitoringSection() {
   if (!access.permissions.settings) {
     return (
       <>
-        <PageHeader title="Мониторинг" />
+        <PageHeader title="Состояние сервисов" />
         <Panel>
           <EmptyState>
             Мониторинг открыт ролям admin и owner: ошибки, логи запросов и состояние сервисов содержат данные всех учеников. Для роли поддержки есть раздел «Поддержка» и карточка пользователя.
@@ -42,7 +42,7 @@ export default function MonitoringSection() {
   if (!supabase) {
     return (
       <>
-        <PageHeader title="Мониторинг" />
+        <PageHeader title="Состояние сервисов" />
         <ErrorState message="Подключение к базе не настроено." />
       </>
     )
@@ -50,7 +50,7 @@ export default function MonitoringSection() {
 
   return (
     <>
-      <PageHeader title="Мониторинг" description="Ошибки, качество решений, логи запросов и состояние сервисов. Данные обновляются сами." />
+      <PageHeader title="Состояние сервисов" description="Ошибки, качество решений, логи запросов и состояние сервисов. Данные обновляются сами." />
       <Tabs
         value={tab}
         tabs={[

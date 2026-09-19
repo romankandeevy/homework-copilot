@@ -1,167 +1,136 @@
-/* Админка на Kandeev Design System (VERKSTAD).
-   Источник: C:\prog\_materials\design-system\VERKSTAD. Правило одно: всё
-   внутри .adm-app, витрина и продукт не задеты.
+/* Админка на Northline v2 - дизайн-системе владельца (19 сентября 2026,
+   до этого была VERKSTAD: клетка, вермильон, моно-капс). Токены системы -
+   в northline.css (грузится раньше), здесь прежние имена переменных разделов
+   переведены на них, поэтому разделы не переписывались построчно.
 
-   Система светлая: чернила на тёплой бумаге, техническая клетка 32px, один
-   акцент - вермильон, и он один на экран: активный раздел, фокус, главное
-   действие. Blueprint - только сетки графиков. Тёмная тема - переворот
-   чернил и бумаги той же системы (в VERKSTAD её нет, ТЗ её требует).
-
-   Шрифты: система просит Golos Text, но фронт раздаёт GitHub Pages и внешних
-   шрифтов не тянет - текст на локальном Onest. Unbounded и JetBrains Mono
-   совпадают с системой. */
+   Правила системы, которые держим: иерархия - размером и весом, не цветом;
+   один акцент (синий) - главное действие, фокус, ссылка, активный раздел;
+   карточка плоская - рамка без тени, тень только у всплывающего; шрифт
+   системный, капс только у подписей групп меню; тёмная тема - та же
+   палитра, переключается атрибутом data-theme на <html>. */
 
 .adm-app {
-  /* Ink / paper / signal / blueprint - как в tokens/colors.css */
-  --ink-1000: oklch(0.14 0.008 60);
-  --ink-900: oklch(0.21 0.008 60);
-  --ink-700: oklch(0.38 0.006 60);
-  --ink-500: oklch(0.56 0.005 60);
-  --ink-400: oklch(0.68 0.005 60);
-  --ink-300: oklch(0.8 0.004 70);
-  --ink-200: oklch(0.89 0.004 80);
-  --ink-100: oklch(0.945 0.003 85);
-  --ink-050: oklch(0.972 0.003 85);
-  --paper-000: oklch(0.995 0.002 90);
-  --paper-100: oklch(0.978 0.004 88);
-  --paper-200: oklch(0.958 0.006 85);
-  --signal-600: oklch(0.52 0.2 36);
-  --signal-500: oklch(0.62 0.22 38);
-  --signal-400: oklch(0.72 0.17 42);
-  --signal-100: oklch(0.93 0.05 45);
-  --blueprint-600: oklch(0.48 0.11 245);
-  --blueprint-400: oklch(0.66 0.09 245);
-  --blueprint-100: oklch(0.93 0.03 245);
-  --ok-500: oklch(0.6 0.13 150);
-  --ok-700: oklch(0.45 0.11 150);
-  --warn-500: oklch(0.75 0.15 80);
-  --warn-700: oklch(0.55 0.13 80);
-  --error-500: oklch(0.55 0.2 27);
+  /* Прежние имена палитры -> ступени Northline. Ступени сами меняются в
+     тёмной теме, отдельного тёмного блока здесь больше нет. */
+  --ink-1000: var(--neutral-12);
+  --ink-900: var(--neutral-12);
+  --ink-700: var(--neutral-11);
+  --ink-500: var(--neutral-11);
+  --ink-400: var(--neutral-9);
+  --ink-300: var(--neutral-7);
+  --ink-200: var(--neutral-6);
+  --ink-100: var(--neutral-4);
+  --ink-050: var(--neutral-3);
+  --paper-000: var(--neutral-2);
+  --paper-100: var(--neutral-1);
+  --paper-200: var(--neutral-3);
+  --signal-600: var(--accent-10);
+  --signal-500: var(--accent-9);
+  --signal-400: var(--accent-8);
+  --signal-100: var(--accent-3);
+  --blueprint-600: var(--info-9);
+  --blueprint-400: var(--info-8);
+  --blueprint-100: var(--info-3);
+  --ok-500: var(--success-9);
+  --ok-700: var(--success-11);
+  --warn-500: var(--warning-9);
+  --warn-700: var(--warning-11);
+  --error-500: var(--danger-9);
 
-  --grid-line: oklch(0.14 0.008 60 / 0.07);
+  --grid-line: transparent;
   --grid-size: 32px;
-  --glass-bg: oklch(0.995 0.002 90 / 0.72);
+  --glass-bg: var(--bg-surface);
 
-  /* Проектные имена токенов переведены на систему: разделы админки
-     размечены ими, и им ничего менять не нужно. */
-  --color-canvas: var(--paper-100);
-  --color-surface: var(--paper-000);
-  --color-surface-raised: var(--paper-100);
-  --color-surface-sunken: var(--paper-200);
-  --color-border: oklch(0.14 0.008 60 / 0.12);
-  --color-border-strong: var(--ink-1000);
-  --color-text-subtle: var(--ink-500);
-  --color-text-muted: var(--ink-700);
-  --color-text: var(--ink-900);
-  --color-strong: var(--ink-1000);
-  --color-on-strong: var(--paper-000);
-  --color-accent: var(--signal-500);
-  --color-accent-hover: var(--signal-600);
-  --color-accent-soft: var(--signal-100);
-  --color-accent-surface: var(--signal-500);
-  --color-on-accent: var(--paper-000);
-  --color-brand-accent: var(--signal-600);
-  --color-info: var(--blueprint-600);
-  --color-info-soft: var(--blueprint-100);
-  --color-success: var(--ok-500);
-  --color-success-strong: var(--ok-700);
-  --color-success-soft: oklch(0.94 0.03 150);
-  --color-warning: var(--warn-500);
-  --color-warning-soft: oklch(0.95 0.04 80);
-  --color-danger: var(--error-500);
-  --color-danger-soft: oklch(0.94 0.04 27);
+  --color-canvas: var(--bg-canvas);
+  --color-surface: var(--bg-surface);
+  --color-surface-raised: var(--bg-surface-raised);
+  --color-surface-sunken: var(--bg-subtle);
+  --color-border: var(--border-default);
+  --color-border-strong: var(--border-strong);
+  --color-text-subtle: var(--text-tertiary);
+  --color-text-muted: var(--text-secondary);
+  --color-text: var(--text-primary);
+  --color-strong: var(--text-primary);
+  --color-on-strong: var(--text-inverse);
+  --color-accent: var(--bg-accent);
+  --color-accent-hover: var(--bg-accent-hover);
+  --color-accent-soft: var(--bg-accent-subtle);
+  --color-accent-surface: var(--bg-accent);
+  --color-on-accent: var(--text-on-accent);
+  --color-brand-accent: var(--text-accent);
+  --color-info: var(--text-info);
+  --color-info-soft: var(--bg-info-subtle);
+  --color-success: var(--bg-success);
+  --color-success-strong: var(--text-success);
+  --color-success-soft: var(--bg-success-subtle);
+  --color-warning: var(--bg-warning);
+  --color-warning-soft: var(--bg-warning-subtle);
+  --color-danger: var(--text-danger);
+  --color-danger-soft: var(--bg-danger-subtle);
 
-  /* Серии графиков: главная - чернила, вторая - вермильон, третья - blueprint */
-  --adm-series-1: var(--ink-1000);
-  --adm-series-2: var(--signal-500);
-  --adm-series-3: var(--blueprint-600);
-  --adm-series-4: var(--ink-400);
-  --adm-series-5: oklch(0.68 0.13 145);
-  --adm-series-6: var(--blueprint-400);
-  --adm-series-7: var(--ink-300);
-  --adm-series-8: var(--signal-400);
+  /* Серии графиков: главная - акцент, вторая - нейтральная */
+  --adm-series-1: var(--accent-9);
+  --adm-series-2: var(--neutral-9);
+  --adm-series-3: var(--info-8);
+  --adm-series-4: var(--neutral-7);
+  --adm-series-5: var(--success-9);
+  --adm-series-6: var(--accent-7);
+  --adm-series-7: var(--neutral-6);
+  --adm-series-8: var(--warning-9);
+
+  /* Шрифты: один системный для всего, моно - для чисел и кода */
+  --font-display: var(--font-sans);
+  --font-body: var(--font-sans);
+  --text-ui: var(--font-size-body-sm);
+  --leading-ui: var(--line-height-body-sm);
 
   --weight-regular: 400;
   --weight-medium: 500;
   --weight-semibold: 600;
-  --weight-bold: 700;
-  --weight-black: 900;
-  --tracking-eyebrow: 0.16em;
-  --tracking-heading: -0.02em;
-  --tracking-display: -0.035em;
+  --weight-bold: 600;
+  --weight-black: 600;
+  --tracking-eyebrow: normal;
+  --tracking-display: -0.02em;
 
-  --radius-xs: 8px;
-  --radius-control: 12px;
-  --radius-surface: 14px;
-  --radius-panel: 14px;
-  --radius-pill: 999px;
+  --radius-control: var(--radius-md);
+  --radius-surface: var(--radius-lg);
+  --radius-panel: var(--radius-lg);
+  --radius-pill: var(--radius-full);
 
-  --shadow-card: 0 1px 2px oklch(0.14 0.008 60 / 0.04), 0 8px 24px -12px oklch(0.14 0.008 60 / 0.14);
-  --shadow-control: 0 1px 2px oklch(0.14 0.008 60 / 0.04);
-  --shadow-raised: 0 2px 4px oklch(0.14 0.008 60 / 0.05), 0 18px 44px -18px oklch(0.14 0.008 60 / 0.2);
-  --shadow-overlay: 0 24px 80px -24px oklch(0.14 0.008 60 / 0.3);
-  --shadow-focus: 0 0 0 3px oklch(0.62 0.22 38 / 0.28);
-  --focus-ring: 0 0 0 2px var(--paper-000), 0 0 0 3px var(--ink-1000), var(--shadow-focus);
+  --shadow-card: none;
+  --shadow-control: none;
+  --shadow-raised: var(--shadow-md), var(--shadow-raised-highlight);
+  --shadow-overlay: var(--shadow-xl), var(--shadow-raised-highlight);
+  --focus-ring: 0 0 0 1px var(--border-focus), var(--shadow-focus);
 
-  --dur-instant: 80ms;
-  --dur-fast: 160ms;
-  --dur-base: 280ms;
-  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
-  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-overshoot: cubic-bezier(0.34, 1.4, 0.5, 1);
-  --transition-control: color var(--dur-fast) var(--ease-standard), background-color var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard), transform var(--dur-fast) var(--ease-standard);
+  --dur-instant: var(--duration-fast);
+  --dur-fast: var(--duration-base);
+  --dur-base: var(--duration-slow);
+  --ease-standard: var(--ease-out);
+  --ease-out-expo: var(--ease-out);
+  --ease-overshoot: var(--ease-out);
+  --transition-control: color var(--dur-fast) var(--ease-standard), background-color var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard);
 
-  --adm-rail: 15rem;
-  --adm-topbar: 3.75rem;
-  --adm-gap: clamp(0.75rem, 2vw, 1.5rem);
+  --adm-rail: var(--sidebar-expanded);
+  --adm-topbar: var(--header-height);
+  --adm-gap: var(--space-6);
 
-  /* Роли типографики */
-  --type-eyebrow: var(--weight-medium) 0.6875rem/1 var(--font-mono);
-  --type-mono: var(--weight-regular) var(--text-small)/1.5 var(--font-mono);
-  --type-label: var(--weight-bold) 0.6875rem/1 var(--font-display);
+  /* Роли типографики: подпись поля и шапка таблицы - label-sm, без капса */
+  --type-eyebrow: var(--font-weight-label-sm) var(--font-size-label-sm)/var(--line-height-label-sm) var(--font-sans);
+  --type-mono: var(--weight-regular) var(--font-size-body-sm)/1.5 var(--font-mono);
+  --type-label: var(--font-weight-label) var(--font-size-label)/var(--line-height-label) var(--font-sans);
 
   min-height: 100svh;
-  background-color: var(--color-canvas);
-  background-image:
-    repeating-linear-gradient(to right, var(--grid-line) 0 1px, transparent 1px var(--grid-size)),
-    repeating-linear-gradient(to bottom, var(--grid-line) 0 1px, transparent 1px var(--grid-size));
-  color: var(--color-text);
-  font-family: var(--font-body);
-  font-size: var(--text-ui);
-  line-height: var(--leading-ui);
+  background: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-body-sm);
   -webkit-font-smoothing: antialiased;
   color-scheme: light;
 }
 
-/* Тёмная тема - переворот чернил и бумаги. Вермильон остаётся тем же. */
-:root[data-theme='dark'] .adm-app {
-  --ink-1000: oklch(0.975 0.004 85);
-  --ink-900: oklch(0.93 0.004 85);
-  --ink-700: oklch(0.8 0.005 80);
-  --ink-500: oklch(0.66 0.005 70);
-  --ink-400: oklch(0.55 0.006 65);
-  --ink-300: oklch(0.42 0.006 60);
-  --ink-200: oklch(0.32 0.007 60);
-  --ink-100: oklch(0.25 0.008 60);
-  --ink-050: oklch(0.21 0.008 60);
-  --paper-000: oklch(0.2 0.008 60);
-  --paper-100: oklch(0.165 0.008 60);
-  --paper-200: oklch(0.13 0.008 60);
-  --signal-100: oklch(0.3 0.06 40);
-  --blueprint-100: oklch(0.28 0.04 245);
-  --grid-line: oklch(0.98 0.004 85 / 0.06);
-  --glass-bg: oklch(0.165 0.008 60 / 0.78);
-  --color-border: oklch(0.98 0.004 85 / 0.14);
-  --color-success-soft: oklch(0.28 0.05 150);
-  --color-warning-soft: oklch(0.3 0.06 80);
-  --color-danger-soft: oklch(0.3 0.07 27);
-  --ok-700: oklch(0.75 0.12 150);
-  --warn-700: oklch(0.8 0.13 80);
-  --shadow-card: 0 1px 2px oklch(0 0 0 / 0.3), 0 8px 24px -12px oklch(0 0 0 / 0.5);
-  --shadow-raised: 0 2px 4px oklch(0 0 0 / 0.35), 0 18px 44px -18px oklch(0 0 0 / 0.6);
-  --shadow-overlay: 0 24px 80px -24px oklch(0 0 0 / 0.7);
-  color-scheme: dark;
-}
+:root[data-theme='dark'] .adm-app { color-scheme: dark; }
 
 .adm-app *,
 .adm-app *::before,
@@ -214,7 +183,7 @@
 .adm-pagination,
 .adm-online,
 .adm-topbar-meta {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
 }
 
 .adm-eyebrow,
@@ -226,10 +195,9 @@
 .adm-cohorts th,
 .adm-hbars-label,
 .adm-funnel-step span {
-  font-size: 0.6875rem;
+  font-size: var(--font-size-label-sm);
   font-weight: var(--weight-medium);
   letter-spacing: var(--tracking-eyebrow);
-  text-transform: uppercase;
 }
 
 /* ---------- Каркас ---------- */
@@ -257,7 +225,6 @@
   color: var(--color-strong);
   font: var(--weight-bold) 0.8125rem/1 var(--font-display);
   letter-spacing: -0.02em;
-  text-transform: uppercase;
   text-decoration: none;
   white-space: nowrap;
 }
@@ -277,7 +244,7 @@
 
 .adm-wordmark-text { font: inherit; }
 .adm-topbar-spacer { flex: 1; }
-.adm-topbar-role { font: var(--type-eyebrow); letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; color: var(--signal-600); white-space: nowrap; }
+.adm-topbar-role { font: var(--type-eyebrow); letter-spacing: var(--tracking-eyebrow);color: var(--signal-600); white-space: nowrap; }
 
 .adm-topbar-meta {
   display: inline-flex;
@@ -313,9 +280,7 @@
   padding: 0.25rem 0.6rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-pill);
-  font-size: 0.6875rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: var(--font-size-label-sm);
   white-space: nowrap;
 }
 
@@ -441,7 +406,6 @@
 .adm-page-header h1 {
   font: var(--weight-black) clamp(1.6rem, 2.6vw, 2.25rem)/1.05 var(--font-display);
   letter-spacing: var(--tracking-display);
-  text-transform: uppercase;
 }
 
 .adm-page-header p { margin-top: var(--space-2); max-width: 70ch; color: var(--color-text-muted); font-size: var(--text-small); line-height: var(--leading-copy); }
@@ -470,7 +434,6 @@
 .adm-panel-header h2 {
   font: var(--weight-bold) 0.875rem/1.3 var(--font-display);
   letter-spacing: -0.01em;
-  text-transform: uppercase;
 }
 
 .adm-panel-header p { margin-top: 0.35rem; color: var(--color-text-subtle); font-size: 0.75rem; }
@@ -526,7 +489,6 @@
   padding: 0.1rem 0.45rem;
   border-radius: var(--radius-pill);
   font: var(--weight-medium) 0.6875rem/1.4 var(--font-mono);
-  letter-spacing: 0.04em;
 }
 
 .adm-delta.is-good { background: var(--color-success-soft); color: var(--ok-700); }
@@ -549,8 +511,6 @@
   background: transparent;
   color: var(--color-strong);
   font: var(--weight-bold) 0.6875rem/1 var(--font-display);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
   cursor: pointer;
   white-space: nowrap;
   transition: var(--transition-control);
@@ -605,8 +565,6 @@
   border-radius: var(--radius-pill);
   color: var(--color-text-muted);
   font: var(--weight-medium) 0.625rem/1 var(--font-mono);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
   white-space: nowrap;
 }
 
@@ -727,8 +685,6 @@
   background: transparent;
   color: var(--color-text-muted);
   font: var(--weight-medium) 0.6875rem/1 var(--font-mono);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
   cursor: pointer;
   transition: var(--transition-control);
 }
@@ -762,7 +718,6 @@
   color: var(--color-text-muted);
   font: var(--weight-medium) 0.6875rem/1 var(--font-mono);
   letter-spacing: var(--tracking-eyebrow);
-  text-transform: uppercase;
   cursor: pointer;
   white-space: nowrap;
   transition: var(--transition-control);
@@ -850,7 +805,6 @@
   margin-top: var(--space-4);
   color: var(--color-text-subtle);
   font-size: 0.75rem;
-  letter-spacing: 0.04em;
 }
 
 .adm-pagination > div { display: inline-flex; align-items: center; gap: var(--space-2); }
@@ -926,7 +880,7 @@
   background: var(--color-surface);
 }
 
-.adm-drawer-header h2 { font: var(--weight-bold) 1rem/1.2 var(--font-display); letter-spacing: -0.01em; text-transform: uppercase; overflow-wrap: anywhere; }
+.adm-drawer-header h2 { font: var(--weight-bold) 1rem/1.2 var(--font-display); letter-spacing: -0.01em;overflow-wrap: anywhere; }
 .adm-drawer-header p { margin-top: 0.3rem; color: var(--color-text-subtle); font-size: 0.75rem; overflow-wrap: anywhere; }
 .adm-drawer-body { display: grid; align-content: start; gap: var(--space-4); flex: 1; padding: var(--space-5); overflow-y: auto; }
 
@@ -1001,7 +955,7 @@
 .adm-palette-list li > button.is-active .adm-cell-main strong,
 .adm-palette-list li > button:hover .adm-cell-main strong { color: var(--paper-000); }
 .adm-palette-empty { padding: var(--space-6); color: var(--color-text-subtle); text-align: center; }
-.adm-palette-foot { display: flex; gap: var(--space-4); padding: var(--space-2) var(--space-4); border-top: 1px solid var(--color-border); color: var(--color-text-subtle); font: var(--type-eyebrow); letter-spacing: 0.08em; text-transform: uppercase; }
+.adm-palette-foot { display: flex; gap: var(--space-4); padding: var(--space-2) var(--space-4); border-top: 1px solid var(--color-border); color: var(--color-text-subtle); font: var(--type-eyebrow);}
 
 /* ---------- Уведомления ---------- */
 
@@ -1057,13 +1011,13 @@
 
 .adm-chart svg { display: block; width: 100%; height: auto; overflow: visible; }
 .adm-chart-grid { stroke: var(--blueprint-600); stroke-opacity: 0.18; stroke-width: 1; }
-.adm-chart-axis { fill: var(--color-text-subtle); font: 10px var(--font-mono); letter-spacing: 0.04em; }
+.adm-chart-axis { fill: var(--color-text-subtle); font: 10px var(--font-mono);}
 .adm-chart-line { fill: none; stroke: currentColor; stroke-width: 2.25; stroke-linejoin: round; stroke-linecap: round; }
 .adm-chart-dot { fill: var(--paper-000); stroke: currentColor; stroke-width: 1.75; }
 .adm-chart-bar { fill: currentColor; }
 .adm-chart-cursor { stroke: var(--blueprint-600); stroke-dasharray: 3 3; }
 
-.adm-chart-legend { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); margin-top: var(--space-3); color: var(--color-text-muted); font-size: 0.6875rem; letter-spacing: 0.06em; text-transform: uppercase; }
+.adm-chart-legend { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); margin-top: var(--space-3); color: var(--color-text-muted); font-size: var(--font-size-label-sm);}
 .adm-chart-legend span { display: inline-flex; align-items: center; gap: 0.4rem; color: var(--color-text-muted); }
 .adm-chart-legend i { width: 0.75rem; height: 0.75rem; border-radius: 3px; background: currentColor; }
 .adm-chart-legend b { color: var(--color-strong); font-weight: var(--weight-medium); }
@@ -1192,7 +1146,7 @@
   box-shadow: var(--shadow-raised);
 }
 
-.adm-gate-card h1 { font: var(--weight-black) 1.5rem/1.05 var(--font-display); letter-spacing: var(--tracking-display); text-transform: uppercase; }
+.adm-gate-card h1 { font: var(--weight-black) 1.5rem/1.05 var(--font-display); letter-spacing: var(--tracking-display);}
 .adm-gate-card p { color: var(--color-text-muted); line-height: var(--leading-copy); }
 .adm-gate-card form { display: grid; gap: var(--space-3); }
 .adm-gate-qr { justify-self: center; width: 12rem; height: 12rem; padding: var(--space-2); border-radius: var(--radius-surface); background: #fff; }
@@ -1257,3 +1211,111 @@
 /* Под закреплённой шапкой карточки ничего не прячется: прокрутка к элементу
    (фокус с клавиатуры, переход к вкладке) оставляет место под шапку. */
 .adm-drawer-body > * { scroll-margin-top: 11rem; }
+
+/* ==========================================================================
+   Northline: компоненты. Слой идёт последним и с префиксом .adm-app, чтобы
+   перебить прежние правила разделов, написанные под VERKSTAD. Размер
+   контролов один на всю админку - control-sm/md, как в таблицах системы.
+   ========================================================================== */
+
+.adm-app {
+  /* Моно остаётся только у кода; цифры - системный шрифт с табличными
+     цифрами, как stat__value в Northline. */
+  --font-mono: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+}
+.adm-app pre,
+.adm-app code,
+.adm-app kbd,
+.adm-app .adm-code { font-family: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace; }
+
+/* Шапка и меню */
+.adm-app .adm-topbar { background: var(--bg-canvas); backdrop-filter: none; -webkit-backdrop-filter: none; }
+.adm-app .adm-wordmark { font: var(--font-weight-semibold) var(--font-size-label)/1 var(--font-sans); letter-spacing: normal; }
+.adm-app .adm-wordmark > span { width: var(--control-xs); height: var(--control-xs); border-radius: var(--radius-sm); background: var(--bg-inverse); color: var(--text-inverse); font: var(--font-weight-semibold) var(--font-size-label-sm)/1 var(--font-sans); }
+.adm-app .adm-topbar-role { font: var(--font-weight-regular) var(--font-size-label)/1 var(--font-sans); color: var(--text-tertiary); }
+.adm-app .adm-rail { background: var(--bg-canvas); padding: var(--space-3); gap: var(--space-0-5); }
+.adm-app .adm-rail-group { margin: var(--space-4) 0 var(--space-1); padding: 0 var(--space-2); font: var(--font-weight-overline) var(--font-size-overline)/var(--line-height-overline) var(--font-sans); letter-spacing: var(--tracking-overline); text-transform: uppercase; color: var(--text-tertiary); }
+.adm-app .adm-rail-group:first-child { margin-top: 0; }
+.adm-app .adm-rail a { min-height: var(--control-md); padding: 0 var(--space-2); gap: var(--space-2); border-radius: var(--radius-sm); color: var(--text-secondary); font-size: var(--font-size-body-sm); font-weight: var(--font-weight-regular); }
+.adm-app .adm-rail a::before { display: none; }
+.adm-app .adm-rail a svg { color: var(--icon-secondary); }
+.adm-app .adm-rail a:hover { background: var(--bg-hover); color: var(--text-primary); }
+.adm-app .adm-rail a.is-active { background: var(--bg-selected); color: var(--text-primary); font-weight: var(--font-weight-label); }
+.adm-app .adm-rail a.is-active svg { color: var(--icon-accent); }
+.adm-app .adm-rail-count { background: var(--bg-subtle); color: var(--text-secondary); font: var(--font-weight-label-xs) var(--font-size-label-xs)/1.6 var(--font-sans); }
+.adm-app .adm-rail-count.is-alert { background: var(--bg-danger-subtle); color: var(--text-danger); }
+
+/* Заголовок страницы и панели */
+.adm-app .adm-page-header { align-items: flex-start; padding-bottom: var(--space-4); border-bottom: var(--border-width-default) solid var(--border-default); }
+.adm-app .adm-page-header h1 { font: var(--font-weight-heading) var(--font-size-heading)/var(--line-height-heading) var(--font-sans); letter-spacing: var(--tracking-heading); color: var(--text-primary); }
+.adm-app .adm-page-header p { font-size: var(--font-size-body-sm); color: var(--text-secondary); margin-top: var(--space-1); }
+.adm-app .adm-panel { padding: var(--inset-lg); border-radius: var(--radius-lg); box-shadow: none; }
+.adm-app .adm-panel-header h2 { font: var(--font-weight-heading-xs) var(--font-size-heading-xs)/var(--line-height-heading-xs) var(--font-sans); letter-spacing: normal; }
+.adm-app .adm-panel-header p { font-size: var(--font-size-caption); color: var(--text-secondary); }
+.adm-app .adm-stat-grid { border-radius: var(--radius-lg); box-shadow: none; }
+.adm-app .adm-stat { border-color: var(--border-subtle); padding: var(--inset-md) var(--inset-lg); }
+.adm-app .adm-stat-label { font: var(--font-weight-regular) var(--font-size-caption)/var(--line-height-caption) var(--font-sans); color: var(--text-tertiary); }
+.adm-app .adm-stat-value { font-family: var(--font-sans); font-weight: var(--font-weight-heading-lg); letter-spacing: var(--tracking-heading-lg); color: var(--text-primary); }
+.adm-app .adm-stat.is-danger,
+.adm-app .adm-stat.is-warning { background: transparent; }
+.adm-app .adm-stat.is-danger .adm-stat-value { color: var(--text-danger); }
+
+/* Кнопки: вторичная - контур, главная - акцент, одна на экран */
+.adm-app .adm-button { min-height: var(--control-md); padding: 0 var(--space-3); gap: var(--space-1-5); border: var(--border-width-default) solid var(--border-default); border-radius: var(--radius-md); background: var(--bg-surface); color: var(--text-primary); font: var(--font-weight-label) var(--font-size-label)/1 var(--font-sans); letter-spacing: normal; text-transform: none; transition: background-color var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out); }
+.adm-app .adm-button.is-sm { min-height: var(--control-sm); padding: 0 var(--space-2-5, var(--space-2)); font-size: var(--font-size-label-sm); }
+.adm-app .adm-button:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--border-hover); color: var(--text-primary); }
+.adm-app .adm-button:active:not(:disabled) { transform: none; background: var(--bg-active); }
+.adm-app .adm-button:disabled { opacity: 1; background: var(--bg-disabled); color: var(--text-disabled); border-color: var(--border-subtle); }
+.adm-app .adm-button.is-primary,
+.adm-app .adm-button.is-accent { background: var(--bg-accent); border-color: var(--bg-accent); color: var(--text-on-accent); }
+.adm-app .adm-button.is-primary:hover:not(:disabled),
+.adm-app .adm-button.is-accent:hover:not(:disabled) { background: var(--bg-accent-hover); border-color: var(--bg-accent-hover); color: var(--text-on-accent); }
+.adm-app .adm-button.is-danger { background: var(--bg-surface); border-color: var(--border-default); color: var(--text-danger); }
+.adm-app .adm-button.is-danger:hover:not(:disabled) { background: var(--bg-danger); border-color: var(--bg-danger); color: var(--text-on-accent); }
+.adm-app .adm-button.is-ghost { background: transparent; border-color: transparent; color: var(--text-secondary); }
+.adm-app .adm-button.is-ghost:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); }
+.adm-app .adm-icon-button { border-color: var(--border-default); border-radius: var(--radius-md); background: var(--bg-surface); color: var(--icon-secondary); }
+.adm-app .adm-icon-button:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--border-hover); color: var(--text-primary); }
+
+/* Метки, переключатели, вкладки */
+.adm-app .adm-badge { font: var(--font-weight-label-sm) var(--font-size-label-sm)/1.5 var(--font-sans); letter-spacing: normal; text-transform: none; border-radius: var(--radius-full); border-color: transparent; background: var(--bg-subtle); color: var(--text-secondary); }
+.adm-app .adm-badge.is-success { background: var(--bg-success-subtle); color: var(--text-success); }
+.adm-app .adm-badge.is-warning { background: var(--bg-warning-subtle); color: var(--text-warning); }
+.adm-app .adm-badge.is-danger { background: var(--bg-danger-subtle); color: var(--text-danger); }
+.adm-app .adm-badge.is-info { background: var(--bg-info-subtle); color: var(--text-info); }
+.adm-app .adm-badge.is-accent { background: var(--bg-accent-subtle); color: var(--text-accent); }
+.adm-app .adm-segmented { display: inline-flex; flex-wrap: wrap; gap: var(--space-0-5); padding: var(--space-0-5); background: var(--bg-subtle); border-radius: var(--radius-md); }
+.adm-app .adm-segmented button { min-height: calc(var(--control-sm) - var(--space-1)); padding: 0 var(--space-3); border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text-secondary); font: var(--font-weight-label-sm) var(--font-size-label-sm)/1 var(--font-sans); letter-spacing: normal; text-transform: none; }
+.adm-app .adm-segmented button:hover { color: var(--text-primary); border: 0; }
+.adm-app .adm-segmented button.is-selected { background: var(--bg-surface); color: var(--text-primary); box-shadow: var(--shadow-xs); }
+.adm-app .adm-tabs { border-bottom: var(--border-width-default) solid var(--border-default); }
+.adm-app .adm-tabs button { font: var(--font-weight-label) var(--font-size-label)/1 var(--font-sans); letter-spacing: normal; text-transform: none; color: var(--text-secondary); }
+.adm-app .adm-tabs button:hover { color: var(--text-primary); }
+.adm-app .adm-tabs button.is-selected { color: var(--text-primary); border-bottom-color: var(--bg-accent); }
+.adm-app .adm-tab-badge { font: var(--font-weight-label-xs) var(--font-size-label-xs)/1.6 var(--font-sans); color: var(--text-tertiary); }
+
+/* Таблицы и поля */
+.adm-app .adm-table th { font: var(--font-weight-label-sm) var(--font-size-label-sm)/var(--line-height-label-sm) var(--font-sans); color: var(--text-secondary); letter-spacing: normal; text-transform: none; border-bottom: var(--border-width-default) solid var(--border-default); }
+.adm-app .adm-table td { border-bottom-color: var(--border-subtle); font-size: var(--font-size-body-sm); }
+.adm-app .adm-table tr.is-clickable:hover td { background: var(--bg-hover); }
+.adm-app .adm-table tr.is-selected td { background: var(--bg-selected); }
+.adm-app .adm-field-label { font: var(--font-weight-label) var(--font-size-label)/var(--line-height-label) var(--font-sans); color: var(--text-primary); letter-spacing: normal; text-transform: none; }
+.adm-app .adm-field-hint { font-size: var(--font-size-caption); color: var(--text-tertiary); }
+.adm-app input:not([type='checkbox']):not([type='radio']),
+.adm-app select,
+.adm-app textarea { min-height: var(--control-md); border: var(--border-width-default) solid var(--border-default); border-radius: var(--radius-md); background: var(--bg-surface); color: var(--text-primary); font-size: var(--font-size-body-sm); box-shadow: none; }
+.adm-app input:not([type='checkbox']):not([type='radio']):hover,
+.adm-app select:hover,
+.adm-app textarea:hover { border-color: var(--border-hover); }
+.adm-app input:not([type='checkbox']):not([type='radio']):focus,
+.adm-app select:focus,
+.adm-app textarea:focus { border-color: var(--border-focus); box-shadow: var(--shadow-focus); }
+.adm-app input::placeholder,
+.adm-app textarea::placeholder { color: var(--text-placeholder); }
+.adm-app input[type='checkbox'] { border-color: var(--border-strong); border-radius: var(--radius-xs); }
+.adm-app input[type='checkbox']:checked,
+.adm-app input[type='checkbox']:indeterminate { background: var(--bg-accent); border-color: var(--bg-accent); }
+.adm-app input[type='checkbox']::after { border-color: var(--icon-on-accent); }
+.adm-app a:hover { color: var(--text-link-hover); }
+.adm-app ::selection { background: var(--bg-accent-subtle); color: var(--text-primary); }

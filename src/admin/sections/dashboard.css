@@ -1,7 +1,7 @@
-/* Дашборд на VERKSTAD: деньги наверху крупно, дальше работа сервиса.
-   Цвет несёт смысл: зелёный - хорошо и растёт, красный - проблема и
-   расход, жёлтый - предупреждение и обязательства, синий - люди.
-   Вермильон остаётся за кнопками действий в тревогах. */
+/* Дашборд: деньги наверху крупно, дальше работа сервиса. С 19 сентября
+   2026 на Northline: цвет - только у состояния (рост, проблема,
+   предупреждение); крупные числа - основным цветом текста; на графиках
+   главная серия - акцент, вторая - нейтральная. */
 
 .adm-app {
   --dash-ok: var(--ok-500);
@@ -65,7 +65,7 @@
 .dash-change.is-good b { background: var(--color-success-soft); color: var(--dash-ok-text); }
 .dash-change.is-bad b { background: var(--color-danger-soft); color: var(--dash-bad); }
 .dash-change small { color: var(--color-text-subtle); font: 0.6875rem/1.3 var(--font-mono); }
-.dash-kpi .dash-change b { font-size: 0.6875rem; }
+.dash-kpi .dash-change b { font-size: var(--font-size-label-sm); }
 
 /* ---------- Цифры работы сервиса ---------- */
 
@@ -132,12 +132,12 @@
 .dash-kpi.is-bad { border-color: color-mix(in oklch, var(--dash-bad) 55%, var(--color-border)); background: var(--color-danger-soft); }
 
 .dash-kpi-foot { display: grid; gap: 0.3rem; justify-items: start; }
-.dash-kpi-foot small { color: var(--color-text-subtle); font: 0.6875rem/1.35 var(--font-mono); letter-spacing: 0.02em; }
+.dash-kpi-foot small { color: var(--color-text-subtle); font: 0.6875rem/1.35 var(--font-mono);}
 .dash-kpi-foot small b { color: var(--color-strong); font-weight: var(--weight-semibold); }
 .dash-kpi-foot .dash-bad-text { color: var(--dash-bad); }
 
 .dash-versus { display: grid; gap: 0.3rem; justify-items: start; }
-.dash-versus small { color: var(--color-text-subtle); font: 0.6875rem/1.3 var(--font-mono); letter-spacing: 0.02em; }
+.dash-versus small { color: var(--color-text-subtle); font: 0.6875rem/1.3 var(--font-mono);}
 
 .dash-money { display: grid; gap: 0.2rem; width: 100%; margin: 0; }
 .dash-money div { display: flex; justify-content: space-between; gap: var(--space-3); }
@@ -583,3 +583,17 @@
 
 /* Сумма с «₽» не рвётся между строками: «7,80» и «₽» порознь не читались. */
 .dash-nowrap { white-space: nowrap; }
+
+/* Northline: крупные числа без цвета, графики - акцент и нейтральная серия */
+.adm-app .dash-hero-value,
+.adm-app .dash-hero-value.is-ok,
+.adm-app .dash-kpi-value { color: var(--text-primary); font-family: var(--font-sans); font-weight: var(--font-weight-semibold); letter-spacing: -0.02em; }
+.adm-app .dash-kpi-value.is-bad { color: var(--text-danger); }
+.adm-app .dash-bar.is-ok,
+.adm-app .dash-legend-item.is-ok i,
+.adm-app .dash-rank-bar .is-ok { background: var(--bg-accent); }
+.adm-app .dash-bar.is-bad,
+.adm-app .dash-legend-item.is-bad i,
+.adm-app .dash-rank-bar .is-bad { background: var(--neutral-7); }
+.adm-app .dash-kpi { box-shadow: none; }
+.adm-app .dash-kpi.is-bad { background: var(--bg-surface); border-color: var(--border-danger); }

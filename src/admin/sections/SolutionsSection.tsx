@@ -433,7 +433,7 @@ export default function SolutionsSection() {
   return (
     <div className="sol-stack">
       <PageHeader
-        title="База решений"
+        title="Решения"
         description="Все решения, которые решатель выдал ученикам и гостям. Только чтение: решение уже у ученика, и правка задним числом поменяла бы то, за что он заплатил."
         actions={list ? <Button size="sm" icon={<ArrowClockwise size={16} weight="bold" aria-hidden="true" />} loading={loading} onClick={reload}>Обновить</Button> : undefined}
       />

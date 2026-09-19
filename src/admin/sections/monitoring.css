@@ -110,7 +110,6 @@
   margin: 0;
   color: var(--color-text-subtle);
   font: var(--weight-medium) 0.6875rem/1.35 var(--font-mono);
-  letter-spacing: 0.03em;
 }
 .mon-live svg { flex: 0 0 auto; }
 .mon-live.is-error { color: var(--warn-700); }
@@ -223,7 +222,7 @@ th.is-right .mon-tip { right: 0; left: auto; }
 .mon-chart-canvas svg { display: block; max-width: 100%; height: auto; overflow: visible; }
 .mon-chart-grid { stroke: var(--blueprint-600); stroke-opacity: 0.18; stroke-dasharray: 2 4; }
 .mon-chart-base { stroke: var(--ink-1000); stroke-opacity: 0.55; }
-.mon-chart-axis { fill: var(--color-text-subtle); font: 10px var(--font-mono); letter-spacing: 0.04em; }
+.mon-chart-axis { fill: var(--color-text-subtle); font: 10px var(--font-mono);}
 .mon-bar { stroke: var(--color-surface); stroke-width: 1; transition: opacity var(--dur-fast) var(--ease-standard); }
 .is-dim .mon-bar { opacity: 0.35; }
 .mon-chart-hit { fill: transparent; cursor: crosshair; }
@@ -295,7 +294,7 @@ th.is-right .mon-tip { right: 0; left: auto; }
 .mon-filters > .adm-field.is-grow { flex: 1 1 16rem; }
 .mon-route-input { display: block; min-width: 0; }
 
-.mon-bulkbar .mon-bulk-count { margin-right: auto; font: var(--weight-semibold) 0.75rem/1.2 var(--font-mono); letter-spacing: 0.04em; }
+.mon-bulkbar .mon-bulk-count { margin-right: auto; font: var(--weight-semibold) 0.75rem/1.2 var(--font-mono);}
 
 .mon-error-title {
   display: -webkit-box;
@@ -351,7 +350,7 @@ th.is-right .mon-tip { right: 0; left: auto; }
 .mon-empty-axis { stroke: var(--ink-400); stroke-width: 1; }
 .mon-empty-line { fill: none; stroke: var(--ok-500); stroke-width: 2.5; stroke-linecap: round; }
 .mon-empty-dot { fill: var(--ok-500); stroke: var(--color-surface); stroke-width: 3; }
-.mon-empty-title { margin: 0; color: var(--color-strong); font: var(--weight-bold) 1rem/1.25 var(--font-display); letter-spacing: -0.01em; text-transform: uppercase; }
+.mon-empty-title { margin: 0; color: var(--color-strong); font: var(--weight-bold) 1rem/1.25 var(--font-display); letter-spacing: -0.01em;}
 .mon-empty-status { display: inline-flex; align-items: center; gap: 0.4rem; margin: 0; font-weight: var(--weight-medium); }
 .mon-empty-status svg { flex: 0 0 auto; }
 .mon-empty-status.is-ok { color: var(--ok-700); }
@@ -374,7 +373,6 @@ th.is-right .mon-tip { right: 0; left: auto; }
   color: var(--color-strong);
   font: var(--weight-medium) 0.6875rem/1 var(--font-mono);
   letter-spacing: var(--tracking-eyebrow);
-  text-transform: uppercase;
 }
 .mon-feed { margin: 0; padding: 0; list-style: none; }
 .mon-feed li + li { border-top: 1px solid var(--color-border); }
@@ -442,7 +440,7 @@ th.is-right .mon-tip { right: 0; left: auto; }
   background: var(--color-surface);
 }
 .mon-event-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--space-3); }
-.mon-event-head h3 { margin: 0; color: var(--color-strong); font: var(--weight-bold) 0.875rem/1.3 var(--font-display); letter-spacing: -0.01em; text-transform: uppercase; }
+.mon-event-head h3 { margin: 0; color: var(--color-strong); font: var(--weight-bold) 0.875rem/1.3 var(--font-display); letter-spacing: -0.01em;}
 .mon-event-pick { flex: 0 1 19rem; }
 .mon-message {
   margin: 0;
@@ -454,7 +452,7 @@ th.is-right .mon-tip { right: 0; left: auto; }
   overflow-wrap: anywhere;
 }
 .mon-agent { display: grid; gap: 0.2rem; }
-.mon-agent small { color: var(--color-text-subtle); font-size: 0.6875rem; overflow-wrap: anywhere; }
+.mon-agent small { color: var(--color-text-subtle); font-size: var(--font-size-label-sm); overflow-wrap: anywhere; }
 .mon-block { display: grid; gap: var(--space-2); min-width: 0; }
 .mon-block-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .mon-block-head .mon-subhead,
@@ -495,7 +493,7 @@ th.is-right .mon-tip { right: 0; left: auto; }
 .mon-light-row.is-warn .mon-light-state { color: var(--warn-700); }
 .mon-light-facts { display: flex; gap: var(--space-4); margin: 0; }
 .mon-light-facts div { display: grid; gap: 0.2rem; text-align: right; }
-.mon-light-facts dt { color: var(--color-text-subtle); font: var(--weight-medium) 0.625rem/1 var(--font-mono); letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; white-space: nowrap; }
+.mon-light-facts dt { color: var(--color-text-subtle); font: var(--weight-medium) 0.625rem/1 var(--font-mono); letter-spacing: var(--tracking-eyebrow);white-space: nowrap; }
 .mon-light-facts dd { margin: 0; color: var(--color-text); font: 0.8125rem/1.2 var(--font-mono); white-space: nowrap; }
 
 /* Селектор с .mon-light-facts: иначе «div { display: grid }» выше

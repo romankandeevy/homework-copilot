@@ -48,9 +48,9 @@ test.describe('админка: база решений', () => {
     await page.setViewportSize({ width: 1440, height: 960 })
     await signIn(page)
 
-    await page.getByRole('navigation', { name: 'Разделы админки' }).getByRole('link', { name: 'База решений' }).click()
+    await page.getByRole('navigation', { name: 'Разделы админки' }).getByRole('link', { name: 'Решения', exact: true }).click()
     await expect(page).toHaveURL(/section=library/)
-    await expect(page.getByRole('heading', { name: 'База решений', level: 1 })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Решения', level: 1 })).toBeVisible()
 
     await expect(statValue(page, 'Выдано решений')).toHaveText('34')
     await expect(statValue(page, 'Добавлено сегодня')).toHaveText('2')

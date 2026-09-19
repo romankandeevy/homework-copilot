@@ -31,6 +31,7 @@ import { adminRpc, bool, isRecord, num, obj, rows, str } from './api'
 import { AdminContext } from './context'
 import type { AdminAccess, AdminPermissions, AdminRole, AdminSection, AdminSignals } from './context'
 import { Button, Field, LoadingState, ToastProvider, useDialogFocus } from './ui'
+import './northline.css'
 import './admin.css'
 
 const DashboardSection = lazy(() => import('./sections/DashboardSection'))
@@ -66,32 +67,32 @@ type NavItem = {
   count?: (signals: AdminSignals) => { value: number; alert: boolean } | null
 }
 
-/* Меню по смыслу, а не по очереди появления разделов (14 сентября 2026):
-   ученики, деньги, контент, система. Промокоды - рядом с финансами:
-   владелец ищет их там, где деньги, а не среди фиче-флагов «Настроек»,
-   где они жили вкладкой. Смотреть и менять их могут admin и owner - как
-   настройки и как требует admin_promo_save в базе. */
+/* Меню по частоте, как в прототипе на Northline (19 сентября 2026):
+   «Каждый день» - то, что владелец открывает ежедневно (сводка, поддержка,
+   ученики, решения, деньги), дальше рост (промокоды, антифрод), сайт и
+   система. Порядок групп задаёт порядок пунктов в массиве. Промокоды могут
+   смотреть и менять admin и owner - как требует admin_promo_save в базе. */
 const navItems: NavItem[] = [
-  { id: 'dashboard', label: 'Дашборд', group: 'Обзор', icon: <ChartLineUp size={18} weight="duotone" aria-hidden="true" />, allowed: () => true },
-  { id: 'users', label: 'Пользователи', group: 'Ученики', icon: <UsersThree size={18} weight="duotone" aria-hidden="true" />, allowed: (p) => p.users },
+  { id: 'dashboard', label: 'Сводка', group: 'Каждый день', icon: <ChartLineUp size={16} weight="regular" aria-hidden="true" />, allowed: () => true },
   {
-    id: 'support', label: 'Поддержка', group: 'Ученики', icon: <Lifebuoy size={18} weight="duotone" aria-hidden="true" />, allowed: (p) => p.support,
+    id: 'support', label: 'Поддержка', group: 'Каждый день', icon: <Lifebuoy size={16} weight="regular" aria-hidden="true" />, allowed: (p) => p.support,
     count: (s) => (s.pendingTickets ? { value: s.pendingTickets, alert: s.overdueTickets > 0 } : null),
   },
+  { id: 'users', label: 'Пользователи', group: 'Каждый день', icon: <UsersThree size={16} weight="regular" aria-hidden="true" />, allowed: (p) => p.users },
+  { id: 'library', label: 'Решения', group: 'Каждый день', icon: <BookOpenText size={16} weight="regular" aria-hidden="true" />, allowed: (p) => p.moderate },
+  { id: 'finance', label: 'Финансы', group: 'Каждый день', icon: <CurrencyRub size={16} weight="regular" aria-hidden="true" />, allowed: (p) => p.money },
+  { id: 'promo', label: 'Промокоды', group: 'Рост', icon: <Ticket size={16} weight="regular" aria-hidden="true" />, allowed: (p) => p.settings },
   {
-    id: 'fraud', label: 'Антифрод', group: 'Ученики', icon: <ShieldWarning size={18} weight="duotone" aria-hidden="true" />, allowed: (p) => p.moderate,
+    id: 'fraud', label: 'Антифрод', group: 'Рост', icon: <ShieldWarning size={16} weight="regular" aria-hidden="true" />, allowed: (p) => p.moderate,
     count: (s) => (s.openFlags ? { value: s.openFlags, alert: false } : null),
   },
-  { id: 'finance', label: 'Финансы', group: 'Деньги', icon: <CurrencyRub size={18} weight="duotone" aria-hidden="true" />, allowed: (p) => p.money },
-  { id: 'promo', label: 'Промокоды', group: 'Деньги', icon: <Ticket size={18} weight="duotone" aria-hidden="true" />, allowed: (p) => p.settings },
-  { id: 'library', label: 'База решений', group: 'Контент', icon: <BookOpenText size={18} weight="duotone" aria-hidden="true" />, allowed: (p) => p.moderate },
+  { id: 'settings', label: 'Настройки', group: 'Сайт', icon: <GearSix size={16} weight="regular" aria-hidden="true" />, allowed: (p) => p.settings },
+  { id: 'notifications', label: 'Уведомления', group: 'Сайт', icon: <BellRinging size={16} weight="regular" aria-hidden="true" />, allowed: (p) => p.settings },
   {
-    id: 'monitoring', label: 'Мониторинг', group: 'Система', icon: <Pulse size={18} weight="duotone" aria-hidden="true" />, allowed: (p) => p.settings,
+    id: 'monitoring', label: 'Состояние', group: 'Система', icon: <Pulse size={16} weight="regular" aria-hidden="true" />, allowed: (p) => p.settings,
     count: (s) => (s.openErrors ? { value: s.openErrors, alert: true } : null),
   },
-  { id: 'notifications', label: 'Уведомления', group: 'Система', icon: <BellRinging size={18} weight="duotone" aria-hidden="true" />, allowed: (p) => p.settings },
-  { id: 'settings', label: 'Настройки', group: 'Система', icon: <GearSix size={18} weight="duotone" aria-hidden="true" />, allowed: (p) => p.settings },
-  { id: 'audit', label: 'Журнал действий', group: 'Система', icon: <ClipboardText size={18} weight="duotone" aria-hidden="true" />, allowed: () => true },
+  { id: 'audit', label: 'Журнал действий', group: 'Система', icon: <ClipboardText size={16} weight="regular" aria-hidden="true" />, allowed: () => true },
 ]
 
 const roleLabels: Record<AdminRole, string> = { owner: 'Владелец', admin: 'Администратор', support: 'Поддержка' }

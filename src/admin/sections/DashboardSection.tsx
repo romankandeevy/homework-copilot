@@ -595,7 +595,7 @@ export default function DashboardSection() {
     alarms.push({
       key: 'down', level: 'danger',
       text: <>Не отвечает: <b>{down.map((item) => serviceNames[str(item.service)] ?? str(item.service)).join(', ')}</b>{str(down[0].downSince) ? `, с ${relativeTime(str(down[0].downSince))}` : ''}</>,
-      action: 'Мониторинг', onAction: () => openSection('monitoring', { m_tab: 'health' }),
+      action: 'Состояние', onAction: () => openSection('monitoring', { m_tab: 'health' }),
     })
   }
   if (num(reconciliation.stuckReservations) || num(reconciliation.walletMismatches)) {
@@ -646,7 +646,7 @@ export default function DashboardSection() {
 
   const header = (
     <PageHeader
-      title="Дашборд"
+      title="Сводка"
       description={`Цифры ${words.current}, сравнение - ${words.previous}. Обновляется само.`}
       actions={(
         <>
@@ -808,7 +808,7 @@ export default function DashboardSection() {
       </Panel>
 
       <div className="adm-grid-2 dash-pair">
-        <Panel title="Сервисы" actions={<Button size="sm" variant="ghost" onClick={() => openSection('monitoring', { m_tab: 'health' })}>Мониторинг</Button>}>
+        <Panel title="Сервисы" actions={<Button size="sm" variant="ghost" onClick={() => openSection('monitoring', { m_tab: 'health' })}>Состояние</Button>}>
           {serviceList.length ? (
             <ul className="dash-lights">
               {serviceList.map((item) => {

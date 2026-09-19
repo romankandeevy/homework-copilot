@@ -1,0 +1,693 @@
+/* Northline v2 - токены дизайн-системы владельца (_materials/northline-design-system-v2.zip).
+   Сгенерировано из tokens.css системы: селекторы :root перенесены на .adm-app,
+   чтобы витрина и продукт не получили чужих переменных. Руками не править -
+   обновлять из системы целиком. Грузится раньше admin.css: admin.css
+   переводит на эти токены прежние имена переменных разделов. */
+
+/* ---- typography -------------------------------------------------------- */
+.adm-app {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI", "Inter var", system-ui, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+
+  /* Display */
+  --font-size-display-xl: 56px; --line-height-display-xl: 58.8px; --tracking-display-xl: -0.03em; --font-weight-display-xl: 600;
+  --font-size-display-lg: 48px; --line-height-display-lg: 51.8px; --tracking-display-lg: -0.025em; --font-weight-display-lg: 600;
+  --font-size-display: 40px; --line-height-display: 44px; --tracking-display: -0.02em; --font-weight-display: 600;
+
+  /* Heading */
+  --font-size-heading-xl: 32px; --line-height-heading-xl: 36.8px; --tracking-heading-xl: -0.02em; --font-weight-heading-xl: 600;
+  --font-size-heading-lg: 24px; --line-height-heading-lg: 28.8px; --tracking-heading-lg: -0.015em; --font-weight-heading-lg: 600;
+  --font-size-heading: 20px; --line-height-heading: 25px; --tracking-heading: -0.01em; --font-weight-heading: 600;
+  --font-size-heading-sm: 16px; --line-height-heading-sm: 22.4px; --tracking-heading-sm: -0.005em; --font-weight-heading-sm: 600;
+  --font-size-heading-xs: 14px; --line-height-heading-xs: 19.6px; --tracking-heading-xs: -0.005em; --font-weight-heading-xs: 600;
+
+  /* Body */
+  --font-size-body-lg: 16px; --line-height-body-lg: 24.8px; --tracking-body-lg: 0em; --font-weight-body-lg: 400;
+  --font-size-body: 14px; --line-height-body: 21.7px; --tracking-body: 0em; --font-weight-body: 400;
+  --font-size-body-sm: 13px; --line-height-body-sm: 19.5px; --tracking-body-sm: 0em; --font-weight-body-sm: 400;
+
+  /* Label */
+  --font-size-label: 13px; --line-height-label: 15.6px; --tracking-label: 0em; --font-weight-label: 500;
+  --font-size-label-sm: 12px; --line-height-label-sm: 14.4px; --tracking-label-sm: 0.005em; --font-weight-label-sm: 500;
+  --font-size-caption: 12px; --line-height-caption: 16.8px; --tracking-caption: 0em; --font-weight-caption: 400;
+  --font-size-label-xs: 11px; --line-height-label-xs: 13.2px; --tracking-label-xs: 0.01em; --font-weight-label-xs: 500;
+  --font-size-overline: 11px; --line-height-overline: 13.2px; --tracking-overline: 0.04em; --font-weight-overline: 500;
+
+  /* Code */
+  --font-size-code: 13px; --line-height-code: 20.2px; --tracking-code: 0em; --font-weight-code: 400;
+  --font-size-numeric: 14px; --line-height-numeric: 21.7px; --tracking-numeric: 0em; --font-weight-numeric: 400;
+
+  /* Controls are fixed-height, so their label sits on line-height 1 and the
+     height token does the vertical rhythm. This is the one place a type style's
+     line-height is deliberately overridden. */
+  --line-height-control: 1;
+}
+
+/* ---- scales (theme-independent) ---------------------------------------- */
+.adm-app {
+  /* spacing */
+  --space-0-5: 2px;
+  --space-1: 4px;
+  --space-1-5: 6px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+  --space-24: 96px;
+  --space-32: 128px;
+  --inset-xs: 8px;
+  --inset-sm: 12px;
+  --inset-md: 16px;
+  --inset-lg: 20px;
+  --inset-xl: 24px;
+  --stack-xs: 4px;
+  --stack-sm: 8px;
+  --stack-md: 16px;
+  --stack-lg: 24px;
+  --stack-xl: 40px;
+  --inline-xs: 4px;
+  --inline-sm: 8px;
+  --inline-md: 12px;
+  --inline-lg: 16px;
+  --inline-xl: 24px;
+  --section-sm: 48px;
+  --section-md: 64px;
+  --section-lg: 96px;
+  --container-max: 1280px;
+  --content-max: 720px;
+  --gutter: 24px;
+
+  /* radius */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-full: 9999px;
+
+  /* size */
+  --control-2xs: 20px;
+  --control-xs: 24px;
+  --control-sm: 28px;
+  --control-md: 32px;
+  --control-lg: 36px;
+  --control-xl: 40px;
+  --icon-3xs: 12px;
+  --icon-2xs: 14px;
+  --icon-sm: 16px;
+  --icon-md: 20px;
+  --icon-lg: 24px;
+  --icon-xl: 32px;
+  --icon-stroke: 1.5px;
+  --glyph-xs: 6px;
+  --glyph-sm: 8px;
+  --glyph-md: 10px;
+  --avatar-xs: 20px;
+  --avatar-sm: 24px;
+  --avatar-md: 32px;
+  --avatar-lg: 40px;
+  --avatar-xl: 56px;
+  --sidebar-collapsed: 56px;
+  --sidebar-expanded: 240px;
+  --header-height: 56px;
+  --row-height: 44px;
+  --textarea-min-height: 88px;
+  --menu-min-width: 200px;
+  --listbox-max-height: 264px;
+  --tooltip-max-width: 220px;
+  --toast-width: 320px;
+  --measure-sm: 320px;
+  --modal-width-sm: 400px;
+  --modal-width-md: 560px;
+  --modal-width-lg: 720px;
+  --drawer-width: 400px;
+  --command-width: 560px;
+  --command-list-height: 320px;
+
+  /* border width */
+  --border-width-default: 1px;
+  --border-width-thick: 2px;
+
+  /* opacity */
+  --opacity-disabled: 0.5;
+  --opacity-muted: 0.7;
+
+  /* blur */
+  --blur-sm: 4px;
+  --blur-md: 8px;
+
+  /* z-index */
+  --z-base: 0;
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-overlay: 300;
+  --z-modal: 400;
+  --z-popover: 500;
+  --z-toast: 600;
+  --z-tooltip: 700;
+
+  /* breakpoints — mirrored here for reference; @media rules must use the
+     literal values below, since custom properties are not valid in media queries. */
+  --breakpoint-sm: 640;
+  --breakpoint-md: 768;
+  --breakpoint-lg: 1024;
+  --breakpoint-xl: 1280;
+  --breakpoint-2xl: 1536;
+}
+
+/* ---- light theme (default) --------------------------------------------- */
+.adm-app {
+  --neutral-1: #fdfdfe;
+  --neutral-2: #f8f8f9;
+  --neutral-3: #f1f2f3;
+  --neutral-4: #e8e9eb;
+  --neutral-5: #dee0e2;
+  --neutral-6: #d2d4d7;
+  --neutral-7: #c1c4c9;
+  --neutral-8: #aaaeb4;
+  --neutral-9: #757b83;
+  --neutral-10: #646970;
+  --neutral-11: #4a4d52;
+  --neutral-12: #202224;
+  --accent-1: #fafeff;
+  --accent-2: #f4f9ff;
+  --accent-3: #eaf2fe;
+  --accent-4: #dfebfc;
+  --accent-5: #d1e1f9;
+  --accent-6: #bfd6f7;
+  --accent-7: #a6c6f5;
+  --accent-8: #84b0f0;
+  --accent-9: #2d69c0;
+  --accent-10: #3268b5;
+  --accent-11: #2b4d7f;
+  --accent-12: #0f213c;
+  --success-1: #fafffc;
+  --success-2: #f2fbf7;
+  --success-3: #e9f5ef;
+  --success-4: #dcefe6;
+  --success-5: #cde7da;
+  --success-6: #b9decd;
+  --success-7: #9dd2ba;
+  --success-8: #73c1a0;
+  --success-9: #007a51;
+  --success-10: #007d58;
+  --success-11: #125b42;
+  --success-12: #03291c;
+  --warning-1: #fffdf8;
+  --warning-2: #fdf7f0;
+  --warning-3: #f9f0e5;
+  --warning-4: #f4e7d6;
+  --warning-5: #efddc5;
+  --warning-6: #e9d0af;
+  --warning-7: #e1be8e;
+  --warning-8: #d5a45e;
+  --warning-9: #cc8700;
+  --warning-10: #955a00;
+  --warning-11: #6a4400;
+  --warning-12: #311d00;
+  --danger-1: #fffbfa;
+  --danger-2: #fff5f3;
+  --danger-3: #ffede9;
+  --danger-4: #fde3dd;
+  --danger-5: #fbd6ce;
+  --danger-6: #f9c7bc;
+  --danger-7: #f6b0a2;
+  --danger-8: #ef917e;
+  --danger-9: #bf3d27;
+  --danger-10: #b03d2a;
+  --danger-11: #7c3326;
+  --danger-12: #3b130c;
+  --info-1: #fafeff;
+  --info-2: #f2fafe;
+  --info-3: #e9f4fa;
+  --info-4: #dcedf5;
+  --info-5: #cce4f0;
+  --info-6: #b9daeb;
+  --info-7: #9dcce4;
+  --info-8: #74b8d9;
+  --info-9: #00729e;
+  --info-10: #00739b;
+  --info-11: #15546e;
+  --info-12: #042533;
+  --black-alpha-1: rgba(0,0,0,0.02);
+  --black-alpha-2: rgba(0,0,0,0.04);
+  --black-alpha-3: rgba(0,0,0,0.06);
+  --black-alpha-4: rgba(0,0,0,0.08);
+  --black-alpha-5: rgba(0,0,0,0.1);
+  --black-alpha-6: rgba(0,0,0,0.12);
+  --black-alpha-7: rgba(0,0,0,0.15);
+  --black-alpha-8: rgba(0,0,0,0.18);
+  --black-alpha-9: rgba(0,0,0,0.24);
+  --black-alpha-10: rgba(0,0,0,0.32);
+  --black-alpha-11: rgba(0,0,0,0.42);
+  --black-alpha-12: rgba(0,0,0,0.55);
+  --white-alpha-1: rgba(255,255,255,0.02);
+  --white-alpha-2: rgba(255,255,255,0.04);
+  --white-alpha-3: rgba(255,255,255,0.06);
+  --white-alpha-4: rgba(255,255,255,0.08);
+  --white-alpha-5: rgba(255,255,255,0.1);
+  --white-alpha-6: rgba(255,255,255,0.12);
+  --white-alpha-7: rgba(255,255,255,0.15);
+  --white-alpha-8: rgba(255,255,255,0.18);
+  --white-alpha-9: rgba(255,255,255,0.24);
+  --white-alpha-10: rgba(255,255,255,0.32);
+  --white-alpha-11: rgba(255,255,255,0.42);
+  --white-alpha-12: rgba(255,255,255,0.55);
+  --bg-canvas: #fdfdfe;
+  --bg-surface: #f8f8f9;
+  --bg-surface-raised: #f8f8f9;
+  --bg-subtle: #f1f2f3;
+  --bg-hover: rgba(0,0,0,0.08);
+  --bg-active: rgba(0,0,0,0.12);
+  --bg-selected: #eaf2fe;
+  --bg-disabled: #f1f2f3;
+  --bg-inverse: #202224;
+  --bg-accent: #2d69c0;
+  --bg-accent-hover: #3268b5;
+  --bg-accent-active: #1755aa;
+  --bg-accent-subtle: #eaf2fe;
+  --bg-success: #007a51;
+  --bg-success-subtle: #e9f5ef;
+  --bg-warning: #cc8700;
+  --bg-warning-subtle: #f9f0e5;
+  --bg-danger: #bf3d27;
+  --bg-danger-subtle: #ffede9;
+  --bg-danger-hover: #b03d2a;
+  --bg-danger-active: #a8250e;
+  --ring-focus-danger: rgba(191,61,39,0.35);
+  --bg-info: #00729e;
+  --bg-info-subtle: #e9f4fa;
+  --bg-overlay: rgba(15,15,17,0.48);
+  --text-primary: #202224;
+  --text-secondary: #4a4d52;
+  --text-tertiary: #646970;
+  --text-disabled: #aaaeb4;
+  --text-placeholder: #757b83;
+  --text-inverse: #fdfdfe;
+  --text-on-accent: #ffffff;
+  --text-on-warning: #1a1a1a;
+  --text-accent: #2b4d7f;
+  --text-link: #2b4d7f;
+  --text-link-hover: #0f213c;
+  --text-success: #125b42;
+  --text-warning: #6a4400;
+  --text-danger: #7c3326;
+  --text-info: #15546e;
+  --border-default: rgba(0,0,0,0.10);
+  --border-subtle: rgba(0,0,0,0.06);
+  --border-strong: rgba(0,0,0,0.18);
+  --border-hover: rgba(0,0,0,0.15);
+  --border-focus: #2d69c0;
+  --border-danger: #bf3d27;
+  --border-inverse: rgba(255,255,255,0.12);
+  --icon-primary: #202224;
+  --icon-secondary: #4a4d52;
+  --icon-tertiary: #646970;
+  --icon-disabled: #aaaeb4;
+  --icon-accent: #2b4d7f;
+  --icon-on-accent: #ffffff;
+  --ring-focus: rgba(45,105,192,0.35);
+
+  --shadow-xs: 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.04), 0 1px 3px rgba(0,0,0,0.06);
+  --shadow-md: 0 2px 4px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06);
+  --shadow-lg: 0 4px 8px rgba(0,0,0,0.04), 0 8px 16px rgba(0,0,0,0.08);
+  --shadow-xl: 0 8px 16px rgba(0,0,0,0.06), 0 16px 24px rgba(0,0,0,0.10);
+  --shadow-border: 0 0 0 1px var(--border-default);
+  --shadow-focus: 0 0 0 3px var(--ring-focus);
+  --shadow-focus-danger: 0 0 0 3px var(--ring-focus-danger);
+  --shadow-inset: inset 0 1px 2px rgba(0,0,0,0.06);
+  --shadow-raised-highlight: none;
+  color-scheme: light;
+}
+
+/* ---- dark theme -------------------------------------------------------- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .adm-app {
+    --neutral-1: #0d0d0e;
+    --neutral-2: #131415;
+    --neutral-3: #1c1d1e;
+    --neutral-4: #252728;
+    --neutral-5: #2e3033;
+    --neutral-6: #3a3d41;
+    --neutral-7: #494d53;
+    --neutral-8: #5e646c;
+    --neutral-9: #737b86;
+    --neutral-10: #858d97;
+    --neutral-11: #a6abb2;
+    --neutral-12: #e5e8ec;
+    --accent-1: #0b0d12;
+    --accent-2: #10141b;
+    --accent-3: #161d28;
+    --accent-4: #1c2737;
+    --accent-5: #213148;
+    --accent-6: #283e5e;
+    --accent-7: #2c4d7e;
+    --accent-8: #3262a8;
+    --accent-9: #2368c9;
+    --accent-10: #4f8ce5;
+    --accent-11: #85ade7;
+    --accent-12: #d3eaff;
+    --success-1: #0a0e0c;
+    --success-2: #0e1612;
+    --success-3: #14201b;
+    --success-4: #182b23;
+    --success-5: #1b372b;
+    --success-6: #1d4636;
+    --success-7: #145b42;
+    --success-8: #007653;
+    --success-9: #007a4d;
+    --success-10: #15a478;
+    --success-11: #76bc9e;
+    --success-12: #ccf2e0;
+    --warning-1: #100d09;
+    --warning-2: #18130d;
+    --warning-3: #231b11;
+    --warning-4: #302414;
+    --warning-5: #3e2d15;
+    --warning-6: #503814;
+    --warning-7: #694501;
+    --warning-8: #8a5700;
+    --warning-9: #cf8500;
+    --warning-10: #be7d00;
+    --warning-11: #cda366;
+    --warning-12: #fde4c3;
+    --danger-1: #110c0a;
+    --danger-2: #1a110f;
+    --danger-3: #271916;
+    --danger-4: #36201c;
+    --danger-5: #462720;
+    --danger-6: #5b2f26;
+    --danger-7: #79362a;
+    --danger-8: #a04030;
+    --danger-9: #c13a24;
+    --danger-10: #db614b;
+    --danger-11: #e39382;
+    --danger-12: #ffdbd1;
+    --info-1: #0a0e10;
+    --info-2: #0e1518;
+    --info-3: #141f24;
+    --info-4: #192931;
+    --info-5: #1c343f;
+    --info-6: #1f4252;
+    --info-7: #19546c;
+    --info-8: #086d90;
+    --info-9: #0071a1;
+    --info-10: #2698c5;
+    --info-11: #78b4d1;
+    --info-12: #cdeeff;
+    --black-alpha-1: rgba(0,0,0,0.02);
+    --black-alpha-2: rgba(0,0,0,0.04);
+    --black-alpha-3: rgba(0,0,0,0.06);
+    --black-alpha-4: rgba(0,0,0,0.08);
+    --black-alpha-5: rgba(0,0,0,0.1);
+    --black-alpha-6: rgba(0,0,0,0.12);
+    --black-alpha-7: rgba(0,0,0,0.15);
+    --black-alpha-8: rgba(0,0,0,0.18);
+    --black-alpha-9: rgba(0,0,0,0.24);
+    --black-alpha-10: rgba(0,0,0,0.32);
+    --black-alpha-11: rgba(0,0,0,0.42);
+    --black-alpha-12: rgba(0,0,0,0.55);
+    --white-alpha-1: rgba(255,255,255,0.02);
+    --white-alpha-2: rgba(255,255,255,0.04);
+    --white-alpha-3: rgba(255,255,255,0.06);
+    --white-alpha-4: rgba(255,255,255,0.08);
+    --white-alpha-5: rgba(255,255,255,0.1);
+    --white-alpha-6: rgba(255,255,255,0.12);
+    --white-alpha-7: rgba(255,255,255,0.15);
+    --white-alpha-8: rgba(255,255,255,0.18);
+    --white-alpha-9: rgba(255,255,255,0.24);
+    --white-alpha-10: rgba(255,255,255,0.32);
+    --white-alpha-11: rgba(255,255,255,0.42);
+    --white-alpha-12: rgba(255,255,255,0.55);
+    --bg-canvas: #0d0d0e;
+    --bg-surface: #131415;
+    --bg-surface-raised: #131415;
+    --bg-subtle: #1c1d1e;
+    --bg-hover: rgba(255,255,255,0.10);
+    --bg-active: rgba(255,255,255,0.15);
+    --bg-selected: #161d28;
+    --bg-disabled: #1c1d1e;
+    --bg-inverse: #e5e8ec;
+    --bg-accent: #2368c9;
+    --bg-accent-hover: #4f8ce5;
+    --bg-accent-active: #0853b2;
+    --bg-accent-subtle: #161d28;
+    --bg-success: #007a4d;
+    --bg-success-subtle: #14201b;
+    --bg-warning: #cf8500;
+    --bg-warning-subtle: #231b11;
+    --bg-danger: #c13a24;
+    --bg-danger-subtle: #271916;
+    --bg-danger-hover: #db614b;
+    --bg-danger-active: #a92008;
+    --ring-focus-danger: rgba(193,58,36,0.45);
+    --bg-info: #0071a1;
+    --bg-info-subtle: #141f24;
+    --bg-overlay: rgba(0,0,0,0.64);
+    --text-primary: #e5e8ec;
+    --text-secondary: #a6abb2;
+    --text-tertiary: #858d97;
+    --text-disabled: #5e646c;
+    --text-placeholder: #737b86;
+    --text-inverse: #0d0d0e;
+    --text-on-accent: #ffffff;
+    --text-on-warning: #1a1a1a;
+    --text-accent: #85ade7;
+    --text-link: #85ade7;
+    --text-link-hover: #d3eaff;
+    --text-success: #76bc9e;
+    --text-warning: #cda366;
+    --text-danger: #e39382;
+    --text-info: #78b4d1;
+    --border-default: rgba(255,255,255,0.12);
+    --border-subtle: rgba(255,255,255,0.06);
+    --border-strong: rgba(255,255,255,0.18);
+    --border-hover: rgba(255,255,255,0.15);
+    --border-focus: #4f8ce5;
+    --border-danger: #c13a24;
+    --border-inverse: rgba(0,0,0,0.12);
+    --icon-primary: #e5e8ec;
+    --icon-secondary: #a6abb2;
+    --icon-tertiary: #858d97;
+    --icon-disabled: #5e646c;
+    --icon-accent: #85ade7;
+    --icon-on-accent: #ffffff;
+    --ring-focus: rgba(79,140,229,0.45);
+
+    --shadow-xs: 0 1px 2px rgba(0,0,0,0.32);
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.30), 0 1px 3px rgba(0,0,0,0.36);
+    --shadow-md: 0 2px 4px rgba(0,0,0,0.32), 0 4px 10px rgba(0,0,0,0.40);
+    --shadow-lg: 0 4px 10px rgba(0,0,0,0.34), 0 10px 20px rgba(0,0,0,0.42);
+    --shadow-xl: 0 10px 20px rgba(0,0,0,0.38), 0 20px 32px rgba(0,0,0,0.46);
+    --shadow-border: 0 0 0 1px var(--border-default);
+    --shadow-focus: 0 0 0 3px var(--ring-focus);
+    --shadow-focus-danger: 0 0 0 3px var(--ring-focus-danger);
+    --shadow-inset: inset 0 1px 2px rgba(0,0,0,0.40);
+    --shadow-raised-highlight: inset 0 1px 0 rgba(255,255,255,0.04);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] .adm-app {
+  --neutral-1: #0d0d0e;
+  --neutral-2: #131415;
+  --neutral-3: #1c1d1e;
+  --neutral-4: #252728;
+  --neutral-5: #2e3033;
+  --neutral-6: #3a3d41;
+  --neutral-7: #494d53;
+  --neutral-8: #5e646c;
+  --neutral-9: #737b86;
+  --neutral-10: #858d97;
+  --neutral-11: #a6abb2;
+  --neutral-12: #e5e8ec;
+  --accent-1: #0b0d12;
+  --accent-2: #10141b;
+  --accent-3: #161d28;
+  --accent-4: #1c2737;
+  --accent-5: #213148;
+  --accent-6: #283e5e;
+  --accent-7: #2c4d7e;
+  --accent-8: #3262a8;
+  --accent-9: #2368c9;
+  --accent-10: #4f8ce5;
+  --accent-11: #85ade7;
+  --accent-12: #d3eaff;
+  --success-1: #0a0e0c;
+  --success-2: #0e1612;
+  --success-3: #14201b;
+  --success-4: #182b23;
+  --success-5: #1b372b;
+  --success-6: #1d4636;
+  --success-7: #145b42;
+  --success-8: #007653;
+  --success-9: #007a4d;
+  --success-10: #15a478;
+  --success-11: #76bc9e;
+  --success-12: #ccf2e0;
+  --warning-1: #100d09;
+  --warning-2: #18130d;
+  --warning-3: #231b11;
+  --warning-4: #302414;
+  --warning-5: #3e2d15;
+  --warning-6: #503814;
+  --warning-7: #694501;
+  --warning-8: #8a5700;
+  --warning-9: #cf8500;
+  --warning-10: #be7d00;
+  --warning-11: #cda366;
+  --warning-12: #fde4c3;
+  --danger-1: #110c0a;
+  --danger-2: #1a110f;
+  --danger-3: #271916;
+  --danger-4: #36201c;
+  --danger-5: #462720;
+  --danger-6: #5b2f26;
+  --danger-7: #79362a;
+  --danger-8: #a04030;
+  --danger-9: #c13a24;
+  --danger-10: #db614b;
+  --danger-11: #e39382;
+  --danger-12: #ffdbd1;
+  --info-1: #0a0e10;
+  --info-2: #0e1518;
+  --info-3: #141f24;
+  --info-4: #192931;
+  --info-5: #1c343f;
+  --info-6: #1f4252;
+  --info-7: #19546c;
+  --info-8: #086d90;
+  --info-9: #0071a1;
+  --info-10: #2698c5;
+  --info-11: #78b4d1;
+  --info-12: #cdeeff;
+  --black-alpha-1: rgba(0,0,0,0.02);
+  --black-alpha-2: rgba(0,0,0,0.04);
+  --black-alpha-3: rgba(0,0,0,0.06);
+  --black-alpha-4: rgba(0,0,0,0.08);
+  --black-alpha-5: rgba(0,0,0,0.1);
+  --black-alpha-6: rgba(0,0,0,0.12);
+  --black-alpha-7: rgba(0,0,0,0.15);
+  --black-alpha-8: rgba(0,0,0,0.18);
+  --black-alpha-9: rgba(0,0,0,0.24);
+  --black-alpha-10: rgba(0,0,0,0.32);
+  --black-alpha-11: rgba(0,0,0,0.42);
+  --black-alpha-12: rgba(0,0,0,0.55);
+  --white-alpha-1: rgba(255,255,255,0.02);
+  --white-alpha-2: rgba(255,255,255,0.04);
+  --white-alpha-3: rgba(255,255,255,0.06);
+  --white-alpha-4: rgba(255,255,255,0.08);
+  --white-alpha-5: rgba(255,255,255,0.1);
+  --white-alpha-6: rgba(255,255,255,0.12);
+  --white-alpha-7: rgba(255,255,255,0.15);
+  --white-alpha-8: rgba(255,255,255,0.18);
+  --white-alpha-9: rgba(255,255,255,0.24);
+  --white-alpha-10: rgba(255,255,255,0.32);
+  --white-alpha-11: rgba(255,255,255,0.42);
+  --white-alpha-12: rgba(255,255,255,0.55);
+  --bg-canvas: #0d0d0e;
+  --bg-surface: #131415;
+  --bg-surface-raised: #131415;
+  --bg-subtle: #1c1d1e;
+  --bg-hover: rgba(255,255,255,0.10);
+  --bg-active: rgba(255,255,255,0.15);
+  --bg-selected: #161d28;
+  --bg-disabled: #1c1d1e;
+  --bg-inverse: #e5e8ec;
+  --bg-accent: #2368c9;
+  --bg-accent-hover: #4f8ce5;
+  --bg-accent-active: #0853b2;
+  --bg-accent-subtle: #161d28;
+  --bg-success: #007a4d;
+  --bg-success-subtle: #14201b;
+  --bg-warning: #cf8500;
+  --bg-warning-subtle: #231b11;
+  --bg-danger: #c13a24;
+  --bg-danger-subtle: #271916;
+  --bg-danger-hover: #db614b;
+  --bg-danger-active: #a92008;
+  --ring-focus-danger: rgba(193,58,36,0.45);
+  --bg-info: #0071a1;
+  --bg-info-subtle: #141f24;
+  --bg-overlay: rgba(0,0,0,0.64);
+  --text-primary: #e5e8ec;
+  --text-secondary: #a6abb2;
+  --text-tertiary: #858d97;
+  --text-disabled: #5e646c;
+  --text-placeholder: #737b86;
+  --text-inverse: #0d0d0e;
+  --text-on-accent: #ffffff;
+  --text-on-warning: #1a1a1a;
+  --text-accent: #85ade7;
+  --text-link: #85ade7;
+  --text-link-hover: #d3eaff;
+  --text-success: #76bc9e;
+  --text-warning: #cda366;
+  --text-danger: #e39382;
+  --text-info: #78b4d1;
+  --border-default: rgba(255,255,255,0.12);
+  --border-subtle: rgba(255,255,255,0.06);
+  --border-strong: rgba(255,255,255,0.18);
+  --border-hover: rgba(255,255,255,0.15);
+  --border-focus: #4f8ce5;
+  --border-danger: #c13a24;
+  --border-inverse: rgba(0,0,0,0.12);
+  --icon-primary: #e5e8ec;
+  --icon-secondary: #a6abb2;
+  --icon-tertiary: #858d97;
+  --icon-disabled: #5e646c;
+  --icon-accent: #85ade7;
+  --icon-on-accent: #ffffff;
+  --ring-focus: rgba(79,140,229,0.45);
+
+  --shadow-xs: 0 1px 2px rgba(0,0,0,0.32);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.30), 0 1px 3px rgba(0,0,0,0.36);
+  --shadow-md: 0 2px 4px rgba(0,0,0,0.32), 0 4px 10px rgba(0,0,0,0.40);
+  --shadow-lg: 0 4px 10px rgba(0,0,0,0.34), 0 10px 20px rgba(0,0,0,0.42);
+  --shadow-xl: 0 10px 20px rgba(0,0,0,0.38), 0 20px 32px rgba(0,0,0,0.46);
+  --shadow-border: 0 0 0 1px var(--border-default);
+  --shadow-focus: 0 0 0 3px var(--ring-focus);
+  --shadow-focus-danger: 0 0 0 3px var(--ring-focus-danger);
+  --shadow-inset: inset 0 1px 2px rgba(0,0,0,0.40);
+  --shadow-raised-highlight: inset 0 1px 0 rgba(255,255,255,0.04);
+  color-scheme: dark;
+}
+
+/* ---- motion (из components/bundle.css: в tokens.json её нет) ---- */
+.adm-app {
+  --duration-instant: 0ms;
+  --duration-fast: 100ms;
+  --duration-base: 150ms;
+  --duration-moderate: 200ms;
+  --duration-slow: 300ms;
+  --duration-slower: 400ms;
+  /* Looping affordances. Not transitions — a spinner/shimmer runs until the work ends. */
+  --duration-spinner: 600ms;
+  --duration-shimmer: 1600ms;
+  --duration-indeterminate: 1400ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  /* Transitions collapse to nothing; loops slow down but keep turning, because a
+     frozen spinner reads as a hung app. The shimmer and the indeterminate sweep
+     stop entirely (rules further down), since they convey nothing a static bar doesn't. */
+  .adm-app {
+    --duration-fast: 0ms; --duration-base: 0ms; --duration-moderate: 0ms;
+    --duration-slow: 0ms; --duration-slower: 0ms;
+    --duration-spinner: 1200ms;
+  }
+}
+

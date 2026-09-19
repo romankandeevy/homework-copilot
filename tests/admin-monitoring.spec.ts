@@ -26,7 +26,7 @@ function rpc(name: string) {
 
 async function openMonitoring(page: Page, query = '') {
   await page.goto(`/admin?section=monitoring${query}`)
-  await expect(page.getByRole('heading', { name: 'Мониторинг', level: 1 })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Состояние сервисов', level: 1 })).toBeVisible()
 }
 
 test.describe('админка: мониторинг', () => {

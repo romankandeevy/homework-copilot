@@ -536,5 +536,5 @@ export async function signIn(page: Page) {
   await expect(page.getByRole('heading', { name: 'Подтверди вход' })).toBeVisible()
   await page.getByLabel('Код').fill('123456')
   await page.getByRole('button', { name: 'Войти' }).click()
-  await expect(page.getByRole('heading', { name: 'Дашборд' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Сводка' })).toBeVisible()
 }
